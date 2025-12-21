@@ -49,11 +49,9 @@ const adminNavItems: NavItem[] = [
 
 const storeNavItems: NavItem[] = [
   { title: '儀表板', href: '/dashboard', icon: Home },
-  { title: '建立訂單', href: '/orders/new', icon: ShoppingCart },
+  { title: '商品目錄', href: '/catalog', icon: PackageSearch },
   { title: '我的訂單', href: '/orders', icon: ClipboardList },
-  { title: '收貨確認', href: '/receiving', icon: Truck },
-  { title: '團隊管理', href: '/team', icon: Users },
-  { title: '稽核日誌', href: '/audit', icon: FileText },
+  { title: '銷貨單管理', href: '/sales-notes', icon: FileText },
 ];
 
 interface AppLayoutProps {
