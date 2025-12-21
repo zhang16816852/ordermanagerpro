@@ -24,7 +24,12 @@ export type Database = {
           new_value: Json | null
           old_value: Json | null
           performed_by: string
-          performed_by_role: Database["public"]["Enums"]["app_role"] | null
+          performed_by_store_role:
+            | Database["public"]["Enums"]["store_role"]
+            | null
+          performed_by_system_role:
+            | Database["public"]["Enums"]["system_role"]
+            | null
           store_id: string | null
         }
         Insert: {
@@ -36,7 +41,12 @@ export type Database = {
           new_value?: Json | null
           old_value?: Json | null
           performed_by: string
-          performed_by_role?: Database["public"]["Enums"]["app_role"] | null
+          performed_by_store_role?:
+            | Database["public"]["Enums"]["store_role"]
+            | null
+          performed_by_system_role?:
+            | Database["public"]["Enums"]["system_role"]
+            | null
           store_id?: string | null
         }
         Update: {
@@ -48,7 +58,12 @@ export type Database = {
           new_value?: Json | null
           old_value?: Json | null
           performed_by?: string
-          performed_by_role?: Database["public"]["Enums"]["app_role"] | null
+          performed_by_store_role?:
+            | Database["public"]["Enums"]["store_role"]
+            | null
+          performed_by_system_role?:
+            | Database["public"]["Enums"]["system_role"]
+            | null
           store_id?: string | null
         }
         Relationships: [
@@ -68,7 +83,7 @@ export type Database = {
           expires_at: string
           id: string
           invited_by: string
-          role: Database["public"]["Enums"]["app_role"]
+          role: Database["public"]["Enums"]["store_role"]
           status: Database["public"]["Enums"]["invitation_status"]
           store_id: string | null
           token: string
@@ -79,7 +94,7 @@ export type Database = {
           expires_at?: string
           id?: string
           invited_by: string
-          role: Database["public"]["Enums"]["app_role"]
+          role: Database["public"]["Enums"]["store_role"]
           status?: Database["public"]["Enums"]["invitation_status"]
           store_id?: string | null
           token?: string
@@ -90,7 +105,7 @@ export type Database = {
           expires_at?: string
           id?: string
           invited_by?: string
-          role?: Database["public"]["Enums"]["app_role"]
+          role?: Database["public"]["Enums"]["store_role"]
           status?: Database["public"]["Enums"]["invitation_status"]
           store_id?: string | null
           token?: string
@@ -155,6 +170,7 @@ export type Database = {
           quantity: number
           shipped_quantity: number
           status: Database["public"]["Enums"]["order_item_status"]
+          store_id: string
           unit_price: number
           updated_at: string
         }
@@ -166,6 +182,7 @@ export type Database = {
           quantity?: number
           shipped_quantity?: number
           status?: Database["public"]["Enums"]["order_item_status"]
+          store_id: string
           unit_price: number
           updated_at?: string
         }
@@ -177,10 +194,18 @@ export type Database = {
           quantity?: number
           shipped_quantity?: number
           status?: Database["public"]["Enums"]["order_item_status"]
+          store_id?: string
           unit_price?: number
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_order_items_store"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "order_items_order_id_fkey"
             columns: ["order_id"]
@@ -201,27 +226,27 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string
-          created_by_admin: boolean
           id: string
           notes: string | null
+          source_type: Database["public"]["Enums"]["order_source_type"]
           store_id: string
           updated_at: string
         }
         Insert: {
           created_at?: string
           created_by: string
-          created_by_admin?: boolean
           id?: string
           notes?: string | null
+          source_type?: Database["public"]["Enums"]["order_source_type"]
           store_id: string
           updated_at?: string
         }
         Update: {
           created_at?: string
           created_by?: string
-          created_by_admin?: boolean
           id?: string
           notes?: string | null
+          source_type?: Database["public"]["Enums"]["order_source_type"]
           store_id?: string
           updated_at?: string
         }
@@ -433,21 +458,21 @@ export type Database = {
         Row: {
           created_at: string
           id: string
-          role: Database["public"]["Enums"]["app_role"]
+          role: Database["public"]["Enums"]["store_role"]
           store_id: string
           user_id: string
         }
         Insert: {
           created_at?: string
           id?: string
-          role?: Database["public"]["Enums"]["app_role"]
+          role?: Database["public"]["Enums"]["store_role"]
           store_id: string
           user_id: string
         }
         Update: {
           created_at?: string
           id?: string
-          role?: Database["public"]["Enums"]["app_role"]
+          role?: Database["public"]["Enums"]["store_role"]
           store_id?: string
           user_id?: string
         }
@@ -498,19 +523,19 @@ export type Database = {
         Row: {
           created_at: string
           id: string
-          role: Database["public"]["Enums"]["app_role"]
+          role: Database["public"]["Enums"]["system_role"]
           user_id: string
         }
         Insert: {
           created_at?: string
           id?: string
-          role: Database["public"]["Enums"]["app_role"]
+          role: Database["public"]["Enums"]["system_role"]
           user_id: string
         }
         Update: {
           created_at?: string
           id?: string
-          role?: Database["public"]["Enums"]["app_role"]
+          role?: Database["public"]["Enums"]["system_role"]
           user_id?: string
         }
         Relationships: []
@@ -522,11 +547,11 @@ export type Database = {
     Functions: {
       get_store_role: {
         Args: { _store_id: string; _user_id: string }
-        Returns: Database["public"]["Enums"]["app_role"]
+        Returns: Database["public"]["Enums"]["store_role"]
       }
       has_role: {
         Args: {
-          _role: Database["public"]["Enums"]["app_role"]
+          _role: Database["public"]["Enums"]["system_role"]
           _user_id: string
         }
         Returns: boolean
@@ -537,7 +562,6 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "founder" | "manager" | "employee" | "customer"
       invitation_status: "pending" | "accepted" | "expired"
       order_item_status:
         | "waiting"
@@ -545,8 +569,11 @@ export type Database = {
         | "shipped"
         | "out_of_stock"
         | "discontinued"
+      order_source_type: "frontend" | "admin_proxy"
       product_status: "active" | "discontinued"
       sales_note_status: "draft" | "shipped" | "received"
+      store_role: "founder" | "manager" | "employee"
+      system_role: "admin" | "customer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -674,7 +701,6 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "founder", "manager", "employee", "customer"],
       invitation_status: ["pending", "accepted", "expired"],
       order_item_status: [
         "waiting",
@@ -683,8 +709,11 @@ export const Constants = {
         "out_of_stock",
         "discontinued",
       ],
+      order_source_type: ["frontend", "admin_proxy"],
       product_status: ["active", "discontinued"],
       sales_note_status: ["draft", "shipped", "received"],
+      store_role: ["founder", "manager", "employee"],
+      system_role: ["admin", "customer"],
     },
   },
 } as const
