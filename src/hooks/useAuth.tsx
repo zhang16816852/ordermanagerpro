@@ -1,22 +1,23 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
-type AppRole = 'admin' | 'founder' | 'manager' | 'employee' | 'customer';
+// Separate types for system and store roles
+type SystemRole = 'admin' | 'customer';
+type StoreRoleType = 'founder' | 'manager' | 'employee';
 
 interface StoreRole {
   store_id: string;
   store_name: string;
-  role: AppRole;
+  role: StoreRoleType;
 }
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  systemRoles: AppRole[];
+  systemRoles: SystemRole[];
   storeRoles: StoreRole[];
   isAdmin: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
@@ -31,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [systemRoles, setSystemRoles] = useState<AppRole[]>([]);
+  const [systemRoles, setSystemRoles] = useState<SystemRole[]>([]);
   const [storeRoles, setStoreRoles] = useState<StoreRole[]>([]);
 
   const isAdmin = systemRoles.includes('admin');
@@ -45,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('user_id', userId);
 
       if (roleError) throw roleError;
-      setSystemRoles((roleData || []).map(r => r.role as AppRole));
+      setSystemRoles((roleData || []).map(r => r.role as SystemRole));
 
       // Fetch store roles
       const { data: storeData, error: storeError } = await supabase
@@ -62,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (storeData || []).map(s => ({
           store_id: s.store_id,
           store_name: (s.stores as any)?.name || '',
-          role: s.role as AppRole,
+          role: s.role as StoreRoleType,
         }))
       );
     } catch (error) {
