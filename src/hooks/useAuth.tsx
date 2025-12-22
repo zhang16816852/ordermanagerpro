@@ -20,6 +20,9 @@ interface AuthContextType {
   systemRoles: SystemRole[];
   storeRoles: StoreRole[];
   isAdmin: boolean;
+  storeId: string | null;
+  storeRole: StoreRoleType | null;
+  setCurrentStore: (storeId: string | null) => void;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -34,8 +37,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [systemRoles, setSystemRoles] = useState<SystemRole[]>([]);
   const [storeRoles, setStoreRoles] = useState<StoreRole[]>([]);
+  const [currentStoreId, setCurrentStoreId] = useState<string | null>(null);
 
   const isAdmin = systemRoles.includes('admin');
+  const storeRole = storeRoles.find(s => s.store_id === currentStoreId)?.role ?? null;
+
+  const setCurrentStore = (storeId: string | null) => {
+    setCurrentStoreId(storeId);
+    if (storeId) {
+      localStorage.setItem('currentStoreId', storeId);
+    } else {
+      localStorage.removeItem('currentStoreId');
+    }
+  };
+
+  // Auto-select first store if none selected
+  useEffect(() => {
+    if (storeRoles.length > 0 && !currentStoreId) {
+      const saved = localStorage.getItem('currentStoreId');
+      if (saved && storeRoles.some(s => s.store_id === saved)) {
+        setCurrentStoreId(saved);
+      } else {
+        setCurrentStoreId(storeRoles[0].store_id);
+      }
+    }
+  }, [storeRoles, currentStoreId]);
 
   const fetchRoles = async (userId: string) => {
     try {
@@ -175,6 +201,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         systemRoles,
         storeRoles,
         isAdmin,
+        storeId: currentStoreId,
+        storeRole,
+        setCurrentStore,
         signIn,
         signUp,
         signOut,
