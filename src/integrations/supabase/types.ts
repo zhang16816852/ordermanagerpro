@@ -76,6 +76,24 @@ export type Database = {
           },
         ]
       }
+      data_versions: {
+        Row: {
+          table_name: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          table_name: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          table_name?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
       invitations: {
         Row: {
           created_at: string
