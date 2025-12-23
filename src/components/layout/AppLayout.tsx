@@ -52,6 +52,8 @@ const storeNavItems: NavItem[] = [
   { title: '商品目錄', href: '/catalog', icon: PackageSearch },
   { title: '我的訂單', href: '/orders', icon: ClipboardList },
   { title: '銷貨單管理', href: '/sales-notes', icon: FileText },
+  { title: '收貨確認', href: '/receiving', icon: Truck },
+  { title: '團隊管理', href: '/team', icon: Users },
 ];
 
 interface AppLayoutProps {
