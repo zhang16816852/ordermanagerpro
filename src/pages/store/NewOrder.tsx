@@ -1,15 +1,15 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { Search, ShoppingCart, Plus, Minus, Trash2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
+import { useStoreProductCache } from "@/hooks/useProductCache";
 
 interface CartItem {
   productId: string;
@@ -27,25 +27,8 @@ export default function StoreNewOrder() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [notes, setNotes] = useState("");
 
-  const { data: storeProducts, isLoading } = useQuery({
-    queryKey: ["store-products-for-order", storeId],
-    queryFn: async () => {
-      if (!storeId) return [];
-
-      const { data, error } = await supabase
-        .from("store_products")
-        .select(`
-          id,
-          wholesale_price,
-          product:products(id, name, sku, base_wholesale_price, status)
-        `)
-        .eq("store_id", storeId);
-
-      if (error) throw error;
-      return data?.filter((sp) => sp.product?.status === "active") || [];
-    },
-    enabled: !!storeId,
-  });
+  // Use cached products
+  const { products: storeProducts, isLoading } = useStoreProductCache(storeId);
 
   const createOrderMutation = useMutation({
     mutationFn: async () => {
@@ -95,22 +78,21 @@ export default function StoreNewOrder() {
     },
   });
 
-  const filteredProducts = storeProducts?.filter((sp) => {
+  const filteredProducts = storeProducts?.filter((product) => {
     const searchLower = search.toLowerCase();
     return (
-      sp.product?.name?.toLowerCase().includes(searchLower) ||
-      sp.product?.sku?.toLowerCase().includes(searchLower)
+      product.name?.toLowerCase().includes(searchLower) ||
+      product.sku?.toLowerCase().includes(searchLower)
     );
   });
 
-  const addToCart = (sp: any) => {
-    const existing = cart.find((item) => item.productId === sp.product.id);
-    const price = sp.wholesale_price ?? sp.product.base_wholesale_price;
+  const addToCart = (product: typeof storeProducts[number]) => {
+    const existing = cart.find((item) => item.productId === product.id);
 
     if (existing) {
       setCart(
         cart.map((item) =>
-          item.productId === sp.product.id
+          item.productId === product.id
             ? { ...item, quantity: item.quantity + 1 }
             : item
         )
@@ -119,10 +101,10 @@ export default function StoreNewOrder() {
       setCart([
         ...cart,
         {
-          productId: sp.product.id,
-          name: sp.product.name,
-          sku: sp.product.sku,
-          price,
+          productId: product.id,
+          name: product.name,
+          sku: product.sku,
+          price: product.wholesale_price,
           quantity: 1,
         },
       ]);
@@ -188,28 +170,26 @@ export default function StoreNewOrder() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {filteredProducts?.map((sp) => {
-                    const price =
-                      sp.wholesale_price ?? sp.product?.base_wholesale_price;
+                  {filteredProducts?.map((product) => {
                     const inCart = cart.find(
-                      (item) => item.productId === sp.product?.id
+                      (item) => item.productId === product.id
                     );
 
                     return (
                       <div
-                        key={sp.id}
+                        key={product.id}
                         className="p-3 border rounded-lg hover:border-primary cursor-pointer transition-colors"
-                        onClick={() => addToCart(sp)}
+                        onClick={() => addToCart(product)}
                       >
                         <div className="flex justify-between items-start">
                           <div>
-                            <div className="font-medium">{sp.product?.name}</div>
+                            <div className="font-medium">{product.name}</div>
                             <div className="text-sm text-muted-foreground font-mono">
-                              {sp.product?.sku}
+                              {product.sku}
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="font-medium">${price}</div>
+                            <div className="font-medium">${product.wholesale_price}</div>
                             {inCart && (
                               <div className="text-sm text-primary">
                                 已加入 x{inCart.quantity}
