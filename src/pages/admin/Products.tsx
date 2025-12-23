@@ -61,6 +61,7 @@ export default function AdminProducts() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
       toast.success('產品已新增');
       setIsDialogOpen(false);
     },
@@ -76,6 +77,7 @@ export default function AdminProducts() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
       toast.success('產品已更新');
       setIsDialogOpen(false);
       setEditingProduct(null);
