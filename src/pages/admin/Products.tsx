@@ -129,9 +129,14 @@ export default function AdminProducts() {
           <h1 className="text-2xl font-bold tracking-tight">產品管理</h1>
           <p className="text-muted-foreground">管理系統中的所有產品</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={(open) => !open && closeDialog()}>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={() => setEditingProduct(null)}>
+            <Button
+              onClick={() => {
+                setEditingProduct(null);
+                setIsDialogOpen(true);
+              }}
+            >
               <Plus className="mr-2 h-4 w-4" />
               新增產品
             </Button>
