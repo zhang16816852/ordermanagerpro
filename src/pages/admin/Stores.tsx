@@ -121,13 +121,20 @@ export default function AdminStores() {
           <h1 className="text-2xl font-bold tracking-tight">店鋪管理</h1>
           <p className="text-muted-foreground">管理所有加盟店鋪</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={(open) => !open && closeDialog()}>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+
           <DialogTrigger asChild>
-            <Button onClick={() => setEditingStore(null)}>
+            <Button
+              onClick={() => {
+                setEditingStore(null);
+                setIsDialogOpen(true);
+              }}
+            >
               <Plus className="mr-2 h-4 w-4" />
               新增店鋪
             </Button>
           </DialogTrigger>
+
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{editingStore ? '編輯店鋪' : '新增店鋪'}</DialogTitle>
