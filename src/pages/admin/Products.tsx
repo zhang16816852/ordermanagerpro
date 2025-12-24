@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables, TablesInsert } from '@/integrations/supabase/types';
 import { Button } from '@/components/ui/button';
@@ -29,9 +29,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Pencil, Search } from 'lucide-react';
+import { Plus, Pencil, Search, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useProductCache } from '@/hooks/useProductCache';
 
 type Product = Tables<'products'>;
 type ProductInsert = TablesInsert<'products'>;
@@ -42,17 +43,8 @@ export default function AdminProducts() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const queryClient = useQueryClient();
 
-  const { data: products, isLoading } = useQuery({
-    queryKey: ['admin-products'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data as Product[];
-    },
-  });
+  // Use product cache instead of direct query
+  const { products, isLoading, version, forceRefresh } = useProductCache();
 
   const createMutation = useMutation({
     mutationFn: async (product: ProductInsert) => {
@@ -127,101 +119,110 @@ export default function AdminProducts() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">產品管理</h1>
-          <p className="text-muted-foreground">管理系統中的所有產品</p>
+          <p className="text-muted-foreground">
+            管理系統中的所有產品
+            <span className="ml-2 text-xs">（緩存版本：{version}）</span>
+          </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button
-              onClick={() => {
-                setEditingProduct(null);
-                setIsDialogOpen(true);
-              }}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              新增產品
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{editingProduct ? '編輯產品' : '新增產品'}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="name">產品名稱</Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    defaultValue={editingProduct?.name}
-                    required
-                  />
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={forceRefresh}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            重新整理
+          </Button>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button
+                onClick={() => {
+                  setEditingProduct(null);
+                  setIsDialogOpen(true);
+                }}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                新增產品
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editingProduct ? '編輯產品' : '新增產品'}</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">產品名稱</Label>
+                    <Input
+                      id="name"
+                      name="name"
+                      defaultValue={editingProduct?.name}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="sku">SKU</Label>
+                    <Input
+                      id="sku"
+                      name="sku"
+                      defaultValue={editingProduct?.sku}
+                      required
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="sku">SKU</Label>
-                  <Input
-                    id="sku"
-                    name="sku"
-                    defaultValue={editingProduct?.sku}
-                    required
+                  <Label htmlFor="description">描述</Label>
+                  <Textarea
+                    id="description"
+                    name="description"
+                    defaultValue={editingProduct?.description || ''}
                   />
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">描述</Label>
-                <Textarea
-                  id="description"
-                  name="description"
-                  defaultValue={editingProduct?.description || ''}
-                />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="base_wholesale_price">批發價</Label>
+                    <Input
+                      id="base_wholesale_price"
+                      name="base_wholesale_price"
+                      type="number"
+                      step="0.01"
+                      defaultValue={editingProduct?.base_wholesale_price}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="base_retail_price">零售價</Label>
+                    <Input
+                      id="base_retail_price"
+                      name="base_retail_price"
+                      type="number"
+                      step="0.01"
+                      defaultValue={editingProduct?.base_retail_price}
+                    />
+                  </div>
+                </div>
                 <div className="space-y-2">
-                  <Label htmlFor="base_wholesale_price">批發價</Label>
-                  <Input
-                    id="base_wholesale_price"
-                    name="base_wholesale_price"
-                    type="number"
-                    step="0.01"
-                    defaultValue={editingProduct?.base_wholesale_price}
-                  />
+                  <Label htmlFor="status">狀態</Label>
+                  <Select
+                    name="status"
+                    defaultValue={editingProduct?.status || 'active'}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">上架中</SelectItem>
+                      <SelectItem value="discontinued">已停售</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="base_retail_price">零售價</Label>
-                  <Input
-                    id="base_retail_price"
-                    name="base_retail_price"
-                    type="number"
-                    step="0.01"
-                    defaultValue={editingProduct?.base_retail_price}
-                  />
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={closeDialog}>
+                    取消
+                  </Button>
+                  <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
+                    {editingProduct ? '儲存' : '新增'}
+                  </Button>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="status">狀態</Label>
-                <Select
-                  name="status"
-                  defaultValue={editingProduct?.status || 'active'}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">上架中</SelectItem>
-                    <SelectItem value="discontinued">已停售</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={closeDialog}>
-                  取消
-                </Button>
-                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
-                  {editingProduct ? '儲存' : '新增'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="flex items-center gap-4">

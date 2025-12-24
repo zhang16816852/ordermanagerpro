@@ -19,10 +19,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Eye, ChevronRight } from 'lucide-react';
+import { Search, Eye, Plus } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
+import { useNavigate } from 'react-router-dom';
 import {
   Dialog,
   DialogContent,
@@ -55,6 +56,7 @@ const statusLabels: Record<string, { label: string; className: string }> = {
 };
 
 export default function AdminOrders() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [storeFilter, setStoreFilter] = useState<string>('all');
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
@@ -128,9 +130,15 @@ export default function AdminOrders() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">所有訂單</h1>
-        <p className="text-muted-foreground">查看與管理系統中的所有訂單</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">所有訂單</h1>
+          <p className="text-muted-foreground">查看與管理系統中的所有訂單</p>
+        </div>
+        <Button onClick={() => navigate('/admin/orders/new')}>
+          <Plus className="mr-2 h-4 w-4" />
+          代訂訂單
+        </Button>
       </div>
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
