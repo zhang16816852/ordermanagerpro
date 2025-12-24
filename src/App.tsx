@@ -14,6 +14,7 @@ import AdminDashboard from "./pages/admin/Dashboard";
 import AdminProducts from "./pages/admin/Products";
 import AdminStores from "./pages/admin/Stores";
 import AdminOrders from "./pages/admin/Orders";
+import AdminNewOrder from "./pages/admin/NewOrder";
 import AdminSalesNotes from "./pages/admin/SalesNotes";
 import AdminShippingPool from "./pages/admin/ShippingPool";
 import AdminUsers from "./pages/admin/Users";
@@ -75,6 +76,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <AppLayout>
               <AdminOrders />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/orders/new"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <AdminNewOrder />
             </AppLayout>
           </ProtectedRoute>
         }
