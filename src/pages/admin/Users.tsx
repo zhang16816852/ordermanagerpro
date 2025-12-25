@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, Users, Store, UserPlus, Mail, Clock, Trash2 } from "lucide-react";
+import { Search, Users, Store, UserPlus, Mail, Clock, Trash2, Copy } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
@@ -221,6 +221,15 @@ export default function AdminUsers() {
     }
   };
 
+  const getInviteLink = (token: string) => {
+    return `${window.location.origin}/invite/${token}`;
+  };
+
+  const copyInviteLink = (token: string) => {
+    navigator.clipboard.writeText(getInviteLink(token));
+    toast.success("邀請連結已複製");
+  };
+
   const openAssignDialog = (userId: string) => {
     setSelectedUserId(userId);
     setShowAssignDialog(true);
@@ -361,7 +370,7 @@ export default function AdminUsers() {
                   <TableHead>店鋪</TableHead>
                   <TableHead>角色</TableHead>
                   <TableHead>到期時間</TableHead>
-                  <TableHead>狀態</TableHead>
+                  <TableHead>邀請連結</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -378,10 +387,14 @@ export default function AdminUsers() {
                       {format(new Date(inv.expires_at), "yyyy/MM/dd HH:mm")}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">
-                        <Clock className="h-3 w-3 mr-1" />
-                        等待中
-                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyInviteLink(inv.token)}
+                      >
+                        <Copy className="h-4 w-4 mr-1" />
+                        複製連結
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

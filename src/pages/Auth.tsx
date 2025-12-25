@@ -41,8 +41,9 @@ export default function Auth() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
 
-  // Check for invitation token
+  // Check for invitation token and redirect
   const inviteToken = searchParams.get('invite');
+  const redirectUrl = searchParams.get('redirect') || '/';
   
   useEffect(() => {
     if (inviteToken) {
@@ -52,9 +53,9 @@ export default function Auth() {
 
   useEffect(() => {
     if (user && !authLoading) {
-      navigate('/');
+      navigate(redirectUrl);
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, redirectUrl]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,7 +79,7 @@ export default function Auth() {
     setLoading(false);
     
     if (!error) {
-      navigate('/');
+      navigate(redirectUrl);
     }
   };
 
@@ -109,7 +110,7 @@ export default function Auth() {
     setLoading(false);
     
     if (!error) {
-      navigate('/');
+      navigate(redirectUrl);
     }
   };
 
