@@ -29,6 +29,7 @@ import StoreReceiving from "./pages/store/Receiving";
 import StoreTeam from "./pages/store/Team";
 import StoreAudit from "./pages/store/Audit";
 import StoreNotifications from "./pages/store/Notifications";
+import AcceptInvite from "./pages/AcceptInvite";
 
 const queryClient = new QueryClient();
 
@@ -38,6 +39,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/auth" element={<Auth />} />
+      <Route path="/invite/:token" element={<AcceptInvite />} />
       
       {/* Admin Routes */}
       <Route
