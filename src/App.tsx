@@ -15,9 +15,12 @@ import AdminProducts from "./pages/admin/Products";
 import AdminStores from "./pages/admin/Stores";
 import AdminOrders from "./pages/admin/Orders";
 import AdminNewOrder from "./pages/admin/NewOrder";
+import AdminEditOrder from "./pages/admin/EditOrder";
 import AdminSalesNotes from "./pages/admin/SalesNotes";
 import AdminShippingPool from "./pages/admin/ShippingPool";
 import AdminUsers from "./pages/admin/Users";
+import AdminBrandPricing from "./pages/admin/BrandPricing";
+import AdminAccounting from "./pages/admin/Accounting";
 
 // Store pages
 import StoreDashboard from "./pages/store/Dashboard";
@@ -25,10 +28,12 @@ import StoreOrders from "./pages/store/Orders";
 import StoreCatalog from "./pages/store/Catalog";
 import StoreSalesNotes from "./pages/store/SalesNotes";
 import StoreNewOrder from "./pages/store/NewOrder";
+import StoreEditOrder from "./pages/store/EditOrder";
 import StoreReceiving from "./pages/store/Receiving";
 import StoreTeam from "./pages/store/Team";
 import StoreAudit from "./pages/store/Audit";
 import StoreNotifications from "./pages/store/Notifications";
+import StoreAccounting from "./pages/store/Accounting";
 import AcceptInvite from "./pages/AcceptInvite";
 
 const queryClient = new QueryClient();
@@ -93,6 +98,16 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/admin/orders/:orderId/edit"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <AdminEditOrder />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/admin/sales-notes"
         element={
           <ProtectedRoute>
@@ -118,6 +133,26 @@ function AppRoutes() {
           <ProtectedRoute>
             <AppLayout>
               <AdminUsers />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/brand-pricing"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <AdminBrandPricing />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/accounting"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <AdminAccounting />
             </AppLayout>
           </ProtectedRoute>
         }
@@ -150,6 +185,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <AppLayout>
               <StoreNewOrder />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/orders/:orderId/edit"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <StoreEditOrder />
             </AppLayout>
           </ProtectedRoute>
         }
@@ -210,6 +255,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <AppLayout>
               <StoreNotifications />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/accounting"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <StoreAccounting />
             </AppLayout>
           </ProtectedRoute>
         }

@@ -111,35 +111,56 @@ export function useProductCache() {
   };
 }
 
-// Hook for store-specific products with caching
+// Hook for store-specific products with caching (now uses brand-based pricing)
 export function useStoreProductCache(storeId: string | null) {
-
   const { products: allProducts, activeProducts: globalActiveProducts, isLoading: productsLoading } = useProductCache();
-  const { data: storeSpecificPrices = [], isLoading: storePricesLoading } = useQuery({
-    queryKey: ['store-products-prices', storeId],
+  
+  // 先取得店鋪的品牌資訊
+  const { data: storeInfo } = useQuery({
+    queryKey: ['store-brand', storeId],
     queryFn: async () => {
-      if (!storeId) return [];
+      if (!storeId) return null;
+      const { data, error } = await supabase
+        .from('stores')
+        .select('brand')
+        .eq('id', storeId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!storeId,
+    staleTime: 1000 * 60 * 10, // 10 分鐘
+  });
+
+  const brand = storeInfo?.brand;
+
+  // 使用品牌來取得價格
+  const { data: brandPrices = [], isLoading: brandPricesLoading } = useQuery({
+    queryKey: ['brand-products-prices', brand],
+    queryFn: async () => {
+      if (!brand) return [];
 
       const { data, error } = await supabase
         .from('store_products')
         .select('product_id, wholesale_price, retail_price')
-        .eq('store_id', storeId);
+        .eq('brand', brand);
 
       if (error) throw error;
       return data || [];
     },
-    enabled: !!storeId,
+    enabled: !!brand,
     staleTime: 1000 * 60 * 5, // 5 分鐘
   });
-  // 當有指定 storeId 時：合併店鋪價格
-  // 當 storeId 為 null 時：直接用 base 價格
+
+  // 當有指定 storeId 且有品牌時：使用品牌價格
+  // 否則：直接用 base 價格
   const mergedProducts = (storeId ? allProducts : globalActiveProducts).map(product => {
-    const storePrice = storeSpecificPrices.find(sp => sp.product_id === product.id);
+    const brandPrice = brandPrices.find(bp => bp.product_id === product.id);
     return {
       ...product,
-      wholesale_price: storePrice?.wholesale_price ?? product.base_wholesale_price,
-      retail_price: storePrice?.retail_price ?? product.base_retail_price,
-      has_store_price: !!storePrice,
+      wholesale_price: brandPrice?.wholesale_price ?? product.base_wholesale_price,
+      retail_price: brandPrice?.retail_price ?? product.base_retail_price,
+      has_store_price: !!brandPrice,
     };
   });
 
@@ -148,6 +169,7 @@ export function useStoreProductCache(storeId: string | null) {
 
   return {
     products: finalProducts,
-    isLoading: productsLoading || (storeId ? storePricesLoading : false),
+    isLoading: productsLoading || (storeId ? brandPricesLoading : false),
+    brand,
   };
 }

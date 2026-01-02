@@ -44,9 +44,11 @@ const adminNavItems: NavItem[] = [
   { title: '總覽', href: '/admin', icon: Home },
   { title: '店鋪管理', href: '/admin/stores', icon: Store },
   { title: '產品管理', href: '/admin/products', icon: PackageSearch },
-  { title: '所有訂單', href: '/admin/orders', icon: ShoppingCart },
+  { title: '品牌價格', href: '/admin/brand-pricing', icon: ShoppingCart },
+  { title: '所有訂單', href: '/admin/orders', icon: ClipboardList },
   { title: '出貨池', href: '/admin/shipping-pool', icon: Truck },
   { title: '銷售單', href: '/admin/sales-notes', icon: FileText },
+  { title: '會計報表', href: '/admin/accounting', icon: FileText },
   { title: '人員管理', href: '/admin/users', icon: Users },
 ];
 // ← 新增這兩行：取得購物車總件數
@@ -69,8 +71,8 @@ export function AppLayout({ children }: AppLayoutProps) {
     { title: '儀表板', href: '/dashboard', icon: Home },
     { title: '商品目錄', href: '/catalog', icon: PackageSearch },
     { title: '我的訂單', href: '/orders', icon: ClipboardList },
-    { title: '銷貨單管理', href: '/sales-notes', icon: FileText },
-    { title: '收貨確認', href: '/receiving', icon: Truck },
+    { title: '銷貨單', href: '/sales-notes', icon: FileText },
+    { title: '會計報表', href: '/accounting', icon: FileText },
     { title: '團隊管理', href: '/team', icon: Users },
   ];
 
