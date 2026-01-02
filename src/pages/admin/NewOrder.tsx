@@ -1,4 +1,5 @@
 // src/pages/admin/NewOrder.tsx
+
 import { useState } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,7 +19,7 @@ import { Search, ShoppingCart, Plus, Minus, Trash2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
-import { useProductCache } from "@/hooks/useProductCache";
+import { useStoreProductCache } from "@/hooks/useProductCache"; // 統一使用這個
 
 interface CartItem {
   productId: string;
@@ -32,15 +33,18 @@ export default function AdminNewOrder() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState("");
+
   const [selectedStoreId, setSelectedStoreId] = useState<string>("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [notes, setNotes] = useState("");
+  const [search, setSearch] = useState("");
 
-  // Use cached products
-  const { activeProducts, isLoading: productsLoading } = useProductCache();
+  // 完全依賴 useStoreProductCache 來取得產品與正確價格
+  const { products: storeProducts, isLoading: productsLoading } = useStoreProductCache(
+    selectedStoreId || null
+  );
 
-  // Fetch stores
+  // 店鋪列表
   const { data: stores, isLoading: storesLoading } = useQuery({
     queryKey: ["admin-stores-list"],
     queryFn: async () => {
@@ -53,27 +57,11 @@ export default function AdminNewOrder() {
     },
   });
 
-  // Fetch store-specific prices when store is selected
-  const { data: storeProducts } = useQuery({
-    queryKey: ["store-products", selectedStoreId],
-    queryFn: async () => {
-      if (!selectedStoreId) return [];
-      const { data, error } = await supabase
-        .from("store_products")
-        .select("product_id, wholesale_price")
-        .eq("store_id", selectedStoreId);
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!selectedStoreId,
-  });
-
   const createOrderMutation = useMutation({
     mutationFn: async () => {
       if (!selectedStoreId || !user) throw new Error("請選擇店鋪");
       if (cart.length === 0) throw new Error("購物車是空的");
 
-      // Create order
       const { data: order, error: orderError } = await supabase
         .from("orders")
         .insert({
@@ -87,7 +75,6 @@ export default function AdminNewOrder() {
 
       if (orderError) throw orderError;
 
-      // Create order items
       const orderItems = cart.map((item) => ({
         order_id: order.id,
         product_id: item.productId,
@@ -96,10 +83,7 @@ export default function AdminNewOrder() {
         unit_price: item.price,
       }));
 
-      const { error: itemsError } = await supabase
-        .from("order_items")
-        .insert(orderItems);
-
+      const { error: itemsError } = await supabase.from("order_items").insert(orderItems);
       if (itemsError) throw itemsError;
 
       return order;
@@ -117,13 +101,14 @@ export default function AdminNewOrder() {
     },
   });
 
-  // Get product price (store-specific or base)
-  const getProductPrice = (productId: string, basePrice: number) => {
-    const storeProduct = storeProducts?.find((sp) => sp.product_id === productId);
-    return storeProduct?.wholesale_price ?? basePrice;
+  // 直接從 storeProducts 拿價格（已經是正確的店鋪價格或 base）
+  const getProductPrice = (productId: string) => {
+    const product = storeProducts.find((p) => p.id === productId);
+    return product?.wholesale_price ?? 0;
   };
 
-  const filteredProducts = activeProducts?.filter((product) => {
+  // 搜尋過濾
+  const filteredProducts = storeProducts.filter((product) => {
     const searchLower = search.toLowerCase();
     return (
       product.name?.toLowerCase().includes(searchLower) ||
@@ -131,15 +116,15 @@ export default function AdminNewOrder() {
     );
   });
 
-  const addToCart = (product: (typeof activeProducts)[number]) => {
-    const price = getProductPrice(product.id, product.base_wholesale_price);
+  const addToCart = (product: typeof storeProducts[number]) => {
+    const price = product.wholesale_price; // 已經是正確價格！
     const existing = cart.find((item) => item.productId === product.id);
 
     if (existing) {
       setCart(
         cart.map((item) =>
           item.productId === product.id
-            ? { ...item, quantity: item.quantity + 1, price }
+            ? { ...item, quantity: item.quantity + 1 }
             : item
         )
       );
@@ -173,16 +158,12 @@ export default function AdminNewOrder() {
     setCart(cart.filter((item) => item.productId !== productId));
   };
 
-  // Update cart prices when store changes
+  const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
   const handleStoreChange = (storeId: string) => {
     setSelectedStoreId(storeId);
-    // Prices will be updated via the storeProducts query
+    setCart([]); // 建議：切換店鋪時清空購物車，避免價格錯亂
   };
-
-  const totalAmount = cart.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
 
   return (
     <div className="space-y-6">
@@ -233,19 +214,11 @@ export default function AdminNewOrder() {
                 </div>
 
                 {productsLoading ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    載入中...
-                  </div>
+                  <div className="text-center py-8 text-muted-foreground">載入中...</div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {filteredProducts?.map((product) => {
-                      const price = getProductPrice(
-                        product.id,
-                        product.base_wholesale_price
-                      );
-                      const inCart = cart.find(
-                        (item) => item.productId === product.id
-                      );
+                    {filteredProducts.map((product) => {
+                      const inCart = cart.find((item) => item.productId === product.id);
 
                       return (
                         <div
@@ -261,7 +234,7 @@ export default function AdminNewOrder() {
                               </div>
                             </div>
                             <div className="text-right">
-                              <div className="font-medium">${price}</div>
+                              <div className="font-medium">${product.wholesale_price}</div>
                               {inCart && (
                                 <div className="text-sm text-primary">
                                   已加入 x{inCart.quantity}
@@ -278,6 +251,7 @@ export default function AdminNewOrder() {
             </Card>
           </div>
 
+          {/* 購物車部分保持不變 */}
           <div>
             <Card className="sticky top-4">
               <CardHeader>
