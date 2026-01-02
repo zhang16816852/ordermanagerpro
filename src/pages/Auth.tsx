@@ -26,15 +26,15 @@ export default function Auth() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, signIn, signUp, loading: authLoading } = useAuth();
-  
+
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  
+
   // Login form
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  
+
   // Signup form
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
@@ -44,7 +44,45 @@ export default function Auth() {
   // Check for invitation token and redirect
   const inviteToken = searchParams.get('invite');
   const redirectUrl = searchParams.get('redirect') || '/';
-  
+  /*email 後墜輔助輸入區域 */
+
+  //email 後墜輔助清單
+  const emailDomains = [
+    "gmail.com",
+    "icloud.com",
+    "yahoo.com",
+    "outlook.com",
+    "hotmail.com",
+  ];
+  //監控變化
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const handleEmailChange = (value: string) => {
+    setLoginEmail(value);
+
+    const atIndex = value.indexOf("@");
+
+    if (atIndex === -1) {
+      setShowSuggestions(false);
+      return;
+    }
+
+    const prefix = value.slice(0, atIndex);
+    const domainPart = value.slice(atIndex + 1);
+
+    const filtered = emailDomains.filter(domain =>
+      domain.startsWith(domainPart)
+    );
+
+    setSuggestions(filtered);
+    setShowSuggestions(filtered.length > 0);
+  };
+  const selectDomain = (domain: string) => {
+    const prefix = loginEmail.split("@")[0];
+    setLoginEmail(`${prefix}@${domain}`);
+    setShowSuggestions(false);
+  };
+
   useEffect(() => {
     if (inviteToken) {
       setActiveTab('signup');
@@ -60,7 +98,7 @@ export default function Auth() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
-    
+
     try {
       loginSchema.parse({ email: loginEmail, password: loginPassword });
     } catch (err) {
@@ -73,11 +111,11 @@ export default function Auth() {
         return;
       }
     }
-    
+
     setLoading(true);
     const { error } = await signIn(loginEmail, loginPassword);
     setLoading(false);
-    
+
     if (!error) {
       navigate(redirectUrl);
     }
@@ -86,7 +124,7 @@ export default function Auth() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
-    
+
     try {
       signUpSchema.parse({
         email: signupEmail,
@@ -104,11 +142,11 @@ export default function Auth() {
         return;
       }
     }
-    
+
     setLoading(true);
     const { error } = await signUp(signupEmail, signupPassword, fullName);
     setLoading(false);
-    
+
     if (!error) {
       navigate(redirectUrl);
     }
@@ -140,9 +178,9 @@ export default function Auth() {
               {activeTab === 'login' ? '登入帳號' : '建立帳號'}
             </CardTitle>
             <CardDescription className="text-center">
-              {activeTab === 'login' 
+              {activeTab === 'login'
                 ? '輸入您的帳號密碼登入系統'
-                : inviteToken 
+                : inviteToken
                   ? '您收到了邀請，請填寫資料完成註冊'
                   : '註冊新帳號以開始使用系統'
               }
@@ -154,11 +192,12 @@ export default function Auth() {
                 <TabsTrigger value="login">登入</TabsTrigger>
                 <TabsTrigger value="signup">註冊</TabsTrigger>
               </TabsList>
-              
+
               <TabsContent value="login">
                 <form onSubmit={handleLogin} className="space-y-4">
-                  <div className="space-y-2">
+                  <div className="space-y-2 relative">
                     <Label htmlFor="login-email">電子信箱</Label>
+
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
@@ -167,12 +206,33 @@ export default function Auth() {
                         placeholder="your@email.com"
                         className="pl-10"
                         value={loginEmail}
-                        onChange={(e) => setLoginEmail(e.target.value)}
+                        onChange={(e) => handleEmailChange(e.target.value)}
+                        onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                        onFocus={() => loginEmail.includes("@") && setShowSuggestions(true)}
                       />
                     </div>
-                    {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+
+                    {showSuggestions && (
+                      <div className="absolute z-10 mt-1 w-full rounded-md border bg-background shadow">
+                        {suggestions.map(domain => (
+                          <button
+                            key={domain}
+                            type="button"
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                            onMouseDown={() => selectDomain(domain)}
+                          >
+                            {loginEmail.split("@")[0]}@{domain}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {errors.email && (
+                      <p className="text-sm text-destructive">{errors.email}</p>
+                    )}
                   </div>
-                  
+
+
                   <div className="space-y-2">
                     <Label htmlFor="login-password">密碼</Label>
                     <div className="relative">
@@ -188,14 +248,14 @@ export default function Auth() {
                     </div>
                     {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
                   </div>
-                  
+
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     登入
                   </Button>
                 </form>
               </TabsContent>
-              
+
               <TabsContent value="signup">
                 <form onSubmit={handleSignUp} className="space-y-4">
                   <div className="space-y-2">
@@ -213,7 +273,7 @@ export default function Auth() {
                     </div>
                     {errors.fullName && <p className="text-sm text-destructive">{errors.fullName}</p>}
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="signup-email">電子信箱</Label>
                     <div className="relative">
@@ -229,7 +289,7 @@ export default function Auth() {
                     </div>
                     {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="signup-password">密碼</Label>
                     <div className="relative">
@@ -245,7 +305,7 @@ export default function Auth() {
                     </div>
                     {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="confirm-password">確認密碼</Label>
                     <div className="relative">
@@ -261,12 +321,12 @@ export default function Auth() {
                     </div>
                     {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword}</p>}
                   </div>
-                  
+
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     註冊
                   </Button>
-                  
+
                   <p className="text-xs text-center text-muted-foreground">
                     自行註冊的帳號為基本會員，僅可查看零售價格
                   </p>
