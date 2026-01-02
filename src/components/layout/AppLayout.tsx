@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useCartStore } from '@/stores/useCartStore';
+import { Badge } from "@/components/ui/badge"; // ← 新增這行
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +37,7 @@ interface NavItem {
   title: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
+  badge?: number;
 }
 
 const adminNavItems: NavItem[] = [
@@ -46,15 +49,10 @@ const adminNavItems: NavItem[] = [
   { title: '銷售單', href: '/admin/sales-notes', icon: FileText },
   { title: '人員管理', href: '/admin/users', icon: Users },
 ];
+// ← 新增這兩行：取得購物車總件數
 
-const storeNavItems: NavItem[] = [
-  { title: '儀表板', href: '/dashboard', icon: Home },
-  { title: '商品目錄', href: '/catalog', icon: PackageSearch },
-  { title: '我的訂單', href: '/orders', icon: ClipboardList },
-  { title: '銷貨單管理', href: '/sales-notes', icon: FileText },
-  { title: '收貨確認', href: '/receiving', icon: Truck },
-  { title: '團隊管理', href: '/team', icon: Users },
-];
+
+
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -65,7 +63,27 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { getTotalItems } = useCartStore();
+  const totalCartItems = getTotalItems();
+  const baseStoreNavItems: NavItem[] = [
+    { title: '儀表板', href: '/dashboard', icon: Home },
+    { title: '商品目錄', href: '/catalog', icon: PackageSearch },
+    { title: '我的訂單', href: '/orders', icon: ClipboardList },
+    { title: '銷貨單管理', href: '/sales-notes', icon: FileText },
+    { title: '收貨確認', href: '/receiving', icon: Truck },
+    { title: '團隊管理', href: '/team', icon: Users },
+  ];
 
+  const storeNavItems: NavItem[] = [
+    ...baseStoreNavItems.slice(0, 2),
+    {
+      title: '購物車',
+      href: '/orders/new',
+      icon: ShoppingCart,
+      badge: totalCartItems > 0 ? totalCartItems : undefined,
+    },
+    ...baseStoreNavItems.slice(2),
+  ];
   const navItems = isAdmin ? adminNavItems : storeNavItems;
   const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
 
@@ -95,24 +113,38 @@ export function AppLayout({ children }: AppLayoutProps) {
       <ScrollArea className="flex-1 py-4">
         <nav className="px-3 space-y-1">
           {navItems.map((item) => {
-            const isActive = location.pathname === item.href ||
+            const isActive =
+              location.pathname === item.href ||
               (item.href !== '/' && location.pathname.startsWith(item.href));
-            
+
             return (
               <Link
                 key={item.href}
                 to={item.href}
                 onClick={() => setSidebarOpen(false)}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors',
+                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors relative',
                   isActive
                     ? 'bg-sidebar-primary text-sidebar-primary-foreground'
                     : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                 )}
               >
-                <item.icon className="h-5 w-5" />
-                {item.title}
-                {isActive && <ChevronRight className="ml-auto h-4 w-4" />}
+                <div className="relative">
+                  <item.icon className="h-5 w-5" />
+                  {item.badge !== undefined && item.badge > 0 && (
+                    <Badge
+                      variant="destructive"
+                      className="absolute -top-1.5 -right-1.5 h-5 min-w-[1.25rem] px-1 text-[10px] flex items-center justify-center rounded-full"
+                    >
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </Badge>
+                  )}
+                </div>
+
+                {/* 文字只在大螢幕顯示（展開狀態） */}
+                <span className="hidden lg:block">{item.title}</span>
+
+                {isActive && <ChevronRight className="ml-auto h-4 w-4 hidden lg:block" />}
               </Link>
             );
           })}
