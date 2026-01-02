@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Eye, Plus } from 'lucide-react';
+import { Search, Eye, Plus, Pencil } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
@@ -35,6 +35,7 @@ interface OrderWithDetails {
   id: string;
   created_at: string;
   source_type: 'frontend' | 'admin_proxy';
+  status: 'pending' | 'processing';
   notes: string | null;
   stores: { name: string; code: string | null } | null;
   order_items: {
@@ -53,6 +54,11 @@ const statusLabels: Record<string, { label: string; className: string }> = {
   shipped: { label: '已出貨', className: 'bg-status-shipped text-success-foreground' },
   out_of_stock: { label: '缺貨', className: 'bg-status-out-of-stock text-destructive-foreground' },
   discontinued: { label: '已停售', className: 'bg-status-discontinued text-muted-foreground' },
+};
+
+const orderStatusLabels: Record<string, { label: string; className: string }> = {
+  pending: { label: '未確認', className: 'bg-warning text-warning-foreground' },
+  processing: { label: '處理中', className: 'bg-primary text-primary-foreground' },
 };
 
 export default function AdminOrders() {
@@ -82,6 +88,7 @@ export default function AdminOrders() {
           id,
           created_at,
           source_type,
+          status,
           notes,
           stores (name, code),
           order_items (
@@ -175,9 +182,10 @@ export default function AdminOrders() {
               <TableHead>品項數</TableHead>
               <TableHead className="text-right">金額</TableHead>
               <TableHead>來源</TableHead>
-              <TableHead>狀態</TableHead>
+              <TableHead>訂單狀態</TableHead>
+              <TableHead>出貨狀態</TableHead>
               <TableHead>建立時間</TableHead>
-              <TableHead className="w-12"></TableHead>
+              <TableHead className="w-24"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -190,20 +198,22 @@ export default function AdminOrders() {
                   <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+                  <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                  <TableCell><Skeleton className="h-8 w-8" /></TableCell>
+                  <TableCell><Skeleton className="h-8 w-16" /></TableCell>
                 </TableRow>
               ))
             ) : filteredOrders?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                   沒有找到訂單
                 </TableCell>
               </TableRow>
             ) : (
               filteredOrders?.map((order) => {
-                const status = getOrderStatus(order.order_items);
-                const statusInfo = statusLabels[status];
+                const itemStatus = getOrderStatus(order.order_items);
+                const itemStatusInfo = statusLabels[itemStatus];
+                const orderStatusInfo = orderStatusLabels[order.status];
                 return (
                   <TableRow key={order.id}>
                     <TableCell className="font-mono text-sm">
@@ -227,21 +237,35 @@ export default function AdminOrders() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className={statusInfo.className}>
-                        {statusInfo.label}
+                      <Badge className={orderStatusInfo.className}>
+                        {orderStatusInfo.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={itemStatusInfo.className}>
+                        {itemStatusInfo.label}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {format(new Date(order.created_at), 'MM/dd HH:mm', { locale: zhTW })}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setSelectedOrder(order)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setSelectedOrder(order)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => navigate(`/admin/orders/${order.id}/edit`)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );

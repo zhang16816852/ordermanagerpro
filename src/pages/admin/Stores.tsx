@@ -87,6 +87,7 @@ export default function AdminStores() {
     const storeData = {
       name: formData.get('name') as string,
       code: (formData.get('code') as string) || null,
+      brand: (formData.get('brand') as string) || null,
       address: (formData.get('address') as string) || null,
       phone: (formData.get('phone') as string) || null,
     };
@@ -94,7 +95,7 @@ export default function AdminStores() {
     if (editingStore) {
       updateMutation.mutate({ id: editingStore.id, ...storeData });
     } else {
-      createMutation.mutate(storeData);
+      createMutation.mutate(storeData as any);
     }
   };
 
@@ -161,6 +162,15 @@ export default function AdminStores() {
                 </div>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="brand">品牌</Label>
+                <Input
+                  id="brand"
+                  name="brand"
+                  defaultValue={(editingStore as any)?.brand || ''}
+                  placeholder="例：雷神快修"
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="address">地址</Label>
                 <Input
                   id="address"
@@ -207,6 +217,7 @@ export default function AdminStores() {
             <TableRow>
               <TableHead>代碼</TableHead>
               <TableHead>名稱</TableHead>
+              <TableHead>品牌</TableHead>
               <TableHead>地址</TableHead>
               <TableHead>電話</TableHead>
               <TableHead>成員數</TableHead>
@@ -219,6 +230,7 @@ export default function AdminStores() {
                 <TableRow key={i}>
                   <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-48" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-12" /></TableCell>
@@ -227,7 +239,7 @@ export default function AdminStores() {
               ))
             ) : filteredStores?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   沒有找到店鋪
                 </TableCell>
               </TableRow>
@@ -238,6 +250,11 @@ export default function AdminStores() {
                     {store.code || '-'}
                   </TableCell>
                   <TableCell className="font-medium">{store.name}</TableCell>
+                  <TableCell>
+                    {(store as any).brand ? (
+                      <Badge variant="secondary">{(store as any).brand}</Badge>
+                    ) : '-'}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {store.address || '-'}
                   </TableCell>

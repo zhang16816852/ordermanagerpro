@@ -247,6 +247,7 @@ export type Database = {
           id: string
           notes: string | null
           source_type: Database["public"]["Enums"]["order_source_type"]
+          status: Database["public"]["Enums"]["order_status"]
           store_id: string
           updated_at: string
         }
@@ -256,6 +257,7 @@ export type Database = {
           id?: string
           notes?: string | null
           source_type?: Database["public"]["Enums"]["order_source_type"]
+          status?: Database["public"]["Enums"]["order_status"]
           store_id: string
           updated_at?: string
         }
@@ -265,6 +267,7 @@ export type Database = {
           id?: string
           notes?: string | null
           source_type?: Database["public"]["Enums"]["order_source_type"]
+          status?: Database["public"]["Enums"]["order_status"]
           store_id?: string
           updated_at?: string
         }
@@ -429,6 +432,7 @@ export type Database = {
       }
       store_products: {
         Row: {
+          brand: string | null
           created_at: string
           id: string
           product_id: string
@@ -438,6 +442,7 @@ export type Database = {
           wholesale_price: number | null
         }
         Insert: {
+          brand?: string | null
           created_at?: string
           id?: string
           product_id: string
@@ -447,6 +452,7 @@ export type Database = {
           wholesale_price?: number | null
         }
         Update: {
+          brand?: string | null
           created_at?: string
           id?: string
           product_id?: string
@@ -507,6 +513,7 @@ export type Database = {
       stores: {
         Row: {
           address: string | null
+          brand: string | null
           code: string | null
           created_at: string
           id: string
@@ -517,6 +524,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          brand?: string | null
           code?: string | null
           created_at?: string
           id?: string
@@ -527,6 +535,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          brand?: string | null
           code?: string | null
           created_at?: string
           id?: string
@@ -578,6 +587,10 @@ export type Database = {
         Args: { _store_id: string; _user_id: string }
         Returns: boolean
       }
+      upsert_brand_product_prices: {
+        Args: { p_brand: string; p_products: Json }
+        Returns: undefined
+      }
     }
     Enums: {
       invitation_status: "pending" | "accepted" | "expired"
@@ -588,6 +601,7 @@ export type Database = {
         | "out_of_stock"
         | "discontinued"
       order_source_type: "frontend" | "admin_proxy"
+      order_status: "pending" | "processing"
       product_status: "active" | "discontinued"
       sales_note_status: "draft" | "shipped" | "received"
       store_role: "founder" | "manager" | "employee"
@@ -728,6 +742,7 @@ export const Constants = {
         "discontinued",
       ],
       order_source_type: ["frontend", "admin_proxy"],
+      order_status: ["pending", "processing"],
       product_status: ["active", "discontinued"],
       sales_note_status: ["draft", "shipped", "received"],
       store_role: ["founder", "manager", "employee"],
