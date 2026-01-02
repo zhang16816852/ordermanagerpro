@@ -1,3 +1,4 @@
+// src/hooks/useProductCache.ts
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -45,7 +46,7 @@ async function checkVersionAndFetch(): Promise<{ products: Product[]; version: n
       .from('products')
       .select('*')
       .order('name');
-    
+
     if (fetchError) throw fetchError;
     return { products: products || [], version: clientVersion || 0 };
   }
@@ -73,7 +74,7 @@ export function useProductCache() {
     queryKey: ['products-with-cache'],
     queryFn: checkVersionAndFetch,
     staleTime: 1000 * 60 * 5, // Consider data fresh for 5 minutes
-    gcTime: 1000 * 60 * 30, // Keep in cache for 30 minutes
+    gcTime: Infinity, // 永久保存
   });
 
   useEffect(() => {
@@ -112,40 +113,41 @@ export function useProductCache() {
 
 // Hook for store-specific products with caching
 export function useStoreProductCache(storeId: string | null) {
-  const { products: allProducts, isLoading: productsLoading } = useProductCache();
 
-  const { data: storeProducts, isLoading: storeProductsLoading } = useQuery({
-    queryKey: ['store-products-cache', storeId],
+  const { products: allProducts, activeProducts: globalActiveProducts, isLoading: productsLoading } = useProductCache();
+  const { data: storeSpecificPrices = [], isLoading: storePricesLoading } = useQuery({
+    queryKey: ['store-products-prices', storeId],
     queryFn: async () => {
       if (!storeId) return [];
-      
+
       const { data, error } = await supabase
         .from('store_products')
         .select('product_id, wholesale_price, retail_price')
         .eq('store_id', storeId);
-      
+
       if (error) throw error;
       return data || [];
     },
     enabled: !!storeId,
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 5, // 5 分鐘
+  });
+  // 當有指定 storeId 時：合併店鋪價格
+  // 當 storeId 為 null 時：直接用 base 價格
+  const mergedProducts = (storeId ? allProducts : globalActiveProducts).map(product => {
+    const storePrice = storeSpecificPrices.find(sp => sp.product_id === product.id);
+    return {
+      ...product,
+      wholesale_price: storePrice?.wholesale_price ?? product.base_wholesale_price,
+      retail_price: storePrice?.retail_price ?? product.base_retail_price,
+      has_store_price: !!storePrice,
+    };
   });
 
-  // Merge product data with store-specific pricing
-  const mergedProducts = allProducts
-    .filter(p => p.status === 'active')
-    .map(product => {
-      const storeProduct = storeProducts?.find(sp => sp.product_id === product.id);
-      return {
-        ...product,
-        wholesale_price: storeProduct?.wholesale_price ?? product.base_wholesale_price,
-        retail_price: storeProduct?.retail_price ?? product.base_retail_price,
-        has_store_price: !!storeProduct,
-      };
-    });
+  // 如果沒有指定 storeId，我們只顯示 active 的
+  const finalProducts = storeId ? mergedProducts.filter(p => p.status === 'active') : mergedProducts;
 
   return {
-    products: mergedProducts,
-    isLoading: productsLoading || storeProductsLoading,
+    products: finalProducts,
+    isLoading: productsLoading || (storeId ? storePricesLoading : false),
   };
 }
