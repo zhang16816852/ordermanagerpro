@@ -1,0 +1,4 @@
+project_id = "jpypdaflozhobkavvioi"
+
+[functions.check-data-version]
+verify_jwt = false
