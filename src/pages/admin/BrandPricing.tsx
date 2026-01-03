@@ -29,7 +29,6 @@ import { toast } from 'sonner';
 interface PriceEntry {
   productId: string;
   wholesalePrice: string;
-  retailPrice: string;
 }
 
 export default function AdminBrandPricing() {
@@ -61,7 +60,7 @@ export default function AdminBrandPricing() {
       if (!selectedBrand) return [];
       const { data, error } = await supabase
         .from('store_products')
-        .select('product_id, wholesale_price, retail_price')
+        .select('product_id, wholesale_price')
         .eq('brand', selectedBrand);
       if (error) throw error;
       return data;
@@ -79,7 +78,6 @@ export default function AdminBrandPricing() {
         entries[p.product_id] = {
           productId: p.product_id,
           wholesalePrice: p.wholesale_price?.toString() || '',
-          retailPrice: p.retail_price?.toString() || '',
         };
       });
       setPriceEntries(entries);
@@ -111,7 +109,6 @@ export default function AdminBrandPricing() {
         return {
           product_id: productId,
           wholesale_price: entry?.wholesalePrice ? parseFloat(entry.wholesalePrice) : product?.base_wholesale_price || 0,
-          retail_price: entry?.retailPrice ? parseFloat(entry.retailPrice) : product?.base_retail_price || 0,
         };
       });
 
@@ -131,7 +128,6 @@ export default function AdminBrandPricing() {
             .from('store_products')
             .update({
               wholesale_price: item.wholesale_price,
-              retail_price: item.retail_price,
             })
             .eq('id', existing.id);
           if (error) throw error;
@@ -143,7 +139,6 @@ export default function AdminBrandPricing() {
               brand: selectedBrand,
               product_id: item.product_id,
               wholesale_price: item.wholesale_price,
-              retail_price: item.retail_price,
               store_id: '00000000-0000-0000-0000-000000000000', // placeholder, brand-based pricing
             } as any);
           if (error) throw error;
@@ -151,7 +146,7 @@ export default function AdminBrandPricing() {
       }
     },
     onSuccess: () => {
-      toast.success(`已更新 ${selectedProducts.size} 個產品的價格`);
+      toast.success(`已更新 ${selectedProducts.size} 個產品的批發價`);
       queryClient.invalidateQueries({ queryKey: ['brand-prices'] });
       setSelectedProducts(new Set());
     },
@@ -160,13 +155,12 @@ export default function AdminBrandPricing() {
     },
   });
 
-  const handlePriceChange = (productId: string, field: 'wholesalePrice' | 'retailPrice', value: string) => {
+  const handlePriceChange = (productId: string, value: string) => {
     setPriceEntries(prev => ({
       ...prev,
       [productId]: {
-        ...prev[productId],
         productId,
-        [field]: value,
+        wholesalePrice: value,
       },
     }));
   };
@@ -191,13 +185,12 @@ export default function AdminBrandPricing() {
     }
   };
 
-  const applyBatchPrice = (field: 'wholesalePrice' | 'retailPrice', value: string) => {
+  const applyBatchPrice = (value: string) => {
     const newEntries = { ...priceEntries };
     selectedProducts.forEach(productId => {
       newEntries[productId] = {
-        ...newEntries[productId],
         productId,
-        [field]: value,
+        wholesalePrice: value,
       };
     });
     setPriceEntries(newEntries);
@@ -209,8 +202,8 @@ export default function AdminBrandPricing() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">品牌價格設定</h1>
-          <p className="text-muted-foreground">批次設定各品牌的產品價格</p>
+          <h1 className="text-2xl font-bold tracking-tight">品牌批發價設定</h1>
+          <p className="text-muted-foreground">批次設定各品牌的產品批發價（零售價統一使用基礎零售價）</p>
         </div>
         <Button variant="outline" onClick={forceRefresh}>
           <RefreshCw className="mr-2 h-4 w-4" />
@@ -226,7 +219,7 @@ export default function AdminBrandPricing() {
             選擇品牌
           </CardTitle>
           <CardDescription>
-            選擇要設定價格的品牌，或輸入新品牌名稱
+            選擇要設定批發價的品牌，或輸入新品牌名稱
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -261,7 +254,7 @@ export default function AdminBrandPricing() {
       {selectedProducts.size > 0 && (
         <Card className="border-primary">
           <CardHeader className="pb-3">
-            <CardTitle className="text-lg">批次設定價格</CardTitle>
+            <CardTitle className="text-lg">批次設定批發價</CardTitle>
             <CardDescription>
               已選擇 {selectedProducts.size} 個產品
             </CardDescription>
@@ -274,16 +267,7 @@ export default function AdminBrandPricing() {
                   type="number"
                   placeholder="批發價"
                   className="w-32"
-                  onBlur={(e) => e.target.value && applyBatchPrice('wholesalePrice', e.target.value)}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">零售價：</span>
-                <Input
-                  type="number"
-                  placeholder="零售價"
-                  className="w-32"
-                  onBlur={(e) => e.target.value && applyBatchPrice('retailPrice', e.target.value)}
+                  onBlur={(e) => e.target.value && applyBatchPrice(e.target.value)}
                 />
               </div>
               <Button
@@ -330,7 +314,6 @@ export default function AdminBrandPricing() {
               <TableHead className="text-right">基礎批發價</TableHead>
               <TableHead className="text-right">基礎零售價</TableHead>
               <TableHead className="text-right">品牌批發價</TableHead>
-              <TableHead className="text-right">品牌零售價</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -343,19 +326,18 @@ export default function AdminBrandPricing() {
                   <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
                   <TableCell><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
-                  <TableCell><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
                 </TableRow>
               ))
             ) : filteredProducts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                   沒有找到產品
                 </TableCell>
               </TableRow>
             ) : (
               filteredProducts.map((product) => {
                 const entry = priceEntries[product.id];
-                const hasCustomPrice = entry?.wholesalePrice || entry?.retailPrice;
+                const hasCustomPrice = !!entry?.wholesalePrice;
                 return (
                   <TableRow key={product.id} className={selectedProducts.has(product.id) ? 'bg-muted/50' : ''}>
                     <TableCell>
@@ -382,16 +364,7 @@ export default function AdminBrandPricing() {
                         type="number"
                         placeholder={product.base_wholesale_price.toString()}
                         value={entry?.wholesalePrice || ''}
-                        onChange={(e) => handlePriceChange(product.id, 'wholesalePrice', e.target.value)}
-                        className="w-24 text-right ml-auto"
-                      />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Input
-                        type="number"
-                        placeholder={product.base_retail_price.toString()}
-                        value={entry?.retailPrice || ''}
-                        onChange={(e) => handlePriceChange(product.id, 'retailPrice', e.target.value)}
+                        onChange={(e) => handlePriceChange(product.id, e.target.value)}
                         className="w-24 text-right ml-auto"
                       />
                     </TableCell>

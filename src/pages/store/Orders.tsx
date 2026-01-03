@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -19,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Search, Eye, Pencil } from 'lucide-react';
+import { Search, Eye, Pencil, Package, Truck, List, LayoutGrid } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
@@ -58,10 +59,13 @@ export default function StoreOrders() {
   const { storeRoles } = useAuth();
   const storeId = storeRoles[0]?.store_id;
   const [search, setSearch] = useState('');
+  const [productFilter, setProductFilter] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
+  const [statusTab, setStatusTab] = useState<'pending' | 'processing'>('pending');
+  const [viewMode, setViewMode] = useState<'orders' | 'items'>('orders');
 
   const { data: orders, isLoading } = useQuery({
-    queryKey: ['store-orders', storeId],
+    queryKey: ['store-orders', storeId, statusTab],
     queryFn: async () => {
       if (!storeId) return [];
       const { data, error } = await supabase
@@ -81,12 +85,32 @@ export default function StoreOrders() {
           )
         `)
         .eq('store_id', storeId)
+        .eq('status', statusTab)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data as OrderWithItems[];
     },
     enabled: !!storeId,
   });
+
+  // 獲取所有商品項目（用於商品視圖）
+  const allItems = orders?.flatMap(order => 
+    order.order_items
+      .filter(item => {
+        if (!productFilter) return true;
+        const searchLower = productFilter.toLowerCase();
+        return (
+          item.products?.name.toLowerCase().includes(searchLower) ||
+          item.products?.sku.toLowerCase().includes(searchLower)
+        );
+      })
+      .map(item => ({
+        ...item,
+        orderId: order.id,
+        orderCreatedAt: order.created_at,
+        orderStatus: order.status,
+      }))
+  ) || [];
 
   const filteredOrders = orders?.filter((order) => {
     if (!search) return true;
@@ -100,7 +124,7 @@ export default function StoreOrders() {
     );
   });
 
-  const getOrderStatus = (items: OrderWithItems['order_items']) => {
+  const getOrderShipmentStatus = (items: OrderWithItems['order_items']) => {
     if (items.length === 0) return 'waiting';
     const allShipped = items.every((i) => i.status === 'shipped');
     const someShipped = items.some((i) => i.shipped_quantity > 0);
@@ -128,106 +152,202 @@ export default function StoreOrders() {
         <p className="text-muted-foreground">查看您的所有訂單</p>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="搜尋訂單編號或產品..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+      {/* 狀態 Tabs */}
+      <Tabs value={statusTab} onValueChange={(v) => setStatusTab(v as 'pending' | 'processing')}>
+        <div className="flex items-center justify-between">
+          <TabsList>
+            <TabsTrigger value="pending" className="gap-2">
+              <Package className="h-4 w-4" />
+              未確認
+            </TabsTrigger>
+            <TabsTrigger value="processing" className="gap-2">
+              <Truck className="h-4 w-4" />
+              處理中
+            </TabsTrigger>
+          </TabsList>
+
+          {/* 視圖切換 */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant={viewMode === 'orders' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('orders')}
+            >
+              <List className="h-4 w-4 mr-1" />
+              訂單
+            </Button>
+            <Button
+              variant={viewMode === 'items' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('items')}
+            >
+              <LayoutGrid className="h-4 w-4 mr-1" />
+              商品
+            </Button>
+          </div>
         </div>
-      </div>
 
-      <div className="rounded-lg border bg-card shadow-soft">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>訂單編號</TableHead>
-              <TableHead>品項數</TableHead>
-              <TableHead className="text-right">金額</TableHead>
-              <TableHead>訂單狀態</TableHead>
-              <TableHead>出貨狀態</TableHead>
-              <TableHead>建立時間</TableHead>
-              <TableHead className="w-24"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-8" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                  <TableCell><Skeleton className="h-8 w-16" /></TableCell>
-                </TableRow>
-              ))
-            ) : filteredOrders?.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                  沒有找到訂單
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredOrders?.map((order) => {
-                const itemStatus = getOrderStatus(order.order_items);
-                const itemStatusInfo = statusLabels[itemStatus];
-                const orderStatusInfo = orderStatusLabels[order.status];
-                const canEdit = order.status === 'pending';
-                return (
-                  <TableRow key={order.id}>
-                    <TableCell className="font-mono text-sm">
-                      {order.id.slice(0, 8)}...
-                    </TableCell>
-                    <TableCell>{order.order_items.length}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      ${getOrderTotal(order.order_items).toFixed(2)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={orderStatusInfo.className}>
-                        {orderStatusInfo.label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={itemStatusInfo.className}>
-                        {itemStatusInfo.label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {format(new Date(order.created_at), 'MM/dd HH:mm', { locale: zhTW })}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setSelectedOrder(order)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        {canEdit && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => navigate(`/orders/${order.id}/edit`)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
+        <div className="flex items-center gap-4 mt-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder={viewMode === 'orders' ? "搜尋訂單編號或產品..." : "搜尋產品名稱或 SKU..."}
+              value={viewMode === 'orders' ? search : productFilter}
+              onChange={(e) => viewMode === 'orders' ? setSearch(e.target.value) : setProductFilter(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        </div>
+
+        <TabsContent value={statusTab} className="mt-4">
+          {viewMode === 'orders' ? (
+            // 訂單視圖
+            <div className="rounded-lg border bg-card shadow-soft">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>訂單編號</TableHead>
+                    <TableHead>品項數</TableHead>
+                    <TableHead className="text-right">金額</TableHead>
+                    <TableHead>出貨狀態</TableHead>
+                    <TableHead>建立時間</TableHead>
+                    <TableHead className="w-24"></TableHead>
                   </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                        <TableCell><Skeleton className="h-8 w-16" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : filteredOrders?.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        沒有找到訂單
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredOrders?.map((order) => {
+                      const itemStatus = getOrderShipmentStatus(order.order_items);
+                      const itemStatusInfo = statusLabels[itemStatus];
+                      const canEdit = order.status === 'pending';
+                      return (
+                        <TableRow key={order.id}>
+                          <TableCell className="font-mono text-sm">
+                            {order.id.slice(0, 8)}...
+                          </TableCell>
+                          <TableCell>{order.order_items.length}</TableCell>
+                          <TableCell className="text-right font-medium">
+                            ${getOrderTotal(order.order_items).toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={itemStatusInfo.className}>
+                              {itemStatusInfo.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {format(new Date(order.created_at), 'MM/dd HH:mm', { locale: zhTW })}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setSelectedOrder(order)}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              {canEdit && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => navigate(`/orders/${order.id}/edit`)}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            // 商品視圖
+            <div className="rounded-lg border bg-card shadow-soft">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>產品名稱</TableHead>
+                    <TableHead className="text-right">訂購</TableHead>
+                    <TableHead className="text-right">已出貨</TableHead>
+                    <TableHead className="text-right">待出貨</TableHead>
+                    <TableHead>狀態</TableHead>
+                    <TableHead>訂單日期</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : allItems.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        沒有找到商品
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    allItems.map((item) => {
+                      const pending = item.quantity - item.shipped_quantity;
+                      const itemStatusInfo = statusLabels[item.status];
+                      return (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-mono text-sm">{item.products?.sku}</TableCell>
+                          <TableCell>{item.products?.name}</TableCell>
+                          <TableCell className="text-right">{item.quantity}</TableCell>
+                          <TableCell className="text-right">{item.shipped_quantity}</TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant={pending > 0 ? 'default' : 'secondary'}>{pending}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={itemStatusInfo.className} variant="secondary">
+                              {itemStatusInfo.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {format(new Date(item.orderCreatedAt), 'MM/dd', { locale: zhTW })}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
+      {/* 訂單詳情 Dialog */}
       <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
