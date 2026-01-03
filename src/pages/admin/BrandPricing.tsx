@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useProductCache } from '@/hooks/useProductCache';
@@ -70,7 +70,9 @@ export default function AdminBrandPricing() {
   });
 
   // 當選擇品牌時，載入現有價格
-  useMemo(() => {
+  useEffect(() => {
+    if (!existingPrices) return;
+
     if (existingPrices.length > 0) {
       const entries: Record<string, PriceEntry> = {};
       existingPrices.forEach(p => {
@@ -85,6 +87,7 @@ export default function AdminBrandPricing() {
       setPriceEntries({});
     }
   }, [existingPrices]);
+
 
   const activeProducts = products.filter(p => p.status === 'active');
 
