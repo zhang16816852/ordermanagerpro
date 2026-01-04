@@ -29,10 +29,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Pencil, Search, RefreshCw } from 'lucide-react';
+import { Plus, Pencil, Search, RefreshCw, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useProductCache } from '@/hooks/useProductCache';
+import { ProductBatchImport } from '@/components/products/ProductBatchImport';
 
 type Product = Tables<'products'>;
 type ProductInsert = TablesInsert<'products'>;
@@ -40,6 +41,7 @@ type ProductInsert = TablesInsert<'products'>;
 export default function AdminProducts() {
   const [search, setSearch] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const queryClient = useQueryClient();
 
@@ -128,6 +130,10 @@ export default function AdminProducts() {
           <Button variant="outline" onClick={forceRefresh}>
             <RefreshCw className="mr-2 h-4 w-4" />
             重新整理
+          </Button>
+          <Button variant="outline" onClick={() => setIsImportOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            批次匯入
           </Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
@@ -305,6 +311,8 @@ export default function AdminProducts() {
           </TableBody>
         </Table>
       </div>
+
+      <ProductBatchImport open={isImportOpen} onOpenChange={setIsImportOpen} />
     </div>
   );
 }

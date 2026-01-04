@@ -11,34 +11,32 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Search, Package, Truck, Send, Store } from "lucide-react";
+import { Search, Package, Truck, Send, Store, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 
-interface DraftSalesNote {
+interface ShippingPoolItem {
   id: string;
+  order_item_id: string;
+  quantity: number;
   store_id: string;
-  notes: string | null;
   created_at: string;
-  store: { name: string; code: string | null };
-  sales_note_items: {
+  order_item: {
     id: string;
     quantity: number;
-    order_item: {
-      id: string;
-      quantity: number;
-      shipped_quantity: number;
-      product: { name: string; sku: string };
-    };
-  }[];
+    shipped_quantity: number;
+    unit_price: number;
+    product: { name: string; sku: string };
+  };
 }
 
 interface GroupedByStore {
   storeId: string;
   storeName: string;
   storeCode: string | null;
-  salesNotes: DraftSalesNote[];
+  items: ShippingPoolItem[];
+  totalQuantity: number;
 }
 
 export default function AdminShippingPool() {
@@ -46,7 +44,7 @@ export default function AdminShippingPool() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [storeFilter, setStoreFilter] = useState<string>("all");
-  const [selectedNotes, setSelectedNotes] = useState<Set<string>>(new Set());
+  const [selectedStores, setSelectedStores] = useState<Set<string>>(new Set());
   const [showShipDialog, setShowShipDialog] = useState(false);
   const [notes, setNotes] = useState("");
 
@@ -59,30 +57,26 @@ export default function AdminShippingPool() {
     },
   });
 
-  // 獲取所有草稿狀態的銷售單（出貨池）
-  const { data: draftSalesNotes, isLoading } = useQuery({
-    queryKey: ["draft-sales-notes", storeFilter],
+  // 獲取出貨池項目
+  const { data: shippingPoolItems, isLoading } = useQuery({
+    queryKey: ["shipping-pool", storeFilter],
     queryFn: async () => {
       let query = supabase
-        .from("sales_notes")
+        .from("shipping_pool")
         .select(`
           id,
+          order_item_id,
+          quantity,
           store_id,
-          notes,
           created_at,
-          store:stores(name, code),
-          sales_note_items(
+          order_item:order_items(
             id,
             quantity,
-            order_item:order_items(
-              id,
-              quantity,
-              shipped_quantity,
-              product:products(name, sku)
-            )
+            shipped_quantity,
+            unit_price,
+            product:products(name, sku)
           )
         `)
-        .eq("status", "draft")
         .order("created_at", { ascending: true });
 
       if (storeFilter !== "all") {
@@ -91,21 +85,25 @@ export default function AdminShippingPool() {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as unknown as DraftSalesNote[];
+      return data as unknown as ShippingPoolItem[];
     },
   });
 
   // 按店家分組
-  const groupedByStore: GroupedByStore[] = draftSalesNotes?.reduce((acc, note) => {
-    const existingGroup = acc.find(g => g.storeId === note.store_id);
+  const groupedByStore: GroupedByStore[] = shippingPoolItems?.reduce((acc, item) => {
+    const store = stores?.find(s => s.id === item.store_id);
+    const existingGroup = acc.find(g => g.storeId === item.store_id);
+    
     if (existingGroup) {
-      existingGroup.salesNotes.push(note);
+      existingGroup.items.push(item);
+      existingGroup.totalQuantity += item.quantity;
     } else {
       acc.push({
-        storeId: note.store_id,
-        storeName: note.store?.name || '',
-        storeCode: note.store?.code || null,
-        salesNotes: [note],
+        storeId: item.store_id,
+        storeName: store?.name || '未知店家',
+        storeCode: store?.code || null,
+        items: [item],
+        totalQuantity: item.quantity,
       });
     }
     return acc;
@@ -118,89 +116,115 @@ export default function AdminShippingPool() {
     return (
       group.storeName.toLowerCase().includes(searchLower) ||
       group.storeCode?.toLowerCase().includes(searchLower) ||
-      group.salesNotes.some(note =>
-        note.sales_note_items.some(item =>
-          item.order_item?.product?.name.toLowerCase().includes(searchLower) ||
-          item.order_item?.product?.sku.toLowerCase().includes(searchLower)
-        )
+      group.items.some(item =>
+        item.order_item?.product?.name.toLowerCase().includes(searchLower) ||
+        item.order_item?.product?.sku.toLowerCase().includes(searchLower)
       )
     );
   });
 
-  const toggleNote = (noteId: string) => {
-    const newSelected = new Set(selectedNotes);
-    if (newSelected.has(noteId)) {
-      newSelected.delete(noteId);
+  const toggleStore = (storeId: string) => {
+    const newSelected = new Set(selectedStores);
+    if (newSelected.has(storeId)) {
+      newSelected.delete(storeId);
     } else {
-      newSelected.add(noteId);
+      newSelected.add(storeId);
     }
-    setSelectedNotes(newSelected);
+    setSelectedStores(newSelected);
   };
 
-  const toggleStoreNotes = (storeId: string) => {
-    const storeNotes = draftSalesNotes?.filter(n => n.store_id === storeId) || [];
-    const allSelected = storeNotes.every(n => selectedNotes.has(n.id));
-    
-    const newSelected = new Set(selectedNotes);
-    if (allSelected) {
-      storeNotes.forEach(n => newSelected.delete(n.id));
-    } else {
-      storeNotes.forEach(n => newSelected.add(n.id));
-    }
-    setSelectedNotes(newSelected);
-  };
-
-  // 確認出貨（將草稿銷售單標記為已出貨）
-  const shipMutation = useMutation({
-    mutationFn: async () => {
-      if (selectedNotes.size === 0) throw new Error("請選擇至少一個銷售單");
-
-      // 更新選定的銷售單狀態為 shipped
+  // 從出貨池移除單個項目
+  const removeItemMutation = useMutation({
+    mutationFn: async (itemId: string) => {
       const { error } = await supabase
-        .from("sales_notes")
-        .update({
-          status: "shipped",
-          shipped_at: new Date().toISOString(),
-          notes: notes || null,
-        })
-        .in("id", Array.from(selectedNotes));
-
+        .from("shipping_pool")
+        .delete()
+        .eq("id", itemId);
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success(`已出貨 ${selectedNotes.size} 個銷售單`);
-      setSelectedNotes(new Set());
-      setShowShipDialog(false);
-      setNotes("");
-      queryClient.invalidateQueries({ queryKey: ["draft-sales-notes"] });
+      toast.success("已從出貨池移除");
+      queryClient.invalidateQueries({ queryKey: ["shipping-pool"] });
+      queryClient.invalidateQueries({ queryKey: ["shipping-pool-items"] });
     },
     onError: (error: Error) => {
       toast.error(error.message);
     },
   });
 
-  // 刪除銷售單（從出貨池移除）
-  const deleteMutation = useMutation({
-    mutationFn: async (noteId: string) => {
-      // 先刪除銷售單項目
-      const { error: itemsError } = await supabase
-        .from("sales_note_items")
-        .delete()
-        .eq("sales_note_id", noteId);
+  // 確認出貨：將選中店家的出貨池項目合併為銷售單
+  const shipMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("未登入");
+      if (selectedStores.size === 0) throw new Error("請選擇至少一個店家");
 
-      if (itemsError) throw itemsError;
+      for (const storeId of selectedStores) {
+        const group = groupedByStore.find(g => g.storeId === storeId);
+        if (!group) continue;
 
-      // 再刪除銷售單
-      const { error } = await supabase
-        .from("sales_notes")
-        .delete()
-        .eq("id", noteId);
+        // 建立銷售單
+        const { data: salesNote, error: noteError } = await supabase
+          .from("sales_notes")
+          .insert({
+            store_id: storeId,
+            created_by: user.id,
+            status: "shipped",
+            shipped_at: new Date().toISOString(),
+            notes: notes || null,
+          })
+          .select()
+          .single();
 
-      if (error) throw error;
+        if (noteError) throw noteError;
+
+        // 建立銷售單項目
+        const noteItems = group.items.map(item => ({
+          sales_note_id: salesNote.id,
+          order_item_id: item.order_item_id,
+          quantity: item.quantity,
+        }));
+
+        const { error: itemsError } = await supabase
+          .from("sales_note_items")
+          .insert(noteItems);
+
+        if (itemsError) throw itemsError;
+
+        // 更新訂單項目的已出貨數量
+        for (const item of group.items) {
+          const newShippedQty = (item.order_item?.shipped_quantity || 0) + item.quantity;
+          const newStatus = newShippedQty >= (item.order_item?.quantity || 0) ? 'shipped' : 'partial';
+          
+          const { error: updateError } = await supabase
+            .from("order_items")
+            .update({ 
+              shipped_quantity: newShippedQty,
+              status: newStatus,
+            })
+            .eq("id", item.order_item_id);
+
+          if (updateError) throw updateError;
+        }
+
+        // 刪除出貨池項目
+        const poolItemIds = group.items.map(i => i.id);
+        const { error: deleteError } = await supabase
+          .from("shipping_pool")
+          .delete()
+          .in("id", poolItemIds);
+
+        if (deleteError) throw deleteError;
+      }
     },
     onSuccess: () => {
-      toast.success("已從出貨池移除");
-      queryClient.invalidateQueries({ queryKey: ["draft-sales-notes"] });
+      toast.success(`已建立 ${selectedStores.size} 個銷售單並出貨`);
+      setSelectedStores(new Set());
+      setShowShipDialog(false);
+      setNotes("");
+      queryClient.invalidateQueries({ queryKey: ["shipping-pool"] });
+      queryClient.invalidateQueries({ queryKey: ["shipping-pool-items"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-sales-notes"] });
     },
     onError: (error: Error) => {
       toast.error(error.message);
@@ -208,10 +232,10 @@ export default function AdminShippingPool() {
   });
 
   const getSelectedSummary = () => {
-    const selectedNotesList = draftSalesNotes?.filter(n => selectedNotes.has(n.id)) || [];
-    const storeCount = new Set(selectedNotesList.map(n => n.store_id)).size;
-    const itemCount = selectedNotesList.reduce((sum, n) => sum + n.sales_note_items.length, 0);
-    return { storeCount, itemCount };
+    const selectedGroups = groupedByStore.filter(g => selectedStores.has(g.storeId));
+    const itemCount = selectedGroups.reduce((sum, g) => sum + g.items.length, 0);
+    const totalQuantity = selectedGroups.reduce((sum, g) => sum + g.totalQuantity, 0);
+    return { storeCount: selectedStores.size, itemCount, totalQuantity };
   };
 
   const summary = getSelectedSummary();
@@ -220,7 +244,7 @@ export default function AdminShippingPool() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">出貨池</h1>
-        <p className="text-muted-foreground">管理待出貨的銷售單，按店家分組顯示</p>
+        <p className="text-muted-foreground">將待出貨項目合併為銷售單後出貨</p>
       </div>
 
       <Card>
@@ -228,14 +252,14 @@ export default function AdminShippingPool() {
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Package className="h-5 w-5" />
-              待出貨銷售單
+              待出貨項目
             </div>
             <Button
               onClick={() => setShowShipDialog(true)}
-              disabled={selectedNotes.size === 0}
+              disabled={selectedStores.size === 0}
             >
               <Truck className="h-4 w-4 mr-2" />
-              確認出貨 ({selectedNotes.size})
+              確認出貨 ({selectedStores.size} 店家)
             </Button>
           </CardTitle>
         </CardHeader>
@@ -269,24 +293,20 @@ export default function AdminShippingPool() {
             <div className="text-center py-8 text-muted-foreground">載入中...</div>
           ) : filteredGroups.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              目前沒有待出貨的銷售單
+              目前沒有待出貨的項目
             </div>
           ) : (
             <Accordion type="multiple" defaultValue={filteredGroups.map(g => g.storeId)} className="space-y-4">
               {filteredGroups.map((group) => {
-                const storeNotes = group.salesNotes;
-                const allSelected = storeNotes.every(n => selectedNotes.has(n.id));
-                const someSelected = storeNotes.some(n => selectedNotes.has(n.id));
-                const totalItems = storeNotes.reduce((sum, n) => sum + n.sales_note_items.length, 0);
+                const isSelected = selectedStores.has(group.storeId);
 
                 return (
                   <AccordionItem key={group.storeId} value={group.storeId} className="border rounded-lg">
                     <AccordionTrigger className="px-4 hover:no-underline">
                       <div className="flex items-center gap-4 flex-1">
                         <Checkbox
-                          checked={allSelected}
-                          className={someSelected && !allSelected ? 'data-[state=checked]:bg-muted' : ''}
-                          onCheckedChange={() => toggleStoreNotes(group.storeId)}
+                          checked={isSelected}
+                          onCheckedChange={() => toggleStore(group.storeId)}
                           onClick={(e) => e.stopPropagation()}
                         />
                         <Store className="h-5 w-5 text-muted-foreground" />
@@ -297,60 +317,55 @@ export default function AdminShippingPool() {
                           )}
                         </div>
                         <div className="flex gap-2">
-                          <Badge variant="secondary">{storeNotes.length} 單</Badge>
-                          <Badge variant="outline">{totalItems} 項</Badge>
+                          <Badge variant="secondary">{group.items.length} 項</Badge>
+                          <Badge variant="outline">共 {group.totalQuantity} 件</Badge>
                         </div>
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-4 pb-4">
-                      <div className="space-y-4">
-                        {storeNotes.map((note) => (
-                          <div key={note.id} className="border rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center gap-3">
-                                <Checkbox
-                                  checked={selectedNotes.has(note.id)}
-                                  onCheckedChange={() => toggleNote(note.id)}
-                                />
-                                <div>
-                                  <span className="font-mono text-sm">{note.id.slice(0, 8)}...</span>
-                                  <span className="text-muted-foreground text-sm ml-2">
-                                    {format(new Date(note.created_at), "MM/dd HH:mm")}
-                                  </span>
-                                </div>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => deleteMutation.mutate(note.id)}
-                              >
-                                移除
-                              </Button>
-                            </div>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>SKU</TableHead>
-                                  <TableHead>產品</TableHead>
-                                  <TableHead className="text-right">出貨數量</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {note.sales_note_items.map((item) => (
-                                  <TableRow key={item.id}>
-                                    <TableCell className="font-mono text-sm">
-                                      {item.order_item?.product?.sku}
-                                    </TableCell>
-                                    <TableCell>{item.order_item?.product?.name}</TableCell>
-                                    <TableCell className="text-right">{item.quantity}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        ))}
-                      </div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>SKU</TableHead>
+                            <TableHead>產品</TableHead>
+                            <TableHead className="text-right">出貨數量</TableHead>
+                            <TableHead className="text-right">單價</TableHead>
+                            <TableHead className="text-right">小計</TableHead>
+                            <TableHead>加入時間</TableHead>
+                            <TableHead className="w-12"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {group.items.map((item) => (
+                            <TableRow key={item.id}>
+                              <TableCell className="font-mono text-sm">
+                                {item.order_item?.product?.sku}
+                              </TableCell>
+                              <TableCell>{item.order_item?.product?.name}</TableCell>
+                              <TableCell className="text-right">{item.quantity}</TableCell>
+                              <TableCell className="text-right">
+                                ${item.order_item?.unit_price.toFixed(2)}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                ${(item.quantity * (item.order_item?.unit_price || 0)).toFixed(2)}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {format(new Date(item.created_at), "MM/dd HH:mm")}
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => removeItemMutation.mutate(item.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </AccordionContent>
                   </AccordionItem>
                 );
@@ -369,12 +384,11 @@ export default function AdminShippingPool() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              將選中店家的出貨池項目合併為銷售單並標記為已出貨：
+            </p>
             <div className="rounded-lg border p-4 bg-muted/50">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <span className="text-muted-foreground">銷售單數量：</span>
-                  <span className="font-medium">{selectedNotes.size}</span>
-                </div>
+              <div className="grid grid-cols-3 gap-2 text-sm">
                 <div>
                   <span className="text-muted-foreground">店家數量：</span>
                   <span className="font-medium">{summary.storeCount}</span>
@@ -383,7 +397,19 @@ export default function AdminShippingPool() {
                   <span className="text-muted-foreground">商品項目：</span>
                   <span className="font-medium">{summary.itemCount}</span>
                 </div>
+                <div>
+                  <span className="text-muted-foreground">總數量：</span>
+                  <span className="font-medium">{summary.totalQuantity}</span>
+                </div>
               </div>
+            </div>
+            <div className="space-y-2">
+              {groupedByStore.filter(g => selectedStores.has(g.storeId)).map(group => (
+                <div key={group.storeId} className="flex items-center justify-between text-sm border rounded p-2">
+                  <span className="font-medium">{group.storeName}</span>
+                  <Badge variant="outline">{group.items.length} 項 / {group.totalQuantity} 件</Badge>
+                </div>
+              ))}
             </div>
             <div>
               <label className="text-sm font-medium">備註（選填）</label>
