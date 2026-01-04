@@ -430,6 +430,48 @@ export type Database = {
           },
         ]
       }
+      shipping_pool: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          order_item_id: string
+          quantity: number
+          store_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          order_item_id: string
+          quantity: number
+          store_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          order_item_id?: string
+          quantity?: number
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shipping_pool_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shipping_pool_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       store_products: {
         Row: {
           brand: string | null

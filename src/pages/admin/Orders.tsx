@@ -29,7 +29,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Search, Eye, Plus, Pencil, Package, Truck, List, LayoutGrid } from 'lucide-react';
+import { Search, Eye, Plus, Pencil, Package, Truck, List, LayoutGrid, CheckSquare } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
@@ -65,6 +65,11 @@ interface ShipmentSelection {
   storeName: string;
 }
 
+interface ShippingPoolItem {
+  order_item_id: string;
+  quantity: number;
+}
+
 const statusLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: '待出貨', className: 'bg-status-waiting text-warning-foreground' },
   partial: { label: '部分出貨', className: 'bg-status-partial text-primary-foreground' },
@@ -89,9 +94,29 @@ export default function AdminOrders() {
   const [statusTab, setStatusTab] = useState<'pending' | 'processing'>('pending');
   const [viewMode, setViewMode] = useState<'orders' | 'items'>('orders');
   
+  // 批次選擇訂單（用於轉處理中）
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
+  
   // 出貨選擇
   const [selectedItems, setSelectedItems] = useState<Map<string, ShipmentSelection>>(new Map());
   const [showShipDialog, setShowShipDialog] = useState(false);
+
+  // 獲取出貨池中的項目，用於計算已在出貨池的數量
+  const { data: shippingPoolItems } = useQuery({
+    queryKey: ['shipping-pool-items'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('shipping_pool')
+        .select('order_item_id, quantity');
+      if (error) throw error;
+      return data as ShippingPoolItem[];
+    },
+  });
+
+  // 建立出貨池項目映射
+  const shippingPoolMap = new Map(
+    shippingPoolItems?.map(item => [item.order_item_id, item.quantity]) || []
+  );
 
   const { data: stores } = useQuery({
     queryKey: ['stores-list'],
@@ -141,10 +166,16 @@ export default function AdminOrders() {
     },
   });
 
+  // 計算待出貨數量（減去已在出貨池的數量）
+  const getPendingQuantity = (item: { id: string; quantity: number; shipped_quantity: number }) => {
+    const inPool = shippingPoolMap.get(item.id) || 0;
+    return item.quantity - item.shipped_quantity - inPool;
+  };
+
   // 獲取所有待出貨的項目（用於商品視圖）
   const allPendingItems = orders?.flatMap(order => 
     order.order_items
-      .filter(item => item.quantity > item.shipped_quantity)
+      .filter(item => getPendingQuantity(item) > 0)
       .filter(item => {
         if (!productFilter) return true;
         const searchLower = productFilter.toLowerCase();
@@ -160,6 +191,7 @@ export default function AdminOrders() {
         storeName: order.stores?.name || '',
         storeCode: order.stores?.code || '',
         storeId: order.store_id,
+        pendingQuantity: getPendingQuantity(item),
       }))
   ) || [];
 
@@ -186,13 +218,31 @@ export default function AdminOrders() {
     return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
   };
 
+  const toggleOrderSelection = (orderId: string, checked: boolean) => {
+    const newSet = new Set(selectedOrderIds);
+    if (checked) {
+      newSet.add(orderId);
+    } else {
+      newSet.delete(orderId);
+    }
+    setSelectedOrderIds(newSet);
+  };
+
+  const toggleAllOrders = (checked: boolean) => {
+    if (checked && filteredOrders) {
+      setSelectedOrderIds(new Set(filteredOrders.map(o => o.id)));
+    } else {
+      setSelectedOrderIds(new Set());
+    }
+  };
+
   const toggleItemSelection = (item: typeof allPendingItems[0], checked: boolean) => {
     const newMap = new Map(selectedItems);
     if (checked) {
       newMap.set(item.id, {
         itemId: item.id,
-        quantity: item.quantity - item.shipped_quantity,
-        maxQuantity: item.quantity - item.shipped_quantity,
+        quantity: item.pendingQuantity,
+        maxQuantity: item.pendingQuantity,
         productName: item.products?.name || '',
         sku: item.products?.sku || '',
         storeId: item.storeId,
@@ -228,45 +278,54 @@ export default function AdminOrders() {
     return acc;
   }, {} as Record<string, { storeName: string; items: ShipmentSelection[] }>);
 
+  // 批次轉為處理中
+  const confirmOrdersMutation = useMutation({
+    mutationFn: async () => {
+      if (selectedOrderIds.size === 0) throw new Error('請選擇至少一個訂單');
+
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: 'processing' })
+        .in('id', Array.from(selectedOrderIds));
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success(`已將 ${selectedOrderIds.size} 個訂單轉為處理中`);
+      setSelectedOrderIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  // 加入出貨池（使用新的 shipping_pool 資料表）
   const addToShippingPoolMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error('未登入');
       if (selectedItems.size === 0) throw new Error('請選擇至少一個項目');
 
-      // 按店家分組建立銷售單
-      for (const [storeId, group] of Object.entries(groupedSelections)) {
-        // 建立銷售單
-        const { data: salesNote, error: noteError } = await supabase
-          .from('sales_notes')
-          .insert({
-            store_id: storeId,
-            created_by: user.id,
-            status: 'draft',
-          })
-          .select()
-          .single();
+      const poolItems = Array.from(selectedItems.values()).map(item => ({
+        order_item_id: item.itemId,
+        quantity: item.quantity,
+        store_id: item.storeId,
+        created_by: user.id,
+      }));
 
-        if (noteError) throw noteError;
+      const { error } = await supabase
+        .from('shipping_pool')
+        .insert(poolItems);
 
-        // 建立銷售單項目
-        const noteItems = group.items.map(item => ({
-          sales_note_id: salesNote.id,
-          order_item_id: item.itemId,
-          quantity: item.quantity,
-        }));
-
-        const { error: itemsError } = await supabase
-          .from('sales_note_items')
-          .insert(noteItems);
-
-        if (itemsError) throw itemsError;
-      }
+      if (error) throw error;
     },
     onSuccess: () => {
-      toast.success(`已加入出貨池，共 ${Object.keys(groupedSelections).length} 個店家`);
+      toast.success(`已加入出貨池，共 ${selectedItems.size} 個項目`);
       setSelectedItems(new Map());
       setShowShipDialog(false);
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['shipping-pool-items'] });
+      queryClient.invalidateQueries({ queryKey: ['shipping-pool'] });
     },
     onError: (error: Error) => {
       toast.error(error.message);
@@ -287,7 +346,11 @@ export default function AdminOrders() {
       </div>
 
       {/* 狀態 Tabs */}
-      <Tabs value={statusTab} onValueChange={(v) => setStatusTab(v as 'pending' | 'processing')}>
+      <Tabs value={statusTab} onValueChange={(v) => {
+        setStatusTab(v as 'pending' | 'processing');
+        setSelectedOrderIds(new Set());
+        setSelectedItems(new Map());
+      }}>
         <div className="flex items-center justify-between">
           <TabsList>
             <TabsTrigger value="pending" className="gap-2">
@@ -345,7 +408,19 @@ export default function AdminOrders() {
             </SelectContent>
           </Select>
           
-          {selectedItems.size > 0 && (
+          {/* 批次確認訂單按鈕 */}
+          {statusTab === 'pending' && viewMode === 'orders' && selectedOrderIds.size > 0 && (
+            <Button 
+              onClick={() => confirmOrdersMutation.mutate()}
+              disabled={confirmOrdersMutation.isPending}
+            >
+              <CheckSquare className="h-4 w-4 mr-2" />
+              轉為處理中 ({selectedOrderIds.size})
+            </Button>
+          )}
+
+          {/* 加入出貨池按鈕 */}
+          {viewMode === 'items' && selectedItems.size > 0 && (
             <Button onClick={() => setShowShipDialog(true)}>
               <Truck className="h-4 w-4 mr-2" />
               加入出貨池 ({selectedItems.size})
@@ -360,6 +435,14 @@ export default function AdminOrders() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {statusTab === 'pending' && (
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={filteredOrders && filteredOrders.length > 0 && selectedOrderIds.size === filteredOrders.length}
+                          onCheckedChange={(checked) => toggleAllOrders(!!checked)}
+                        />
+                      </TableHead>
+                    )}
                     <TableHead>訂單編號</TableHead>
                     <TableHead>店鋪</TableHead>
                     <TableHead>品項數</TableHead>
@@ -374,6 +457,7 @@ export default function AdminOrders() {
                   {isLoading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <TableRow key={i}>
+                        {statusTab === 'pending' && <TableCell><Skeleton className="h-4 w-4" /></TableCell>}
                         <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-8" /></TableCell>
@@ -386,7 +470,7 @@ export default function AdminOrders() {
                     ))
                   ) : filteredOrders?.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={statusTab === 'pending' ? 9 : 8} className="text-center py-8 text-muted-foreground">
                         沒有找到訂單
                       </TableCell>
                     </TableRow>
@@ -395,7 +479,15 @@ export default function AdminOrders() {
                       const itemStatus = getOrderShipmentStatus(order.order_items);
                       const itemStatusInfo = statusLabels[itemStatus];
                       return (
-                        <TableRow key={order.id}>
+                        <TableRow key={order.id} className={selectedOrderIds.has(order.id) ? 'bg-muted/50' : ''}>
+                          {statusTab === 'pending' && (
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedOrderIds.has(order.id)}
+                                onCheckedChange={(checked) => toggleOrderSelection(order.id, !!checked)}
+                              />
+                            </TableCell>
+                          )}
                           <TableCell className="font-mono text-sm">
                             {order.id.slice(0, 8)}...
                           </TableCell>
@@ -464,8 +556,8 @@ export default function AdminOrders() {
                             allPendingItems.forEach(item => {
                               newMap.set(item.id, {
                                 itemId: item.id,
-                                quantity: item.quantity - item.shipped_quantity,
-                                maxQuantity: item.quantity - item.shipped_quantity,
+                                quantity: item.pendingQuantity,
+                                maxQuantity: item.pendingQuantity,
                                 productName: item.products?.name || '',
                                 sku: item.products?.sku || '',
                                 storeId: item.storeId,
@@ -484,6 +576,7 @@ export default function AdminOrders() {
                     <TableHead>產品名稱</TableHead>
                     <TableHead className="text-right">訂購</TableHead>
                     <TableHead className="text-right">已出貨</TableHead>
+                    <TableHead className="text-right">出貨池</TableHead>
                     <TableHead className="text-right">待出貨</TableHead>
                     <TableHead className="w-32">出貨數量</TableHead>
                     <TableHead>訂單日期</TableHead>
@@ -500,19 +593,20 @@ export default function AdminOrders() {
                         <TableCell><Skeleton className="h-4 w-8" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-8" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-8" /></TableCell>
                         <TableCell><Skeleton className="h-8 w-20" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                       </TableRow>
                     ))
                   ) : allPendingItems.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                         沒有待出貨的商品
                       </TableCell>
                     </TableRow>
                   ) : (
                     allPendingItems.map((item) => {
-                      const pending = item.quantity - item.shipped_quantity;
+                      const inPool = shippingPoolMap.get(item.id) || 0;
                       const selection = selectedItems.get(item.id);
                       return (
                         <TableRow key={item.id} className={selection ? 'bg-muted/50' : ''}>
@@ -533,7 +627,16 @@ export default function AdminOrders() {
                           <TableCell className="text-right">{item.quantity}</TableCell>
                           <TableCell className="text-right">{item.shipped_quantity}</TableCell>
                           <TableCell className="text-right">
-                            <Badge variant={pending > 0 ? 'default' : 'secondary'}>{pending}</Badge>
+                            {inPool > 0 && (
+                              <Badge variant="outline" className="bg-warning/10">
+                                {inPool}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant={item.pendingQuantity > 0 ? 'default' : 'secondary'}>
+                              {item.pendingQuantity}
+                            </Badge>
                           </TableCell>
                           <TableCell>
                             {selection && (
@@ -653,7 +756,7 @@ export default function AdminOrders() {
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              以下商品將按店家分組加入出貨池：
+              以下商品將加入出貨池，在出貨池中可以合併為銷售單：
             </p>
             {Object.entries(groupedSelections).map(([storeId, group]) => (
               <div key={storeId} className="border rounded-lg p-4">
