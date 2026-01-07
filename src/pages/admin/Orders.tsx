@@ -93,10 +93,10 @@ export default function AdminOrders() {
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
   const [statusTab, setStatusTab] = useState<'pending' | 'processing'>('pending');
   const [viewMode, setViewMode] = useState<'orders' | 'items'>('orders');
-  
+
   // 批次選擇訂單（用於轉處理中）
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
-  
+
   // 出貨選擇
   const [selectedItems, setSelectedItems] = useState<Map<string, ShipmentSelection>>(new Map());
   const [showShipDialog, setShowShipDialog] = useState(false);
@@ -173,7 +173,7 @@ export default function AdminOrders() {
   };
 
   // 獲取所有待出貨的項目（用於商品視圖）
-  const allPendingItems = orders?.flatMap(order => 
+  const allPendingItems = orders?.flatMap(order =>
     order.order_items
       .filter(item => getPendingQuantity(item) > 0)
       .filter(item => {
@@ -407,10 +407,10 @@ export default function AdminOrders() {
               ))}
             </SelectContent>
           </Select>
-          
+
           {/* 批次確認訂單按鈕 */}
           {statusTab === 'pending' && viewMode === 'orders' && selectedOrderIds.size > 0 && (
-            <Button 
+            <Button
               onClick={() => confirmOrdersMutation.mutate()}
               disabled={confirmOrdersMutation.isPending}
             >
@@ -438,7 +438,7 @@ export default function AdminOrders() {
                     {statusTab === 'pending' && (
                       <TableHead className="w-12">
                         <Checkbox
-                          checked={filteredOrders && filteredOrders.length > 0 && selectedOrderIds.size === filteredOrders.length}
+                          checked={filteredOrders && filteredOrders.length > 0 && selectedOrderIds.size === filteredOrders.length || false}
                           onCheckedChange={(checked) => toggleAllOrders(!!checked)}
                         />
                       </TableHead>
