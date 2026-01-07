@@ -20,6 +20,22 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -29,23 +45,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Pencil, Search, RefreshCw, Upload } from 'lucide-react';
+import { Plus, Search, RefreshCw, Upload, MoreHorizontal, Pencil, Copy, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useProductCache } from '@/hooks/useProductCache';
 import { ProductBatchImport } from '@/components/products/ProductBatchImport';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
 
 type Product = Tables<'products'>;
 type ProductInsert = TablesInsert<'products'>;
+
+const STATUS_LABELS: Record<string, string> = {
+  active: '上架中',
+  discontinued: '已停售',
+  preorder: '預購中',
+  sold_out: '售完停產',
+};
+
+const STATUS_VARIANTS: Record<string, string> = {
+  active: 'bg-success text-success-foreground',
+  preorder: 'bg-blue-500 text-white',
+  sold_out: 'bg-orange-500 text-white',
+  discontinued: '',
+};
 
 export default function AdminProducts() {
   const [search, setSearch] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
+  const [activeTab, setActiveTab] = useState<'list' | 'variants'>('list');
   const queryClient = useQueryClient();
 
-  // Use product cache instead of direct query
   const { products, isLoading, version, forceRefresh } = useProductCache();
 
   const createMutation = useMutation({
@@ -81,6 +114,22 @@ export default function AdminProducts() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
+      toast.success('產品已刪除');
+      setDeleteProduct(null);
+    },
+    onError: (error) => {
+      toast.error(`刪除失敗：${error.message}`);
+    },
+  });
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -88,9 +137,16 @@ export default function AdminProducts() {
       name: formData.get('name') as string,
       sku: formData.get('sku') as string,
       description: formData.get('description') as string || null,
+      brand: formData.get('brand') as string || null,
+      model: formData.get('model') as string || null,
+      series: formData.get('series') as string || null,
+      color: formData.get('color') as string || null,
+      barcode: formData.get('barcode') as string || null,
+      category: formData.get('category') as string || null,
       base_wholesale_price: parseFloat(formData.get('base_wholesale_price') as string) || 0,
       base_retail_price: parseFloat(formData.get('base_retail_price') as string) || 0,
-      status: formData.get('status') as 'active' | 'discontinued',
+      status: formData.get('status') as 'active' | 'discontinued' | 'preorder' | 'sold_out',
+      has_variants: formData.get('has_variants') === 'on',
     };
 
     if (editingProduct) {
@@ -100,10 +156,24 @@ export default function AdminProducts() {
     }
   };
 
+  const handleCopy = (product: Product) => {
+    setEditingProduct(null);
+    const copiedProduct = {
+      ...product,
+      id: undefined,
+      sku: `${product.sku}-COPY`,
+      name: `${product.name} (複製)`,
+    };
+    setEditingProduct(copiedProduct as any);
+    setIsDialogOpen(true);
+  };
+
   const filteredProducts = products?.filter(
     (p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku.toLowerCase().includes(search.toLowerCase())
+      p.sku.toLowerCase().includes(search.toLowerCase()) ||
+      (p.brand && p.brand.toLowerCase().includes(search.toLowerCase())) ||
+      (p.model && p.model.toLowerCase().includes(search.toLowerCase()))
   );
 
   const openEditDialog = (product: Product) => {
@@ -147,23 +217,15 @@ export default function AdminProducts() {
                 新增產品
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>{editingProduct ? '編輯產品' : '新增產品'}</DialogTitle>
+                <DialogTitle>{editingProduct?.id ? '編輯產品' : '新增產品'}</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
+                {/* 基本資訊 */}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="name">產品名稱</Label>
-                    <Input
-                      id="name"
-                      name="name"
-                      defaultValue={editingProduct?.name}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="sku">SKU</Label>
+                    <Label htmlFor="sku">SKU *</Label>
                     <Input
                       id="sku"
                       name="sku"
@@ -171,7 +233,73 @@ export default function AdminProducts() {
                       required
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="name">產品名稱 *</Label>
+                    <Input
+                      id="name"
+                      name="name"
+                      defaultValue={editingProduct?.name}
+                      required
+                    />
+                  </div>
                 </div>
+
+                {/* 品牌/型號/系列 */}
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="brand">廠牌</Label>
+                    <Input
+                      id="brand"
+                      name="brand"
+                      defaultValue={editingProduct?.brand || ''}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="model">型號</Label>
+                    <Input
+                      id="model"
+                      name="model"
+                      defaultValue={editingProduct?.model || ''}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="series">系列</Label>
+                    <Input
+                      id="series"
+                      name="series"
+                      defaultValue={editingProduct?.series || ''}
+                    />
+                  </div>
+                </div>
+
+                {/* 分類/顏色/條碼 */}
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="category">分類</Label>
+                    <Input
+                      id="category"
+                      name="category"
+                      defaultValue={editingProduct?.category || ''}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="color">顏色備註</Label>
+                    <Input
+                      id="color"
+                      name="color"
+                      defaultValue={editingProduct?.color || ''}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="barcode">條碼</Label>
+                    <Input
+                      id="barcode"
+                      name="barcode"
+                      defaultValue={editingProduct?.barcode || ''}
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="description">描述</Label>
                   <Textarea
@@ -180,6 +308,8 @@ export default function AdminProducts() {
                     defaultValue={editingProduct?.description || ''}
                   />
                 </div>
+
+                {/* 價格 */}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="base_wholesale_price">批發價</Label>
@@ -202,27 +332,47 @@ export default function AdminProducts() {
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="status">狀態</Label>
-                  <Select
-                    name="status"
-                    defaultValue={editingProduct?.status || 'active'}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">上架中</SelectItem>
-                      <SelectItem value="discontinued">已停售</SelectItem>
-                    </SelectContent>
-                  </Select>
+
+                {/* 狀態和變體 */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="status">狀態</Label>
+                    <Select
+                      name="status"
+                      defaultValue={editingProduct?.status || 'active'}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">上架中</SelectItem>
+                        <SelectItem value="preorder">預購中</SelectItem>
+                        <SelectItem value="sold_out">售完停產</SelectItem>
+                        <SelectItem value="discontinued">已停售</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>有變體選項</Label>
+                    <div className="flex items-center gap-2 pt-2">
+                      <Switch
+                        id="has_variants"
+                        name="has_variants"
+                        defaultChecked={editingProduct?.has_variants || false}
+                      />
+                      <Label htmlFor="has_variants" className="font-normal text-muted-foreground">
+                        啟用後可在產品頁面管理變體
+                      </Label>
+                    </div>
+                  </div>
                 </div>
+
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="outline" onClick={closeDialog}>
                     取消
                   </Button>
                   <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
-                    {editingProduct ? '儲存' : '新增'}
+                    {editingProduct?.id ? '儲存' : '新增'}
                   </Button>
                 </div>
               </form>
@@ -231,86 +381,148 @@ export default function AdminProducts() {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="搜尋產品名稱或 SKU..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-      </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'list' | 'variants')}>
+        <div className="flex items-center justify-between gap-4">
+          <TabsList>
+            <TabsTrigger value="list">產品列表</TabsTrigger>
+            <TabsTrigger value="variants">變體管理</TabsTrigger>
+          </TabsList>
 
-      <div className="rounded-lg border bg-card shadow-soft">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>SKU</TableHead>
-              <TableHead>名稱</TableHead>
-              <TableHead className="text-right">批發價</TableHead>
-              <TableHead className="text-right">零售價</TableHead>
-              <TableHead>狀態</TableHead>
-              <TableHead className="w-12"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                  <TableCell><Skeleton className="h-8 w-8" /></TableCell>
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="搜尋產品名稱、SKU、品牌、型號..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        </div>
+
+        <TabsContent value="list" className="mt-4">
+          <div className="rounded-lg border bg-card shadow-soft">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>名稱</TableHead>
+                  <TableHead>廠牌</TableHead>
+                  <TableHead>型號</TableHead>
+                  <TableHead className="text-right">批發價</TableHead>
+                  <TableHead className="text-right">零售價</TableHead>
+                  <TableHead>狀態</TableHead>
+                  <TableHead className="w-12"></TableHead>
                 </TableRow>
-              ))
-            ) : filteredProducts?.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  沒有找到產品
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredProducts?.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell className="font-mono text-sm">{product.sku}</TableCell>
-                  <TableCell className="font-medium">{product.name}</TableCell>
-                  <TableCell className="text-right">
-                    ${product.base_wholesale_price.toFixed(2)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    ${product.base_retail_price.toFixed(2)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={product.status === 'active' ? 'default' : 'secondary'}
-                      className={
-                        product.status === 'active'
-                          ? 'bg-success text-success-foreground'
-                          : ''
-                      }
-                    >
-                      {product.status === 'active' ? '上架中' : '已停售'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openEditDialog(product)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-8" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : filteredProducts?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      沒有找到產品
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredProducts?.map((product) => (
+                    <TableRow key={product.id}>
+                      <TableCell className="font-mono text-sm">{product.sku}</TableCell>
+                      <TableCell className="font-medium">
+                        {product.name}
+                        {product.has_variants && (
+                          <Badge variant="outline" className="ml-2 text-xs">有變體</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{product.brand || '-'}</TableCell>
+                      <TableCell className="text-muted-foreground">{product.model || '-'}</TableCell>
+                      <TableCell className="text-right">
+                        ${product.base_wholesale_price.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        ${product.base_retail_price.toFixed(2)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={product.status === 'discontinued' ? 'secondary' : 'default'}
+                          className={STATUS_VARIANTS[product.status] || ''}
+                        >
+                          {STATUS_LABELS[product.status] || product.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openEditDialog(product)}>
+                              <Pencil className="mr-2 h-4 w-4" />
+                              編輯
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleCopy(product)}>
+                              <Copy className="mr-2 h-4 w-4" />
+                              複製
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => setDeleteProduct(product)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              刪除
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="variants" className="mt-4">
+          <div className="rounded-lg border bg-card p-8 text-center text-muted-foreground">
+            <p>變體管理功能開發中</p>
+            <p className="text-sm mt-2">請先在產品列表中啟用「有變體選項」，然後在此管理變體</p>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* 刪除確認對話框 */}
+      <AlertDialog open={!!deleteProduct} onOpenChange={() => setDeleteProduct(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>確定要刪除此產品嗎？</AlertDialogTitle>
+            <AlertDialogDescription>
+              您即將刪除產品「{deleteProduct?.name}」（SKU: {deleteProduct?.sku}）。
+              此操作無法復原，相關的訂單項目可能會受到影響。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteProduct && deleteMutation.mutate(deleteProduct.id)}
+            >
+              {deleteMutation.isPending ? '刪除中...' : '確定刪除'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ProductBatchImport open={isImportOpen} onOpenChange={setIsImportOpen} />
     </div>

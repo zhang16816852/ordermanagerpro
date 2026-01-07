@@ -281,38 +281,124 @@ export type Database = {
           },
         ]
       }
-      products: {
+      product_variants: {
         Row: {
-          base_retail_price: number
-          base_wholesale_price: number
+          barcode: string | null
+          color: string | null
           created_at: string
-          description: string | null
           id: string
           name: string
+          option_1: string | null
+          option_2: string | null
+          option_3: string | null
+          product_id: string
+          retail_price: number
           sku: string
           status: Database["public"]["Enums"]["product_status"]
+          table_settings: Json | null
+          updated_at: string
+          wholesale_price: number
+        }
+        Insert: {
+          barcode?: string | null
+          color?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          option_1?: string | null
+          option_2?: string | null
+          option_3?: string | null
+          product_id: string
+          retail_price?: number
+          sku: string
+          status?: Database["public"]["Enums"]["product_status"]
+          table_settings?: Json | null
+          updated_at?: string
+          wholesale_price?: number
+        }
+        Update: {
+          barcode?: string | null
+          color?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          option_1?: string | null
+          option_2?: string | null
+          option_3?: string | null
+          product_id?: string
+          retail_price?: number
+          sku?: string
+          status?: Database["public"]["Enums"]["product_status"]
+          table_settings?: Json | null
+          updated_at?: string
+          wholesale_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_variants_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          barcode: string | null
+          base_retail_price: number
+          base_wholesale_price: number
+          brand: string | null
+          category: string | null
+          color: string | null
+          created_at: string
+          description: string | null
+          has_variants: boolean | null
+          id: string
+          model: string | null
+          name: string
+          series: string | null
+          sku: string
+          status: Database["public"]["Enums"]["product_status"]
+          table_settings: Json | null
           updated_at: string
         }
         Insert: {
+          barcode?: string | null
           base_retail_price?: number
           base_wholesale_price?: number
+          brand?: string | null
+          category?: string | null
+          color?: string | null
           created_at?: string
           description?: string | null
+          has_variants?: boolean | null
           id?: string
+          model?: string | null
           name: string
+          series?: string | null
           sku: string
           status?: Database["public"]["Enums"]["product_status"]
+          table_settings?: Json | null
           updated_at?: string
         }
         Update: {
+          barcode?: string | null
           base_retail_price?: number
           base_wholesale_price?: number
+          brand?: string | null
+          category?: string | null
+          color?: string | null
           created_at?: string
           description?: string | null
+          has_variants?: boolean | null
           id?: string
+          model?: string | null
           name?: string
+          series?: string | null
           sku?: string
           status?: Database["public"]["Enums"]["product_status"]
+          table_settings?: Json | null
           updated_at?: string
         }
         Relationships: []
@@ -481,6 +567,7 @@ export type Database = {
           retail_price: number | null
           store_id: string
           updated_at: string
+          variant_id: string | null
           wholesale_price: number | null
         }
         Insert: {
@@ -491,6 +578,7 @@ export type Database = {
           retail_price?: number | null
           store_id: string
           updated_at?: string
+          variant_id?: string | null
           wholesale_price?: number | null
         }
         Update: {
@@ -501,6 +589,7 @@ export type Database = {
           retail_price?: number | null
           store_id?: string
           updated_at?: string
+          variant_id?: string | null
           wholesale_price?: number | null
         }
         Relationships: [
@@ -516,6 +605,13 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_products_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
             referencedColumns: ["id"]
           },
         ]
@@ -644,7 +740,7 @@ export type Database = {
         | "discontinued"
       order_source_type: "frontend" | "admin_proxy"
       order_status: "pending" | "processing"
-      product_status: "active" | "discontinued"
+      product_status: "active" | "discontinued" | "preorder" | "sold_out"
       sales_note_status: "draft" | "shipped" | "received"
       store_role: "founder" | "manager" | "employee"
       system_role: "admin" | "customer"
@@ -785,7 +881,7 @@ export const Constants = {
       ],
       order_source_type: ["frontend", "admin_proxy"],
       order_status: ["pending", "processing"],
-      product_status: ["active", "discontinued"],
+      product_status: ["active", "discontinued", "preorder", "sold_out"],
       sales_note_status: ["draft", "shipped", "received"],
       store_role: ["founder", "manager", "employee"],
       system_role: ["admin", "customer"],
