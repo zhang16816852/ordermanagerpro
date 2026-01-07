@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import Papa from 'papaparse';
+import jschardet from 'jschardet';
 import {
   Dialog,
   DialogContent,
@@ -76,7 +78,7 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
       const result: string[] = [];
       let current = '';
       let inQuotes = false;
-      
+
       for (let i = 0; i < line.length; i++) {
         const char = line[i];
         if (char === '"') {
@@ -98,72 +100,96 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
     if (!file) return;
 
     const reader = new FileReader();
+
     reader.onload = (event) => {
-      const text = event.target?.result as string;
-      const rows = parseCSV(text);
-      
-      if (rows.length < 2) {
-        toast.error('CSV 檔案至少需要標題列和一筆資料');
-        return;
-      }
+      const result = event.target?.result;
+      if (!(result instanceof ArrayBuffer)) return;
 
-      const headerRow = rows[0].map(h => h.toLowerCase().trim());
-      setHeaders(headerRow);
+      // --- A. 自動偵測編碼 ---
+      const uint8Array = new Uint8Array(result);
+      const binaryString = Array.from(uint8Array.slice(0, 1000))
+        .map(b => String.fromCharCode(b))
+        .join('');
 
-      // 自動映射欄位
-      const autoMapping: Record<string, string> = {};
-      const allFields = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS];
-      
-      headerRow.forEach((header, index) => {
-        const matchedField = allFields.find(f => 
-          header === f || 
-          header.replace(/_/g, ' ') === f.replace(/_/g, ' ') ||
-          header.includes(f)
-        );
-        if (matchedField) {
-          autoMapping[matchedField] = String(index);
+      const detection = jschardet.detect(binaryString);
+      const encoding = detection.encoding || 'UTF-8';
+
+      // --- B. 使用 PapaParse 解析 ---
+      Papa.parse(file, {
+        encoding: encoding,
+        header: false, // 我們先用 array 模式讀取，方便做自動映射
+        skipEmptyLines: true,
+        complete: (results) => {
+          const rows = results.data as string[][];
+
+          if (rows.length < 2) {
+            toast.error('CSV 檔案至少需要標題列和一筆資料');
+            return;
+          }
+
+          const headerRow = rows[0].map(h => h.toLowerCase().trim());
+          setHeaders(headerRow);
+
+          // --- C. 自動映射欄位 (維持原本邏輯) ---
+          const autoMapping: Record<string, string> = {};
+          const allFields = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS];
+
+          headerRow.forEach((header, index) => {
+            const matchedField = allFields.find(f =>
+              header === f ||
+              header.replace(/_/g, ' ') === f.replace(/_/g, ' ') ||
+              header.includes(f)
+            );
+            if (matchedField) {
+              autoMapping[matchedField] = String(index);
+            }
+          });
+
+          setFieldMapping(autoMapping);
+
+          // --- D. 解析資料列 (轉換為 ImportRow 格式) ---
+          const dataRows = rows.slice(1);
+          const parsedData: ImportRow[] = dataRows.map(row => {
+            const getField = (field: string): string => {
+              const index = parseInt(autoMapping[field] ?? '-1');
+              return index >= 0 && index < row.length ? row[index] : '';
+            };
+
+            const sku = getField('sku');
+            const name = getField('name');
+            const description = getField('description');
+            const wholesalePrice = parseFloat(getField('base_wholesale_price')) || 0;
+            const retailPrice = parseFloat(getField('base_retail_price')) || 0;
+            const statusRaw = getField('status')?.toLowerCase();
+            const status: 'active' | 'discontinued' = statusRaw === 'discontinued' ? 'discontinued' : 'active';
+
+            const errors: string[] = [];
+            if (!sku) errors.push('SKU 為必填');
+            if (!name) errors.push('名稱為必填');
+
+            return {
+              sku,
+              name,
+              description,
+              base_wholesale_price: wholesalePrice,
+              base_retail_price: retailPrice,
+              status,
+              errors,
+              isValid: errors.length === 0,
+            };
+          });
+
+          setImportData(parsedData);
+          setStep('preview');
+        },
+        error: (error) => {
+          toast.error(`解析失敗：${error.message}`);
         }
       });
-
-      setFieldMapping(autoMapping);
-      
-      // 解析資料列
-      const dataRows = rows.slice(1);
-      const parsedData: ImportRow[] = dataRows.map(row => {
-        const getField = (field: string): string => {
-          const index = parseInt(autoMapping[field] ?? '-1');
-          return index >= 0 && index < row.length ? row[index] : '';
-        };
-
-        const sku = getField('sku');
-        const name = getField('name');
-        const description = getField('description');
-        const wholesalePrice = parseFloat(getField('base_wholesale_price')) || 0;
-        const retailPrice = parseFloat(getField('base_retail_price')) || 0;
-        const statusRaw = getField('status')?.toLowerCase();
-        const status: 'active' | 'discontinued' = statusRaw === 'discontinued' ? 'discontinued' : 'active';
-
-        const errors: string[] = [];
-        if (!sku) errors.push('SKU 為必填');
-        if (!name) errors.push('名稱為必填');
-
-        return {
-          sku,
-          name,
-          description,
-          base_wholesale_price: wholesalePrice,
-          base_retail_price: retailPrice,
-          status,
-          errors,
-          isValid: errors.length === 0,
-        };
-      });
-
-      setImportData(parsedData);
-      setStep('preview');
     };
 
-    reader.readAsText(file);
+    // 關鍵：使用 readAsArrayBuffer 才能偵測編碼
+    reader.readAsArrayBuffer(file);
     e.target.value = '';
   }, []);
 
@@ -171,7 +197,7 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
     setImportData(prev => {
       const updated = [...prev];
       const row = { ...updated[index] };
-      
+
       if (field === 'sku' || field === 'name' || field === 'description') {
         (row as any)[field] = value;
       } else if (field === 'base_wholesale_price' || field === 'base_retail_price') {
@@ -272,8 +298,8 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
                   <p><strong>status 值：</strong>active 或 discontinued（預設為 active）</p>
                 </div>
                 <div className="mt-3 p-2 bg-background rounded font-mono text-xs">
-                  sku,name,description,base_wholesale_price,base_retail_price,status<br/>
-                  SKU001,產品A,描述內容,100,150,active<br/>
+                  sku,name,description,base_wholesale_price,base_retail_price,status<br />
+                  SKU001,產品A,描述內容,100,150,active<br />
                   SKU002,產品B,,80,120,active
                 </div>
               </div>
