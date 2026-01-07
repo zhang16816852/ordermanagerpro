@@ -8,7 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
-
+import { Loader2 } from "lucide-react";
 // Admin pages
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminProducts from "./pages/admin/Products";
@@ -36,6 +36,28 @@ import StoreNotifications from "./pages/store/Notifications";
 import StoreAccounting from "./pages/store/Accounting";
 import AcceptInvite from "./pages/AcceptInvite";
 
+function RootRedirect() {
+  const { user, isAdmin, loading } = useAuth();
+
+  // 如果還在確認身分，顯示讀取中
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // 沒登入，去登入頁
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  // 是 Admin 去總覽，不是則去儀表板
+  return isAdmin ?
+    <Navigate to="/admin" replace /> :
+    <Navigate to="/dashboard" replace />;
+}
 const queryClient = new QueryClient();
 
 function AppRoutes() {
@@ -43,9 +65,11 @@ function AppRoutes() {
 
   return (
     <Routes>
+      {/* 1. 將根路徑交給 RootRedirect 處理 */}
+      <Route path="/" element={<RootRedirect />} />
+
       <Route path="/auth" element={<Auth />} />
       <Route path="/invite/:token" element={<AcceptInvite />} />
-      
       {/* Admin Routes */}
       <Route
         path="/admin"
@@ -180,7 +204,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/orders/new"
+        path="/cart"
         element={
           <ProtectedRoute>
             <AppLayout>
@@ -270,15 +294,6 @@ function AppRoutes() {
         }
       />
 
-      {/* Root redirect */}
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <Navigate to={isAdmin ? "/admin" : "/dashboard"} replace />
-          </ProtectedRoute>
-        }
-      />
 
       <Route path="*" element={<NotFound />} />
     </Routes>

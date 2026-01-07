@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link, useMatch, useResolvedPath } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -38,6 +38,7 @@ interface NavItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: number;
+  end?: boolean;
 }
 
 const adminNavItems: NavItem[] = [
@@ -59,7 +60,52 @@ const adminNavItems: NavItem[] = [
 interface AppLayoutProps {
   children: ReactNode;
 }
+// 放在 AppLayout 外部或同個檔案內
+function SideNavLink({
+  item,
+  onClick
+}: {
+  item: NavItem;
+  onClick: () => void
+}) {
+  // useMatch 會檢查當前 URL 是否匹配 item.href
+  // end: item.href === '/' 確保首頁必須完全匹配，而其他路徑則匹配開頭即可
+  const match = useMatch({
+    path: item.href,
+    end: item.href === '/admin' || item.href === '/dashboard' || item.href === '/'
+  });
 
+  const isActive = !!match;
+
+  return (
+    <Link
+      to={item.href}
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors relative',
+        isActive
+          ? 'bg-sidebar-primary text-sidebar-primary-foreground font-medium'
+          : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+      )}
+    >
+      <div className="relative">
+        <item.icon className="h-5 w-5" />
+        {item.badge !== undefined && item.badge > 0 && (
+          <Badge
+            variant="destructive"
+            className="absolute -top-1.5 -right-1.5 h-5 min-w-[1.25rem] px-1 text-[10px] flex items-center justify-center rounded-full border-2 border-sidebar"
+          >
+            {item.badge > 99 ? '99+' : item.badge}
+          </Badge>
+        )}
+      </div>
+
+      <span className="flex-1">{item.title}</span>
+
+      {isActive && <ChevronRight className="ml-auto h-4 w-4 opacity-70" />}
+    </Link>
+  );
+}
 export function AppLayout({ children }: AppLayoutProps) {
   const { user, isAdmin, signOut, storeRoles } = useAuth();
   const navigate = useNavigate();
@@ -80,7 +126,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     ...baseStoreNavItems.slice(0, 2),
     {
       title: '購物車',
-      href: '/orders/new',
+      href: '/cart',
       icon: ShoppingCart,
       badge: totalCartItems > 0 ? totalCartItems : undefined,
     },
@@ -96,63 +142,19 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const NavContent = () => (
     <div className="flex flex-col h-full">
-      {/* Logo */}
-      <div className="p-4 border-b border-sidebar-border">
-        <Link to="/" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center">
-            <Package className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="font-semibold text-sidebar-foreground">訂單系統</h1>
-            <p className="text-xs text-sidebar-foreground/60">
-              {isAdmin ? 'Admin' : storeRoles[0]?.store_name || '我的店鋪'}
-            </p>
-          </div>
-        </Link>
-      </div>
+      {/* Logo ... */}
 
-      {/* Navigation */}
       <ScrollArea className="flex-1 py-4">
         <nav className="px-3 space-y-1">
-          {navItems.map((item) => {
-            const isActive =
-              location.pathname === item.href ||
-              (item.href !== '/' && location.pathname.startsWith(item.href));
-
-            return (
-              <Link
-                key={item.href}
-                to={item.href}
-                onClick={() => setSidebarOpen(false)}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors relative',
-                  isActive
-                    ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                    : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                )}
-              >
-                <div className="relative">
-                  <item.icon className="h-5 w-5" />
-                  {item.badge !== undefined && item.badge > 0 && (
-                    <Badge
-                      variant="destructive"
-                      className="absolute -top-1.5 -right-1.5 h-5 min-w-[1.25rem] px-1 text-[10px] flex items-center justify-center rounded-full"
-                    >
-                      {item.badge > 99 ? '99+' : item.badge}
-                    </Badge>
-                  )}
-                </div>
-
-                {/* 文字只在大螢幕顯示（展開狀態） */}
-                <span className="hidden lg:block">{item.title}</span>
-
-                {isActive && <ChevronRight className="ml-auto h-4 w-4 hidden lg:block" />}
-              </Link>
-            );
-          })}
+          {navItems.map((item) => (
+            <SideNavLink
+              key={item.href}
+              item={item}
+              onClick={() => setSidebarOpen(false)}
+            />
+          ))}
         </nav>
       </ScrollArea>
-
       {/* User section */}
       <div className="p-4 border-t border-sidebar-border">
         <DropdownMenu>

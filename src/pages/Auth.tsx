@@ -91,7 +91,7 @@ export default function Auth() {
 
   useEffect(() => {
     if (user && !authLoading) {
-      navigate(redirectUrl);
+      navigate('/', { replace: true });
     }
   }, [user, authLoading, navigate, redirectUrl]);
 
@@ -117,7 +117,7 @@ export default function Auth() {
     setLoading(false);
 
     if (!error) {
-      navigate(redirectUrl);
+      navigate('/', { replace: true });
     }
   };
 
@@ -148,7 +148,7 @@ export default function Auth() {
     setLoading(false);
 
     if (!error) {
-      navigate(redirectUrl);
+      navigate('/', { replace: true });
     }
   };
 

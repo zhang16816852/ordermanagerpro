@@ -35,12 +35,12 @@ const AcceptInvite = () => {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const { user, loading: authLoading, signUp } = useAuth();
-  
+
   const [invitation, setInvitation] = useState<InvitationDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // 註冊表單狀態
   const [showSignUp, setShowSignUp] = useState(false);
   const [fullName, setFullName] = useState('');
@@ -50,6 +50,11 @@ const AcceptInvite = () => {
   const [registering, setRegistering] = useState(false);
 
   useEffect(() => {
+    console.log({
+      authLoading,
+      user,
+      token
+    });
     const fetchInvitation = async () => {
       if (!token) {
         setError('無效的邀請連結');
@@ -90,6 +95,7 @@ const AcceptInvite = () => {
           setLoading(false);
           return;
         }
+        console.log('invite data', data);
 
         setInvitation(data as InvitationDetails);
       } catch (err) {
@@ -248,7 +254,7 @@ const AcceptInvite = () => {
     return labels[role] || role;
   };
 
-  if (loading || authLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Card className="w-full max-w-md">
@@ -377,9 +383,9 @@ const AcceptInvite = () => {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button 
+                  <Button
                     type="button"
-                    variant="outline" 
+                    variant="outline"
                     className="flex-1"
                     onClick={() => setShowSignUp(false)}
                   >
@@ -424,16 +430,16 @@ const AcceptInvite = () => {
               請選擇登入或註冊帳號以接受邀請
             </p>
             <div className="flex flex-col gap-2">
-              <Button 
-                className="w-full" 
+              <Button
+                className="w-full"
                 onClick={() => setShowSignUp(true)}
               >
                 <UserPlus className="mr-2 h-4 w-4" />
                 註冊新帳號
               </Button>
-              <Button 
+              <Button
                 variant="outline"
-                className="w-full" 
+                className="w-full"
                 onClick={() => navigate(`/auth?redirect=/invite/${token}`)}
               >
                 已有帳號，登入
@@ -464,14 +470,14 @@ const AcceptInvite = () => {
               請使用正確的帳號登入，或請管理員重新發送邀請到您目前的 Email
             </p>
             <div className="flex gap-2">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="flex-1"
                 onClick={() => navigate('/')}
               >
                 返回首頁
               </Button>
-              <Button 
+              <Button
                 className="flex-1"
                 onClick={async () => {
                   await supabase.auth.signOut();
@@ -516,14 +522,14 @@ const AcceptInvite = () => {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="flex-1"
               onClick={() => navigate('/')}
             >
               取消
             </Button>
-            <Button 
+            <Button
               className="flex-1"
               onClick={handleAcceptInvitation}
               disabled={accepting}
