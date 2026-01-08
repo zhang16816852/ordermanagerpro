@@ -1,18 +1,26 @@
 // src/components/order/OrderCreator.tsx
 import { useState } from "react";
-import { useNavigate } from "react-router-dom"; // ← 一定要加這行！
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, ShoppingCart, Plus, Minus, Trash2, Send } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Search, ShoppingCart, Plus, Minus, Trash2, Send, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import { useStoreProductCache } from "@/hooks/useProductCache";
+import { useStoreProductCache, useProductVariants, ProductWithPricing, VariantWithPricing } from "@/hooks/useProductCache";
 
 interface CartItem {
   productId: string;
+  variantId?: string;
   name: string;
   sku: string;
   price: number;
@@ -27,7 +35,7 @@ interface OrderCreatorProps {
   title: string;
   userId: string;
   description: string;
-  onOrderCreated?: () => void; // ← 改名更清楚：訂單建立成功後的額外動作
+  onOrderCreated?: () => void;
 }
 
 export default function OrderCreator({
@@ -45,8 +53,9 @@ export default function OrderCreator({
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [notes, setNotes] = useState("");
+  const [variantDialogProduct, setVariantDialogProduct] = useState<ProductWithPricing | null>(null);
 
-  const { products: storeProducts, isLoading: productsLoading } = useStoreProductCache(storeId);
+  const { products: storeProducts, isLoading: productsLoading, brand } = useStoreProductCache(storeId);
 
   const createOrderMutation = useMutation({
     mutationFn: async () => {
@@ -83,7 +92,7 @@ export default function OrderCreator({
       setCart([]);
       setNotes("");
       queryClient.invalidateQueries({ queryKey: [queryKeyToInvalidate] });
-      onOrderCreated?.(); // 讓父層執行額外邏輯（例如 admin 清空選單）
+      onOrderCreated?.();
       navigate(successRedirect);
     },
     onError: (error: any) => {
@@ -99,12 +108,26 @@ export default function OrderCreator({
     );
   });
 
-  const addToCart = (product: typeof storeProducts[number]) => {
-    const existing = cart.find((item) => item.productId === product.id);
+  const handleProductClick = (product: ProductWithPricing) => {
+    if (product.has_variants && product.variants && product.variants.length > 0) {
+      // 有變體，開啟變體選擇對話框
+      setVariantDialogProduct(product);
+    } else {
+      // 無變體，直接加入購物車
+      addToCart(product);
+    }
+  };
+
+  const addToCart = (product: ProductWithPricing, variant?: VariantWithPricing) => {
+    const itemId = variant ? `${product.id}-${variant.id}` : product.id;
+    const existing = cart.find((item) => 
+      variant ? item.variantId === variant.id : item.productId === product.id && !item.variantId
+    );
+
     if (existing) {
       setCart(
         cart.map((item) =>
-          item.productId === product.id
+          (variant ? item.variantId === variant.id : item.productId === product.id && !item.variantId)
             ? { ...item, quantity: item.quantity + 1 }
             : item
         )
@@ -114,20 +137,25 @@ export default function OrderCreator({
         ...cart,
         {
           productId: product.id,
-          name: product.name,
-          sku: product.sku,
-          price: product.wholesale_price,
+          variantId: variant?.id,
+          name: variant ? `${product.name} - ${variant.name}` : product.name,
+          sku: variant?.sku || product.sku,
+          price: variant?.effective_wholesale_price ?? product.wholesale_price,
           quantity: 1,
         },
       ]);
     }
+
+    if (variant) {
+      setVariantDialogProduct(null);
+    }
   };
 
-  const updateQuantity = (productId: string, delta: number) => {
+  const updateQuantity = (productId: string, variantId: string | undefined, delta: number) => {
     setCart(
       cart
         .map((item) =>
-          item.productId === productId
+          item.productId === productId && item.variantId === variantId
             ? { ...item, quantity: Math.max(0, item.quantity + delta) }
             : item
         )
@@ -135,8 +163,8 @@ export default function OrderCreator({
     );
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart(cart.filter((item) => item.productId !== productId));
+  const removeFromCart = (productId: string, variantId: string | undefined) => {
+    setCart(cart.filter((item) => !(item.productId === productId && item.variantId === variantId)));
   };
 
   const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -148,7 +176,6 @@ export default function OrderCreator({
         <p className="text-muted-foreground">{description}</p>
       </div>
 
-      {/* 移除外層的 {storeId && (...)}，因為父層已保證 storeId 有效 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <Card>
@@ -173,26 +200,42 @@ export default function OrderCreator({
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {filteredProducts.map((product) => {
-                    const inCart = cart.find((item) => item.productId === product.id);
+                    const inCartCount = cart
+                      .filter((item) => item.productId === product.id)
+                      .reduce((sum, item) => sum + item.quantity, 0);
+                    const hasVariants = product.has_variants && product.variants && product.variants.length > 0;
+
                     return (
                       <div
                         key={product.id}
                         className="p-3 border rounded-lg hover:border-primary cursor-pointer transition-colors"
-                        onClick={() => addToCart(product)}
+                        onClick={() => handleProductClick(product)}
                       >
                         <div className="flex justify-between items-start">
-                          <div>
-                            <div className="font-medium">{product.name}</div>
+                          <div className="flex-1">
+                            <div className="font-medium flex items-center gap-2">
+                              {product.name}
+                              {hasVariants && (
+                                <Badge variant="outline" className="text-xs">
+                                  {product.variants!.length} 變體
+                                </Badge>
+                              )}
+                            </div>
                             <div className="text-sm text-muted-foreground font-mono">
                               {product.sku}
                             </div>
                           </div>
-                          <div className="text-right">
-                            <div className="font-medium">${product.wholesale_price}</div>
-                            {inCart && (
-                              <div className="text-sm text-primary">
-                                已加入 x{inCart.quantity}
-                              </div>
+                          <div className="text-right flex items-center gap-2">
+                            <div>
+                              <div className="font-medium">${product.wholesale_price}</div>
+                              {inCartCount > 0 && (
+                                <div className="text-sm text-primary">
+                                  已加入 x{inCartCount}
+                                </div>
+                              )}
+                            </div>
+                            {hasVariants && (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             )}
                           </div>
                         </div>
@@ -223,7 +266,7 @@ export default function OrderCreator({
                   <div className="space-y-2">
                     {cart.map((item) => (
                       <div
-                        key={item.productId}
+                        key={`${item.productId}-${item.variantId || 'base'}`}
                         className="flex items-center justify-between p-2 border rounded"
                       >
                         <div className="flex-1 min-w-0">
@@ -237,7 +280,7 @@ export default function OrderCreator({
                             variant="outline"
                             size="icon"
                             className="h-7 w-7"
-                            onClick={() => updateQuantity(item.productId, -1)}
+                            onClick={() => updateQuantity(item.productId, item.variantId, -1)}
                           >
                             <Minus className="h-3 w-3" />
                           </Button>
@@ -246,7 +289,7 @@ export default function OrderCreator({
                             variant="outline"
                             size="icon"
                             className="h-7 w-7"
-                            onClick={() => updateQuantity(item.productId, 1)}
+                            onClick={() => updateQuantity(item.productId, item.variantId, 1)}
                           >
                             <Plus className="h-3 w-3" />
                           </Button>
@@ -254,7 +297,7 @@ export default function OrderCreator({
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 text-destructive"
-                            onClick={() => removeFromCart(item.productId)}
+                            onClick={() => removeFromCart(item.productId, item.variantId)}
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>
@@ -290,6 +333,59 @@ export default function OrderCreator({
           </Card>
         </div>
       </div>
+
+      {/* 變體選擇對話框 */}
+      <Dialog open={!!variantDialogProduct} onOpenChange={() => setVariantDialogProduct(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>選擇規格</DialogTitle>
+          </DialogHeader>
+          {variantDialogProduct && (
+            <div className="space-y-4">
+              <div className="text-sm text-muted-foreground">
+                {variantDialogProduct.name}
+              </div>
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {variantDialogProduct.variants?.map((variant) => {
+                  const inCart = cart.find((item) => item.variantId === variant.id);
+                  const price = 'effective_wholesale_price' in variant 
+                    ? variant.effective_wholesale_price 
+                    : variant.wholesale_price;
+                  return (
+                    <div
+                      key={variant.id}
+                      className="p-3 border rounded-lg hover:border-primary cursor-pointer transition-colors"
+                      onClick={() => addToCart(variantDialogProduct, variant as VariantWithPricing)}
+                    >
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <div className="font-medium">{variant.name}</div>
+                          <div className="text-xs text-muted-foreground font-mono">
+                            {variant.sku}
+                          </div>
+                          {(variant.option_1 || variant.option_2 || variant.option_3) && (
+                            <div className="flex gap-1 mt-1">
+                              {variant.option_1 && <Badge variant="secondary" className="text-xs">{variant.option_1}</Badge>}
+                              {variant.option_2 && <Badge variant="secondary" className="text-xs">{variant.option_2}</Badge>}
+                              {variant.option_3 && <Badge variant="secondary" className="text-xs">{variant.option_3}</Badge>}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <div className="font-medium">${Number(price)}</div>
+                          {inCart && (
+                            <div className="text-sm text-primary">已加入 x{inCart.quantity}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

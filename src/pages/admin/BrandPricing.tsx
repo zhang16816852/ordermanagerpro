@@ -21,13 +21,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Search, Save, Tags, RefreshCw } from 'lucide-react';
+import { Search, Save, Tags, RefreshCw, ChevronRight, ChevronDown, Layers } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 
 interface PriceEntry {
   productId: string;
+  variantId?: string;
   wholesalePrice: string;
 }
 
@@ -38,6 +44,7 @@ export default function AdminBrandPricing() {
   const [selectedBrand, setSelectedBrand] = useState<string>('');
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [priceEntries, setPriceEntries] = useState<Record<string, PriceEntry>>({});
+  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
 
   // 取得所有品牌
   const { data: brands = [], isLoading: brandsLoading } = useQuery({
@@ -53,19 +60,32 @@ export default function AdminBrandPricing() {
     },
   });
 
-  // 取得選定品牌的現有價格
+  // 取得選定品牌的現有價格（包含變體）
   const { data: existingPrices = [] } = useQuery({
     queryKey: ['brand-prices', selectedBrand],
     queryFn: async () => {
       if (!selectedBrand) return [];
       const { data, error } = await supabase
         .from('store_products')
-        .select('product_id, wholesale_price')
+        .select('product_id, variant_id, wholesale_price')
         .eq('brand', selectedBrand);
       if (error) throw error;
       return data;
     },
     enabled: !!selectedBrand,
+  });
+
+  // 取得所有變體
+  const { data: allVariants = [], isLoading: variantsLoading } = useQuery({
+    queryKey: ['all-product-variants'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('product_variants')
+        .select('*')
+        .order('sku');
+      if (error) throw error;
+      return data || [];
+    },
   });
 
   // 當選擇品牌時，載入現有價格
@@ -75,8 +95,10 @@ export default function AdminBrandPricing() {
     if (existingPrices.length > 0) {
       const entries: Record<string, PriceEntry> = {};
       existingPrices.forEach(p => {
-        entries[p.product_id] = {
+        const key = p.variant_id ? `${p.product_id}-${p.variant_id}` : p.product_id;
+        entries[key] = {
           productId: p.product_id,
+          variantId: p.variant_id || undefined,
           wholesalePrice: p.wholesale_price?.toString() || '',
         };
       });
@@ -85,7 +107,6 @@ export default function AdminBrandPricing() {
       setPriceEntries({});
     }
   }, [existingPrices]);
-
 
   const activeProducts = products.filter(p => p.status === 'active');
 
@@ -98,55 +119,75 @@ export default function AdminBrandPricing() {
     );
   });
 
+  // 取得產品的變體
+  const getProductVariants = (productId: string) => {
+    return allVariants.filter(v => v.product_id === productId && v.status === 'active');
+  };
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!selectedBrand) throw new Error('請先選擇品牌');
       if (selectedProducts.size === 0) throw new Error('請選擇至少一個產品');
 
-      const productsToSave = Array.from(selectedProducts).map(productId => {
-        const entry = priceEntries[productId];
+      const itemsToSave: Array<{
+        product_id: string;
+        variant_id: string | null;
+        wholesale_price: number;
+      }> = [];
+
+      selectedProducts.forEach(key => {
+        const [productId, variantId] = key.includes('-') ? key.split('-') : [key, null];
+        const entry = priceEntries[key];
         const product = products.find(p => p.id === productId);
-        return {
+        const variant = variantId ? allVariants.find(v => v.id === variantId) : null;
+
+        itemsToSave.push({
           product_id: productId,
-          wholesale_price: entry?.wholesalePrice ? parseFloat(entry.wholesalePrice) : product?.base_wholesale_price || 0,
-        };
+          variant_id: variantId,
+          wholesale_price: entry?.wholesalePrice
+            ? parseFloat(entry.wholesalePrice)
+            : (variant?.wholesale_price ?? product?.base_wholesale_price ?? 0),
+        });
       });
 
-      // 使用 upsert 方式更新價格
-      for (const item of productsToSave) {
-        // 先檢查是否存在
-        const { data: existing } = await supabase
+      // 批次更新
+      for (const item of itemsToSave) {
+        let query = supabase
           .from('store_products')
           .select('id')
           .eq('brand', selectedBrand)
-          .eq('product_id', item.product_id)
-          .maybeSingle();
+          .eq('product_id', item.product_id);
+        
+        if (item.variant_id) {
+          query = query.eq('variant_id', item.variant_id);
+        } else {
+          query = query.is('variant_id', null);
+        }
+        
+        const { data: existing } = await query.maybeSingle();
 
         if (existing) {
-          // 更新
           const { error } = await supabase
             .from('store_products')
-            .update({
-              wholesale_price: item.wholesale_price,
-            })
+            .update({ wholesale_price: item.wholesale_price })
             .eq('id', existing.id);
           if (error) throw error;
         } else {
-          // 新增 - 使用 any 暫時繞過類型限制（types 尚未更新）
           const { error } = await supabase
             .from('store_products')
             .insert({
               brand: selectedBrand,
               product_id: item.product_id,
+              variant_id: item.variant_id,
               wholesale_price: item.wholesale_price,
-              store_id: '00000000-0000-0000-0000-000000000000', // placeholder, brand-based pricing
+              store_id: '00000000-0000-0000-0000-000000000000',
             } as any);
           if (error) throw error;
         }
       }
     },
     onSuccess: () => {
-      toast.success(`已更新 ${selectedProducts.size} 個產品的批發價`);
+      toast.success(`已更新 ${selectedProducts.size} 個項目的批發價`);
       queryClient.invalidateQueries({ queryKey: ['brand-prices'] });
       setSelectedProducts(new Set());
     },
@@ -155,18 +196,31 @@ export default function AdminBrandPricing() {
     },
   });
 
-  const handlePriceChange = (productId: string, value: string) => {
+  const handlePriceChange = (key: string, productId: string, variantId: string | undefined, value: string) => {
     setPriceEntries(prev => ({
       ...prev,
-      [productId]: {
+      [key]: {
         productId,
+        variantId,
         wholesalePrice: value,
       },
     }));
   };
 
-  const toggleProduct = (productId: string) => {
+  const toggleProduct = (key: string) => {
     setSelectedProducts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleExpanded = (productId: string) => {
+    setExpandedProducts(prev => {
       const newSet = new Set(prev);
       if (newSet.has(productId)) {
         newSet.delete(productId);
@@ -178,32 +232,54 @@ export default function AdminBrandPricing() {
   };
 
   const toggleAll = () => {
-    if (selectedProducts.size === filteredProducts.length) {
+    const allKeys: string[] = [];
+    filteredProducts.forEach(p => {
+      const variants = getProductVariants(p.id);
+      if (variants.length > 0) {
+        variants.forEach(v => allKeys.push(`${p.id}-${v.id}`));
+      } else {
+        allKeys.push(p.id);
+      }
+    });
+
+    if (selectedProducts.size === allKeys.length) {
       setSelectedProducts(new Set());
     } else {
-      setSelectedProducts(new Set(filteredProducts.map(p => p.id)));
+      setSelectedProducts(new Set(allKeys));
     }
   };
 
   const applyBatchPrice = (value: string) => {
     const newEntries = { ...priceEntries };
-    selectedProducts.forEach(productId => {
-      newEntries[productId] = {
+    selectedProducts.forEach(key => {
+      const [productId, variantId] = key.includes('-') ? key.split('-') : [key, undefined];
+      newEntries[key] = {
         productId,
+        variantId,
         wholesalePrice: value,
       };
     });
     setPriceEntries(newEntries);
   };
 
-  const isLoading = productsLoading || brandsLoading;
+  const isLoading = productsLoading || brandsLoading || variantsLoading;
+
+  // 計算總選擇數
+  const getTotalSelectableCount = () => {
+    let count = 0;
+    filteredProducts.forEach(p => {
+      const variants = getProductVariants(p.id);
+      count += variants.length > 0 ? variants.length : 1;
+    });
+    return count;
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">品牌批發價設定</h1>
-          <p className="text-muted-foreground">批次設定各品牌的產品批發價（零售價統一使用基礎零售價）</p>
+          <p className="text-muted-foreground">批次設定各品牌的產品與變體批發價</p>
         </div>
         <Button variant="outline" onClick={forceRefresh}>
           <RefreshCw className="mr-2 h-4 w-4" />
@@ -256,7 +332,7 @@ export default function AdminBrandPricing() {
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">批次設定批發價</CardTitle>
             <CardDescription>
-              已選擇 {selectedProducts.size} 個產品
+              已選擇 {selectedProducts.size} 個項目
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -275,7 +351,7 @@ export default function AdminBrandPricing() {
                 disabled={saveMutation.isPending || !selectedBrand}
               >
                 <Save className="mr-2 h-4 w-4" />
-                {saveMutation.isPending ? '儲存中...' : '儲存選定產品'}
+                {saveMutation.isPending ? '儲存中...' : '儲存選定項目'}
               </Button>
             </div>
           </CardContent>
@@ -305,10 +381,11 @@ export default function AdminBrandPricing() {
             <TableRow>
               <TableHead className="w-12">
                 <Checkbox
-                  checked={selectedProducts.size === filteredProducts.length && filteredProducts.length > 0}
+                  checked={selectedProducts.size === getTotalSelectableCount() && getTotalSelectableCount() > 0}
                   onCheckedChange={toggleAll}
                 />
               </TableHead>
+              <TableHead className="w-8"></TableHead>
               <TableHead>SKU</TableHead>
               <TableHead>產品名稱</TableHead>
               <TableHead className="text-right">基礎批發價</TableHead>
@@ -321,6 +398,7 @@ export default function AdminBrandPricing() {
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
                   <TableCell><Skeleton className="h-4 w-4" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-4" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-40" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
@@ -330,45 +408,121 @@ export default function AdminBrandPricing() {
               ))
             ) : filteredProducts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   沒有找到產品
                 </TableCell>
               </TableRow>
             ) : (
               filteredProducts.map((product) => {
-                const entry = priceEntries[product.id];
-                const hasCustomPrice = !!entry?.wholesalePrice;
+                const variants = getProductVariants(product.id);
+                const hasVariants = variants.length > 0;
+                const isExpanded = expandedProducts.has(product.id);
+                const productEntry = priceEntries[product.id];
+                const hasCustomPrice = !!productEntry?.wholesalePrice;
+
                 return (
-                  <TableRow key={product.id} className={selectedProducts.has(product.id) ? 'bg-muted/50' : ''}>
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedProducts.has(product.id)}
-                        onCheckedChange={() => toggleProduct(product.id)}
-                      />
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">{product.sku}</TableCell>
-                    <TableCell className="font-medium">
-                      {product.name}
-                      {hasCustomPrice && (
-                        <Badge variant="outline" className="ml-2 text-xs">已設定</Badge>
+                  <Collapsible key={product.id} open={isExpanded} onOpenChange={() => toggleExpanded(product.id)} asChild>
+                    <>
+                      <TableRow className={hasVariants ? 'cursor-pointer hover:bg-muted/50' : ''}>
+                        <TableCell>
+                          {!hasVariants && (
+                            <Checkbox
+                              checked={selectedProducts.has(product.id)}
+                              onCheckedChange={() => toggleProduct(product.id)}
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {hasVariants && (
+                            <CollapsibleTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-6 w-6">
+                                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                              </Button>
+                            </CollapsibleTrigger>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">{product.sku}</TableCell>
+                        <TableCell className="font-medium">
+                          {product.name}
+                          {hasVariants && (
+                            <Badge variant="outline" className="ml-2 text-xs">
+                              <Layers className="h-3 w-3 mr-1" />
+                              {variants.length} 變體
+                            </Badge>
+                          )}
+                          {!hasVariants && hasCustomPrice && (
+                            <Badge variant="outline" className="ml-2 text-xs">已設定</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          ${product.base_wholesale_price}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          ${product.base_retail_price}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {!hasVariants ? (
+                            <Input
+                              type="number"
+                              placeholder={product.base_wholesale_price.toString()}
+                              value={productEntry?.wholesalePrice || ''}
+                              onChange={(e) => handlePriceChange(product.id, product.id, undefined, e.target.value)}
+                              className="w-24 text-right ml-auto"
+                            />
+                          ) : (
+                            <span className="text-muted-foreground text-sm">展開設定</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+
+                      {hasVariants && (
+                        <CollapsibleContent asChild>
+                          <>
+                            {variants.map((variant) => {
+                              const variantKey = `${product.id}-${variant.id}`;
+                              const variantEntry = priceEntries[variantKey];
+                              const hasVariantCustomPrice = !!variantEntry?.wholesalePrice;
+
+                              return (
+                                <TableRow key={variant.id} className="bg-muted/30">
+                                  <TableCell>
+                                    <Checkbox
+                                      checked={selectedProducts.has(variantKey)}
+                                      onCheckedChange={() => toggleProduct(variantKey)}
+                                    />
+                                  </TableCell>
+                                  <TableCell></TableCell>
+                                  <TableCell className="font-mono text-sm pl-8">{variant.sku}</TableCell>
+                                  <TableCell className="pl-8">
+                                    <span className="text-muted-foreground">└ </span>
+                                    {variant.name}
+                                    {hasVariantCustomPrice && (
+                                      <Badge variant="outline" className="ml-2 text-xs">已設定</Badge>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-right text-muted-foreground">
+                                    ${variant.wholesale_price}
+                                  </TableCell>
+                                  <TableCell className="text-right text-muted-foreground">
+                                    ${variant.retail_price}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <Input
+                                      type="number"
+                                      placeholder={variant.wholesale_price.toString()}
+                                      value={variantEntry?.wholesalePrice || ''}
+                                      onChange={(e) => handlePriceChange(variantKey, product.id, variant.id, e.target.value)}
+                                      className="w-24 text-right ml-auto"
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </>
+                        </CollapsibleContent>
                       )}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      ${product.base_wholesale_price}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      ${product.base_retail_price}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Input
-                        type="number"
-                        placeholder={product.base_wholesale_price.toString()}
-                        value={entry?.wholesalePrice || ''}
-                        onChange={(e) => handlePriceChange(product.id, e.target.value)}
-                        className="w-24 text-right ml-auto"
-                      />
-                    </TableCell>
-                  </TableRow>
+                    </>
+                  </Collapsible>
                 );
               })
             )}

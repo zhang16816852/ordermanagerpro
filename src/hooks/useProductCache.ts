@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Product = Tables<'products'>;
+type ProductVariant = Tables<'product_variants'>;
 
 interface ProductCache {
   version: number;
@@ -111,6 +112,20 @@ export function useProductCache() {
   };
 }
 
+// Extended product type with pricing and variants
+export interface ProductWithPricing extends Product {
+  wholesale_price: number;
+  retail_price: number;
+  has_store_price: boolean;
+  variants?: ProductVariant[];
+}
+
+export interface VariantWithPricing extends ProductVariant {
+  effective_wholesale_price: number;
+  effective_retail_price: number;
+  has_brand_price: boolean;
+}
+
 // Hook for store-specific products with caching (now uses brand-based pricing)
 export function useStoreProductCache(storeId: string | null) {
   const { products: allProducts, activeProducts: globalActiveProducts, isLoading: productsLoading } = useProductCache();
@@ -134,7 +149,7 @@ export function useStoreProductCache(storeId: string | null) {
 
   const brand = storeInfo?.brand;
 
-  // 使用品牌來取得價格
+  // 使用品牌來取得價格（包括變體價格）
   const { data: brandPrices = [], isLoading: brandPricesLoading } = useQuery({
     queryKey: ['brand-products-prices', brand],
     queryFn: async () => {
@@ -142,7 +157,7 @@ export function useStoreProductCache(storeId: string | null) {
 
       const { data, error } = await supabase
         .from('store_products')
-        .select('product_id, wholesale_price, retail_price')
+        .select('product_id, variant_id, wholesale_price, retail_price')
         .eq('brand', brand);
 
       if (error) throw error;
@@ -152,15 +167,46 @@ export function useStoreProductCache(storeId: string | null) {
     staleTime: 1000 * 60 * 5, // 5 分鐘
   });
 
-  // 當有指定 storeId 且有品牌時：使用品牌價格
-  // 否則：直接用 base 價格
-  const mergedProducts = (storeId ? allProducts : globalActiveProducts).map(product => {
-    const brandPrice = brandPrices.find(bp => bp.product_id === product.id);
+  // 取得所有變體
+  const { data: allVariants = [], isLoading: variantsLoading } = useQuery({
+    queryKey: ['all-active-variants'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('product_variants')
+        .select('*')
+        .eq('status', 'active')
+        .order('sku');
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // 合併產品與品牌價格
+  const mergedProducts: ProductWithPricing[] = (storeId ? allProducts : globalActiveProducts).map(product => {
+    const brandPrice = brandPrices.find(bp => bp.product_id === product.id && !bp.variant_id);
+    
+    // 取得此產品的變體並套用品牌價格
+    const productVariants: VariantWithPricing[] = allVariants
+      .filter(v => v.product_id === product.id)
+      .map(variant => {
+        const variantBrandPrice = brandPrices.find(
+          bp => bp.product_id === product.id && bp.variant_id === variant.id
+        );
+        return {
+          ...variant,
+          effective_wholesale_price: variantBrandPrice?.wholesale_price ?? variant.wholesale_price,
+          effective_retail_price: variantBrandPrice?.retail_price ?? variant.retail_price,
+          has_brand_price: !!variantBrandPrice,
+        };
+      });
+
     return {
       ...product,
       wholesale_price: brandPrice?.wholesale_price ?? product.base_wholesale_price,
       retail_price: brandPrice?.retail_price ?? product.base_retail_price,
       has_store_price: !!brandPrice,
+      variants: productVariants.length > 0 ? productVariants : undefined,
     };
   });
 
@@ -169,7 +215,57 @@ export function useStoreProductCache(storeId: string | null) {
 
   return {
     products: finalProducts,
-    isLoading: productsLoading || (storeId ? brandPricesLoading : false),
+    isLoading: productsLoading || (storeId ? brandPricesLoading || variantsLoading : false),
     brand,
+  };
+}
+
+// Hook for getting variants with brand pricing for a specific product
+export function useProductVariants(productId: string | null, brand: string | null) {
+  const { data: variants = [], isLoading: variantsLoading } = useQuery({
+    queryKey: ['product-variants', productId],
+    queryFn: async () => {
+      if (!productId) return [];
+      const { data, error } = await supabase
+        .from('product_variants')
+        .select('*')
+        .eq('product_id', productId)
+        .eq('status', 'active')
+        .order('sku');
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!productId,
+  });
+
+  const { data: brandPrices = [], isLoading: pricesLoading } = useQuery({
+    queryKey: ['variant-brand-prices', productId, brand],
+    queryFn: async () => {
+      if (!brand || !productId) return [];
+      const { data, error } = await supabase
+        .from('store_products')
+        .select('variant_id, wholesale_price, retail_price')
+        .eq('brand', brand)
+        .eq('product_id', productId)
+        .not('variant_id', 'is', null);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!brand && !!productId,
+  });
+
+  const variantsWithPricing: VariantWithPricing[] = variants.map(variant => {
+    const brandPrice = brandPrices.find(bp => bp.variant_id === variant.id);
+    return {
+      ...variant,
+      effective_wholesale_price: brandPrice?.wholesale_price ?? variant.wholesale_price,
+      effective_retail_price: brandPrice?.retail_price ?? variant.retail_price,
+      has_brand_price: !!brandPrice,
+    };
+  });
+
+  return {
+    variants: variantsWithPricing,
+    isLoading: variantsLoading || pricesLoading,
   };
 }

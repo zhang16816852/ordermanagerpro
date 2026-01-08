@@ -52,6 +52,7 @@ import { useProductCache } from '@/hooks/useProductCache';
 import { ProductBatchImport } from '@/components/products/ProductBatchImport';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
+import { VariantManager } from '@/components/products/VariantManager';
 
 type Product = Tables<'products'>;
 type ProductInsert = TablesInsert<'products'>;
@@ -495,10 +496,7 @@ export default function AdminProducts() {
         </TabsContent>
 
         <TabsContent value="variants" className="mt-4">
-          <div className="rounded-lg border bg-card p-8 text-center text-muted-foreground">
-            <p>變體管理功能開發中</p>
-            <p className="text-sm mt-2">請先在產品列表中啟用「有變體選項」，然後在此管理變體</p>
-          </div>
+          <VariantManager products={products || []} search={search} />
         </TabsContent>
       </Tabs>
 
