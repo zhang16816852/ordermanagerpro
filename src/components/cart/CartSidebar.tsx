@@ -63,48 +63,56 @@ export default function CartSidebar({ showCheckoutButton = true }: CartSidebarPr
       <CardContent className="space-y-4">
         <ScrollArea className="h-96 pr-4 -mx-4 px-4">
           <div className="space-y-3">
-            {cartItems.map((item) => (
-              <div
-                key={item.productId}
-                className="flex items-center gap-3 p-3 border rounded-lg bg-background"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate text-sm">{item.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {item.sku} · ${item.price} × {item.quantity}
-                  </p>
+            {cartItems.map((item) => {
+              // 產生唯一的 key
+              const itemKey = `${item.productId}-${item.variantId || 'base'}`;
+
+              return (
+                <div
+                  key={itemKey}
+                  className="flex items-center gap-3 p-3 border rounded-lg bg-background"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate text-sm">{item.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {item.sku} · ${item.price} × {item.quantity}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8"
+                      // 修改：傳入 variantId
+                      onClick={() => updateQuantity(item.productId, item.variantId, item.quantity - 1)}
+                    >
+                      <Minus className="h-3 w-3" />
+                    </Button>
+                    <span className="w-9 text-center text-sm font-medium">
+                      {item.quantity}
+                    </span>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8"
+                      // 修改：傳入 variantId
+                      onClick={() => updateQuantity(item.productId, item.variantId, item.quantity + 1)}
+                    >
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 text-destructive"
+                      // 修改：傳入 variantId
+                      onClick={() => removeItem(item.productId, item.variantId)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    className="h-8 w-8"
-                    onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                  >
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  <span className="w-9 text-center text-sm font-medium">
-                    {item.quantity}
-                  </span>
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    className="h-8 w-8"
-                    onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                  >
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 text-destructive"
-                    onClick={() => removeItem(item.productId)}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </ScrollArea>
 

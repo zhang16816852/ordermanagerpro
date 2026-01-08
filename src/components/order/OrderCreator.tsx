@@ -56,7 +56,6 @@ export default function OrderCreator({
   const [variantDialogProduct, setVariantDialogProduct] = useState<ProductWithPricing | null>(null);
 
   const { products: storeProducts, isLoading: productsLoading, brand } = useStoreProductCache(storeId);
-
   const createOrderMutation = useMutation({
     mutationFn: async () => {
       if (cart.length === 0) throw new Error("購物車是空的");
@@ -120,7 +119,7 @@ export default function OrderCreator({
 
   const addToCart = (product: ProductWithPricing, variant?: VariantWithPricing) => {
     const itemId = variant ? `${product.id}-${variant.id}` : product.id;
-    const existing = cart.find((item) => 
+    const existing = cart.find((item) =>
       variant ? item.variantId === variant.id : item.productId === product.id && !item.variantId
     );
 
@@ -348,8 +347,8 @@ export default function OrderCreator({
               <div className="space-y-2 max-h-[400px] overflow-y-auto">
                 {variantDialogProduct.variants?.map((variant) => {
                   const inCart = cart.find((item) => item.variantId === variant.id);
-                  const price = 'effective_wholesale_price' in variant 
-                    ? variant.effective_wholesale_price 
+                  const price = 'effective_wholesale_price' in variant
+                    ? variant.effective_wholesale_price
                     : variant.wholesale_price;
                   return (
                     <div

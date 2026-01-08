@@ -8,13 +8,14 @@ export interface CartItem {
   sku: string;
   price: number;        // 這是加入購物車當時的批發價（固定不變）
   quantity: number;
+  variantId?: string;
 }
 
 interface CartStore {
   items: CartItem[];
-  addItem: (product: { id: string; name: string; sku: string; wholesale_price: number }) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
-  removeItem: (productId: string) => void;
+  addItem: (product: { id: string; name: string; sku: string; wholesale_price: number; variantId?: string }) => void;
+  updateQuantity: (productId: string, variantId: string | undefined, quantity: number) => void;
+  removeItem: (productId: string, variantId: string | undefined) => void;
   clearCart: () => void;
   getTotalItems: () => number;
   getTotalAmount: () => number;
@@ -27,21 +28,26 @@ export const useCartStore = create<CartStore>()(
 
       addItem: (product) => {
         set((state) => {
-          const existing = state.items.find((item) => item.productId === product.id);
-          if (existing) {
-            return {
-              items: state.items.map((item) =>
-                item.productId === product.id
-                  ? { ...item, quantity: item.quantity + 1 }
-                  : item
-              ),
+          // 關鍵修改：檢查 productId 和 variantId 是否同時匹配
+          const existingIndex = state.items.findIndex(
+            (item) => item.productId === product.id && item.variantId === product.variantId
+          );
+
+          if (existingIndex > -1) {
+            const newItems = [...state.items];
+            newItems[existingIndex] = {
+              ...newItems[existingIndex],
+              quantity: newItems[existingIndex].quantity + 1,
             };
+            return { items: newItems };
           }
+
           return {
             items: [
               ...state.items,
               {
                 productId: product.id,
+                variantId: product.variantId,
                 name: product.name,
                 sku: product.sku,
                 price: product.wholesale_price,
@@ -52,26 +58,25 @@ export const useCartStore = create<CartStore>()(
         });
       },
 
-      updateQuantity: (productId, quantity) => {
-        if (quantity <= 0) {
-          set((state) => ({
-            items: state.items.filter((item) => item.productId !== productId),
-          }));
-        } else {
-          set((state) => ({
-            items: state.items.map((item) =>
-              item.productId === productId ? { ...item, quantity } : item
-            ),
-          }));
-        }
-      },
-
-      removeItem: (productId) => {
+      updateQuantity: (productId, variantId, quantity) => {
         set((state) => ({
-          items: state.items.filter((item) => item.productId !== productId),
+          items: state.items
+            .map((item) =>
+              item.productId === productId && item.variantId === variantId
+                ? { ...item, quantity }
+                : item
+            )
+            .filter((item) => item.quantity > 0),
         }));
       },
 
+      removeItem: (productId, variantId) => {
+        set((state) => ({
+          items: state.items.filter(
+            (item) => !(item.productId === productId && item.variantId === variantId)
+          ),
+        }));
+      },
       clearCart: () => {
         set({ items: [] });
       },
@@ -84,6 +89,7 @@ export const useCartStore = create<CartStore>()(
         return get().items.reduce((sum, item) => sum + item.price * item.quantity, 0);
       },
     }),
+    
     {
       name: "cart-storage", // localStorage key
       // 可選：只儲存 items，其他函數不需持久化
