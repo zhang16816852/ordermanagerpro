@@ -1,3 +1,4 @@
+// src/pages/admin/Products.tsx
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -56,7 +57,7 @@ import { VariantManager } from '@/components/products/VariantManager';
 
 type Product = Tables<'products'>;
 type ProductInsert = TablesInsert<'products'>;
-
+type ProductVariant = Tables<'product_variants'>;
 const STATUS_LABELS: Record<string, string> = {
   active: '上架中',
   discontinued: '已停售',
@@ -77,6 +78,8 @@ export default function AdminProducts() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
+  const [editingVariants, setEditingVariants] = useState<ProductVariant[]>([]);
+
   const [activeTab, setActiveTab] = useState<'list' | 'variants'>('list');
   const queryClient = useQueryClient();
 
@@ -84,19 +87,39 @@ export default function AdminProducts() {
 
   const createMutation = useMutation({
     mutationFn: async (product: ProductInsert) => {
-      const { error } = await supabase.from('products').insert(product);
+      const { data, error } = await supabase.from('products').insert(product).select().single();
       if (error) throw error;
+      console.log('Created product:', data);
+      return data; // ← 回傳新增的產品
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
-      queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
+    onSuccess: async (newProduct) => {
       toast.success('產品已新增');
+
       setIsDialogOpen(false);
+      if (editingVariants.length > 0) {
+        const variantsToInsert = editingVariants.map(v => ({
+          sku: `${v.sku}`,
+          name: `${v.name}`,
+          product_id: newProduct.id,
+          barcode: v.barcode,
+          color: v.color,
+          option_1: v.option_1,
+          option_2: v.option_2,
+          option_3: v.option_3,
+          wholesale_price: v.wholesale_price,
+          retail_price: v.retail_price,
+          status: v.status,
+        }));
+
+        const { error } = await supabase.from('product_variants').insert(variantsToInsert);
+        if (error) toast.error('新增變體失敗');
+      }
     },
     onError: (error) => {
       toast.error(`新增失敗：${error.message}`);
     },
   });
+
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Product> & { id: string }) => {
@@ -155,13 +178,27 @@ export default function AdminProducts() {
       updateMutation.mutate({ id: editingProduct.id, ...productData });
     } else {
       // 新增產品
-      createMutation.mutate(productData);
+
+      createMutation.mutate(productData, {
+        onSuccess: async (newProduct) => {
+          if (editingVariants.length > 0) {
+            const variantsToInsert = editingVariants.map(v => ({
+              ...v,
+              product_id: newProduct.id,
+            }));
+            const { error } = await supabase.from('product_variants').insert(variantsToInsert);
+            if (error) toast.error('新增變體失敗');
+          }
+        },
+      });
     }
   };
 
-  const handleCopy = (product: Product) => {
+  const handleCopy = async (product: Product) => {
     setEditingProduct(null);
-    const { id, ...rest } = product; // 移除 id
+    setEditingVariants([]);
+
+    const { id, ...rest } = product;
 
     const copiedProduct = {
       ...rest,
@@ -170,8 +207,30 @@ export default function AdminProducts() {
     };
 
     setEditingProduct(copiedProduct as any);
+
+    if (product.has_variants) {
+      // 取得原產品變體
+      const { data: variants, error } = await supabase
+        .from('product_variants')
+        .select('*')
+        .eq('product_id', product.id);
+
+      if (error) {
+        toast.error('複製變體失敗');
+      } else if (variants?.length) {
+        const copiedVariants = variants.map(v => ({
+          ...v,
+          id: undefined, // 移除原 id
+          sku: `${v.sku}-COPY`,
+          name: `${v.name} (複製)`,
+        }));
+        setEditingVariants(copiedVariants);
+      }
+    }
+
     setIsDialogOpen(true);
   };
+
 
   const filteredProducts = products?.filter(
     (p) =>
@@ -371,6 +430,49 @@ export default function AdminProducts() {
                     </div>
                   </div>
                 </div>
+                {editingVariants.length > 0 && (
+                  <div className="mt-4 border-t pt-4 space-y-2">
+                    <h4 className="font-medium">複製的變體（可編輯）</h4>
+                    {editingVariants.map((variant, index) => (
+                      <div key={index} className="grid grid-cols-3 gap-2 items-end">
+                        <div className="space-y-1">
+                          <Label>SKU</Label>
+                          <Input
+                            value={variant.sku}
+                            onChange={(e) => {
+                              const newVariants = [...editingVariants];
+                              newVariants[index].sku = e.target.value;
+                              setEditingVariants(newVariants);
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>名稱</Label>
+                          <Input
+                            value={variant.name}
+                            onChange={(e) => {
+                              const newVariants = [...editingVariants];
+                              newVariants[index].name = e.target.value;
+                              setEditingVariants(newVariants);
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>批發價</Label>
+                          <Input
+                            type="number"
+                            value={variant.wholesale_price}
+                            onChange={(e) => {
+                              const newVariants = [...editingVariants];
+                              newVariants[index].wholesale_price = parseFloat(e.target.value) || 0;
+                              setEditingVariants(newVariants);
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="outline" onClick={closeDialog}>
