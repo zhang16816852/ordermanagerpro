@@ -150,21 +150,25 @@ export default function AdminProducts() {
       has_variants: formData.get('has_variants') === 'on',
     };
 
-    if (editingProduct) {
+    if (editingProduct?.id) {
+      // 更新原產品
       updateMutation.mutate({ id: editingProduct.id, ...productData });
     } else {
+      // 新增產品
       createMutation.mutate(productData);
     }
   };
 
   const handleCopy = (product: Product) => {
     setEditingProduct(null);
+    const { id, ...rest } = product; // 移除 id
+
     const copiedProduct = {
-      ...product,
-      id: undefined,
+      ...rest,
       sku: `${product.sku}-COPY`,
       name: `${product.name} (複製)`,
     };
+
     setEditingProduct(copiedProduct as any);
     setIsDialogOpen(true);
   };
