@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { useCartStore } from '@/stores/useCartStore';
+import { useStoreDraft } from '@/stores/useOrderDraftStore';
 import { Badge } from "@/components/ui/badge"; // ← 新增這行
 import {
   DropdownMenu,
@@ -111,8 +111,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { getTotalItems } = useCartStore();
-  const totalCartItems = getTotalItems();
+  const storeId = storeRoles[0]?.store_id;
+  const { totalItems: totalCartItems } = useStoreDraft(storeId);
   const baseStoreNavItems: NavItem[] = [
     { title: '儀表板', href: '/dashboard', icon: Home },
     { title: '商品目錄', href: '/catalog', icon: PackageSearch },

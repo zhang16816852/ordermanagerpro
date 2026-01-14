@@ -9,12 +9,13 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
+
 // Admin pages
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminProducts from "./pages/admin/Products";
 import AdminStores from "./pages/admin/Stores";
 import AdminOrders from "./pages/admin/Orders";
-import AdminNewOrder from "./pages/admin/NewOrder";
+import AdminOrderComposer from "./pages/admin/OrderComposer";
 import AdminEditOrder from "./pages/admin/EditOrder";
 import AdminSalesNotes from "./pages/admin/SalesNotes";
 import AdminShippingPool from "./pages/admin/ShippingPool";
@@ -27,7 +28,7 @@ import StoreDashboard from "./pages/store/Dashboard";
 import StoreOrders from "./pages/store/Orders";
 import StoreCatalog from "./pages/store/Catalog";
 import StoreSalesNotes from "./pages/store/SalesNotes";
-import StoreNewOrder from "./pages/store/NewOrder";
+import StoreCheckout from "./pages/store/Checkout";
 import StoreEditOrder from "./pages/store/EditOrder";
 import StoreReceiving from "./pages/store/Receiving";
 import StoreTeam from "./pages/store/Team";
@@ -39,7 +40,6 @@ import AcceptInvite from "./pages/AcceptInvite";
 function RootRedirect() {
   const { user, isAdmin, loading } = useAuth();
 
-  // 如果還在確認身分，顯示讀取中
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -48,28 +48,24 @@ function RootRedirect() {
     );
   }
 
-  // 沒登入，去登入頁
   if (!user) {
     return <Navigate to="/auth" replace />;
   }
 
-  // 是 Admin 去總覽，不是則去儀表板
   return isAdmin ?
     <Navigate to="/admin" replace /> :
     <Navigate to="/dashboard" replace />;
 }
+
 const queryClient = new QueryClient();
 
 function AppRoutes() {
-  const { isAdmin } = useAuth();
-
   return (
     <Routes>
-      {/* 1. 將根路徑交給 RootRedirect 處理 */}
       <Route path="/" element={<RootRedirect />} />
-
       <Route path="/auth" element={<Auth />} />
       <Route path="/invite/:token" element={<AcceptInvite />} />
+
       {/* Admin Routes */}
       <Route
         path="/admin"
@@ -116,7 +112,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AppLayout>
-              <AdminNewOrder />
+              <AdminOrderComposer />
             </AppLayout>
           </ProtectedRoute>
         }
@@ -208,7 +204,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AppLayout>
-              <StoreNewOrder />
+              <StoreCheckout />
             </AppLayout>
           </ProtectedRoute>
         }
@@ -293,7 +289,6 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
 
       <Route path="*" element={<NotFound />} />
     </Routes>
