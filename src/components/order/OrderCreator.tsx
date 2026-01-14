@@ -2,30 +2,35 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Search, ShoppingCart, Plus, Minus, Trash2, Send, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import { useStoreProductCache, useProductVariants, ProductWithPricing, VariantWithPricing } from "@/hooks/useProductCache";
+import { useStoreProductCache, ProductWithPricing, VariantWithPricing } from "@/hooks/useProductCache";
 
-interface CartItem {
-  productId: string;
-  variantId?: string;
-  name: string;
-  sku: string;
-  price: number;
-  quantity: number;
-}
+// 1. 定義 Schema
+const orderSchema = z.object({
+  notes: z.string().optional(),
+  items: z.array(z.object({
+    productId: z.string(),
+    variantId: z.string().optional(),
+    name: z.string(),
+    sku: z.string(),
+    price: z.number(),
+    quantity: z.number().min(1, "數量至少為 1"),
+  })).min(1, "購物車是空的"),
+});
+
+type OrderFormValues = z.infer<typeof orderSchema>;
 
 interface OrderCreatorProps {
   storeId: string;
@@ -51,21 +56,33 @@ export default function OrderCreator({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [notes, setNotes] = useState("");
   const [variantDialogProduct, setVariantDialogProduct] = useState<ProductWithPricing | null>(null);
 
-  const { products: storeProducts, isLoading: productsLoading, brand } = useStoreProductCache(storeId);
-  const createOrderMutation = useMutation({
-    mutationFn: async () => {
-      if (cart.length === 0) throw new Error("購物車是空的");
+  const { products: storeProducts, isLoading: productsLoading } = useStoreProductCache(storeId);
 
+  // 2. 初始化 React Hook Form
+  const form = useForm<OrderFormValues>({
+    resolver: zodResolver(orderSchema),
+    defaultValues: {
+      notes: "",
+      items: [],
+    },
+  });
+
+  const { fields, append, remove, update } = useFieldArray({
+    control: form.control,
+    name: "items",
+  });
+
+  // 3. 建立訂單的 Mutation
+  const createOrderMutation = useMutation({
+    mutationFn: async (values: OrderFormValues) => {
       const { data: order, error: orderError } = await supabase
         .from("orders")
         .insert({
           store_id: storeId,
           created_by: userId,
-          notes,
+          notes: values.notes,
           source_type: sourceType,
         })
         .select()
@@ -73,7 +90,7 @@ export default function OrderCreator({
 
       if (orderError) throw orderError;
 
-      const orderItems = cart.map((item) => ({
+      const orderItems = values.items.map((item) => ({
         order_id: order.id,
         product_id: item.productId,
         variant_id: item.variantId,
@@ -89,8 +106,7 @@ export default function OrderCreator({
     },
     onSuccess: () => {
       toast.success("訂單已建立");
-      setCart([]);
-      setNotes("");
+      form.reset();
       queryClient.invalidateQueries({ queryKey: [queryKeyToInvalidate] });
       onOrderCreated?.();
       navigate(successRedirect);
@@ -100,74 +116,33 @@ export default function OrderCreator({
     },
   });
 
-  const filteredProducts = storeProducts.filter((product) => {
-    const searchLower = search.toLowerCase();
-    return (
-      product.name?.toLowerCase().includes(searchLower) ||
-      product.sku?.toLowerCase().includes(searchLower)
-    );
-  });
-
-  const handleProductClick = (product: ProductWithPricing) => {
-    if (product.has_variants && product.variants && product.variants.length > 0) {
-      // 有變體，開啟變體選擇對話框
-      setVariantDialogProduct(product);
-    } else {
-      // 無變體，直接加入購物車
-      addToCart(product);
-    }
-  };
-
+  // 4. 購物車邏輯
   const addToCart = (product: ProductWithPricing, variant?: VariantWithPricing) => {
-    const itemId = variant ? `${product.id}-${variant.id}` : product.id;
-    const existing = cart.find((item) =>
+    const existingIndex = fields.findIndex((item) =>
       variant ? item.variantId === variant.id : item.productId === product.id && !item.variantId
     );
 
-    if (existing) {
-      setCart(
-        cart.map((item) =>
-          (variant ? item.variantId === variant.id : item.productId === product.id && !item.variantId)
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        )
-      );
+    if (existingIndex > -1) {
+      const currentItem = fields[existingIndex];
+      update(existingIndex, { ...currentItem, quantity: currentItem.quantity + 1 });
     } else {
-      setCart([
-        ...cart,
-        {
-          productId: product.id,
-          variantId: variant?.id,
-          name: variant ? `${product.name} - ${variant.name}` : product.name,
-          sku: variant?.sku || product.sku,
-          price: variant?.effective_wholesale_price ?? product.wholesale_price,
-          quantity: 1,
-        },
-      ]);
+      append({
+        productId: product.id,
+        variantId: variant?.id,
+        name: variant ? `${product.name} - ${variant.name}` : product.name,
+        sku: variant?.sku || product.sku,
+        price: variant?.effective_wholesale_price ?? product.wholesale_price,
+        quantity: 1,
+      });
     }
-
-    if (variant) {
-      setVariantDialogProduct(null);
-    }
+    setVariantDialogProduct(null);
   };
 
-  const updateQuantity = (productId: string, variantId: string | undefined, delta: number) => {
-    setCart(
-      cart
-        .map((item) =>
-          item.productId === productId && item.variantId === variantId
-            ? { ...item, quantity: Math.max(0, item.quantity + delta) }
-            : item
-        )
-        .filter((item) => item.quantity > 0)
-    );
-  };
+  const totalAmount = fields.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  const removeFromCart = (productId: string, variantId: string | undefined) => {
-    setCart(cart.filter((item) => !(item.productId === productId && item.variantId === variantId)));
-  };
-
-  const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const filteredProducts = storeProducts.filter((p) =>
+    p.name?.toLowerCase().includes(search.toLowerCase()) || p.sku?.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
@@ -176,214 +151,131 @@ export default function OrderCreator({
         <p className="text-muted-foreground">{description}</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>產品目錄</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="relative mb-4">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="搜尋產品..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit((v) => createOrderMutation.mutate(v))} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* 左側：產品選擇 */}
+          <div className="lg:col-span-2">
+            <Card>
+              <CardHeader><CardTitle>產品目錄</CardTitle></CardHeader>
+              <CardContent>
+                <div className="relative mb-4">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="搜尋產品..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
+                </div>
 
-              {productsLoading ? (
-                <div className="text-center py-8 text-muted-foreground">載入中...</div>
-              ) : filteredProducts.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">沒有找到符合的產品</div>
-              ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {filteredProducts.map((product) => {
-                    const inCartCount = cart
-                      .filter((item) => item.productId === product.id)
-                      .reduce((sum, item) => sum + item.quantity, 0);
-                    const hasVariants = product.has_variants && product.variants && product.variants.length > 0;
-
+                    const inCartCount = fields
+                      .filter(f => f.productId === product.id)
+                      .reduce((sum, f) => sum + f.quantity, 0);
+                    
                     return (
-                      <div
-                        key={product.id}
+                      <div 
+                        key={product.id} 
                         className="p-3 border rounded-lg hover:border-primary cursor-pointer transition-colors"
-                        onClick={() => handleProductClick(product)}
+                        onClick={() => product.has_variants ? setVariantDialogProduct(product) : addToCart(product)}
                       >
                         <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="font-medium flex items-center gap-2">
-                              {product.name}
-                              {hasVariants && (
-                                <Badge variant="outline" className="text-xs">
-                                  {product.variants!.length} 變體
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="text-sm text-muted-foreground font-mono">
-                              {product.sku}
-                            </div>
+                          <div>
+                            <div className="font-medium">{product.name}</div>
+                            <div className="text-sm text-muted-foreground font-mono">{product.sku}</div>
                           </div>
-                          <div className="text-right flex items-center gap-2">
-                            <div>
-                              <div className="font-medium">${product.wholesale_price}</div>
-                              {inCartCount > 0 && (
-                                <div className="text-sm text-primary">
-                                  已加入 x{inCartCount}
-                                </div>
-                              )}
-                            </div>
-                            {hasVariants && (
-                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                            )}
+                          <div className="text-right">
+                            <div className="font-medium">${product.wholesale_price}</div>
+                            {inCartCount > 0 && <div className="text-sm text-primary">x{inCartCount}</div>}
                           </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+              </CardContent>
+            </Card>
+          </div>
 
-        <div>
-          <Card className="sticky top-4">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ShoppingCart className="h-5 w-5" />
-                購物車 ({cart.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {cart.length === 0 ? (
-                <p className="text-center text-muted-foreground py-4">
-                  購物車是空的
-                </p>
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    {cart.map((item) => (
-                      <div
-                        key={`${item.productId}-${item.variantId || 'base'}`}
-                        className="flex items-center justify-between p-2 border rounded"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium truncate">{item.name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            ${item.price} x {item.quantity}
+          {/* 右側：購物車與提交 */}
+          <div className="space-y-6">
+            <Card className="sticky top-4">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShoppingCart className="h-5 w-5" /> 購物車 ({fields.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {fields.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-4">購物車是空的</p>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      {fields.map((field, index) => (
+                        <div key={field.id} className="flex items-center justify-between p-2 border rounded">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate text-sm">{field.name}</div>
+                            <div className="text-xs text-muted-foreground">${field.price}</div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button type="button" variant="outline" size="icon" className="h-7 w-7" onClick={() => update(index, { ...field, quantity: Math.max(0, field.quantity - 1) })}>
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                            <span className="w-6 text-center text-sm">{field.quantity}</span>
+                            <Button type="button" variant="outline" size="icon" className="h-7 w-7" onClick={() => update(index, { ...field, quantity: field.quantity + 1 })}>
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => remove(index)}>
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => updateQuantity(item.productId, item.variantId, -1)}
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <span className="w-8 text-center">{item.quantity}</span>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => updateQuantity(item.productId, item.variantId, 1)}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-destructive"
-                            onClick={() => removeFromCart(item.productId, item.variantId)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
 
-                  <div className="border-t pt-4">
-                    <div className="flex justify-between font-medium text-lg">
+                    <div className="border-t pt-2 flex justify-between font-bold">
                       <span>總計</span>
                       <span>${totalAmount.toLocaleString()}</span>
                     </div>
-                  </div>
 
-                  <Textarea
-                    placeholder="訂單備註（選填）"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                  />
+                    <FormField
+                      control={form.control}
+                      name="notes"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl><Textarea placeholder="訂單備註" {...field} /></FormControl>
+                        </FormItem>
+                      )}
+                    />
 
-                  <Button
-                    className="w-full"
-                    onClick={() => createOrderMutation.mutate()}
-                    disabled={createOrderMutation.isPending}
-                  >
-                    <Send className="h-4 w-4 mr-2" />
-                    {createOrderMutation.isPending ? "處理中..." : "送出訂單"}
-                  </Button>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+                    <Button type="submit" className="w-full" disabled={createOrderMutation.isPending || fields.length === 0}>
+                      <Send className="h-4 w-4 mr-2" />
+                      {createOrderMutation.isPending ? "處理中..." : "送出訂單"}
+                    </Button>
+                    {form.formState.errors.items && (
+                      <p className="text-xs text-destructive text-center">{form.formState.errors.items.message}</p>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </form>
+      </Form>
 
-      {/* 變體選擇對話框 */}
+      {/* 變體選擇 Dialog 同原先邏輯，但 onClick 調用新的 addToCart */}
       <Dialog open={!!variantDialogProduct} onOpenChange={() => setVariantDialogProduct(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>選擇規格</DialogTitle>
-          </DialogHeader>
-          {variantDialogProduct && (
-            <div className="space-y-4">
-              <div className="text-sm text-muted-foreground">
-                {variantDialogProduct.name}
-              </div>
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {variantDialogProduct.variants?.map((variant) => {
-                  const inCart = cart.find((item) => item.variantId === variant.id);
-                  const price = 'effective_wholesale_price' in variant
-                    ? variant.effective_wholesale_price
-                    : variant.wholesale_price;
-                  return (
-                    <div
-                      key={variant.id}
-                      className="p-3 border rounded-lg hover:border-primary cursor-pointer transition-colors"
-                      onClick={() => addToCart(variantDialogProduct, variant as VariantWithPricing)}
-                    >
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <div className="font-medium">{variant.name}</div>
-                          <div className="text-xs text-muted-foreground font-mono">
-                            {variant.sku}
-                          </div>
-                          {(variant.option_1 || variant.option_2 || variant.option_3) && (
-                            <div className="flex gap-1 mt-1">
-                              {variant.option_1 && <Badge variant="secondary" className="text-xs">{variant.option_1}</Badge>}
-                              {variant.option_2 && <Badge variant="secondary" className="text-xs">{variant.option_2}</Badge>}
-                              {variant.option_3 && <Badge variant="secondary" className="text-xs">{variant.option_3}</Badge>}
-                            </div>
-                          )}
-                        </div>
-                        <div className="text-right">
-                          <div className="font-medium">${Number(price)}</div>
-                          {inCart && (
-                            <div className="text-sm text-primary">已加入 x{inCart.quantity}</div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+        <DialogContent>
+          <DialogHeader><DialogTitle>選擇規格</DialogTitle></DialogHeader>
+          {variantDialogProduct?.variants?.map((v) => (
+            <div 
+              key={v.id} 
+              className="p-3 border rounded-lg cursor-pointer hover:border-primary"
+              onClick={() => addToCart(variantDialogProduct, v as VariantWithPricing)}
+            >
+              <div className="flex justify-between items-center">
+                <span>{v.name}</span>
+                <span className="font-bold">${v.wholesale_price}</span>
               </div>
             </div>
-          )}
+          ))}
         </DialogContent>
       </Dialog>
     </div>
