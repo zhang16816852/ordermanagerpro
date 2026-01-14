@@ -31,7 +31,7 @@ import { Label } from '@/components/ui/label';
 import { Plus, Pencil, Trash2, Layers, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
-import { VariantBatchCreator } from './VariantBatchCreator';
+import { VariantBatchCreator } from '../ProductFormDialog/VariantBatchCreator';
 
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;

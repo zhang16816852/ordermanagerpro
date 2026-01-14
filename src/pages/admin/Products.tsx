@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Tables, TablesInsert } from '@/integrations/supabase/types';
+import { Tables } from '@/integrations/supabase/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -39,7 +39,6 @@ import { VariantManager } from '@/components/products/VariantManager';
 import { ProductFormDialog } from '@/components/ProductFormDialog/ProductFormDialog';
 
 type Product = Tables<'products'>;
-type ProductVariant = Tables<'product_variants'>;
 
 const STATUS_LABELS: Record<string, string> = {
   active: '上架中',
@@ -78,7 +77,7 @@ export default function AdminProducts() {
       toast.success('產品已新增');
       setIsDialogOpen(false);
     },
-    onError: (error) => toast.error(`新增失敗：${error.message}`),
+    onError: (error: any) => toast.error(`新增失敗：${error.message}`),
   });
 
   const updateMutation = useMutation({
@@ -92,7 +91,7 @@ export default function AdminProducts() {
       setIsDialogOpen(false);
       setEditingProduct(null);
     },
-    onError: (error) => toast.error(`更新失敗：${error.message}`),
+    onError: (error: any) => toast.error(`更新失敗：${error.message}`),
   });
 
   const deleteMutation = useMutation({
@@ -105,7 +104,7 @@ export default function AdminProducts() {
       toast.success('產品已刪除');
       setDeleteProduct(null);
     },
-    onError: (error) => toast.error(`刪除失敗：${error.message}`),
+    onError: (error: any) => toast.error(`刪除失敗：${error.message}`),
   });
 
   // --- Handlers ---
@@ -117,14 +116,13 @@ export default function AdminProducts() {
     }
   };
 
-  const handleCopy = async (product: Product) => {
+  const handleCopy = (product: Product) => {
     const { id, created_at, ...rest } = product;
     const copiedProduct = {
       ...rest,
       sku: `${product.sku}-COPY`,
       name: `${product.name} (複製)`,
     };
-    // 注意：這裡直接開啟 Dialog，由 Dialog 內部的 useEffect 同步資料到 RHF
     setEditingProduct(copiedProduct as any);
     setIsDialogOpen(true);
   };
@@ -142,21 +140,21 @@ export default function AdminProducts() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">產品管理</h1>
-          <p className="text-muted-foreground">
-            管理系統中的所有產品
-            <span className="ml-2 text-xs">（緩存版本：{version}）</span>
+          <p className="text-muted-foreground text-sm mt-1">
+            管理產品基本資訊與變體
+            <span className="ml-2 text-xs opacity-50">（緩存版本：{version}）</span>
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={forceRefresh}>
+          <Button variant="outline" size="sm" onClick={forceRefresh}>
             <RefreshCw className="mr-2 h-4 w-4" />
             重新整理
           </Button>
-          <Button variant="outline" onClick={() => setIsImportOpen(true)}>
+          <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)}>
             <Upload className="mr-2 h-4 w-4" />
             批次匯入
           </Button>
-          <Button onClick={() => { setEditingProduct(null); setIsDialogOpen(true); }}>
+          <Button size="sm" onClick={() => { setEditingProduct(null); setIsDialogOpen(true); }}>
             <Plus className="mr-2 h-4 w-4" />
             新增產品
           </Button>
@@ -164,96 +162,106 @@ export default function AdminProducts() {
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'list' | 'variants')}>
-        <div className="flex items-center justify-between gap-4">
-          <TabsList>
-            <TabsTrigger value="list">產品列表</TabsTrigger>
-            <TabsTrigger value="variants">變體管理</TabsTrigger>
+        <div className="flex items-center justify-between gap-4 bg-muted/20 p-1 rounded-lg">
+          <TabsList className="bg-transparent">
+            <TabsTrigger value="list" className="data-[state=active]:bg-background shadow-sm">
+              產品列表
+            </TabsTrigger>
+            <TabsTrigger value="variants" className="data-[state=active]:bg-background shadow-sm">
+              全域變體總覽
+            </TabsTrigger>
           </TabsList>
 
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="relative flex-1 max-w-sm px-2">
+            <Search className="absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="搜尋產品名稱、SKU、品牌、型號..."
+              placeholder="搜尋名稱、SKU、品牌..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
+              className="pl-11 bg-background"
             />
           </div>
         </div>
 
-        <TabsContent value="list" className="mt-4">
-          <div className="rounded-lg border bg-card shadow-soft">
+        {/* 產品列表頁簽 */}
+        <TabsContent value="list" className="mt-4 outline-none">
+          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead>SKU</TableHead>
+                  <TableHead className="w-[150px]">SKU</TableHead>
                   <TableHead>名稱</TableHead>
-                  <TableHead>廠牌</TableHead>
-                  <TableHead>型號</TableHead>
-                  <TableHead className="text-right">批發價</TableHead>
-                  <TableHead className="text-right">零售價</TableHead>
+                  <TableHead>廠牌/型號</TableHead>
+                  <TableHead className="text-right">批發/零售價</TableHead>
                   <TableHead>狀態</TableHead>
-                  <TableHead className="w-12"></TableHead>
+                  <TableHead className="w-12 text-center">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-48" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24 ml-auto" /></TableCell>
                       <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-8 w-8" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-8 mx-auto" /></TableCell>
                     </TableRow>
                   ))
                 ) : filteredProducts?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      沒有找到產品
+                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                      找不到符合條件的產品
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredProducts?.map((product) => (
-                    <TableRow key={product.id}>
-                      <TableCell className="font-mono text-sm">{product.sku}</TableCell>
-                      <TableCell className="font-medium">
-                        {product.name}
-                        {product.has_variants && (
-                          <Badge variant="outline" className="ml-2 text-xs">有變體</Badge>
-                        )}
+                    <TableRow key={product.id} className="hover:bg-muted/30 transition-colors">
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {product.sku}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{product.brand || '-'}</TableCell>
-                      <TableCell className="text-muted-foreground">{product.model || '-'}</TableCell>
-                      <TableCell className="text-right">${product.base_wholesale_price.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">${product.base_retail_price.toFixed(2)}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {product.name}
+                          {product.has_variants && (
+                            <Badge variant="secondary" className="text-[10px] h-4 px-1">VAR</Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        <span className="text-muted-foreground">{product.brand || '-'}</span>
+                        <span className="mx-1 text-slate-300">/</span>
+                        <span className="text-slate-500">{product.model || '-'}</span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="text-sm font-semibold">${product.base_wholesale_price}</div>
+                        <div className="text-[10px] text-muted-foreground">${product.base_retail_price}</div>
+                      </TableCell>
                       <TableCell>
                         <Badge
-                          variant={product.status === 'discontinued' ? 'secondary' : 'default'}
-                          className={STATUS_VARIANTS[product.status] || ''}
+                          variant="outline"
+                          className={`${STATUS_VARIANTS[product.status] || ''} border-none font-normal`}
                         >
                           {STATUS_LABELS[product.status] || product.status}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-center">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                          <DropdownMenuContent align="end" className="w-32">
                             <DropdownMenuItem onClick={() => { setEditingProduct(product); setIsDialogOpen(true); }}>
-                              <Pencil className="mr-2 h-4 w-4" /> 編輯
+                              <Pencil className="mr-2 h-4 w-4" /> 編輯詳情
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleCopy(product)}>
-                              <Copy className="mr-2 h-4 w-4" /> 複製
+                              <Copy className="mr-2 h-4 w-4" /> 複製產品
                             </DropdownMenuItem>
                             <DropdownMenuItem className="text-destructive" onClick={() => setDeleteProduct(product)}>
-                              <Trash2 className="mr-2 h-4 w-4" /> 刪除
+                              <Trash2 className="mr-2 h-4 w-4" /> 刪除產品
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -266,12 +274,13 @@ export default function AdminProducts() {
           </div>
         </TabsContent>
 
-        <TabsContent value="variants" className="mt-4">
+        {/* 全域變體總覽 - 保留原本的 VariantManager 元件用於跨產品搜尋變體 */}
+        <TabsContent value="variants" className="mt-4 outline-none">
           <VariantManager products={products || []} search={search} />
         </TabsContent>
       </Tabs>
 
-      {/* 新增/編輯彈窗元件 */}
+      {/* 整合了「基本資訊」與「變體管理」標籤的統一對話框 */}
       <ProductFormDialog
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
@@ -280,23 +289,22 @@ export default function AdminProducts() {
         isLoading={createMutation.isPending || updateMutation.isPending}
       />
 
-      {/* 刪除確認 */}
+      {/* 刪除確認彈窗 */}
       <AlertDialog open={!!deleteProduct} onOpenChange={() => setDeleteProduct(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>確定要刪除此產品嗎？</AlertDialogTitle>
+            <AlertDialogTitle>確定要刪除產品嗎？</AlertDialogTitle>
             <AlertDialogDescription>
-              您即將刪除產品「{deleteProduct?.name}」（SKU: {deleteProduct?.sku}）。
-              此操作無法復原，相關的訂單項目可能會受到影響。
+              這將刪除「{deleteProduct?.name}」及其關聯的所有變體資料。此操作無法復原。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive hover:bg-destructive/90"
               onClick={() => deleteProduct && deleteMutation.mutate(deleteProduct.id)}
             >
-              {deleteMutation.isPending ? '刪除中...' : '確定刪除'}
+              確認刪除
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
