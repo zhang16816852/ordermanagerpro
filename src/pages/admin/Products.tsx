@@ -61,7 +61,7 @@ export default function AdminProducts() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'variants'>('list');
-  
+
   const queryClient = useQueryClient();
   const { products, isLoading, version, forceRefresh } = useProductCache();
 
@@ -116,15 +116,41 @@ export default function AdminProducts() {
     }
   };
 
-  const handleCopy = (product: Product) => {
-    const { id, created_at, ...rest } = product;
-    const copiedProduct = {
-      ...rest,
-      sku: `${product.sku}-COPY`,
-      name: `${product.name} (複製)`,
-    };
-    setEditingProduct(copiedProduct as any);
-    setIsDialogOpen(true);
+  const handleCopy = async (product: Product) => {
+    const newName = `${product.name} (複製)`;
+    const newSku = `${product.sku}-COPY-${Math.floor(Math.random() * 1000)}`;
+
+    try {
+      // 呼叫 Supabase RPC
+      const { data: newProductId, error } = await supabase.rpc('duplicate_product_with_variants', {
+        target_product_id: product.id,
+        new_name: newName,
+        new_sku: newSku
+      });
+
+      if (error) throw error;
+
+      // 重新整理列表
+      queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
+      toast.success('產品及其變體已完整複製');
+
+      // 選取新產品並打開 Dialog 讓使用者編輯
+      // 注意：這裡可能需要重新抓取新產品的完整資料
+      const { data: newProduct } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', newProductId)
+        .single();
+
+      if (newProduct) {
+        setEditingProduct(newProduct);
+        setIsDialogOpen(true);
+      }
+
+    } catch (error: any) {
+      console.error('Copy Error:', error);
+      toast.error(`複製失敗：${error.message}`);
+    }
   };
 
   const filteredProducts = products?.filter(
@@ -225,7 +251,7 @@ export default function AdminProducts() {
                         <div className="flex items-center gap-2">
                           {product.name}
                           {product.has_variants && (
-                            <Badge variant="secondary" className="text-[10px] h-4 px-1">VAR</Badge>
+                            <Badge variant="secondary" className="text-[10px] h-4 px-1">變體</Badge>
                           )}
                         </div>
                       </TableCell>
