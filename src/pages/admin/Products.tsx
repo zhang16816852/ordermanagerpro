@@ -54,7 +54,7 @@ import { ProductBatchImport } from '@/components/products/ProductBatchImport';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { VariantManager } from '@/components/products/VariantManager';
-
+import {ProductFormDialog} from '@/components/ProductFormDialog/ProductFormDialog';
 type Product = Tables<'products'>;
 type ProductInsert = TablesInsert<'products'>;
 type ProductVariant = Tables<'product_variants'>;
