@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options    
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.1"
@@ -710,10 +710,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      duplicate_product_with_variants: {
-        Args: { new_name: string; new_sku: string; target_product_id: string }
-        Returns: string
-      }
       get_store_role: {
         Args: { _store_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["store_role"]

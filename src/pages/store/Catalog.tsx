@@ -1,41 +1,20 @@
 // src/pages/store/Catalog.tsx
-import { useAuth } from '@/hooks/useAuth';
-import { useCartStore } from '@/stores/useCartStore';
-import { useStoreProductCache, ProductWithPricing, VariantWithPricing } from "@/hooks/useProductCache";
-import ProductSelectionGrid from "@/components/productSelect/ProductSelectionGrid";
-import CartSidebar from "@/components/cart/CartSidebar";
+import { useAuth } from "@/hooks/useAuth";
+import { useStoreProductCache } from "@/hooks/useProductCache";
+import ProductCatalog from "@/components/order/ProductCatalog";
+import CartPanel from "@/components/order/CartPanel";
 
 export default function StoreCatalog() {
-  const { storeRoles } = useAuth();
-  const storeId = storeRoles[0]?.store_id;
+  const { storeId } = useAuth();
+  const { products, isLoading } = useStoreProductCache(storeId ?? null);
 
-  // 使用與 OrderCreator 相同的 Cache Hook
-  const { products, isLoading } = useStoreProductCache(storeId);
-  
-  const { items: cartItems, addItem } = useCartStore();
-
-  const handleAddToCart = (product: ProductWithPricing, variant?: VariantWithPricing) => {
-    addItem({
-      id: product.id,
-      variantId: variant?.id, // 確保你的 Zustand Store 支援 variantId
-      name: variant ? `${product.name} - ${variant.name}` : product.name,
-      sku: variant?.sku || product.sku,
-      wholesale_price: variant?.effective_wholesale_price ?? product.wholesale_price,
-    });
-  };
-
-  const getCartQuantity = (productId: string, variantId?: string) => {
-    if (variantId) {
-      return cartItems.find(i => i.productId === productId && i.variantId === variantId)?.quantity || 0;
-    }
-    return cartItems.find(i => i.productId === productId && !i.variantId)?.quantity || 0;
-  };
-
-  const getTotalProductQuantity = (productId: string) => {
-    return cartItems
-      .filter(i => i.productId === productId)
-      .reduce((sum, i) => sum + i.quantity, 0);
-  };
+  if (!storeId) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        無法取得店鋪資訊
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -45,17 +24,15 @@ export default function StoreCatalog() {
           <p className="text-muted-foreground">選擇想訂購的商品，加入購物車後去結帳</p>
         </div>
 
-        <ProductSelectionGrid 
+        <ProductCatalog
           products={products}
           isLoading={isLoading}
-          onAddToCart={handleAddToCart}
-          getCartQuantity={getCartQuantity}
-          getTotalProductQuantity={getTotalProductQuantity}
+          storeId={storeId}
         />
       </div>
 
       <div className="lg:col-span-1">
-        <CartSidebar showCheckoutButton={true} />
+        <CartPanel storeId={storeId} showCheckoutButton />
       </div>
     </div>
   );
