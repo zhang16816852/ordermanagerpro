@@ -700,10 +700,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      duplicate_product_with_variants: {
-        Args: { new_name: string; new_sku: string; target_product_id: string }
-        Returns: string
-      }
       get_store_role: {
         Args: { _store_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["store_role"]
