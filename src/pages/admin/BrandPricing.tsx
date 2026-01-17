@@ -160,7 +160,7 @@ export default function AdminBrandPricing() {
             wholesale_price: item.wholesale_price,
           })),
           {
-            onConflict: 'store_products_brand_unique', // 直接用 index 名稱
+            onConflict: 'brand,product_id,variant_id', // 直接用 index 名稱
           }
         )
         .throwOnError();
