@@ -154,6 +154,7 @@ export default function AdminBrandPricing() {
     if (!selectedBrand) throw new Error('請先選擇品牌');
     if (selectedProducts.size === 0) throw new Error('請選擇至少一個產品');
 
+    // 整理資料格式
     const itemsToSave = Array.from(selectedProducts).map(key => {
       const [productId, variantId] = key.includes('-') ? key.split('-') : [key, null];
       const entry = priceEntries[key];
@@ -163,15 +164,15 @@ export default function AdminBrandPricing() {
       return {
         brand: selectedBrand,
         product_id: productId,
-        variant_id: variantId || null,
+        variant_id: variantId || null, // 確保為 null 而不是 undefined
         wholesale_price: entry?.wholesalePrice
           ? parseFloat(entry.wholesalePrice)
           : (variant?.wholesale_price ?? product?.base_wholesale_price ?? 0),
       };
     });
 
-    // 🔥 改用 RPC 呼叫剛建立的函數
-    const { error } = await supabase.rpc('upsert_store_products_batch', {
+    // 🔥 呼叫 RPC 函數，直接解決索引匹配問題
+    const { error } = await supabase.rpc('upsert_brand_product_prices', {
       p_items: itemsToSave
     });
 
@@ -183,9 +184,10 @@ export default function AdminBrandPricing() {
     setSelectedProducts(new Set());
   },
   onError: (error: Error) => {
-    toast.error(error.message);
+    toast.error(`儲存失敗: ${error.message}`);
   },
 });
+
 
 
 
