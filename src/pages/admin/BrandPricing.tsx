@@ -123,31 +123,7 @@ export default function AdminBrandPricing() {
   const getProductVariants = (productId: string) => {
     return allVariants.filter(v => v.product_id === productId && v.status === 'active');
   };
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedBrand) throw new Error('請先選擇品牌');
-      if (selectedProducts.size === 0) throw new Error('請選擇至少一個產品');
-
-      const itemsToSave: Array<{
-        product_id: string;
-        variant_id: string | null;
-        wholesale_price: number;
-      }> = [];
-
-      selectedProducts.forEach(key => {
-        const [productId, variantId] = key.includes('-') ? key.split('-') : [key, null];
-        const entry = priceEntries[key];
-        const product = products.find(p => p.id === productId);
-        const variant = variantId ? allVariants.find(v => v.id === variantId) : null;
-
-        itemsToSave.push({
-          product_id: productId,
-          variant_id: variantId,
-          wholesale_price: entry?.wholesalePrice
-            ? parseFloat(entry.wholesalePrice)
-            : (variant?.wholesale_price ?? product?.base_wholesale_price ?? 0),
-        });
-      });
+  
 
       const saveMutation = useMutation({
   mutationFn: async () => {
