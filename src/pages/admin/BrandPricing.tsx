@@ -149,34 +149,44 @@ export default function AdminBrandPricing() {
         });
       });
 
-      // 🔥 brand-only upsert
-      const { error } = await supabase
-        .from('store_products')
-        .upsert(
-          itemsToSave.map(item => ({
-            brand: selectedBrand,
-            product_id: item.product_id,
-            variant_id: item.variant_id,
-            wholesale_price: item.wholesale_price,
-          })),
-          {
-            onConflict: 'brand,product_id,variant_id', // 直接用 index 名稱
-          }
-        )
-        .throwOnError();
+      const saveMutation = useMutation({
+  mutationFn: async () => {
+    if (!selectedBrand) throw new Error('請先選擇品牌');
+    if (selectedProducts.size === 0) throw new Error('請選擇至少一個產品');
 
+    const itemsToSave = Array.from(selectedProducts).map(key => {
+      const [productId, variantId] = key.includes('-') ? key.split('-') : [key, null];
+      const entry = priceEntries[key];
+      const product = products.find(p => p.id === productId);
+      const variant = variantId ? allVariants.find(v => v.id === variantId) : null;
 
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success(`已更新 ${selectedProducts.size} 個項目的批發價`);
-      queryClient.invalidateQueries({ queryKey: ['brand-prices', selectedBrand] });
-      setSelectedProducts(new Set());
-    },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
-  });
+      return {
+        brand: selectedBrand,
+        product_id: productId,
+        variant_id: variantId || null,
+        wholesale_price: entry?.wholesalePrice
+          ? parseFloat(entry.wholesalePrice)
+          : (variant?.wholesale_price ?? product?.base_wholesale_price ?? 0),
+      };
+    });
+
+    // 🔥 改用 RPC 呼叫剛建立的函數
+    const { error } = await supabase.rpc('upsert_store_products_batch', {
+      p_items: itemsToSave
+    });
+
+    if (error) throw error;
+  },
+  onSuccess: () => {
+    toast.success(`已成功更新價格`);
+    queryClient.invalidateQueries({ queryKey: ['brand-prices', selectedBrand] });
+    setSelectedProducts(new Set());
+  },
+  onError: (error: Error) => {
+    toast.error(error.message);
+  },
+});
+
 
 
   const handlePriceChange = (key: string, productId: string, variantId: string | undefined, value: string) => {
