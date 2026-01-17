@@ -123,7 +123,6 @@ export default function AdminBrandPricing() {
   const getProductVariants = (productId: string) => {
     return allVariants.filter(v => v.product_id === productId && v.status === 'active');
   };
-
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!selectedBrand) throw new Error('請先選擇品牌');
@@ -150,51 +149,35 @@ export default function AdminBrandPricing() {
         });
       });
 
-      // 批次更新
-      for (const item of itemsToSave) {
-        let query = supabase
-          .from('store_products')
-          .select('id')
-          .eq('brand', selectedBrand)
-          .eq('product_id', item.product_id);
-        
-        if (item.variant_id) {
-          query = query.eq('variant_id', item.variant_id);
-        } else {
-          query = query.is('variant_id', null);
-        }
-        
-        const { data: existing } = await query.maybeSingle();
+      // 🔥 brand-only upsert
+      const { error } = await supabase
+        .from('store_products')
+        .upsert(
+          itemsToSave.map(item => ({
+            brand: selectedBrand,
+            product_id: item.product_id,
+            variant_id: item.variant_id,
+            wholesale_price: item.wholesale_price,
+          })),
+          {
+            onConflict: 'store_products_brand_unique', // 直接用 index 名稱
+          }
+        )
+        .throwOnError();
 
-        if (existing) {
-          const { error } = await supabase
-            .from('store_products')
-            .update({ wholesale_price: item.wholesale_price })
-            .eq('id', existing.id);
-          if (error) throw error;
-        } else {
-          const { error } = await supabase
-            .from('store_products')
-            .insert({
-              brand: selectedBrand,
-              product_id: item.product_id,
-              variant_id: item.variant_id,
-              wholesale_price: item.wholesale_price,
-              store_id: '00000000-0000-0000-0000-000000000000',
-            } as any);
-          if (error) throw error;
-        }
-      }
+
+      if (error) throw error;
     },
     onSuccess: () => {
       toast.success(`已更新 ${selectedProducts.size} 個項目的批發價`);
-      queryClient.invalidateQueries({ queryKey: ['brand-prices'] });
+      queryClient.invalidateQueries({ queryKey: ['brand-prices', selectedBrand] });
       setSelectedProducts(new Set());
     },
     onError: (error: Error) => {
       toast.error(error.message);
     },
   });
+
 
   const handlePriceChange = (key: string, productId: string, variantId: string | undefined, value: string) => {
     setPriceEntries(prev => ({
