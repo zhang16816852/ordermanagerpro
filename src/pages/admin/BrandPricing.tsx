@@ -132,15 +132,18 @@ export default function AdminBrandPricing() {
 
       // 整理資料格式
       const itemsToSave = Array.from(selectedProducts).map(key => {
-        const [productId, variantId] = key.includes('-') ? key.split('-') : [key, null];
+ 
+        const [productId, variantId] = key.includes(':')
+          ? key.split(':')
+          : [key, null];
+
         const entry = priceEntries[key];
         const product = products.find(p => p.id === productId);
         const variant = variantId ? allVariants.find(v => v.id === variantId) : null;
 
         return {
-          brand: selectedBrand,
           product_id: productId,
-          variant_id: variantId || null,
+          variant_id: variantId,
           wholesale_price: entry?.wholesalePrice
             ? parseFloat(entry.wholesalePrice)
             : (variant?.wholesale_price ?? product?.base_wholesale_price ?? 0),
@@ -149,7 +152,8 @@ export default function AdminBrandPricing() {
 
       // 呼叫 RPC 函數
       const { error } = await supabase.rpc('upsert_brand_product_prices', {
-        p_items: itemsToSave
+        p_brand: selectedBrand, // 根據你的定義，這是一個單獨的參數
+        p_products: itemsToSave
       });
 
       if (error) throw error;
@@ -204,7 +208,7 @@ export default function AdminBrandPricing() {
     filteredProducts.forEach(p => {
       const variants = getProductVariants(p.id);
       if (variants.length > 0) {
-        variants.forEach(v => allKeys.push(`${p.id}-${v.id}`));
+        variants.forEach(v => allKeys.push(`${p.id}:${v.id}`));
       } else {
         allKeys.push(p.id);
       }
@@ -447,7 +451,7 @@ export default function AdminBrandPricing() {
                         <CollapsibleContent asChild>
                           <>
                             {variants.map((variant) => {
-                              const variantKey = `${product.id}-${variant.id}`;
+                              const variantKey = `${product.id}:${variant.id}`;
                               const variantEntry = priceEntries[variantKey];
                               const hasVariantCustomPrice = !!variantEntry?.wholesalePrice;
 
