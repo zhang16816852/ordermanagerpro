@@ -122,11 +122,12 @@ export default function AdminProducts() {
 
     try {
       // 呼叫 Supabase RPC
-      const { data: newProductId, error } = await supabase.rpc('duplicate_product_with_variants', {
-        target_product_id: product.id,
-        new_name: newName,
-        new_sku: newSku
-      });
+      const { data: newProductId, error } =
+        await supabase.rpc('duplicate_product_with_variants', {
+          target_product_id: product.id,
+          new_name: newName,
+          new_sku: newSku,
+        });
 
       if (error) throw error;
 
@@ -139,7 +140,7 @@ export default function AdminProducts() {
       const { data: newProduct } = await supabase
         .from('products')
         .select('*')
-        .eq('id', newProductId)
+        .eq('id', newProductId!)
         .single();
 
       if (newProduct) {
@@ -251,7 +252,7 @@ export default function AdminProducts() {
                         <div className="flex items-center gap-2">
                           {product.name}
                           {product.has_variants && (
-                            <Badge variant="secondary" className="text-[10px] h-4 px-1">變體</Badge>
+                            <Badge variant="secondary" className="text-[10px] h-4 px-1">選項</Badge>
                           )}
                         </div>
                       </TableCell>

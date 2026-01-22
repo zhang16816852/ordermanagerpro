@@ -142,7 +142,9 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
                             <FormControl>
                                 <Checkbox
                                     checked={field.value}
-                                    onCheckedChange={field.onChange}
+                                    onCheckedChange={(checked) =>
+                                        field.onChange(checked === true)
+                                    }
                                 />
                             </FormControl>
                             <div className="space-y-1 leading-none">
@@ -154,6 +156,7 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
                         </FormItem>
                     )}
                 />
+
 
                 {/* 按鈕區 */}
                 <div className="flex justify-end gap-3 pt-4 border-t">
