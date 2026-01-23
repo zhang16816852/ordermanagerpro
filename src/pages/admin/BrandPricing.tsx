@@ -95,7 +95,8 @@ export default function AdminBrandPricing() {
     if (existingPrices.length > 0) {
       const entries: Record<string, PriceEntry> = {};
       existingPrices.forEach(p => {
-        const key = p.variant_id ? `${p.product_id}-${p.variant_id}` : p.product_id;
+        // 統一使用 : 作為分隔符
+        const key = p.variant_id ? `${p.product_id}:${p.variant_id}` : p.product_id;
         entries[key] = {
           productId: p.product_id,
           variantId: p.variant_id || undefined,
@@ -224,7 +225,8 @@ export default function AdminBrandPricing() {
   const applyBatchPrice = (value: string) => {
     const newEntries = { ...priceEntries };
     selectedProducts.forEach(key => {
-      const [productId, variantId] = key.includes('-') ? key.split('-') : [key, undefined];
+      // 統一使用 : 作為分隔符
+      const [productId, variantId] = key.includes(':') ? key.split(':') : [key, undefined];
       newEntries[key] = {
         productId,
         variantId,

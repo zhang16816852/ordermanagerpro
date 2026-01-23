@@ -565,6 +565,7 @@ export type Database = {
           id: string
           product_id: string
           retail_price: number | null
+          store_id: string
           updated_at: string
           variant_id: string | null
           wholesale_price: number | null
@@ -575,6 +576,7 @@ export type Database = {
           id?: string
           product_id: string
           retail_price?: number | null
+          store_id: string
           updated_at?: string
           variant_id?: string | null
           wholesale_price?: number | null
@@ -585,6 +587,7 @@ export type Database = {
           id?: string
           product_id?: string
           retail_price?: number | null
+          store_id?: string
           updated_at?: string
           variant_id?: string | null
           wholesale_price?: number | null
@@ -595,6 +598,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_products_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
             referencedColumns: ["id"]
           },
           {
@@ -700,10 +710,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      duplicate_product_with_variants: {
-        Args: { new_name: string; new_sku: string; target_product_id: string }
-        Returns: string
-      }
       get_store_role: {
         Args: { _store_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["store_role"]
@@ -721,10 +727,6 @@ export type Database = {
       }
       upsert_brand_product_prices: {
         Args: { p_brand: string; p_products: Json }
-        Returns: undefined
-      }
-      upsert_store_products_batch: {
-        Args: { p_items: Json }
         Returns: undefined
       }
     }
@@ -751,7 +753,7 @@ export type Database = {
 
 type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]        
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
@@ -761,12 +763,12 @@ export type Tables<
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])   
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
-  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &    
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
       DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
@@ -839,7 +841,7 @@ export type Enums<
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"] 
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
@@ -862,7 +864,7 @@ export type CompositeTypes<
   schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]      
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
 
