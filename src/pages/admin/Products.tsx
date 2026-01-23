@@ -34,6 +34,7 @@ import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useProductCache } from '@/hooks/useProductCache';
 import { ProductBatchImport } from '@/components/products/ProductBatchImport';
+import { VariantBatchImport } from '@/components/products/VariantBatchImport';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { VariantManager } from '@/components/products/VariantManager';
 import { ProductFormDialog } from '@/components/ProductFormDialog/ProductFormDialog';
@@ -58,6 +59,7 @@ export default function AdminProducts() {
   const [search, setSearch] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isVariantImportOpen, setIsVariantImportOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'variants'>('list');
@@ -121,13 +123,15 @@ export default function AdminProducts() {
     const newSku = `${product.sku}-COPY-${Math.floor(Math.random() * 1000)}`;
 
     try {
-      // 呼叫 Supabase RPC
-      const { data: newProductId, error } =
-        await supabase.rpc('duplicate_product_with_variants', {
+      // 呼叫 Supabase RPC - 使用 any 繞過類型檢查（RPC 函數存在但類型未同步）
+      const { data: newProductId, error } = await (supabase.rpc as any)(
+        'duplicate_product_with_variants',
+        {
           target_product_id: product.id,
           new_name: newName,
           new_sku: newSku,
-        });
+        }
+      );
 
       if (error) throw error;
 
@@ -136,16 +140,17 @@ export default function AdminProducts() {
       toast.success('產品及其變體已完整複製');
 
       // 選取新產品並打開 Dialog 讓使用者編輯
-      // 注意：這裡可能需要重新抓取新產品的完整資料
-      const { data: newProduct } = await supabase
-        .from('products')
-        .select('*')
-        .eq('id', newProductId!)
-        .single();
+      if (newProductId) {
+        const { data: newProduct } = await supabase
+          .from('products')
+          .select('*')
+          .eq('id', newProductId)
+          .single();
 
-      if (newProduct) {
-        setEditingProduct(newProduct);
-        setIsDialogOpen(true);
+        if (newProduct) {
+          setEditingProduct(newProduct);
+          setIsDialogOpen(true);
+        }
       }
 
     } catch (error: any) {
@@ -179,7 +184,11 @@ export default function AdminProducts() {
           </Button>
           <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)}>
             <Upload className="mr-2 h-4 w-4" />
-            批次匯入
+            匯入產品
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setIsVariantImportOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            匯入變體
           </Button>
           <Button size="sm" onClick={() => { setEditingProduct(null); setIsDialogOpen(true); }}>
             <Plus className="mr-2 h-4 w-4" />
@@ -338,6 +347,7 @@ export default function AdminProducts() {
       </AlertDialog>
 
       <ProductBatchImport open={isImportOpen} onOpenChange={setIsImportOpen} />
+      <VariantBatchImport open={isVariantImportOpen} onOpenChange={setIsVariantImportOpen} />
     </div>
   );
 }

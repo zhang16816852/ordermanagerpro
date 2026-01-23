@@ -151,7 +151,9 @@ export default function ProductCatalog({
               <div className="space-y-2 max-h-[400px] overflow-y-auto">
                 {variantDialogProduct.variants?.map((variant) => {
                   const qty = getItemQuantity(variantDialogProduct.id, variant.id);
-                  const price = variant.wholesale_price ?? variant.wholesale_price;
+                  // 使用品牌價格（effective_wholesale_price），若無則使用變體的基礎批發價
+                  const variantWithPricing = variant as VariantWithPricing;
+                  const price = variantWithPricing.effective_wholesale_price ?? variant.wholesale_price;
 
                   return (
                     <div
