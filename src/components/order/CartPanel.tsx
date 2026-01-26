@@ -72,7 +72,7 @@ export default function CartPanel({
                     {item.sku} · ${item.price} × {item.quantity}
                   </p>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 flex-shrink-0">
                   <Button
                     size="icon"
                     variant="outline"

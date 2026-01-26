@@ -17,12 +17,14 @@ interface ProductCatalogProps {
   products: ProductWithPricing[];
   isLoading: boolean;
   storeId: string;
+  viewMode?: 'products' | 'variants';
 }
 
 export default function ProductCatalog({
   products,
   isLoading,
   storeId,
+  viewMode = 'products',
 }: ProductCatalogProps) {
   const [search, setSearch] = useState("");
   const [variantDialogProduct, setVariantDialogProduct] = useState<ProductWithPricing | null>(null);
@@ -79,11 +81,18 @@ export default function ProductCatalog({
     <>
       <Card>
         <CardHeader>
-          <CardTitle>產品目錄</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>產品目錄</CardTitle>
+            {viewMode === 'variants' && (
+              <Badge variant="outline" className="text-xs">
+                顯示所有規格單品
+              </Badge>
+            )}
+          </div>
           <div className="relative mt-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="搜尋產品名稱或 SKU..."
+              placeholder={viewMode === 'products' ? "搜尋產品名稱或 SKU..." : "搜尋單品名稱、SKU 或規格..."}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10"
@@ -95,7 +104,8 @@ export default function ProductCatalog({
             <div className="text-center py-8 text-muted-foreground">載入中...</div>
           ) : filteredProducts.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">沒有找到符合的產品</div>
-          ) : (
+          ) : viewMode === 'products' ? (
+            // 產品檢視模式 (原有邏輯)
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredProducts.map((product) => {
                 const totalInCart = getTotalProductQuantity(product.id);
@@ -129,6 +139,69 @@ export default function ProductCatalog({
                           )}
                         </div>
                         {hasVariants && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            // 單品檢視模式 (直接顯示所有變體)
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {filteredProducts.flatMap(product => {
+                if (product.has_variants && product.variants && product.variants.length > 0) {
+                  return product.variants.map(variant => ({ product, variant }));
+                }
+                return [{ product, variant: null }];
+              }).map(({ product, variant }) => {
+                // 如果是變體，使用變體 ID 作為 Key，否則使用產品 ID
+                const key = variant ? `${product.id}-${variant.id}` : product.id;
+
+                // 計算購物車數量
+                const qty = variant
+                  ? getItemQuantity(product.id, variant.id)
+                  : getItemQuantity(product.id);
+
+                // 計算價格
+                const price = variant
+                  ? ((variant as VariantWithPricing).effective_wholesale_price ?? variant.wholesale_price)
+                  : product.wholesale_price;
+
+                const displayName = variant
+                  ? `${product.name} - ${variant.name}`
+                  : product.name;
+
+                const displaySku = variant ? variant.sku : product.sku;
+
+                return (
+                  <div
+                    key={key}
+                    className="p-3 border rounded-lg hover:border-primary cursor-pointer transition-colors"
+                    onClick={() => variant ? handleVariantSelect(product, variant as VariantWithPricing) : addItem(product)}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate pr-2">
+                          {product.name}
+                          {variant && <span className="text-muted-foreground"> - {variant.name}</span>}
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          <span className="text-xs text-muted-foreground font-mono bg-muted px-1 rounded">
+                            {displaySku}
+                          </span>
+                          {variant && (
+                            <>
+                              {variant.option_1 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_1}</Badge>}
+                              {variant.option_2 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_2}</Badge>}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="font-medium">${Number(price)}</div>
+                        {qty > 0 && (
+                          <div className="text-sm text-primary font-medium">已選 x{qty}</div>
+                        )}
                       </div>
                     </div>
                   </div>
