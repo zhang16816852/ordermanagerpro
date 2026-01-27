@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables, TablesInsert } from '@/integrations/supabase/types';
@@ -20,10 +20,24 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Pencil, Search, Users } from 'lucide-react';
+import { Plus, Pencil, Search, Users, Check, ChevronsUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from '@/lib/utils';
 
 type Store = Tables<'stores'>;
 type StoreInsert = TablesInsert<'stores'>;
@@ -36,7 +50,22 @@ export default function AdminStores() {
   const [search, setSearch] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStore, setEditingStore] = useState<Store | null>(null);
+  const [open, setOpen] = useState(false); // Popover open state
+  const [showDeleteAlert, setShowDeleteAlert] = useState(false); // Reserved for future use
+  const [selectedBrand, setSelectedBrand] = useState("");
+  const [brandOpen, setBrandOpen] = useState(false);
+  const [brandSearch, setBrandSearch] = useState("");
+
   const queryClient = useQueryClient();
+
+  // Effect to sync selectedBrand when editingStore changes
+  useEffect(() => {
+    if (editingStore) {
+      setSelectedBrand((editingStore as any).brand || "");
+    } else {
+      setSelectedBrand("");
+    }
+  }, [editingStore]);
 
   const { data: stores, isLoading } = useQuery({
     queryKey: ['admin-stores'],
@@ -48,6 +77,22 @@ export default function AdminStores() {
       if (error) throw error;
       return data as StoreWithMembers[];
     },
+  });
+
+  // Fetch unique brands
+  const { data: brands = [] } = useQuery({
+    queryKey: ['unique-brands'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('stores')
+        .select('brand')
+        .not('brand', 'is', null);
+
+      if (error) throw error;
+
+      const uniqueBrands = Array.from(new Set(data.map(item => item.brand).filter(Boolean))) as string[];
+      return uniqueBrands.sort();
+    }
   });
 
   const createMutation = useMutation({
@@ -128,6 +173,7 @@ export default function AdminStores() {
             <Button
               onClick={() => {
                 setEditingStore(null);
+                setSelectedBrand("");
                 setIsDialogOpen(true);
               }}
             >
@@ -136,7 +182,7 @@ export default function AdminStores() {
             </Button>
           </DialogTrigger>
 
-          <DialogContent>
+          <DialogContent className="overflow-visible">
             <DialogHeader>
               <DialogTitle>{editingStore ? '編輯店鋪' : '新增店鋪'}</DialogTitle>
             </DialogHeader>
@@ -161,15 +207,68 @@ export default function AdminStores() {
                   />
                 </div>
               </div>
-              <div className="space-y-2">
+
+              <div className="space-y-2 flex flex-col">
                 <Label htmlFor="brand">品牌</Label>
-                <Input
-                  id="brand"
-                  name="brand"
-                  defaultValue={(editingStore as any)?.brand || ''}
-                  placeholder="例：雷神快修"
-                />
+                <input type="hidden" name="brand" value={selectedBrand} />
+                <Popover open={brandOpen} onOpenChange={setBrandOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={brandOpen}
+                      className="w-full justify-between"
+                    >
+                      {selectedBrand || "選擇品牌..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0">
+                    <Command>
+                      <CommandInput
+                        placeholder="搜尋或輸入新品牌..."
+                        value={brandSearch}
+                        onValueChange={setBrandSearch}
+                      />
+                      <CommandList>
+                        <CommandEmpty>
+                          <div
+                            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground"
+                            onClick={() => {
+                              setSelectedBrand(brandSearch);
+                              setBrandOpen(false);
+                            }}
+                          >
+                            <Plus className="h-4 w-4" />
+                            新增 "{brandSearch}"
+                          </div>
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {brands.map((brand) => (
+                            <CommandItem
+                              key={brand}
+                              value={brand}
+                              onSelect={(currentValue) => {
+                                setSelectedBrand(currentValue === selectedBrand ? "" : currentValue);
+                                setBrandOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedBrand === brand ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {brand}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="address">地址</Label>
                 <Input

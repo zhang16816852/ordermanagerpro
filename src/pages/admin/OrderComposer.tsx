@@ -29,6 +29,7 @@ export default function AdminOrderComposer() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selectedStoreId, setSelectedStoreId] = useState<string>("");
+  const [viewMode, setViewMode] = useState<'products' | 'variants'>('products');
 
   const { data: stores = [], isLoading: storesLoading } = useQuery({
     queryKey: ["admin-stores-list"],
@@ -126,11 +127,33 @@ export default function AdminOrderComposer() {
 
       {selectedStoreId ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-4">
+            <div className="flex bg-muted p-1 rounded-lg self-start">
+              <button
+                onClick={() => setViewMode('products')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${viewMode === 'products'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                產品檢視
+              </button>
+              <button
+                onClick={() => setViewMode('variants')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${viewMode === 'variants'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                單品檢視
+              </button>
+            </div>
+
             <ProductCatalog
               products={products}
               isLoading={productsLoading}
               storeId={selectedStoreId}
+              viewMode={viewMode}
             />
           </div>
 
