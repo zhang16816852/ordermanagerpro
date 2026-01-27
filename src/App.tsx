@@ -22,6 +22,7 @@ import AdminShippingPool from "./pages/admin/ShippingPool";
 import AdminUsers from "./pages/admin/Users";
 import AdminBrandPricing from "./pages/admin/BrandPricing";
 import AdminAccounting from "./pages/admin/Accounting";
+import AdminPurchaseOrders from "./pages/admin/PurchaseOrders";
 
 // Store pages
 import StoreDashboard from "./pages/store/Dashboard";
@@ -173,6 +174,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <AppLayout>
               <AdminAccounting />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/purchase-orders"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <AdminPurchaseOrders />
             </AppLayout>
           </ProtectedRoute>
         }
