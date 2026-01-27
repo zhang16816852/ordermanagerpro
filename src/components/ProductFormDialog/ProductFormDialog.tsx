@@ -12,6 +12,7 @@ import { VariantSection } from './VariantSection';
 const productSchema = z.object({
   name: z.string().min(1, '產品名稱為必填'),
   sku: z.string().min(1, 'SKU 為必填'),
+  category: z.string().nullable().optional(),
   brand: z.string().nullable().optional(),
   model: z.string().nullable().optional(),
   base_wholesale_price: z.coerce.number().min(0),
@@ -37,7 +38,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
   const form = useForm<z.infer<typeof productSchema>>({
     resolver: zodResolver(productSchema),
     defaultValues: {
-      name: '', sku: '', brand: '', model: '',
+      name: '', sku: '', category: '', brand: '', model: '',
       base_wholesale_price: 0, base_retail_price: 0,
       status: 'active', has_variants: false,
     },
@@ -50,7 +51,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
         form.reset(initialData);
       } else {
         form.reset({
-          name: '', sku: '', brand: '', model: '',
+          name: '', sku: '', category: '', brand: '', model: '',
           base_wholesale_price: 0, base_retail_price: 0,
           status: 'active', has_variants: false,
         });
@@ -72,8 +73,8 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
               <TabsTrigger value="basic" className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none">
                 基本資訊
               </TabsTrigger>
-              <TabsTrigger 
-                value="variants" 
+              <TabsTrigger
+                value="variants"
                 disabled={!initialData || !form.watch('has_variants')} // 即時監控 Form 內的 has_variants
                 className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
               >
@@ -85,10 +86,10 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
           <div className="flex-1 overflow-y-auto p-6">
             <TabsContent value="basic" className="m-0 focus-visible:ring-0">
               {/* 3. 將 form 物件傳遞給子組件 */}
-              <BasicInfoForm 
-                form={form} 
-                onSubmit={onSubmit} 
-                isLoading={isLoading} 
+              <BasicInfoForm
+                form={form}
+                onSubmit={onSubmit}
+                isLoading={isLoading}
                 onCancel={() => onOpenChange(false)}
               />
             </TabsContent>

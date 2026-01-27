@@ -227,6 +227,7 @@ export default function AdminProducts() {
                 <TableRow>
                   <TableHead className="w-[150px]">SKU</TableHead>
                   <TableHead>名稱</TableHead>
+                  <TableHead>類別</TableHead>
                   <TableHead>廠牌/型號</TableHead>
                   <TableHead className="text-right">批發/零售價</TableHead>
                   <TableHead>狀態</TableHead>
@@ -265,6 +266,7 @@ export default function AdminProducts() {
                           )}
                         </div>
                       </TableCell>
+                      <TableCell>{product.category || '-'}</TableCell>
                       <TableCell className="text-sm">
                         <span className="text-muted-foreground">{product.brand || '-'}</span>
                         <span className="mx-1 text-slate-300">/</span>

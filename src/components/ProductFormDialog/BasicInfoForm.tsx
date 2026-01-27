@@ -72,7 +72,20 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
                         )}
                     />
 
-                    {/* 品牌 */}
+                    {/* 類別 */}
+                    <FormField
+                        control={form.control}
+                        name="category"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>類別</FormLabel>
+                                <FormControl>
+                                    <Input placeholder="例如：外套" {...field} value={field.value || ''} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
                     <FormField
                         control={form.control}
                         name="brand"
