@@ -29,7 +29,7 @@ import { useNavigate } from 'react-router-dom';
 interface OrderWithItems {
   id: string;
   created_at: string;
-  status: 'pending' | 'processing';
+  status: 'pending' | 'processing' | 'shipped';
   notes: string | null;
   order_items: {
     id: string;
@@ -38,6 +38,7 @@ interface OrderWithItems {
     unit_price: number;
     status: string;
     products: { name: string; sku: string } | null;
+    product_variants: { name: string } | null;
   }[];
 }
 
@@ -52,6 +53,7 @@ const statusLabels: Record<string, { label: string; className: string }> = {
 const orderStatusLabels: Record<string, { label: string; className: string }> = {
   pending: { label: '未確認', className: 'bg-warning text-warning-foreground' },
   processing: { label: '處理中', className: 'bg-primary text-primary-foreground' },
+  shipped: { label: '已出貨', className: 'bg-success text-success-foreground' },
 };
 
 export default function StoreOrders() {
@@ -61,7 +63,7 @@ export default function StoreOrders() {
   const [search, setSearch] = useState('');
   const [productFilter, setProductFilter] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
-  const [statusTab, setStatusTab] = useState<'pending' | 'processing'>('pending');
+  const [statusTab, setStatusTab] = useState<'pending' | 'processing' | 'shipped'>('pending');
   const [viewMode, setViewMode] = useState<'orders' | 'items'>('orders');
 
   const { data: orders, isLoading } = useQuery({
@@ -81,7 +83,8 @@ export default function StoreOrders() {
             shipped_quantity,
             unit_price,
             status,
-            products (name, sku)
+            products (name, sku),
+            product_variants (name)
           )
         `)
         .eq('store_id', storeId)
@@ -94,7 +97,7 @@ export default function StoreOrders() {
   });
 
   // 獲取所有商品項目（用於商品視圖）
-  const allItems = orders?.flatMap(order => 
+  const allItems = orders?.flatMap(order =>
     order.order_items
       .filter(item => {
         if (!productFilter) return true;
@@ -153,7 +156,7 @@ export default function StoreOrders() {
       </div>
 
       {/* 狀態 Tabs */}
-      <Tabs value={statusTab} onValueChange={(v) => setStatusTab(v as 'pending' | 'processing')}>
+      <Tabs value={statusTab} onValueChange={(v) => setStatusTab(v as 'pending' | 'processing' | 'shipped')}>
         <div className="flex items-center justify-between">
           <TabsList>
             <TabsTrigger value="pending" className="gap-2">
@@ -163,6 +166,10 @@ export default function StoreOrders() {
             <TabsTrigger value="processing" className="gap-2">
               <Truck className="h-4 w-4" />
               處理中
+            </TabsTrigger>
+            <TabsTrigger value="shipped" className="gap-2">
+              <Truck className="h-4 w-4" />
+              已出貨
             </TabsTrigger>
           </TabsList>
 
@@ -322,7 +329,14 @@ export default function StoreOrders() {
                       return (
                         <TableRow key={item.id}>
                           <TableCell className="font-mono text-sm">{item.products?.sku}</TableCell>
-                          <TableCell>{item.products?.name}</TableCell>
+                          <TableCell>
+                            {item.products?.name}
+                            {item.product_variants && (
+                              <span className="text-muted-foreground ml-1">
+                                - {item.product_variants.name}
+                              </span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">{item.quantity}</TableCell>
                           <TableCell className="text-right">{item.shipped_quantity}</TableCell>
                           <TableCell className="text-right">
@@ -395,7 +409,14 @@ export default function StoreOrders() {
                           <TableCell className="font-mono text-sm">
                             {item.products?.sku}
                           </TableCell>
-                          <TableCell>{item.products?.name}</TableCell>
+                          <TableCell>
+                            {item.products?.name}
+                            {item.product_variants && (
+                              <span className="text-muted-foreground ml-1">
+                                - {item.product_variants.name}
+                              </span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">
                             ${item.unit_price.toFixed(2)}
                           </TableCell>

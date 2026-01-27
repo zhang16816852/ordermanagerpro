@@ -37,6 +37,7 @@ interface SalesNoteWithItems {
     order_items: {
       id: string;
       products: { name: string; sku: string } | null;
+      product_variants: { name: string } | null;
     } | null;
   }[];
 }
@@ -71,7 +72,8 @@ export default function StoreSalesNotes() {
             quantity,
             order_items (
               id,
-              products (name, sku)
+              products (name, sku),
+              product_variants (name)
             )
           )
         `)
@@ -251,7 +253,14 @@ export default function StoreSalesNotes() {
                         <TableCell className="font-mono text-sm">
                           {item.order_items?.products?.sku}
                         </TableCell>
-                        <TableCell>{item.order_items?.products?.name}</TableCell>
+                        <TableCell>
+                          {item.order_items?.products?.name}
+                          {item.order_items?.product_variants && (
+                            <span className="text-muted-foreground ml-1">
+                              - {item.order_items.product_variants.name}
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">{item.quantity}</TableCell>
                       </TableRow>
                     ))}

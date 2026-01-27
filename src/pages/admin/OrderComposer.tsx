@@ -66,6 +66,7 @@ export default function AdminOrderComposer() {
       const orderItems = items.map((item) => ({
         order_id: order.id,
         product_id: item.productId,
+        variant_id: item.variantId || null,
         store_id: selectedStoreId,
         quantity: item.quantity,
         unit_price: item.price,

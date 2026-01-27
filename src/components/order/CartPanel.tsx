@@ -7,6 +7,14 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { ShoppingCart, Plus, Minus, Trash2, ArrowRight } from "lucide-react";
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface CartPanelProps {
   storeId: string;
@@ -61,48 +69,137 @@ export default function CartPanel({
       <CardContent className="space-y-4">
         <ScrollArea className="h-96 pr-4 -mx-4 px-4">
           <div className="space-y-3">
-            {items.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center gap-3 p-3 border rounded-lg bg-background"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate text-sm">{item.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {item.sku} · ${item.price} × {item.quantity}
-                  </p>
+            {/* Mobile View (Card List) */}
+            <div className="md:hidden space-y-3">
+              {items.map((item) => (
+                <div
+                  key={item.id}
+                  className="p-3 border rounded-lg bg-background space-y-3"
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm break-words leading-tight">
+                        {item.variantName || item.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1 font-mono">
+                        {item.sku}
+                      </p>
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0 -mr-1 -mt-1"
+                      onClick={() => removeItem(item.id)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    {/* 單價 */}
+                    <div className="text-xs text-muted-foreground">
+                      ${item.price.toLocaleString()}
+                    </div>
+
+                    {/* 數量控制 */}
+                    <div className="flex items-center border rounded-md h-7 shadow-sm">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 rounded-none px-0"
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <span className="w-8 text-center text-sm font-medium tabular-nums border-x h-full flex items-center justify-center bg-muted/20">
+                        {item.quantity}
+                      </span>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 rounded-none px-0"
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </div>
+
+                    {/* 小計 */}
+                    <div className="text-sm font-medium tabular-nums text-right min-w-[60px]">
+                      ${(item.price * item.quantity).toLocaleString()}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    className="h-8 w-8"
-                    onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                  >
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  <span className="w-9 text-center text-sm font-medium">
-                    {item.quantity}
-                  </span>
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    className="h-8 w-8"
-                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                  >
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 text-destructive"
-                    onClick={() => removeItem(item.id)}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            {/* Desktop View (Table) */}
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>商品名稱</TableHead>
+                    <TableHead className="w-[100px] text-right">單價</TableHead>
+                    <TableHead className="w-[140px] text-center">數量</TableHead>
+                    <TableHead className="w-[100px] text-right">小計</TableHead>
+                    <TableHead className="w-[50px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell>
+                        <div className="font-medium text-sm">
+                          {item.variantName || item.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground font-mono">
+                          {item.sku}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        ${item.price.toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-center border rounded-md h-8 shadow-sm max-w-[120px] mx-auto">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 rounded-none px-0"
+                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          >
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <span className="w-10 text-center text-sm font-medium tabular-nums border-x h-full flex items-center justify-center bg-muted/20">
+                            {item.quantity}
+                          </span>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 rounded-none px-0"
+                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        ${(item.price * item.quantity).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeItem(item.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         </ScrollArea>
 

@@ -24,10 +24,12 @@ interface ShippingPoolItem {
   created_at: string;
   order_item: {
     id: string;
+    order_id: string;
     quantity: number;
     shipped_quantity: number;
     unit_price: number;
     product: { name: string; sku: string };
+    product_variant?: { name: string } | null;
   };
 }
 
@@ -71,10 +73,12 @@ export default function AdminShippingPool() {
           created_at,
           order_item:order_items(
             id,
+            order_id,
             quantity,
             shipped_quantity,
             unit_price,
-            product:products(name, sku)
+            product:products(name, sku),
+            product_variant:product_variants(name)
           )
         `)
         .order("created_at", { ascending: true });
@@ -93,7 +97,7 @@ export default function AdminShippingPool() {
   const groupedByStore: GroupedByStore[] = shippingPoolItems?.reduce((acc, item) => {
     const store = stores?.find(s => s.id === item.store_id);
     const existingGroup = acc.find(g => g.storeId === item.store_id);
-    
+
     if (existingGroup) {
       existingGroup.items.push(item);
       existingGroup.totalQuantity += item.quantity;
@@ -194,10 +198,10 @@ export default function AdminShippingPool() {
         for (const item of group.items) {
           const newShippedQty = (item.order_item?.shipped_quantity || 0) + item.quantity;
           const newStatus = newShippedQty >= (item.order_item?.quantity || 0) ? 'shipped' : 'partial';
-          
+
           const { error: updateError } = await supabase
             .from("order_items")
-            .update({ 
+            .update({
               shipped_quantity: newShippedQty,
               status: newStatus,
             })
@@ -214,6 +218,36 @@ export default function AdminShippingPool() {
           .in("id", poolItemIds);
 
         if (deleteError) throw deleteError;
+      }
+
+      // Check and update order status for affected orders
+      const affectedOrderIds = new Set<string>();
+      for (const storeId of selectedStores) {
+        const group = groupedByStore.find(g => g.storeId === storeId);
+        if (group) {
+          group.items.forEach(item => {
+            if (item.order_item?.order_id) {
+              affectedOrderIds.add(item.order_item.order_id);
+            }
+          });
+        }
+      }
+
+      for (const orderId of affectedOrderIds) {
+        const { data: items } = await supabase
+          .from('order_items')
+          .select('quantity, shipped_quantity')
+          .eq('order_id', orderId);
+
+        if (items && items.length > 0) {
+          const allShipped = items.every(i => i.shipped_quantity >= i.quantity);
+          if (allShipped) {
+            await supabase
+              .from('orders')
+              .update({ status: 'shipped' })
+              .eq('id', orderId);
+          }
+        }
       }
     },
     onSuccess: () => {
@@ -341,7 +375,14 @@ export default function AdminShippingPool() {
                               <TableCell className="font-mono text-sm">
                                 {item.order_item?.product?.sku}
                               </TableCell>
-                              <TableCell>{item.order_item?.product?.name}</TableCell>
+                              <TableCell>
+                                {item.order_item?.product?.name}
+                                {item.order_item?.product_variant && (
+                                  <span className="text-muted-foreground ml-1">
+                                    - {item.order_item.product_variant.name}
+                                  </span>
+                                )}
+                              </TableCell>
                               <TableCell className="text-right">{item.quantity}</TableCell>
                               <TableCell className="text-right">
                                 ${item.order_item?.unit_price.toFixed(2)}

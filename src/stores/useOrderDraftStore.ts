@@ -11,6 +11,7 @@ export interface OrderDraftItem {
   sku: string;
   price: number;
   quantity: number;
+  variantName?: string;
 }
 
 export interface OrderDraft {
@@ -94,6 +95,7 @@ export const useOrderDraftStore = create<OrderDraftState>()(
               productId: product.id,
               variantId: variant?.id,
               name: variant ? `${product.name} - ${variant.name}` : product.name,
+              variantName: variant?.name,
               sku: variant?.sku || product.sku,
               price: variant?.effective_wholesale_price ?? product.wholesale_price,
               quantity: 1,
@@ -123,8 +125,8 @@ export const useOrderDraftStore = create<OrderDraftState>()(
             quantity <= 0
               ? draft.items.filter((item) => item.id !== itemId)
               : draft.items.map((item) =>
-                  item.id === itemId ? { ...item, quantity } : item
-                );
+                item.id === itemId ? { ...item, quantity } : item
+              );
 
           return {
             drafts: {
@@ -225,11 +227,11 @@ export function useStoreDraft(storeId: string | undefined) {
       notes: "",
       totalItems: 0,
       totalAmount: 0,
-      addItem: () => {},
-      updateQuantity: () => {},
-      removeItem: () => {},
-      updateNotes: () => {},
-      clearDraft: () => {},
+      addItem: () => { },
+      updateQuantity: () => { },
+      removeItem: () => { },
+      updateNotes: () => { },
+      clearDraft: () => { },
       getItemQuantity: () => 0,
       getTotalProductQuantity: () => 0,
     };

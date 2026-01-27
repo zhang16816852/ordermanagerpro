@@ -82,6 +82,7 @@ interface PurchaseOrderItem {
   received_quantity: number;
   unit_cost: number;
   product?: { id: string; name: string; sku: string };
+  variant?: { id: string; name: string; sku: string };
 }
 
 interface Product {
@@ -95,7 +96,7 @@ export default function AdminPurchaseOrders() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('orders');
-  
+
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);
   const [supplierDialogOpen, setSupplierDialogOpen] = useState(false);
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
@@ -125,7 +126,7 @@ export default function AdminPurchaseOrders() {
         .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      
+
       return ((data || []) as any[]).map((order) => ({
         ...order,
         supplier: suppliers.find(s => s.id === order.supplier_id),
@@ -155,7 +156,7 @@ export default function AdminPurchaseOrders() {
         .select('*')
         .eq('purchase_order_id', viewingOrder.id);
       if (error) throw error;
-      
+
       // Get product info
       const productIds = (data || []).map((item: any) => item.product_id).filter(Boolean);
       let productMap: Record<string, Product> = {};
@@ -166,10 +167,23 @@ export default function AdminPurchaseOrders() {
           .in('id', productIds);
         productMap = (prods || []).reduce((acc, p) => ({ ...acc, [p.id]: p }), {});
       }
-      
+
+      // Get variant info
+      const variantIds = (data || []).map((item: any) => item.variant_id).filter(Boolean);
+      let variantMap: Record<string, { id: string; name: string; sku: string }> = {};
+
+      if (variantIds.length > 0) {
+        const { data: variants } = await supabase
+          .from('product_variants')
+          .select('id, name, sku')
+          .in('id', variantIds);
+        variantMap = (variants || []).reduce((acc, v) => ({ ...acc, [v.id]: v }), {});
+      }
+
       return ((data || []) as any[]).map((item) => ({
         ...item,
         product: productMap[item.product_id],
+        variant: variantMap[item.variant_id],
       })) as PurchaseOrderItem[];
     },
     enabled: !!viewingOrder,
@@ -275,7 +289,7 @@ export default function AdminPurchaseOrders() {
             .select('quantity')
             .eq('product_id', orderItem.product_id)
             .maybeSingle();
-          
+
           const currentQty = existing?.quantity || 0;
           const { error: invError } = await (supabase as any)
             .from('product_inventory')
@@ -301,7 +315,7 @@ export default function AdminPurchaseOrders() {
       if (viewingOrder) {
         await (supabase as any)
           .from('purchase_orders')
-          .update({ 
+          .update({
             status: newStatus,
             received_date: allReceived ? new Date().toISOString().split('T')[0] : null,
           })
@@ -562,9 +576,12 @@ export default function AdminPurchaseOrders() {
                 <TableBody>
                   {orderItems.map((item) => (
                     <TableRow key={item.id}>
-                      <TableCell>{item.product?.name || '-'}</TableCell>
+                      <TableCell>
+                        {item.product?.name || '-'}
+                        {item.variant && <span className="text-muted-foreground ml-1">- {item.variant.name}</span>}
+                      </TableCell>
                       <TableCell className="font-mono text-sm">
-                        {item.product?.sku || '-'}
+                        {item.variant?.sku || item.product?.sku || '-'}
                       </TableCell>
                       <TableCell className="text-right">{item.quantity}</TableCell>
                       <TableCell className="text-right">
@@ -781,14 +798,39 @@ function ItemForm({
   isLoading: boolean;
 }) {
   const [productId, setProductId] = useState('');
+  const [variantId, setVariantId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState('1');
   const [unitCost, setUnitCost] = useState('');
+  const [variants, setVariants] = useState<{ id: string; name: string; sku: string }[]>([]);
+
+  // Fetch variants when product is selected
+  const handleProductChange = async (pId: string) => {
+    setProductId(pId);
+    setVariantId(null);
+    setVariants([]);
+
+    const product = products.find(p => p.id === pId);
+    if (product?.has_variants) {
+      const { data } = await supabase
+        .from('product_variants')
+        .select('id, name, sku')
+        .eq('product_id', pId)
+        .order('name');
+
+      if (data) {
+        setVariants(data);
+      }
+    }
+  };
+
+  const selectedProduct = products.find(p => p.id === productId);
+  const showVariantSelect = selectedProduct?.has_variants;
 
   return (
     <div className="space-y-4">
       <div className="space-y-2">
         <Label>產品</Label>
-        <Select value={productId} onValueChange={setProductId}>
+        <Select value={productId} onValueChange={handleProductChange}>
           <SelectTrigger>
             <SelectValue placeholder="選擇產品" />
           </SelectTrigger>
@@ -801,6 +843,25 @@ function ItemForm({
           </SelectContent>
         </Select>
       </div>
+
+      {showVariantSelect && (
+        <div className="space-y-2">
+          <Label>規格/變體</Label>
+          <Select value={variantId || ''} onValueChange={setVariantId}>
+            <SelectTrigger>
+              <SelectValue placeholder="選擇規格" />
+            </SelectTrigger>
+            <SelectContent>
+              {variants.map((v) => (
+                <SelectItem key={v.id} value={v.id}>
+                  {v.sku ? `${v.sku} - ` : ''}{v.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>數量</Label>
@@ -815,10 +876,11 @@ function ItemForm({
         <Button
           onClick={() => onSubmit({
             product_id: productId || null,
+            variant_id: variantId || null,
             quantity: parseInt(quantity),
             unit_cost: parseFloat(unitCost) || 0,
           })}
-          disabled={!productId || !quantity || isLoading}
+          disabled={!productId || (showVariantSelect && !variantId) || !quantity || isLoading}
         >
           {isLoading ? '處理中...' : '新增'}
         </Button>

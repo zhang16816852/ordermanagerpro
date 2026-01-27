@@ -41,7 +41,9 @@ export default function AdminSalesNotes() {
               id,
               quantity,
               unit_price,
-              product:products(name, sku)
+              unit_price,
+              product:products(name, sku),
+              product_variant:product_variants(name)
             )
           )
         `)
@@ -247,7 +249,14 @@ export default function AdminSalesNotes() {
                   <TableBody>
                     {selectedNote.sales_note_items?.map((item: any) => (
                       <TableRow key={item.id}>
-                        <TableCell>{item.order_item?.product?.name}</TableCell>
+                        <TableCell>
+                          {item.order_item?.product?.name}
+                          {item.order_item?.product_variant && (
+                            <span className="text-muted-foreground ml-1">
+                              - {item.order_item.product_variant.name}
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell className="font-mono text-sm">
                           {item.order_item?.product?.sku}
                         </TableCell>

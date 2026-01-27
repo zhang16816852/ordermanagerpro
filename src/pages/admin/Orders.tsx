@@ -40,7 +40,7 @@ interface OrderWithDetails {
   id: string;
   created_at: string;
   source_type: 'frontend' | 'admin_proxy';
-  status: 'pending' | 'processing';
+  status: 'pending' | 'processing' | 'shipped';
   notes: string | null;
   store_id: string;
   stores: { name: string; code: string | null } | null;
@@ -52,6 +52,7 @@ interface OrderWithDetails {
     status: string;
     store_id: string;
     products: { name: string; sku: string } | null;
+    product_variants: { name: string; option_1: string | null; option_2: string | null } | null;
   }[];
 }
 
@@ -81,6 +82,7 @@ const statusLabels: Record<string, { label: string; className: string }> = {
 const orderStatusLabels: Record<string, { label: string; className: string }> = {
   pending: { label: '未確認', className: 'bg-warning text-warning-foreground' },
   processing: { label: '處理中', className: 'bg-primary text-primary-foreground' },
+  shipped: { label: '已出貨', className: 'bg-success text-success-foreground' },
 };
 
 export default function AdminOrders() {
@@ -91,7 +93,7 @@ export default function AdminOrders() {
   const [storeFilter, setStoreFilter] = useState<string>('all');
   const [productFilter, setProductFilter] = useState<string>('');
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
-  const [statusTab, setStatusTab] = useState<'pending' | 'processing'>('pending');
+  const [statusTab, setStatusTab] = useState<'pending' | 'processing' | 'shipped'>('pending');
   const [viewMode, setViewMode] = useState<'orders' | 'items'>('orders');
 
   // 批次選擇訂單（用於轉處理中）
@@ -150,7 +152,10 @@ export default function AdminOrders() {
             unit_price,
             status,
             store_id,
-            products (name, sku)
+            status,
+            store_id,
+            products (name, sku),
+            product_variants (name, option_1, option_2)
           )
         `)
         .eq('status', statusTab)
@@ -300,6 +305,58 @@ export default function AdminOrders() {
     },
   });
 
+  // 同步舊訂單狀態（將已全數出貨但狀態仍為 processing 的訂單更新為 shipped）
+  const syncOrdersMutation = useMutation({
+    mutationFn: async () => {
+      // 1. 獲取所有處理中的訂單及其項目
+      const { data: processingOrders, error } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          order_items (
+            quantity,
+            shipped_quantity
+          )
+        `)
+        .eq('status', 'processing');
+
+      if (error) throw error;
+
+      if (!processingOrders || processingOrders.length === 0) return 0;
+
+      // 2. 找出所有項目都已出貨的訂單 ID
+      const ordersToUpdate = processingOrders
+        .filter(order => {
+          if (!order.order_items || order.order_items.length === 0) return false;
+          return order.order_items.every(item => item.shipped_quantity >= item.quantity);
+        })
+        .map(order => order.id);
+
+      if (ordersToUpdate.length === 0) return 0;
+
+      // 3. 批量更新這些訂單的狀態
+      const { error: updateError } = await supabase
+        .from('orders')
+        .update({ status: 'shipped' })
+        .in('id', ordersToUpdate);
+
+      if (updateError) throw updateError;
+
+      return ordersToUpdate.length;
+    },
+    onSuccess: (count) => {
+      if (count > 0) {
+        toast.success(`已成功同步 ${count} 筆訂單狀態為「已出貨」`);
+        queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      } else {
+        toast.info('沒有需要同步的訂單');
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(`同步失敗: ${error.message}`);
+    },
+  });
+
   // 加入出貨池（使用新的 shipping_pool 資料表）
   const addToShippingPoolMutation = useMutation({
     mutationFn: async () => {
@@ -343,11 +400,15 @@ export default function AdminOrders() {
           <Plus className="mr-2 h-4 w-4" />
           代訂訂單
         </Button>
+        <Button onClick={() => syncOrdersMutation.mutate()} variant="outline" className="ml-2" disabled={syncOrdersMutation.isPending}>
+          <Package className="mr-2 h-4 w-4" />
+          同步舊訂單狀態
+        </Button>
       </div>
 
       {/* 狀態 Tabs */}
       <Tabs value={statusTab} onValueChange={(v) => {
-        setStatusTab(v as 'pending' | 'processing');
+        setStatusTab(v as 'pending' | 'processing' | 'shipped');
         setSelectedOrderIds(new Set());
         setSelectedItems(new Map());
       }}>
@@ -360,6 +421,10 @@ export default function AdminOrders() {
             <TabsTrigger value="processing" className="gap-2">
               <Truck className="h-4 w-4" />
               處理中
+            </TabsTrigger>
+            <TabsTrigger value="shipped" className="gap-2">
+              <CheckSquare className="h-4 w-4" />
+              已出貨
             </TabsTrigger>
           </TabsList>
 
@@ -623,7 +688,14 @@ export default function AdminOrders() {
                             )}
                           </TableCell>
                           <TableCell className="font-mono text-sm">{item.products?.sku}</TableCell>
-                          <TableCell>{item.products?.name}</TableCell>
+                          <TableCell>
+                            {item.products?.name}
+                            {item.product_variants && (
+                              <span className="text-muted-foreground ml-1">
+                                - {item.product_variants.name}
+                              </span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">{item.quantity}</TableCell>
                           <TableCell className="text-right">{item.shipped_quantity}</TableCell>
                           <TableCell className="text-right">
@@ -720,7 +792,14 @@ export default function AdminOrders() {
                           <TableCell className="font-mono text-sm">
                             {item.products?.sku}
                           </TableCell>
-                          <TableCell>{item.products?.name}</TableCell>
+                          <TableCell>
+                            {item.products?.name}
+                            {item.product_variants && (
+                              <span className="text-muted-foreground ml-1">
+                                - {item.product_variants.name}
+                              </span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">
                             ${item.unit_price.toFixed(2)}
                           </TableCell>

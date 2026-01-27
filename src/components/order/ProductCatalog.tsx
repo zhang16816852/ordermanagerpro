@@ -168,7 +168,7 @@ export default function ProductCatalog({
                   : product.wholesale_price;
 
                 const displayName = variant
-                  ? `${product.name} - ${variant.name}`
+                  ? variant.name
                   : product.name;
 
                 const displaySku = variant ? variant.sku : product.sku;
@@ -182,13 +182,9 @@ export default function ProductCatalog({
                     <div className="flex justify-between items-start">
                       <div className="flex-1 min-w-0">
                         <div className="font-medium truncate pr-2">
-                          {product.name}
-                          {variant && <span className="text-muted-foreground"> - {variant.name}</span>}
+                          {displayName}
                         </div>
                         <div className="flex flex-wrap gap-1 mt-1">
-                          <span className="text-xs text-muted-foreground font-mono bg-muted px-1 rounded">
-                            {displaySku}
-                          </span>
                           {variant && (
                             <>
                               {variant.option_1 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_1}</Badge>}
