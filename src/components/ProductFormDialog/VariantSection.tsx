@@ -5,11 +5,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Plus, Layers, Pencil, Trash2 } from 'lucide-react';
 import { VariantBatchCreator } from './VariantBatchCreator';
+import { VariantEditDialog } from '@/components/products/VariantEditDialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 
 export function VariantSection({ product }: { product: any }) {
   const [isBatchOpen, setIsBatchOpen] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingVariant, setEditingVariant] = useState<any>(null);
   const queryClient = useQueryClient();
 
   // 取得變體資料
@@ -57,7 +60,7 @@ export function VariantSection({ product }: { product: any }) {
           <Button size="sm" variant="outline" onClick={() => setIsBatchOpen(true)}>
             <Layers className="mr-2 h-4 w-4" /> 批次產生
           </Button>
-          <Button size="sm">
+          <Button size="sm" onClick={() => { setEditingVariant(null); setIsDialogOpen(true); }}>
             <Plus className="mr-2 h-4 w-4" /> 新增單一
           </Button>
         </div>
@@ -106,12 +109,17 @@ export function VariantSection({ product }: { product: any }) {
                   <TableCell className="text-right font-mono">${v.retail_price}</TableCell>
                   <TableCell className="text-center">
                     <div className="flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" className="h-7 w-7">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => { setEditingVariant(v); setIsDialogOpen(true); }}
+                      >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         className="h-7 w-7 text-destructive"
                         onClick={() => handleDelete(v.id)}
                       >
@@ -127,11 +135,19 @@ export function VariantSection({ product }: { product: any }) {
       </div>
 
       {/* 批次產生器 */}
-      <VariantBatchCreator 
-        open={isBatchOpen} 
-        onOpenChange={setIsBatchOpen} 
-        product={product} 
-        onSuccess={refreshVariants} // 成功後刷新 Query
+      <VariantBatchCreator
+        open={isBatchOpen}
+        onOpenChange={setIsBatchOpen}
+        product={product}
+        onSuccess={refreshVariants}
+      />
+
+      <VariantEditDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        product={product}
+        variant={editingVariant}
+        onSuccess={refreshVariants}
       />
     </div>
   );

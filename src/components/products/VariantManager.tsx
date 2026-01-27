@@ -32,6 +32,7 @@ import { Plus, Pencil, Trash2, Layers, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VariantBatchCreator } from '../ProductFormDialog/VariantBatchCreator';
+import { VariantEditDialog } from './VariantEditDialog';
 
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;
@@ -57,10 +58,10 @@ export function VariantManager({ products, search }: VariantManagerProps) {
   const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(null);
 
   // 篩選有變體的產品
-  const productsWithVariants = products.filter(p => 
+  const productsWithVariants = products.filter(p =>
     p.has_variants &&
     (p.name.toLowerCase().includes(search.toLowerCase()) ||
-     p.sku.toLowerCase().includes(search.toLowerCase()))
+      p.sku.toLowerCase().includes(search.toLowerCase()))
   );
 
   const selectedProduct = products.find(p => p.id === selectedProductId);
@@ -81,37 +82,6 @@ export function VariantManager({ products, search }: VariantManagerProps) {
     enabled: !!selectedProductId,
   });
 
-  const createMutation = useMutation({
-    mutationFn: async (variant: VariantInsert) => {
-      const { error } = await supabase.from('product_variants').insert(variant);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['product-variants', selectedProductId] });
-      toast.success('變體已新增');
-      setIsDialogOpen(false);
-    },
-    onError: (error) => {
-      toast.error(`新增失敗：${error.message}`);
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, ...updates }: Partial<ProductVariant> & { id: string }) => {
-      const { error } = await supabase.from('product_variants').update(updates).eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['product-variants', selectedProductId] });
-      toast.success('變體已更新');
-      setIsDialogOpen(false);
-      setEditingVariant(null);
-    },
-    onError: (error) => {
-      toast.error(`更新失敗：${error.message}`);
-    },
-  });
-
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('product_variants').delete().eq('id', id);
@@ -125,30 +95,6 @@ export function VariantManager({ products, search }: VariantManagerProps) {
       toast.error(`刪除失敗：${error.message}`);
     },
   });
-
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const variantData = {
-      product_id: selectedProductId!,
-      sku: formData.get('sku') as string,
-      name: formData.get('name') as string,
-      barcode: formData.get('barcode') as string || null,
-      color: formData.get('color') as string || null,
-      option_1: formData.get('option_1') as string || null,
-      option_2: formData.get('option_2') as string || null,
-      option_3: formData.get('option_3') as string || null,
-      wholesale_price: parseFloat(formData.get('wholesale_price') as string) || 0,
-      retail_price: parseFloat(formData.get('retail_price') as string) || 0,
-      status: formData.get('status') as ProductVariant['status'],
-    };
-
-    if (editingVariant) {
-      updateMutation.mutate({ id: editingVariant.id, ...variantData });
-    } else {
-      createMutation.mutate(variantData);
-    }
-  };
 
   const openEditDialog = (variant: ProductVariant) => {
     setEditingVariant(variant);
@@ -268,9 +214,9 @@ export function VariantManager({ products, search }: VariantManagerProps) {
                         <Button variant="ghost" size="icon" onClick={() => openEditDialog(variant)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="text-destructive"
                           onClick={() => deleteMutation.mutate(variant.id)}
                         >
@@ -296,131 +242,15 @@ export function VariantManager({ products, search }: VariantManagerProps) {
         </div>
       )}
 
-      {/* 新增/編輯對話框 */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editingVariant ? '編輯變體' : '新增變體'}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="sku">SKU *</Label>
-                <Input
-                  id="sku"
-                  name="sku"
-                  defaultValue={editingVariant?.sku || `${selectedProduct?.sku}-`}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="name">變體名稱 *</Label>
-                <Input
-                  id="name"
-                  name="name"
-                  defaultValue={editingVariant?.name}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="option_1">選項1</Label>
-                <Input
-                  id="option_1"
-                  name="option_1"
-                  placeholder="如：霧面"
-                  defaultValue={editingVariant?.option_1 || ''}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="option_2">選項2</Label>
-                <Input
-                  id="option_2"
-                  name="option_2"
-                  placeholder="如：256GB"
-                  defaultValue={editingVariant?.option_2 || ''}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="option_3">選項3</Label>
-                <Input
-                  id="option_3"
-                  name="option_3"
-                  placeholder="如：白色"
-                  defaultValue={editingVariant?.option_3 || ''}
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="barcode">條碼</Label>
-                <Input
-                  id="barcode"
-                  name="barcode"
-                  defaultValue={editingVariant?.barcode || ''}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="color">顏色備註</Label>
-                <Input
-                  id="color"
-                  name="color"
-                  defaultValue={editingVariant?.color || ''}
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="wholesale_price">批發價</Label>
-                <Input
-                  id="wholesale_price"
-                  name="wholesale_price"
-                  type="number"
-                  step="0.01"
-                  defaultValue={editingVariant?.wholesale_price || selectedProduct?.base_wholesale_price}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="retail_price">零售價</Label>
-                <Input
-                  id="retail_price"
-                  name="retail_price"
-                  type="number"
-                  step="0.01"
-                  defaultValue={editingVariant?.retail_price || selectedProduct?.base_retail_price}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="status">狀態</Label>
-                <Select name="status" defaultValue={editingVariant?.status || 'active'}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">上架中</SelectItem>
-                    <SelectItem value="preorder">預購中</SelectItem>
-                    <SelectItem value="sold_out">售完停產</SelectItem>
-                    <SelectItem value="discontinued">已停售</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={closeDialog}>
-                取消
-              </Button>
-              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
-                {editingVariant ? '儲存' : '新增'}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <VariantEditDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        product={selectedProduct || null}
+        variant={editingVariant}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['product-variants', selectedProductId] });
+        }}
+      />
 
       {/* 批次建立對話框 */}
       {selectedProduct && (
