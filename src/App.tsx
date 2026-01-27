@@ -12,11 +12,12 @@ import { Loader2 } from "lucide-react";
 
 // Admin pages
 import AdminDashboard from "./pages/admin/Dashboard";
+import AdminOrderList from "./pages/admin/AdminOrderList";
 import AdminProducts from "./pages/admin/Products";
 import AdminStores from "./pages/admin/Stores";
-import AdminOrders from "./pages/admin/Orders";
+import AdminOrders from "./pages/admin/AdminOrderList"; // Keep alias if needed or refactor usage
 import AdminOrderComposer from "./pages/admin/OrderComposer";
-import AdminEditOrder from "./pages/admin/EditOrder";
+import AdminOrderEdit from "./pages/admin/AdminOrderEdit";
 import AdminSalesNotes from "./pages/admin/SalesNotes";
 import AdminShippingPool from "./pages/admin/ShippingPool";
 import AdminUsers from "./pages/admin/Users";
@@ -26,11 +27,11 @@ import AdminPurchaseOrders from "./pages/admin/PurchaseOrders";
 
 // Store pages
 import StoreDashboard from "./pages/store/Dashboard";
-import StoreOrders from "./pages/store/Orders";
+import StoreOrderList from "./pages/store/StoreOrderList";
 import StoreCatalog from "./pages/store/Catalog";
 import StoreSalesNotes from "./pages/store/SalesNotes";
 import StoreCheckout from "./pages/store/Checkout";
-import StoreEditOrder from "./pages/store/EditOrder";
+import StoreOrderEdit from "./pages/store/StoreOrderEdit";
 import StoreReceiving from "./pages/store/Receiving";
 import StoreTeam from "./pages/store/Team";
 import StoreAudit from "./pages/store/Audit";
@@ -103,7 +104,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AppLayout>
-              <AdminOrders />
+              <AdminOrderList />
             </AppLayout>
           </ProtectedRoute>
         }
@@ -123,7 +124,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AppLayout>
-              <AdminEditOrder />
+              <AdminOrderEdit />
             </AppLayout>
           </ProtectedRoute>
         }
@@ -205,7 +206,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AppLayout>
-              <StoreOrders />
+              <StoreOrderList />
             </AppLayout>
           </ProtectedRoute>
         }
@@ -225,7 +226,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AppLayout>
-              <StoreEditOrder />
+              <StoreOrderEdit />
             </AppLayout>
           </ProtectedRoute>
         }

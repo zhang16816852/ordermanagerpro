@@ -35,6 +35,8 @@ import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { OrderDetailDialog } from '@/components/order/OrderDetailDialog';
+import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 
 interface OrderWithDetails {
   id: string;
@@ -85,7 +87,7 @@ const orderStatusLabels: Record<string, { label: string; className: string }> = 
   shipped: { label: '已出貨', className: 'bg-success text-success-foreground' },
 };
 
-export default function AdminOrders() {
+export default function AdminOrderList() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -574,9 +576,7 @@ export default function AdminOrders() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Badge className={itemStatusInfo.className}>
-                              {itemStatusInfo.label}
-                            </Badge>
+                            <OrderStatusBadge status={itemStatus} type="shipping" />
                           </TableCell>
                           <TableCell className="text-muted-foreground">
                             {format(new Date(order.created_at), 'MM/dd HH:mm', { locale: zhTW })}
@@ -736,93 +736,11 @@ export default function AdminOrders() {
         </TabsContent>
       </Tabs>
 
-      {/* 訂單詳情 Dialog */}
-      <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>訂單詳情</DialogTitle>
-          </DialogHeader>
-          {selectedOrder && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">訂單編號：</span>
-                  <span className="font-mono">{selectedOrder.id}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">店鋪：</span>
-                  <span>{selectedOrder.stores?.name}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">建立時間：</span>
-                  <span>
-                    {format(new Date(selectedOrder.created_at), 'yyyy/MM/dd HH:mm', {
-                      locale: zhTW,
-                    })}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">來源：</span>
-                  <span>{selectedOrder.source_type === 'frontend' ? '前台訂單' : '後台代訂'}</span>
-                </div>
-              </div>
-              {selectedOrder.notes && (
-                <div className="text-sm">
-                  <span className="text-muted-foreground">備註：</span>
-                  <span>{selectedOrder.notes}</span>
-                </div>
-              )}
-              <div className="border rounded-lg">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>產品名稱</TableHead>
-                      <TableHead className="text-right">單價</TableHead>
-                      <TableHead className="text-right">數量</TableHead>
-                      <TableHead className="text-right">已出貨</TableHead>
-                      <TableHead>狀態</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedOrder.order_items.map((item) => {
-                      const itemStatus = statusLabels[item.status];
-                      return (
-                        <TableRow key={item.id}>
-                          <TableCell className="font-mono text-sm">
-                            {item.products?.sku}
-                          </TableCell>
-                          <TableCell>
-                            {item.products?.name}
-                            {item.product_variants && (
-                              <span className="text-muted-foreground ml-1">
-                                - {item.product_variants.name}
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            ${item.unit_price.toFixed(2)}
-                          </TableCell>
-                          <TableCell className="text-right">{item.quantity}</TableCell>
-                          <TableCell className="text-right">{item.shipped_quantity}</TableCell>
-                          <TableCell>
-                            <Badge className={itemStatus.className} variant="secondary">
-                              {itemStatus.label}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-              <div className="flex justify-end text-lg font-semibold">
-                總計：${getOrderTotal(selectedOrder.order_items).toFixed(2)}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <OrderDetailDialog
+        order={selectedOrder}
+        open={!!selectedOrder}
+        onOpenChange={(open) => !open && setSelectedOrder(null)}
+      />
 
       {/* 確認出貨 Dialog */}
       <Dialog open={showShipDialog} onOpenChange={setShowShipDialog}>

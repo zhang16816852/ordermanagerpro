@@ -1,9 +1,8 @@
-// src/pages/admin/EditOrder.tsx
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useProductCache } from '@/hooks/useProductCache';
+import { useStoreProductCache } from '@/hooks/useProductCache';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,23 +23,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Save, Lock, Unlock, Plus, Trash2 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { ArrowLeft, Save, Plus, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
+import { OrderItemsTable } from '@/components/order/OrderItemsTable';
 
 const statusLabels = {
-  pending: { label: '未確認', className: 'bg-warning text-warning-foreground' },
-  processing: { label: '處理中', className: 'bg-primary text-primary-foreground' },
+  pending: { label: '未確認', className: 'bg-warning text-warning-foreground', editable: true },
+  processing: { label: '處理中', className: 'bg-primary text-primary-foreground', editable: false },
 };
 
-export default function AdminEditOrder() {
+export default function StoreOrderEdit() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
-  const { products } = useProductCache();
+  const { storeId } = useAuth();
+  const { products } = useStoreProductCache(storeId);
 
   const [notes, setNotes] = useState('');
   const [orderItems, setOrderItems] = useState<Array<{
@@ -53,14 +53,13 @@ export default function AdminEditOrder() {
   const [selectedProductId, setSelectedProductId] = useState<string>('');
 
   const { data: order, isLoading } = useQuery({
-    queryKey: ['order-detail', orderId],
+    queryKey: ['store-order-detail', orderId],
     queryFn: async () => {
       if (!orderId) return null;
       const { data, error } = await supabase
         .from('orders')
         .select(`
           *,
-          stores (name, code, brand),
           order_items (
             id,
             product_id,
@@ -94,6 +93,7 @@ export default function AdminEditOrder() {
   const updateOrderMutation = useMutation({
     mutationFn: async () => {
       if (!orderId || !order) throw new Error('訂單不存在');
+      if (order.status !== 'pending') throw new Error('只能修改未確認的訂單');
 
       // 更新訂單備註
       const { error: orderError } = await supabase
@@ -105,7 +105,6 @@ export default function AdminEditOrder() {
       // 更新現有項目
       for (const item of orderItems) {
         if (item.isNew) {
-          // 新增項目
           const { error } = await supabase
             .from('order_items')
             .insert({
@@ -117,7 +116,6 @@ export default function AdminEditOrder() {
             });
           if (error) throw error;
         } else {
-          // 更新現有項目
           const { error } = await supabase
             .from('order_items')
             .update({
@@ -144,28 +142,9 @@ export default function AdminEditOrder() {
     },
     onSuccess: () => {
       toast.success('訂單已更新');
-      queryClient.invalidateQueries({ queryKey: ['order-detail'] });
-      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
-    },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
-  });
-
-  const toggleStatusMutation = useMutation({
-    mutationFn: async () => {
-      if (!orderId || !order) throw new Error('訂單不存在');
-      const newStatus = order.status === 'pending' ? 'processing' : 'pending';
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: newStatus })
-        .eq('id', orderId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success('訂單狀態已更新');
-      queryClient.invalidateQueries({ queryKey: ['order-detail'] });
-      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['store-order-detail'] });
+      queryClient.invalidateQueries({ queryKey: ['store-orders'] });
+      navigate('/orders');
     },
     onError: (error: Error) => {
       toast.error(error.message);
@@ -176,14 +155,6 @@ export default function AdminEditOrder() {
     setOrderItems(prev => {
       const updated = [...prev];
       updated[index].quantity = Math.max(1, value);
-      return updated;
-    });
-  };
-
-  const handlePriceChange = (index: number, value: number) => {
-    setOrderItems(prev => {
-      const updated = [...prev];
-      updated[index].unitPrice = Math.max(0, value);
       return updated;
     });
   };
@@ -203,7 +174,7 @@ export default function AdminEditOrder() {
         id: `new-${Date.now()}`,
         productId: product.id,
         quantity: 1,
-        unitPrice: product.base_wholesale_price,
+        unitPrice: product.wholesale_price,
         isNew: true,
       },
     ]);
@@ -220,9 +191,7 @@ export default function AdminEditOrder() {
     return product?.sku || '';
   };
 
-  const getTotalAmount = () => {
-    return orderItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  };
+  /* Helper functions removed */
 
   if (isLoading) {
     return (
@@ -236,7 +205,7 @@ export default function AdminEditOrder() {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
         <p className="text-muted-foreground">找不到訂單</p>
-        <Button onClick={() => navigate('/admin/orders')}>
+        <Button onClick={() => navigate('/orders')}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           返回訂單列表
         </Button>
@@ -245,15 +214,82 @@ export default function AdminEditOrder() {
   }
 
   const statusInfo = statusLabels[order.status as keyof typeof statusLabels];
+  const isEditable = order.status === 'pending';
   const availableProducts = products.filter(
-    p => p.status === 'active' && !orderItems.some(item => item.productId === p.id)
+    p => !orderItems.some(item => item.productId === p.id)
   );
+
+  if (!isEditable) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" onClick={() => navigate('/orders')}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            返回
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">訂單詳情</h1>
+            <p className="text-muted-foreground font-mono text-sm">{order.id}</p>
+          </div>
+        </div>
+
+        <Card className="border-warning">
+          <CardContent className="flex items-center gap-4 py-6">
+            <Lock className="h-8 w-8 text-warning" />
+            <div>
+              <h3 className="font-semibold">訂單已鎖定</h3>
+              <p className="text-muted-foreground">
+                此訂單已進入處理階段，無法再進行修改。如需修改請聯繫管理員。
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 顯示訂單詳情（只讀） */}
+        <Card>
+          <CardHeader>
+            <CardTitle>訂單項目</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>產品名稱</TableHead>
+                  <TableHead className="text-right">單價</TableHead>
+                  <TableHead className="text-right">數量</TableHead>
+                  <TableHead className="text-right">小計</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {order.order_items.map((item: any) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-mono text-sm">{item.products?.sku}</TableCell>
+                    <TableCell>{item.products?.name}</TableCell>
+                    <TableCell className="text-right">${item.unit_price}</TableCell>
+                    <TableCell className="text-right">{item.quantity}</TableCell>
+                    <TableCell className="text-right font-medium">
+                      ${(item.quantity * item.unit_price).toFixed(2)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <div className="text-right mt-4 text-lg font-semibold">
+              總計：${order.order_items.reduce((sum: number, item: any) =>
+                sum + item.quantity * item.unit_price, 0).toFixed(2)}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => navigate('/admin/orders')}>
+          <Button variant="ghost" onClick={() => navigate('/orders')}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             返回
           </Button>
@@ -262,70 +298,26 @@ export default function AdminEditOrder() {
             <p className="text-muted-foreground font-mono text-sm">{order.id}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge className={statusInfo.className}>{statusInfo.label}</Badge>
-          <Button
-            variant="outline"
-            onClick={() => toggleStatusMutation.mutate()}
-            disabled={toggleStatusMutation.isPending}
-          >
-            {order.status === 'pending' ? (
-              <>
-                <Lock className="mr-2 h-4 w-4" />
-                鎖定訂單
-              </>
-            ) : (
-              <>
-                <Unlock className="mr-2 h-4 w-4" />
-                解除鎖定
-              </>
-            )}
-          </Button>
-        </div>
+        <Badge className={statusInfo.className}>{statusInfo.label}</Badge>
       </div>
 
       {/* 訂單資訊 */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>訂單資訊</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">店鋪：</span>
-                <span className="font-medium">{order.stores?.name}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">品牌：</span>
-                <span className="font-medium">{order.stores?.brand || '-'}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">建立時間：</span>
-                <span>{format(new Date(order.created_at), 'yyyy/MM/dd HH:mm', { locale: zhTW })}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">來源：</span>
-                <span>{order.source_type === 'frontend' ? '前台' : '後台'}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>訂單備註</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Textarea
-              placeholder="輸入訂單備註..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={4}
-            />
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>訂單備註</CardTitle>
+          <CardDescription>
+            建立時間：{format(new Date(order.created_at), 'yyyy/MM/dd HH:mm', { locale: zhTW })}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            placeholder="輸入訂單備註..."
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+          />
+        </CardContent>
+      </Card>
 
       {/* 新增產品 */}
       <Card>
@@ -341,7 +333,7 @@ export default function AdminEditOrder() {
               <SelectContent>
                 {availableProducts.map(product => (
                   <SelectItem key={product.id} value={product.id}>
-                    {product.sku} - {product.name}
+                    {product.sku} - {product.name} (${product.wholesale_price})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -360,64 +352,14 @@ export default function AdminEditOrder() {
           <CardTitle>訂單項目</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>SKU</TableHead>
-                <TableHead>產品名稱</TableHead>
-                <TableHead className="w-32">單價</TableHead>
-                <TableHead className="w-32">數量</TableHead>
-                <TableHead className="text-right">小計</TableHead>
-                <TableHead className="w-12"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orderItems.map((item, index) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-mono text-sm">
-                    {getProductSku(item.productId)}
-                    {item.isNew && <Badge variant="outline" className="ml-2">新增</Badge>}
-                  </TableCell>
-                  <TableCell>{getProductName(item.productId)}</TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      value={item.unitPrice}
-                      onChange={(e) => handlePriceChange(index, parseFloat(e.target.value) || 0)}
-                      className="w-24"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      value={item.quantity}
-                      onChange={(e) => handleQuantityChange(index, parseInt(e.target.value) || 1)}
-                      className="w-20"
-                      min={1}
-                    />
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    ${(item.quantity * item.unitPrice).toFixed(2)}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemoveItem(index)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-
-          <div className="flex justify-between items-center mt-6 pt-4 border-t">
-            <div className="text-lg font-semibold">
-              總計：${getTotalAmount().toFixed(2)}
-            </div>
+          <OrderItemsTable
+            items={orderItems}
+            products={products}
+            onUpdateQuantity={handleQuantityChange}
+            onRemove={handleRemoveItem}
+            isEditable={true}
+          />
+          <div className="flex justify-end mt-4">
             <Button
               onClick={() => updateOrderMutation.mutate()}
               disabled={updateOrderMutation.isPending}
