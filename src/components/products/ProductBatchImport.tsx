@@ -36,6 +36,7 @@ interface ImportRow {
   sku: string;
   name: string;
   description: string;
+  category: string;
   base_wholesale_price: number;
   base_retail_price: number;
   status: 'active' | 'discontinued';
@@ -49,7 +50,7 @@ interface ProductBatchImportProps {
 }
 
 const REQUIRED_FIELDS = ['sku', 'name'];
-const OPTIONAL_FIELDS = ['description', 'base_wholesale_price', 'base_retail_price', 'status'];
+const OPTIONAL_FIELDS = ['description', 'category', 'base_wholesale_price', 'base_retail_price', 'status'];
 
 export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportProps) {
   const queryClient = useQueryClient();
@@ -158,6 +159,7 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
             const sku = getField('sku');
             const name = getField('name');
             const description = getField('description');
+            const category = getField('category');
             const wholesalePrice = parseFloat(getField('base_wholesale_price')) || 0;
             const retailPrice = parseFloat(getField('base_retail_price')) || 0;
             const statusRaw = getField('status')?.toLowerCase();
@@ -171,6 +173,7 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
               sku,
               name,
               description,
+              category,
               base_wholesale_price: wholesalePrice,
               base_retail_price: retailPrice,
               status,
@@ -231,6 +234,7 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
         sku: row.sku,
         name: row.name,
         description: row.description || null,
+        category: row.category || null,
         base_wholesale_price: row.base_wholesale_price,
         base_retail_price: row.base_retail_price,
         status: row.status,
@@ -298,8 +302,8 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
                   <p><strong>status 值：</strong>active 或 discontinued（預設為 active）</p>
                 </div>
                 <div className="mt-3 p-2 bg-background rounded font-mono text-xs">
-                  sku,name,description,base_wholesale_price,base_retail_price,status<br />
-                  SKU001,產品A,描述內容,100,150,active<br />
+                  sku,name,description,category,base_wholesale_price,base_retail_price,status<br />
+                  SKU001,產品A,描述內容,類別,100,150,active<br />
                   SKU002,產品B,,80,120,active
                 </div>
               </div>
@@ -329,6 +333,7 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
                       <TableHead>SKU</TableHead>
                       <TableHead>名稱</TableHead>
                       <TableHead>描述</TableHead>
+                      <TableHead>類別</TableHead>
                       <TableHead className="text-right">批發價</TableHead>
                       <TableHead className="text-right">零售價</TableHead>
                       <TableHead>狀態</TableHead>
@@ -376,6 +381,17 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
                             />
                           ) : (
                             row.description || '-'
+                          )}
+                        </TableCell>
+                        <TableCell className="max-w-[150px] truncate">
+                          {editingIndex === index ? (
+                            <Input
+                              value={row.category}
+                              onChange={(e) => updateRow(index, 'category', e.target.value)}
+                              className="h-8"
+                            />
+                          ) : (
+                            row.category || '-'
                           )}
                         </TableCell>
                         <TableCell className="text-right">

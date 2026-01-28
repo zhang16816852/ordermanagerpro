@@ -31,38 +31,68 @@ export default function ProductCatalog({
 
   const { addItem, getItemQuantity, getTotalProductQuantity } = useStoreDraft(storeId);
 
-  const filteredProducts = products.filter((product) => {
-    if (!search.trim()) return true;
 
-    const keywords = search
-      .toLowerCase()
-      .split(/\s+/)
-      .filter(Boolean);
+  const keywords = search
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
 
-    const productTexts = [product.name, product.sku]
-      .filter(Boolean)
-      .map((v) => v!.toLowerCase());
+  const filteredProducts = products
+    .map((product) => {
+      if (keywords.length === 0) return product;
 
-    const variantTexts =
-      product.variants?.flatMap((variant) =>
-        [
-          variant.name,
-          variant.sku,
-          variant.barcode,
-          variant.option_1,
-          variant.option_2,
-          variant.option_3,
-        ]
-          .filter(Boolean)
-          .map((v) => v!.toLowerCase())
-      ) ?? [];
+      const productTexts = [product.name, product.sku]
+        .filter(Boolean)
+        .map((v) => v!.toLowerCase());
 
-    const searchableTexts = [...productTexts, ...variantTexts];
+      const productMatched = keywords.every((keyword) =>
+        productTexts.some((text) => text.includes(keyword))
+      );
 
-    return keywords.some((keyword) =>
-      searchableTexts.some((text) => text.includes(keyword))
-    );
-  });
+      const matchedVariants =
+        product.variants?.filter((variant) => {
+          const variantTexts = [
+            variant.name,
+            variant.sku,
+            variant.barcode,
+            variant.option_1,
+            variant.option_2,
+            variant.option_3,
+          ]
+            .filter(Boolean)
+            .map((v) => v!.toLowerCase());
+
+          return keywords.every((keyword) =>
+            variantTexts.some((text) => text.includes(keyword))
+          );
+        }) ?? [];
+
+      // 產品命中 → 保留全部 variants
+      // 變體命中 → 只保留命中的 variants
+      return {
+        ...product,
+        variants: productMatched ? product.variants : matchedVariants,
+      };
+    })
+    .filter((product) => {
+      if (keywords.length === 0) return true;
+
+      const productTexts = [product.name, product.sku]
+        .filter(Boolean)
+        .map((v) => v!.toLowerCase());
+
+      const productMatched = keywords.some((keyword) =>
+        productTexts.some((text) => text.includes(keyword))
+      );
+
+      // 產品命中就保留（即使沒 variants）
+      if (productMatched) return true;
+
+      // 沒命中產品本身，就看有沒有命中的 variants
+      return (product.variants?.length ?? 0) > 0;
+    });
+
 
   const handleProductClick = (product: ProductWithPricing) => {
     if (product.has_variants && product.variants && product.variants.length > 0) {

@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Layers } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -20,6 +21,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -29,12 +35,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, RefreshCw, Upload, MoreHorizontal, Pencil, Copy, Trash2 } from 'lucide-react';
+import { Plus, Search, RefreshCw, Upload, MoreHorizontal, Pencil, Copy, Trash2, ChevronRight, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useProductCache } from '@/hooks/useProductCache';
-import { ProductBatchImport } from '@/components/products/ProductBatchImport';
-import { VariantBatchImport } from '@/components/products/VariantBatchImport';
+import { UnifiedProductImport } from '@/components/products/UnifiedProductImport';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { VariantManager } from '@/components/products/VariantManager';
 import { ProductFormDialog } from '@/components/ProductFormDialog/ProductFormDialog';
@@ -59,7 +64,6 @@ export default function AdminProducts() {
   const [search, setSearch] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [isVariantImportOpen, setIsVariantImportOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'variants'>('list');
@@ -158,7 +162,23 @@ export default function AdminProducts() {
       toast.error(`複製失敗：${error.message}`);
     }
   };
+  // 取得所有變體
+  const { data: allVariants = [], isLoading: variantsLoading } = useQuery({
+    queryKey: ['all-product-variants'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('product_variants')
+        .select('*')
+        .order('sku');
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
+  // 取得產品的變體
+  const getProductVariants = (productId: string) => {
+    return allVariants.filter(v => v.product_id === productId && v.status === 'active');
+  };
   const filteredProducts = products?.filter(
     (p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -184,11 +204,7 @@ export default function AdminProducts() {
           </Button>
           <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)}>
             <Upload className="mr-2 h-4 w-4" />
-            匯入產品
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setIsVariantImportOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" />
-            匯入變體
+            批次匯入
           </Button>
           <Button size="sm" onClick={() => { setEditingProduct(null); setIsDialogOpen(true); }}>
             <Plus className="mr-2 h-4 w-4" />
@@ -261,9 +277,15 @@ export default function AdminProducts() {
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           {product.name}
-                          {product.has_variants && (
-                            <Badge variant="secondary" className="text-[10px] h-4 px-1">選項</Badge>
-                          )}
+                          {product.has_variants && (() => {
+                            const variants = getProductVariants(product.id);
+                            return variants.length > 0 ? (
+                              <Badge variant="outline" className="ml-2 text-xs">
+                                <Layers className="h-3 w-3 mr-1" />
+                                {variants.length} 變體
+                              </Badge>
+                            ) : null;
+                          })()}
                         </div>
                       </TableCell>
                       <TableCell>{product.category || '-'}</TableCell>
@@ -348,8 +370,7 @@ export default function AdminProducts() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <ProductBatchImport open={isImportOpen} onOpenChange={setIsImportOpen} />
-      <VariantBatchImport open={isVariantImportOpen} onOpenChange={setIsVariantImportOpen} />
+      <UnifiedProductImport open={isImportOpen} onOpenChange={setIsImportOpen} />
     </div>
   );
 }
