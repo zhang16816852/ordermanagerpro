@@ -47,7 +47,7 @@ export default function ProductCatalog({
         .map((v) => v!.toLowerCase());
 
       const productMatched = keywords.every((keyword) =>
-        productTexts.some((text) => text.includes(keyword))
+        productTexts.every((text) => text.includes(keyword))
       );
 
       const matchedVariants =
@@ -82,8 +82,8 @@ export default function ProductCatalog({
         .filter(Boolean)
         .map((v) => v!.toLowerCase());
 
-      const productMatched = keywords.some((keyword) =>
-        productTexts.some((text) => text.includes(keyword))
+      const productMatched = keywords.every((keyword) =>
+        productTexts.every((text) => text.includes(keyword))
       );
 
       // 產品命中就保留（即使沒 variants）
