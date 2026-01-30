@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,8 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Search, FileText } from "lucide-react";
 import { SalesNoteListTable } from "@/components/sales/SalesNoteListTable";
 import { SalesNoteDetailDialog, SalesNoteDetail } from "@/components/sales/SalesNoteDetailDialog";
+import { toast } from "sonner";
 
 export default function AdminSalesNotes() {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [storeFilter, setStoreFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -67,12 +69,29 @@ export default function AdminSalesNotes() {
     );
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.rpc("delete_sales_note", {
+        p_sales_note_id: id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("銷貨單已刪除並回滾至出貨池");
+      queryClient.invalidateQueries({ queryKey: ["admin-sales-notes"] });
+    },
+    onError: (error: Error) => {
+      toast.error(`刪除失敗：${error.message}`);
+    },
+  });
+
   // Map data for the table component
   const tableData = filteredNotes?.map(note => ({
     id: note.id,
     storeName: note.store?.name,
     storeCode: note.store?.code,
     status: note.status,
+    access_token: note.access_token,
     itemCount: note.sales_note_items?.length || 0,
     created_at: note.created_at,
     shipped_at: note.shipped_at,
@@ -157,6 +176,11 @@ export default function AdminSalesNotes() {
               // Note: the 'note' from tableData is just summary, we find the full note from salesNotes
               const fullNote = salesNotes?.find(n => n.id === note.id);
               setSelectedNote(fullNote);
+            }}
+            onDelete={(id) => {
+              if (window.confirm("確定要刪除此銷貨單嗎？\n\n注意：刪除後，商品將會回滾至出貨池（變回未出貨狀態）。")) {
+                deleteMutation.mutate(id);
+              }
             }}
             showStoreColumn={true}
           />

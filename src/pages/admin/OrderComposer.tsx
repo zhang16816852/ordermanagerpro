@@ -11,6 +11,7 @@ import { useStoreDraft } from "@/stores/useOrderDraftStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -19,7 +20,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Send } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Send, Copy, Check } from "lucide-react";
 
 import ProductCatalog from "@/components/order/ProductCatalog";
 import CartPanel from "@/components/order/CartPanel";
@@ -29,6 +38,8 @@ export default function AdminOrderComposer() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selectedStoreId, setSelectedStoreId] = useState<string>("");
+  const [createdOrder, setCreatedOrder] = useState<{ id: string; access_token: string } | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
 
   const { data: stores = [], isLoading: storesLoading } = useQuery({
     queryKey: ["admin-stores-list"],
@@ -66,7 +77,6 @@ export default function AdminOrderComposer() {
       const orderItems = items.map((item) => ({
         order_id: order.id,
         product_id: item.productId,
-        variant_id: item.variantId || null,
         store_id: selectedStoreId,
         quantity: item.quantity,
         unit_price: item.price,
@@ -80,11 +90,11 @@ export default function AdminOrderComposer() {
 
       return order;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success("訂單已成功建立！");
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
-      navigate("/admin/orders");
+      setCreatedOrder({ id: data.id, access_token: data.access_token });
     },
     onError: (error: any) => {
       toast.error(error.message || "建立訂單失敗");
@@ -93,6 +103,18 @@ export default function AdminOrderComposer() {
 
   const handleStoreChange = (storeId: string) => {
     setSelectedStoreId(storeId);
+  };
+
+  const getShareLink = () => {
+    if (!createdOrder) return "";
+    return `${window.location.origin}/share/order/${createdOrder.id}?token=${createdOrder.access_token}`;
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(getShareLink());
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+    toast.success("連結已複製");
   };
 
   return (
@@ -176,6 +198,26 @@ export default function AdminOrderComposer() {
           請先選擇店鋪以開始建立訂單
         </div>
       )}
+
+      <Dialog open={!!createdOrder} onOpenChange={(open) => !open && navigate("/admin/orders")}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>訂單建立成功</DialogTitle>
+            <DialogDescription>
+              您可以複製以下連結並傳送給客戶，以便他們查看訂單詳情。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center space-x-2">
+            <Input value={getShareLink()} readOnly />
+            <Button size="icon" variant="outline" onClick={copyToClipboard}>
+              {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => navigate("/admin/orders")}>完成</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

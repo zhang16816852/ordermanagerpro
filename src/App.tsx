@@ -39,6 +39,10 @@ import StoreNotifications from "./pages/store/Notifications";
 import StoreAccounting from "./pages/store/Accounting";
 import AcceptInvite from "./pages/AcceptInvite";
 
+//Shate pages
+import SharedOrder from "./pages/share/SharedOrder";
+import SharedSales from "./pages/share/SharedSales";
+
 function RootRedirect() {
   const { user, isAdmin, loading } = useAuth();
 
@@ -67,6 +71,10 @@ function AppRoutes() {
       <Route path="/" element={<RootRedirect />} />
       <Route path="/auth" element={<Auth />} />
       <Route path="/invite/:token" element={<AcceptInvite />} />
+
+      {/* Share Routes 不需要登入*/}
+      <Route path="/share/order/:orderId" element={<SharedOrder />} />
+      <Route path="/share/sale/:salesNoteId" element={<SharedSales />} />
 
       {/* Admin Routes */}
       <Route

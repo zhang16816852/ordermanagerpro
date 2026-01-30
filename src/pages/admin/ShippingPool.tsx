@@ -338,10 +338,11 @@ export default function AdminShippingPool() {
                   <AccordionItem key={group.storeId} value={group.storeId} className="border rounded-lg">
                     <AccordionTrigger className="px-4 hover:no-underline">
                       <div className="flex items-center gap-4 flex-1">
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => toggleStore(group.storeId)}
-                          onClick={(e) => e.stopPropagation()}
+                        <div
+                          role="checkbox"
+                          aria-checked={isSelected}
+                          onClick={(e) => { toggleStore(group.storeId); e.stopPropagation(); }}
+                          className={`w-4 h-4 border rounded ${isSelected ? 'bg-primary' : ''}`}
                         />
                         <Store className="h-5 w-5 text-muted-foreground" />
                         <div className="flex-1 text-left">
