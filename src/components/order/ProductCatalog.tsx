@@ -106,7 +106,12 @@ export default function ProductCatalog({
     addItem(product, variant);
     setVariantDialogProduct(null);
   };
-
+  const STATUS_LABELS: Record<string, string> = {
+    active: '上架中',
+    discontinued: '已停售',
+    preorder: '預購中',
+    sold_out: '售完停產',
+  };
   return (
     <>
       <Card>
@@ -217,8 +222,8 @@ export default function ProductCatalog({
                         <div className="flex flex-wrap gap-1 mt-1">
                           {variant && (
                             <>
-                              {variant.option_1 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_1}</Badge>}
-                              {variant.option_2 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_2}</Badge>}
+                              {variant.option_1 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_2}</Badge>}
+                              {variant.option_2 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_3}</Badge>}
                             </>
                           )}
                         </div>
@@ -229,6 +234,7 @@ export default function ProductCatalog({
                           <div className="text-sm text-primary font-medium">已選 x{qty}</div>
                         )}
                       </div>
+                      <Badge variant="secondary" className="text-[10px] h-5 px-1">{STATUS_LABELS[variant?.status ?? product.status]}</Badge>
                     </div>
                   </div>
                 );

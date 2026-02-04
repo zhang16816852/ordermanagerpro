@@ -39,6 +39,8 @@ interface ImportRow {
     product_name: string;
     description: string;
     category: string;
+    brand: string;
+    model: string;
     base_wholesale_price: number;
     base_retail_price: number;
     product_status: 'active' | 'discontinued' | 'preorder' | 'sold_out';
@@ -66,7 +68,7 @@ interface UnifiedProductImportProps {
 }
 
 const PRODUCT_REQUIRED = ['product_sku', 'product_name'];
-const PRODUCT_OPTIONAL = ['description', 'category', 'base_wholesale_price', 'base_retail_price', 'product_status'];
+const PRODUCT_OPTIONAL = ['description', 'category', 'brand', 'model', 'base_wholesale_price', 'base_retail_price', 'product_status'];
 const VARIANT_FIELDS = ['variant_sku', 'variant_name', 'option_1', 'option_2', 'option_3', 'variant_wholesale_price', 'variant_retail_price', 'variant_status', 'barcode'];
 
 export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImportProps) {
@@ -88,7 +90,7 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
     const downloadTemplate = () => {
         // 統一範本包含所有欄位，使用者可以選擇性填寫
         const csvContent = [
-            'product_sku,product_name,description,category,base_wholesale_price,base_retail_price,product_status,variant_sku,variant_name,option_1,option_2,option_3,variant_wholesale_price,variant_retail_price,variant_status,barcode',
+            'product_sku,product_name,description,category,brand,base_wholesale_price,base_retail_price,product_status,variant_sku,variant_name,option_1,option_2,option_3,variant_wholesale_price,variant_retail_price,variant_status,barcode',
             '# 範例1：純產品（不填寫 variant_* 欄位）',
             'PROD-001,基本款T恤,純棉舒適T恤,服飾,100,150,active,,,,,,,,,',
             'PROD-002,經典牛仔褲,耐穿牛仔褲,服飾,200,300,active,,,,,,,,,',
@@ -193,6 +195,8 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
 
                         const product_sku = getField('product_sku');
                         const product_name = getField('product_name');
+                        const brand = getField('brand');
+                        const model = getField('model');
                         const description = getField('description');
                         const category = getField('category');
                         const base_wholesale_price = parseFloat(getField('base_wholesale_price')) || 0;
@@ -219,6 +223,8 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                         const baseRow = {
                             product_sku,
                             product_name,
+                            brand,
+                            model,
                             description,
                             category,
                             base_wholesale_price,
@@ -336,6 +342,8 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                 sku: row.product_sku,
                 name: row.product_name,
                 description: row.description || null,
+                model: row.option_2 || null,
+                brand: row.brand || null,
                 category: row.category || null,
                 base_wholesale_price: row.base_wholesale_price,
                 base_retail_price: row.base_retail_price,
@@ -478,7 +486,7 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                                 <div className="text-sm text-muted-foreground space-y-2">
                                     <div>
                                         <p><strong>產品必填欄位：</strong>product_sku, product_name</p>
-                                        <p><strong>產品選填欄位：</strong>description, category, base_wholesale_price, base_retail_price, product_status</p>
+                                        <p><strong>產品選填欄位：</strong>description, category,brand, base_wholesale_price, base_retail_price, product_status</p>
                                     </div>
                                     <div>
                                         <p><strong>變體欄位（選填）：</strong>variant_sku, variant_name, option_1, option_2, option_3, variant_wholesale_price, variant_retail_price, variant_status, barcode</p>
@@ -544,6 +552,7 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                                             <TableHead className="w-12">#</TableHead>
                                             <TableHead>產品SKU</TableHead>
                                             <TableHead>產品名稱</TableHead>
+                                            <TableHead>品牌</TableHead>
                                             <TableHead>類別</TableHead>
                                             <TableHead className="text-right">批發/零售</TableHead>
                                             <TableHead>變體SKU</TableHead>
@@ -576,6 +585,13 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                                                     <Input
                                                         value={row.product_name}
                                                         onChange={(e) => updateRow(index, 'product_name', e.target.value)}
+                                                        className="h-7 text-sm"
+                                                    />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Input
+                                                        value={row.brand}
+                                                        onChange={(e) => updateRow(index, 'brand', e.target.value)}
                                                         className="h-7 text-sm"
                                                     />
                                                 </TableCell>

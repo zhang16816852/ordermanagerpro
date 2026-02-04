@@ -8,6 +8,14 @@ import { VariantBatchCreator } from './VariantBatchCreator';
 import { VariantEditDialog } from '@/components/products/VariantEditDialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
+
+const STATUS_LABELS: Record<string, string> = {
+  active: '上架中',
+  discontinued: '已停售',
+  preorder: '預購中',
+  sold_out: '售完停產',
+};
 
 export function VariantSection({ product }: { product: any }) {
   const [isBatchOpen, setIsBatchOpen] = useState(false);
@@ -74,6 +82,7 @@ export function VariantSection({ product }: { product: any }) {
               <TableHead>規格名稱</TableHead>
               <TableHead className="text-right">批發價</TableHead>
               <TableHead className="text-right">零售價</TableHead>
+              <TableHead>狀態</TableHead>
               <TableHead className="w-[100px] text-center">操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -105,6 +114,11 @@ export function VariantSection({ product }: { product: any }) {
                     {v.sku}
                   </TableCell>
                   <TableCell className="font-medium">{v.name}</TableCell>
+                  <TableCell>
+                    <Badge variant={v.status === 'active' ? 'default' : 'secondary'}>
+                      {STATUS_LABELS[v.status]}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-right font-mono">${v.wholesale_price}</TableCell>
                   <TableCell className="text-right font-mono">${v.retail_price}</TableCell>
                   <TableCell className="text-center">

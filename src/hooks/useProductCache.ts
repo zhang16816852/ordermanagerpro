@@ -89,7 +89,7 @@ export function useProductCache() {
     await queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
   }, [queryClient]);
 
-  const activeProducts = localProducts.filter(p => p.status === 'active');
+  const activeProducts = localProducts.filter(p => p.status !== 'discontinued');
 
   const getProductById = useCallback((id: string) => {
     return localProducts.find(p => p.id === id) || null;
@@ -129,7 +129,7 @@ export interface VariantWithPricing extends ProductVariant {
 // Hook for store-specific products with caching (now uses brand-based pricing)
 export function useStoreProductCache(storeId: string | null) {
   const { products: allProducts, activeProducts: globalActiveProducts, isLoading: productsLoading } = useProductCache();
-  
+
   // 先取得店鋪的品牌資訊
   const { data: storeInfo } = useQuery({
     queryKey: ['store-brand', storeId],
@@ -169,12 +169,11 @@ export function useStoreProductCache(storeId: string | null) {
 
   // 取得所有變體
   const { data: allVariants = [], isLoading: variantsLoading } = useQuery({
-    queryKey: ['all-active-variants'],
+    queryKey: ['all-product-variants-for-store'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('product_variants')
         .select('*')
-        .eq('status', 'active')
         .order('sku');
       if (error) throw error;
       return data || [];
@@ -185,10 +184,11 @@ export function useStoreProductCache(storeId: string | null) {
   // 合併產品與品牌價格
   const mergedProducts: ProductWithPricing[] = (storeId ? allProducts : globalActiveProducts).map(product => {
     const brandPrice = brandPrices.find(bp => bp.product_id === product.id && !bp.variant_id);
-    
+
     // 取得此產品的變體並套用品牌價格
     const productVariants: VariantWithPricing[] = allVariants
       .filter(v => v.product_id === product.id)
+      .filter(v => v.status !== 'discontinued')
       .map(variant => {
         const variantBrandPrice = brandPrices.find(
           bp => bp.product_id === product.id && bp.variant_id === variant.id
@@ -198,6 +198,7 @@ export function useStoreProductCache(storeId: string | null) {
           effective_wholesale_price: variantBrandPrice?.wholesale_price ?? variant.wholesale_price,
           effective_retail_price: variantBrandPrice?.retail_price ?? variant.retail_price,
           has_brand_price: !!variantBrandPrice,
+          status: variant.status,
         };
       });
 
@@ -209,15 +210,22 @@ export function useStoreProductCache(storeId: string | null) {
       variants: productVariants.length > 0 ? productVariants : undefined,
     };
   });
-
-  // 如果沒有指定 storeId，我們只顯示 active 的
-  const finalProducts = storeId ? mergedProducts.filter(p => p.status === 'active') : mergedProducts;
-
+  // 如果沒有指定 storeId，我們不顯示已停售的產品
+  const finalProducts = mergedProducts.filter(p => p.status !== 'discontinued');
+  console.log(
+    'finalProducts:',
+    finalProducts.map(p => ({
+      name: p.name,
+      status: p.status,
+    }))
+  );
   return {
     products: finalProducts,
     isLoading: productsLoading || (storeId ? brandPricesLoading || variantsLoading : false),
     brand,
   };
+
+
 }
 
 // Hook for getting variants with brand pricing for a specific product
@@ -230,7 +238,6 @@ export function useProductVariants(productId: string | null, brand: string | nul
         .from('product_variants')
         .select('*')
         .eq('product_id', productId)
-        .eq('status', 'active')
         .order('sku');
       if (error) throw error;
       return data;

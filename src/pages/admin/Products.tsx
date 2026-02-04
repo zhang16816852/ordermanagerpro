@@ -67,6 +67,19 @@ export default function AdminProducts() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'variants'>('list');
+  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (productId: string) => {
+    setExpandedProducts(prev => {
+      const next = new Set(prev);
+      if (next.has(productId)) {
+        next.delete(productId);
+      } else {
+        next.add(productId);
+      }
+      return next;
+    });
+  };
 
   const queryClient = useQueryClient();
   const { products, isLoading, version, forceRefresh } = useProductCache();
@@ -111,6 +124,18 @@ export default function AdminProducts() {
       setDeleteProduct(null);
     },
     onError: (error: any) => toast.error(`刪除失敗：${error.message}`),
+  });
+
+  const updateVariantPriceMutation = useMutation({
+    mutationFn: async ({ id, ...updates }: { id: string, wholesale_price?: number, retail_price?: number, status?: 'active' | 'discontinued' | 'preorder' | 'sold_out' }) => {
+      const { error } = await supabase.from('product_variants').update(updates).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['all-product-variants'] });
+      toast.success('變體已更新');
+    },
+    onError: (error: any) => toast.error(`更新失敗：${error.message}`),
   });
 
   // --- Handlers ---
@@ -177,7 +202,7 @@ export default function AdminProducts() {
 
   // 取得產品的變體
   const getProductVariants = (productId: string) => {
-    return allVariants.filter(v => v.product_id === productId && v.status === 'active');
+    return allVariants.filter(v => v.product_id === productId);
   };
   const filteredProducts = products?.filter(
     (p) =>
@@ -241,6 +266,7 @@ export default function AdminProducts() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
+                  <TableHead className="w-[50px]"></TableHead>
                   <TableHead className="w-[150px]">SKU</TableHead>
                   <TableHead>名稱</TableHead>
                   <TableHead>類別</TableHead>
@@ -269,65 +295,146 @@ export default function AdminProducts() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredProducts?.map((product) => (
-                    <TableRow key={product.id} className="hover:bg-muted/30 transition-colors">
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {product.sku}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          {product.name}
-                          {product.has_variants && (() => {
-                            const variants = getProductVariants(product.id);
-                            return variants.length > 0 ? (
-                              <Badge variant="outline" className="ml-2 text-xs">
-                                <Layers className="h-3 w-3 mr-1" />
-                                {variants.length} 變體
+                  filteredProducts?.map((product) => {
+                    const variants = getProductVariants(product.id);
+                    const hasVariants = product.has_variants && variants.length > 0;
+                    const isExpanded = expandedProducts.has(product.id);
+
+                    return (
+                      <Collapsible key={product.id} open={isExpanded} onOpenChange={() => toggleExpanded(product.id)} asChild>
+                        <>
+                          <TableRow className="hover:bg-muted/30 transition-colors">
+                            <TableCell>
+                              {hasVariants && (
+                                <CollapsibleTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                  </Button>
+                                </CollapsibleTrigger>
+                              )}
+                            </TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground">
+                              {product.sku}
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                {product.name}
+                                {hasVariants && (
+                                  <Badge variant="outline" className="ml-2 text-xs">
+                                    <Layers className="h-3 w-3 mr-1" />
+                                    {variants.length} 變體
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>{product.category || '-'}</TableCell>
+                            <TableCell className="text-sm">
+                              <span className="text-muted-foreground">{product.brand || '-'}</span>
+                              <span className="mx-1 text-slate-300">/</span>
+                              <span className="text-slate-500">{product.model || '-'}</span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="text-sm font-semibold">${product.base_wholesale_price}</div>
+                              <div className="text-[10px] text-muted-foreground">${product.base_retail_price}</div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className={`${STATUS_VARIANTS[product.status] || ''} border-none font-normal`}
+                              >
+                                {STATUS_LABELS[product.status] || product.status}
                               </Badge>
-                            ) : null;
-                          })()}
-                        </div>
-                      </TableCell>
-                      <TableCell>{product.category || '-'}</TableCell>
-                      <TableCell className="text-sm">
-                        <span className="text-muted-foreground">{product.brand || '-'}</span>
-                        <span className="mx-1 text-slate-300">/</span>
-                        <span className="text-slate-500">{product.model || '-'}</span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="text-sm font-semibold">${product.base_wholesale_price}</div>
-                        <div className="text-[10px] text-muted-foreground">${product.base_retail_price}</div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={`${STATUS_VARIANTS[product.status] || ''} border-none font-normal`}
-                        >
-                          {STATUS_LABELS[product.status] || product.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-32">
-                            <DropdownMenuItem onClick={() => { setEditingProduct(product); setIsDialogOpen(true); }}>
-                              <Pencil className="mr-2 h-4 w-4" /> 編輯詳情
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleCopy(product)}>
-                              <Copy className="mr-2 h-4 w-4" /> 複製產品
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="text-destructive" onClick={() => setDeleteProduct(product)}>
-                              <Trash2 className="mr-2 h-4 w-4" /> 刪除產品
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-32">
+                                  <DropdownMenuItem onClick={() => { setEditingProduct(product); setIsDialogOpen(true); }}>
+                                    <Pencil className="mr-2 h-4 w-4" /> 編輯詳情
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleCopy(product)}>
+                                    <Copy className="mr-2 h-4 w-4" /> 複製產品
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem className="text-destructive" onClick={() => setDeleteProduct(product)}>
+                                    <Trash2 className="mr-2 h-4 w-4" /> 刪除產品
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+
+                          {hasVariants && (
+                            <CollapsibleContent asChild>
+                              <TableRow className="bg-muted/10 hover:bg-muted/20 border-t-0 shadow-inner">
+                                <TableCell colSpan={8} className="p-0">
+                                  <div className="py-2 px-4 pl-14">
+                                    <Table>
+                                      <TableHeader className="bg-transparent border-b">
+                                        <TableRow className="hover:bg-transparent border-none">
+                                          <TableHead className="h-8 text-xs">變體 SKU</TableHead>
+                                          <TableHead className="h-8 text-xs">變體名稱</TableHead>
+                                          <TableHead className="h-8 text-xs">規格</TableHead>
+                                          <TableHead className="h-8 text-xs text-right">狀態</TableHead>
+                                          <TableHead className="h-8 text-xs text-right">批發價</TableHead>
+                                          <TableHead className="h-8 text-xs text-right">零售價</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {variants.map((v) => (
+                                          <TableRow key={v.id} className="hover:bg-background border-none">
+                                            <TableCell className="py-1 font-mono text-xs">{v.sku}</TableCell>
+                                            <TableCell className="py-1 text-sm font-medium">{v.name}</TableCell>
+                                            <TableCell className="py-1 text-xs text-muted-foreground">
+                                              {[v.option_1, v.option_2, v.option_3].filter(Boolean).join(' / ')}
+                                            </TableCell>
+                                            <TableCell className="py-1 text-right">
+                                              <Badge variant="outline" className={`text-[10px] ${STATUS_VARIANTS[v.status] || ''}`}>
+                                                {STATUS_LABELS[v.status]}
+                                              </Badge>
+                                            </TableCell>
+                                            <TableCell className="py-1 text-right">
+                                              <Input
+                                                key={`${v.id}-wholesale-${v.wholesale_price}`}
+                                                className="h-7 w-20 text-right text-xs ml-auto"
+                                                defaultValue={v.wholesale_price}
+                                                onBlur={(e) => {
+                                                  const val = parseFloat(e.target.value);
+                                                  if (!isNaN(val) && val !== v.wholesale_price) {
+                                                    updateVariantPriceMutation.mutate({ id: v.id, wholesale_price: val });
+                                                  }
+                                                }}
+                                              />
+                                            </TableCell>
+                                            <TableCell className="py-1 text-right">
+                                              <Input
+                                                key={`${v.id}-retail-${v.retail_price}`}
+                                                className="h-7 w-20 text-right text-xs ml-auto"
+                                                defaultValue={v.retail_price}
+                                                onBlur={(e) => {
+                                                  const val = parseFloat(e.target.value);
+                                                  if (!isNaN(val) && val !== v.retail_price) {
+                                                    updateVariantPriceMutation.mutate({ id: v.id, retail_price: val });
+                                                  }
+                                                }}
+                                              />
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            </CollapsibleContent>
+                          )}
+                        </>
+                      </Collapsible>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
