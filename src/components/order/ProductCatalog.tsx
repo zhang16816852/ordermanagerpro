@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { ProductWithPricing, VariantWithPricing } from "@/hooks/useProductCache";
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
-
+import { StatusBadge } from "../ProductStatusBadge";
 interface ProductCatalogProps {
   products: ProductWithPricing[];
   isLoading: boolean;
@@ -106,12 +106,7 @@ export default function ProductCatalog({
     addItem(product, variant);
     setVariantDialogProduct(null);
   };
-  const STATUS_LABELS: Record<string, string> = {
-    active: '上架中',
-    discontinued: '已停售',
-    preorder: '預購中',
-    sold_out: '售完停產',
-  };
+
   return (
     <>
       <Card>
@@ -234,7 +229,7 @@ export default function ProductCatalog({
                           <div className="text-sm text-primary font-medium">已選 x{qty}</div>
                         )}
                       </div>
-                      <Badge variant="secondary" className="text-[10px] h-5 px-1">{STATUS_LABELS[variant?.status ?? product.status]}</Badge>
+                      <StatusBadge status={variant?.status ?? product.status} />
                     </div>
                   </div>
                 );

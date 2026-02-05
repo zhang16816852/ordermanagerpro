@@ -212,13 +212,6 @@ export function useStoreProductCache(storeId: string | null) {
   });
   // 如果沒有指定 storeId，我們不顯示已停售的產品
   const finalProducts = mergedProducts.filter(p => p.status !== 'discontinued');
-  console.log(
-    'finalProducts:',
-    finalProducts.map(p => ({
-      name: p.name,
-      status: p.status,
-    }))
-  );
   return {
     products: finalProducts,
     isLoading: productsLoading || (storeId ? brandPricesLoading || variantsLoading : false),
