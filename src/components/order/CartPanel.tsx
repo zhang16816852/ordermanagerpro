@@ -31,7 +31,7 @@ export default function CartPanel({
 }: CartPanelProps) {
   const navigate = useNavigate();
   const { items, totalItems, totalAmount, updateQuantity, removeItem } = useStoreDraft(storeId);
-
+  console.log(items);
   if (items.length === 0) {
     return (
       <Card className="sticky top-4">
@@ -67,7 +67,7 @@ export default function CartPanel({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <ScrollArea className="h-96 pr-4 -mx-4 px-4">
+        <ScrollArea className="max-h-[50vh]">
           <div className="space-y-3">
             {/* Mobile View (Card List) */}
             <div className="md:hidden space-y-3">
@@ -79,7 +79,7 @@ export default function CartPanel({
                   <div className="flex justify-between items-start gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm break-words leading-tight">
-                        {item.variantName || item.name}
+                        {item.options && item.options.length > 0 ? item.options.join(' / ') : (item.variantName || item.name)}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1 font-mono">
                         {item.sku}
@@ -138,9 +138,8 @@ export default function CartPanel({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>商品名稱</TableHead>
-                    <TableHead className="w-[100px] text-right">單價</TableHead>
-                    <TableHead className="w-[140px] text-center">數量</TableHead>
+                    <TableHead >商品名稱</TableHead>
+                    <TableHead className="w-[140px] text-center">單價 / 數量</TableHead>
                     <TableHead className="w-[100px] text-right">小計</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
@@ -149,40 +148,47 @@ export default function CartPanel({
                   {items.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>
-                        <div className="font-medium text-sm">
-                          {item.variantName || item.name}
+                        <div className="w-[140px] font-medium text-sm">
+                          {item.options && item.options.length > 0 ? item.options.join(' / ') : (item.variantName || item.name)}
                         </div>
-                        <div className="text-xs text-muted-foreground font-mono">
-                          {item.sku}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        ${item.price.toLocaleString()}
+
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center justify-center border rounded-md h-8 shadow-sm max-w-[120px] mx-auto">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 rounded-none px-0"
-                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <span className="w-10 text-center text-sm font-medium tabular-nums border-x h-full flex items-center justify-center bg-muted/20">
-                            {item.quantity}
-                          </span>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 rounded-none px-0"
-                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
+                        <div className="flex flex-col items-center gap-2">
+
+                          {/* 單價 */}
+                          <div className="text-sm font-medium">
+                            ${item.price.toLocaleString()}
+                          </div>
+
+                          {/* 數量控制 */}
+                          <div className="flex items-center border rounded-md h-8 shadow-sm">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 rounded-none px-0"
+                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            >
+                              <Minus className="h-3 w-3" />
+                            </Button>
+
+                            <span className="w-10 text-center text-sm font-medium tabular-nums border-x h-full flex items-center justify-center bg-muted/20">
+                              {item.quantity}
+                            </span>
+
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 rounded-none px-0"
+                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
+
                         </div>
                       </TableCell>
-                      <TableCell className="text-right font-medium">
+                      <TableCell className="text-right font-lg ">
                         ${(item.price * item.quantity).toLocaleString()}
                       </TableCell>
                       <TableCell>

@@ -12,6 +12,7 @@ export interface OrderDraftItem {
   price: number;
   quantity: number;
   variantName?: string;
+  options?: string[];
 }
 
 export interface OrderDraft {
@@ -99,6 +100,9 @@ export const useOrderDraftStore = create<OrderDraftState>()(
               sku: variant?.sku || product.sku,
               price: variant?.effective_wholesale_price ?? product.wholesale_price,
               quantity: 1,
+              options: variant
+                ? [variant.option_1, variant.option_2, variant.option_3].filter((o): o is string => !!o)
+                : undefined,
             };
             newItems = [...draft.items, newItem];
           }

@@ -5,7 +5,7 @@ import { Tables } from '@/integrations/supabase/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Layers } from 'lucide-react';
+import { Download, Layers } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -43,6 +43,8 @@ import { UnifiedProductImport } from '@/components/products/UnifiedProductImport
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { VariantManager } from '@/components/products/VariantManager';
 import { ProductFormDialog } from '@/components/ProductFormDialog/ProductFormDialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import Papa from 'papaparse';
 
 type Product = Tables<'products'>;
 
@@ -68,6 +70,7 @@ export default function AdminProducts() {
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
   const [activeTab, setActiveTab] = useState<'list' | 'variants'>('list');
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
 
   const toggleExpanded = (productId: string) => {
     setExpandedProducts(prev => {
@@ -204,6 +207,7 @@ export default function AdminProducts() {
   const getProductVariants = (productId: string) => {
     return allVariants.filter(v => v.product_id === productId);
   };
+
   const filteredProducts = products?.filter(
     (p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -211,6 +215,111 @@ export default function AdminProducts() {
       (p.brand && p.brand.toLowerCase().includes(search.toLowerCase())) ||
       (p.model && p.model.toLowerCase().includes(search.toLowerCase()))
   );
+
+  const isAllSelected = filteredProducts && filteredProducts.length > 0 &&
+    filteredProducts.every(p => selectedProductIds.has(p.id));
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const allIds = filteredProducts?.map(p => p.id) || [];
+      setSelectedProductIds(prev => {
+        const next = new Set(prev);
+        allIds.forEach(id => next.add(id));
+        return next;
+      });
+    } else {
+      setSelectedProductIds(prev => {
+        const next = new Set(prev);
+        filteredProducts?.forEach(p => next.delete(p.id));
+        return next;
+      });
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedProductIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBatchExport = () => {
+    const selected = products?.filter(p => selectedProductIds.has(p.id)) || [];
+    const exportData: any[] = [];
+
+    selected.forEach(p => {
+      const variants = getProductVariants(p.id);
+
+      if (variants.length > 0) {
+        variants.forEach(v => {
+          exportData.push({
+            product_sku: p.sku,
+            product_name: p.name,
+            description: p.description || '',
+            category: p.category || '',
+            brand: p.brand || '',
+            model: p.model || '',
+            series: p.series || '',
+            base_wholesale_price: p.base_wholesale_price,
+            base_retail_price: p.base_retail_price,
+            product_status: p.status,
+
+            variant_sku: v.sku,
+            variant_name: v.name,
+            option_1: v.option_1 || '',
+            option_2: v.option_2 || '',
+            option_3: v.option_3 || '',
+            variant_wholesale_price: v.wholesale_price,
+            variant_retail_price: v.retail_price,
+            variant_status: v.status,
+
+            barcode: `'${v.barcode}` || '',
+          });
+        });
+      } else {
+        exportData.push({
+          product_sku: p.sku,
+          product_name: p.name,
+          description: p.description || '',
+          category: p.category || '',
+          brand: p.brand || '',
+          base_wholesale_price: p.base_wholesale_price,
+          base_retail_price: p.base_retail_price,
+          product_status: p.status,
+
+          variant_sku: '',
+          variant_name: '',
+          option_1: '',
+          option_2: '',
+          option_3: '',
+          variant_wholesale_price: '',
+          variant_retail_price: '',
+          variant_status: '',
+          barcode: '',
+        });
+      }
+    });
+
+    const csv = Papa.unparse(exportData);
+
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csv], {
+      type: 'text/csv;charset=utf-8;',
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = `products_export_${new Date().toISOString().slice(0, 10)}.csv`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
 
   return (
     <div className="space-y-6">
@@ -223,14 +332,28 @@ export default function AdminProducts() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={forceRefresh}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            重新整理
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" />
-            批次匯入
-          </Button>
+          {selectedProductIds.size > 0 ? (
+            <>
+              <Button variant="secondary" size="sm" onClick={() => setSelectedProductIds(new Set())}>
+                取消全選 ({selectedProductIds.size})
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleBatchExport}>
+                <Download className="mr-2 h-4 w-4" />
+                匯出 CSV
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" size="sm" onClick={forceRefresh}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                重新整理
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)}>
+                <Upload className="mr-2 h-4 w-4" />
+                批次匯入
+              </Button>
+            </>
+          )}
           <Button size="sm" onClick={() => { setEditingProduct(null); setIsDialogOpen(true); }}>
             <Plus className="mr-2 h-4 w-4" />
             新增產品
@@ -266,6 +389,13 @@ export default function AdminProducts() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
+                  <TableHead className="w-[40px]">
+                    <Checkbox
+                      checked={!!isAllSelected}
+                      onCheckedChange={(checked) => toggleSelectAll(!!checked)}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                   <TableHead className="w-[150px]">SKU</TableHead>
                   <TableHead>名稱</TableHead>
@@ -303,7 +433,15 @@ export default function AdminProducts() {
                     return (
                       <Collapsible key={product.id} open={isExpanded} onOpenChange={() => toggleExpanded(product.id)} asChild>
                         <>
-                          <TableRow className="hover:bg-muted/30 transition-colors">
+                          <TableRow className={`hover:bg-muted/30 transition-colors ${selectedProductIds.has(product.id) ? 'bg-muted/50' : ''}`}>
+                            <TableCell className="w-[40px]">
+                              <Checkbox
+                                checked={selectedProductIds.has(product.id)}
+                                onCheckedChange={() => toggleSelect(product.id)}
+                                aria-label="Select row"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </TableCell>
                             <TableCell>
                               {hasVariants && (
                                 <CollapsibleTrigger asChild>
@@ -370,7 +508,7 @@ export default function AdminProducts() {
                           {hasVariants && (
                             <CollapsibleContent asChild>
                               <TableRow className="bg-muted/10 hover:bg-muted/20 border-t-0 shadow-inner">
-                                <TableCell colSpan={8} className="p-0">
+                                <TableCell colSpan={9} className="p-0">
                                   <div className="py-2 px-4 pl-14">
                                     <Table>
                                       <TableHeader className="bg-transparent border-b">

@@ -41,6 +41,7 @@ interface ImportRow {
     category: string;
     brand: string;
     model: string;
+    series: string;
     base_wholesale_price: number;
     base_retail_price: number;
     product_status: 'active' | 'discontinued' | 'preorder' | 'sold_out';
@@ -68,7 +69,7 @@ interface UnifiedProductImportProps {
 }
 
 const PRODUCT_REQUIRED = ['product_sku', 'product_name'];
-const PRODUCT_OPTIONAL = ['description', 'category', 'brand', 'model', 'base_wholesale_price', 'base_retail_price', 'product_status'];
+const PRODUCT_OPTIONAL = ['description', 'category', 'brand', 'model', 'series', 'base_wholesale_price', 'base_retail_price', 'product_status'];
 const VARIANT_FIELDS = ['variant_sku', 'variant_name', 'option_1', 'option_2', 'option_3', 'variant_wholesale_price', 'variant_retail_price', 'variant_status', 'barcode'];
 
 export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImportProps) {
@@ -90,7 +91,7 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
     const downloadTemplate = () => {
         // 統一範本包含所有欄位，使用者可以選擇性填寫
         const csvContent = [
-            'product_sku,product_name,description,category,brand,base_wholesale_price,base_retail_price,product_status,variant_sku,variant_name,option_1,option_2,option_3,variant_wholesale_price,variant_retail_price,variant_status,barcode',
+            'product_sku,product_name,description,category,brand,model,series,base_wholesale_price,base_retail_price,product_status,variant_sku,variant_name,option_1,option_2,option_3,variant_wholesale_price,variant_retail_price,variant_status,barcode',
             '# 範例1：純產品（不填寫 variant_* 欄位）',
             'PROD-001,基本款T恤,純棉舒適T恤,服飾,100,150,active,,,,,,,,,',
             'PROD-002,經典牛仔褲,耐穿牛仔褲,服飾,200,300,active,,,,,,,,,',
@@ -197,6 +198,7 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                         const product_name = getField('product_name');
                         const brand = getField('brand');
                         const model = getField('model');
+                        const series = getField('series');
                         const description = getField('description');
                         const category = getField('category');
                         const base_wholesale_price = parseFloat(getField('base_wholesale_price')) || 0;
@@ -225,6 +227,7 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                             product_name,
                             brand,
                             model,
+                            series,
                             description,
                             category,
                             base_wholesale_price,
@@ -327,6 +330,24 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
     const invalidRows = importData.filter(r => !r.isValid);
     const productsWithVariants = validRows.filter(r => r.hasVariant);
     const productsWithoutVariants = validRows.filter(r => !r.hasVariant);
+    function normalizeBarcode(value: any): string {
+        if (!value) return '';
+
+        // 如果是科學記號
+        if (typeof value === 'number') {
+            return value.toLocaleString('fullwide', { useGrouping: false });
+        }
+
+        const str = String(value);
+
+        // 科學記號字串 → 轉回
+        if (/e\+/i.test(str)) {
+            return Number(str)
+                .toLocaleString('fullwide', { useGrouping: false });
+        }
+
+        return str.trim();
+    }
 
     const importMutation = useMutation({
         mutationFn: async () => {
@@ -343,6 +364,7 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                 name: row.product_name,
                 description: row.description || null,
                 model: row.option_2 || null,
+                series: row.series || null,
                 brand: row.brand || null,
                 category: row.category || null,
                 base_wholesale_price: row.base_wholesale_price,
@@ -379,7 +401,7 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                     option_3: row.option_3 || null,
                     wholesale_price: row.variant_wholesale_price || row.base_wholesale_price,
                     retail_price: row.variant_retail_price || row.base_retail_price,
-                    barcode: row.barcode || null,
+                    barcode: normalizeBarcode(row.barcode) || null,
                     status: row.variant_status || row.product_status,
                 }));
 
@@ -592,6 +614,13 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                                                     <Input
                                                         value={row.brand}
                                                         onChange={(e) => updateRow(index, 'brand', e.target.value)}
+                                                        className="h-7 text-sm"
+                                                    />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Input
+                                                        value={row.series}
+                                                        onChange={(e) => updateRow(index, 'series', e.target.value)}
                                                         className="h-7 text-sm"
                                                     />
                                                 </TableCell>
