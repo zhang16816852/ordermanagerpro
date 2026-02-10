@@ -111,65 +111,57 @@ export default function CheckoutForm({
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 py-6">
-      <div>
-        <h1 className="text-3xl font-bold">{title}</h1>
-        <p className="text-muted-foreground mt-2">{description}</p>
-      </div>
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      {/* 左側：備註卡 */}
+      <Card className="space-y-4 lg:col-span-3">
+        <CardHeader>
+          <CardTitle>訂單備註（選填）</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            placeholder="例如：急件、指定送貨時間、特殊包裝需求..."
+            value={notes}
+            onChange={(e) => updateNotes(e.target.value)}
+            rows={5}
+          />
+        </CardContent>
+      </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* 購物車內容 */}
-        <div className="lg:col-span-2">
-          <CartPanel storeId={storeId} showCheckoutButton={false} />
-        </div>
+      {/* 右側：送出卡 */}
+      <Card className="space-y-4 lg:col-span-2">
+        <CardHeader>
+          <CardTitle className="flex justify-between">
+            <span>訂單總金額</span>
+            <span className="text-2xl font-bold text-primary">
+              ${totalAmount.toLocaleString()}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Button
+            size="lg"
+            className="w-full"
+            onClick={() => createOrderMutation.mutate()}
+            disabled={createOrderMutation.isPending}
+          >
+            <Send className="h-5 w-5 mr-2" />
+            {createOrderMutation.isPending ? "提交中..." : "確認送出訂單"}
+          </Button>
 
-        {/* 訂單備註與提交 */}
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>訂單備註（選填）</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                placeholder="例如：急件、指定送貨時間、特殊包裝需求..."
-                value={notes}
-                onChange={(e) => updateNotes(e.target.value)}
-                rows={5}
-              />
-            </CardContent>
-          </Card>
+          <Button
+            variant="outline"
+            className="w-full mt-3"
+            onClick={() => navigate(catalogPath)}
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            繼續購物
+          </Button>
+        </CardContent>
+      </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex justify-between">
-                <span>訂單總金額</span>
-                <span className="text-2xl font-bold text-primary">
-                  ${totalAmount.toLocaleString()}
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Button
-                size="lg"
-                className="w-full"
-                onClick={() => createOrderMutation.mutate()}
-                disabled={createOrderMutation.isPending}
-              >
-                <Send className="h-5 w-5 mr-2" />
-                {createOrderMutation.isPending ? "提交中..." : "確認送出訂單"}
-              </Button>
-
-              <Button
-                variant="outline"
-                className="w-full mt-3"
-                onClick={() => navigate(catalogPath)}
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                繼續購物
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+      {/* 下方購物車，跨兩欄 */}
+      <div className="lg:col-span-5">
+        <CartPanel storeId={storeId} showCheckoutButton={false} />
       </div>
     </div>
   );

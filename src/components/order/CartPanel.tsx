@@ -56,8 +56,8 @@ export default function CartPanel({
   }
 
   return (
-    <Card className="sticky top-4">
-      <CardHeader>
+    <Card className="sticky top-4 flex flex-col max-h-[calc(100vh-2rem)]">
+      <CardHeader className="shrink-0"> {/* 防止 Header 被壓縮 */}
         <CardTitle className="flex items-center justify-between">
           <span className="flex items-center gap-2">
             <ShoppingCart className="h-5 w-5" />
@@ -66,11 +66,11 @@ export default function CartPanel({
           <Badge variant="secondary">{totalItems}</Badge>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <ScrollArea className="max-h-[50vh]">
-          <div className="space-y-3">
+      <CardContent className="flex-1 min-h-0 flex flex-col space-y-4 overflow-hidden">
+        <ScrollArea className="flex-1 w-full">
+          <div className="space-y-3 pr-4">
             {/* Mobile View (Card List) */}
-            <div className="md:hidden space-y-3">
+            <div className="md:hidden space-y-3 overflow-y-auto">
               {items.map((item) => (
                 <div
                   key={item.id}
@@ -211,7 +211,7 @@ export default function CartPanel({
 
         <Separator />
 
-        <div className="space-y-4">
+        <div className="shrink-0 space-y-4 pt-2">
           <div className="flex justify-between text-lg font-semibold">
             <span>總計</span>
             <span>${totalAmount.toLocaleString()}</span>
