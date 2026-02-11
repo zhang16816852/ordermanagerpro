@@ -1213,57 +1213,55 @@ function ImportFromOrdersDialog({
 
   return (
     <div className="space-y-4">
-      <div className="border rounded-md max-h-[400px] overflow-y-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[50px]">
-                <Checkbox
-                  checked={pendingItems.length > 0 && selectedItems.size === pendingItems.length}
-                  onCheckedChange={(c) => {
-                    if (c) setSelectedItems(new Set(pendingItems.map((i: any) => i._id)));
-                    else setSelectedItems(new Set());
-                  }}
-                />
-              </TableHead>
-              <TableHead>來源訂單</TableHead>
-              <TableHead>SKU</TableHead>
-              <TableHead>產品</TableHead>
-              <TableHead className="text-right">需採購數</TableHead>
-              <TableHead className="text-right">預估成本</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {dataLoading ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8">載入中...</TableCell></TableRow>
-            ) : pendingItems.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8">沒有待採購項目</TableCell></TableRow>
-            ) : (
-              pendingItems.map((item: any) => (
-                <TableRow key={item._id}>
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedItems.has(item._id)}
-                      onCheckedChange={(c) => handleToggle(item._id, !!c)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-mono text-xs">{item.order_id.slice(0, 8)}</div>
-                    <div className="text-xs text-muted-foreground">{format(new Date(item.order_date), 'MM/dd')}</div>
-                  </TableCell>
-                  <TableCell className="font-mono text-sm">{item.sku}</TableCell>
-                  <TableCell>
-                    {item.product_name}
-                    {item.variant_name && <span className="text-muted-foreground ml-1">- {item.variant_name}</span>}
-                  </TableCell>
-                  <TableCell className="text-right">{item.quantity}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">${item.estimated_cost}</TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <Table containerClassName="max-h-[400px]">
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[50px]">
+              <Checkbox
+                checked={pendingItems.length > 0 && selectedItems.size === pendingItems.length}
+                onCheckedChange={(c) => {
+                  if (c) setSelectedItems(new Set(pendingItems.map((i: any) => i._id)));
+                  else setSelectedItems(new Set());
+                }}
+              />
+            </TableHead>
+            <TableHead>來源訂單</TableHead>
+            <TableHead>SKU</TableHead>
+            <TableHead>產品</TableHead>
+            <TableHead className="text-right">需採購數</TableHead>
+            <TableHead className="text-right">預估成本</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {dataLoading ? (
+            <TableRow><TableCell colSpan={6} className="text-center py-8">載入中...</TableCell></TableRow>
+          ) : pendingItems.length === 0 ? (
+            <TableRow><TableCell colSpan={6} className="text-center py-8">沒有待採購項目</TableCell></TableRow>
+          ) : (
+            pendingItems.map((item: any) => (
+              <TableRow key={item._id}>
+                <TableCell>
+                  <Checkbox
+                    checked={selectedItems.has(item._id)}
+                    onCheckedChange={(c) => handleToggle(item._id, !!c)}
+                  />
+                </TableCell>
+                <TableCell>
+                  <div className="font-mono text-xs">{item.order_id.slice(0, 8)}</div>
+                  <div className="text-xs text-muted-foreground">{format(new Date(item.order_date), 'MM/dd')}</div>
+                </TableCell>
+                <TableCell className="font-mono text-sm">{item.sku}</TableCell>
+                <TableCell>
+                  {item.product_name}
+                  {item.variant_name && <span className="text-muted-foreground ml-1">- {item.variant_name}</span>}
+                </TableCell>
+                <TableCell className="text-right">{item.quantity}</TableCell>
+                <TableCell className="text-right text-muted-foreground">${item.estimated_cost}</TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
       <DialogFooter>
         <div className="flex-1 text-sm text-muted-foreground self-center">
           已選擇 {selectedItems.size} 個項目

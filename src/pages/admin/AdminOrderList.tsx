@@ -392,20 +392,22 @@ export default function AdminOrderList() {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col h-[calc(100vh-4rem)] space-y-4 p-4 md:p-6 overflow-hidden">
+      <div className="flex items-center justify-between flex-none">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">所有訂單</h1>
           <p className="text-muted-foreground">查看與管理系統中的所有訂單</p>
         </div>
-        <Button onClick={() => navigate('/admin/orders/new')}>
-          <Plus className="mr-2 h-4 w-4" />
-          代訂訂單
-        </Button>
-        <Button onClick={() => syncOrdersMutation.mutate()} variant="outline" className="ml-2" disabled={syncOrdersMutation.isPending}>
-          <Package className="mr-2 h-4 w-4" />
-          同步舊訂單狀態
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => navigate('/admin/orders/new')}>
+            <Plus className="mr-2 h-4 w-4" />
+            代訂訂單
+          </Button>
+          <Button onClick={() => syncOrdersMutation.mutate()} variant="outline" disabled={syncOrdersMutation.isPending}>
+            <Package className="mr-2 h-4 w-4" />
+            同步舊訂單狀態
+          </Button>
+        </div>
       </div>
 
       {/* 狀態 Tabs */}
@@ -413,8 +415,8 @@ export default function AdminOrderList() {
         setStatusTab(v as 'pending' | 'processing' | 'shipped');
         setSelectedOrderIds(new Set());
         setSelectedItems(new Map());
-      }}>
-        <div className="flex items-center justify-between">
+      }} className="flex-1 flex flex-col min-h-0">
+        <div className="flex items-center justify-between flex-none">
           <TabsList>
             <TabsTrigger value="pending" className="gap-2">
               <Package className="h-4 w-4" />
@@ -451,7 +453,7 @@ export default function AdminOrderList() {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-4 flex-none">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -495,11 +497,11 @@ export default function AdminOrderList() {
           )}
         </div>
 
-        <TabsContent value={statusTab} className="mt-4">
+        <TabsContent value={statusTab} className="flex-1 mt-4 min-h-0 overflow-hidden flex flex-col">
           {viewMode === 'orders' ? (
             // 訂單視圖
-            <div className="rounded-lg border bg-card shadow-soft">
-              <Table>
+            <div className="rounded-lg border bg-card shadow-soft flex-1 flex flex-col overflow-hidden">
+              <Table containerClassName="h-full">
                 <TableHeader>
                   <TableRow>
                     {statusTab === 'pending' && (
@@ -608,8 +610,8 @@ export default function AdminOrderList() {
             </div>
           ) : (
             // 商品視圖
-            <div className="rounded-lg border bg-card shadow-soft">
-              <Table>
+            <div className="rounded-lg border bg-card shadow-soft flex-1 flex flex-col overflow-hidden">
+              <Table containerClassName="h-full">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12">

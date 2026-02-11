@@ -48,6 +48,7 @@ interface SalesNoteDetailDialogProps {
     onConfirmReceive?: (noteId: string) => void;
     isConfirming?: boolean;
     enablePayment?: boolean;
+    showSku?: boolean;
 }
 
 export function SalesNoteDetailDialog({
@@ -56,7 +57,8 @@ export function SalesNoteDetailDialog({
     note,
     onConfirmReceive,
     isConfirming,
-    enablePayment = false
+    enablePayment = false,
+    showSku = true
 }: SalesNoteDetailDialogProps) {
     const { user } = useAuth();
     const queryClient = useQueryClient();
@@ -240,7 +242,9 @@ export function SalesNoteDetailDialog({
                             <Table>
                                 <TableHeader className="bg-muted/50">
                                     <TableRow>
-                                        <TableHead>產品 / SKU</TableHead>
+                                        <TableHead>
+                                            {showSku ? "產品 / SKU" : "產品"}
+                                        </TableHead>
                                         <TableHead className="text-right">數量</TableHead>
                                         {note.items[0]?.unitPrice !== undefined && (
                                             <TableHead className="text-right">單價</TableHead>
@@ -259,9 +263,11 @@ export function SalesNoteDetailDialog({
                                                         </Badge>
                                                     )}
                                                 </div>
-                                                <div className="text-xs text-muted-foreground font-mono mt-0.5">
-                                                    {item.productSku}
-                                                </div>
+                                                {showSku && (
+                                                    <div className="text-xs text-muted-foreground font-mono mt-0.5">
+                                                        {item.productSku}
+                                                    </div>
+                                                )}
                                             </TableCell>
                                             <TableCell className="text-right font-medium">
                                                 {item.quantity}

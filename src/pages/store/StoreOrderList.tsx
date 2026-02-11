@@ -151,15 +151,15 @@ export default function StoreOrderList() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="flex flex-col h-[calc(100vh-4rem)] space-y-4 p-4 md:p-6 overflow-hidden">
+      <div className="flex-none">
         <h1 className="text-2xl font-bold tracking-tight">我的訂單</h1>
         <p className="text-muted-foreground">查看您的所有訂單</p>
       </div>
 
       {/* 狀態 Tabs */}
       <Tabs value={statusTab} onValueChange={(v) => setStatusTab(v as 'pending' | 'processing' | 'shipped')}>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-none">
           <TabsList>
             <TabsTrigger value="pending" className="gap-2">
               <Package className="h-4 w-4" />
@@ -196,7 +196,7 @@ export default function StoreOrderList() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4 mt-4">
+        <div className="flex items-center gap-4 mt-4 flex-none">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -208,11 +208,11 @@ export default function StoreOrderList() {
           </div>
         </div>
 
-        <TabsContent value={statusTab} className="mt-4">
+        <TabsContent value={statusTab} className="flex-1 mt-4 min-h-0 overflow-hidden flex flex-col">
           {viewMode === 'orders' ? (
             // 訂單視圖
-            <div className="rounded-lg border bg-card shadow-soft">
-              <Table>
+            <div className="rounded-lg border bg-card shadow-soft flex-1 flex flex-col overflow-hidden">
+              <Table containerClassName="h-full">
                 <TableHeader>
                   <TableRow>
                     <TableHead>訂單編號</TableHead>
@@ -290,11 +290,10 @@ export default function StoreOrderList() {
             </div>
           ) : (
             // 商品視圖
-            <div className="rounded-lg border bg-card shadow-soft">
-              <Table>
+            <div className="rounded-lg border bg-card shadow-soft flex-1 flex flex-col overflow-hidden">
+              <Table containerClassName="h-full">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>SKU</TableHead>
                     <TableHead>產品名稱</TableHead>
                     <TableHead className="text-right">訂購</TableHead>
                     <TableHead className="text-right">已出貨</TableHead>
@@ -318,7 +317,7 @@ export default function StoreOrderList() {
                     ))
                   ) : allItems.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                         沒有找到商品
                       </TableCell>
                     </TableRow>
@@ -328,7 +327,6 @@ export default function StoreOrderList() {
                       const itemStatusInfo = statusLabels[item.status];
                       return (
                         <TableRow key={item.id}>
-                          <TableCell className="font-mono text-sm">{item.products?.sku}</TableCell>
                           <TableCell>
                             {item.products?.name}
                             {item.product_variants && (

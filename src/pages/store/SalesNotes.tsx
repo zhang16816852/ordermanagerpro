@@ -165,6 +165,7 @@ export default function StoreSalesNotes() {
         onOpenChange={(open) => !open && setSelectedNoteId(null)}
         onConfirmReceive={handleConfirmReceive}
         isConfirming={confirmReceiveMutation.isPending}
+        showSku={false}
       />
     </div>
   );

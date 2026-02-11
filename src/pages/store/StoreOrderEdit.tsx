@@ -254,7 +254,6 @@ export default function StoreOrderEdit() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>SKU</TableHead>
                   <TableHead>產品名稱</TableHead>
                   <TableHead className="text-right">單價</TableHead>
                   <TableHead className="text-right">數量</TableHead>
@@ -264,7 +263,6 @@ export default function StoreOrderEdit() {
               <TableBody>
                 {order.order_items.map((item: any) => (
                   <TableRow key={item.id}>
-                    <TableCell className="font-mono text-sm">{item.products?.sku}</TableCell>
                     <TableCell>{item.products?.name}</TableCell>
                     <TableCell className="text-right">${item.unit_price}</TableCell>
                     <TableCell className="text-right">{item.quantity}</TableCell>
