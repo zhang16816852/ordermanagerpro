@@ -56,7 +56,8 @@ export default function CartPanel({
   }
 
   return (
-    <Card className="sticky top-4 flex flex-col max-h-[calc(100vh-2rem)]">
+    <Card className="flex flex-col h-full">
+
       <CardHeader className="shrink-0"> {/* 防止 Header 被壓縮 */}
         <CardTitle className="flex items-center justify-between">
           <span className="flex items-center gap-2">
@@ -70,7 +71,7 @@ export default function CartPanel({
         <ScrollArea className="flex-1 w-full">
           <div className="space-y-3 pr-4">
             {/* Mobile View (Card List) */}
-            <div className="md:hidden space-y-3 overflow-y-auto">
+            <div className="md:hidden space-y-3">
               {items.map((item) => (
                 <div
                   key={item.id}

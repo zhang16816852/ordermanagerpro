@@ -72,7 +72,7 @@ export default function StoreCatalog() {
             </SheetTrigger>
             <SheetContent
               side="right"
-              className="w-full sm:w-[540px] p-3"
+              className="w-full sm:w-[540px] p-3 h-full flex flex-col"
             >
               <CartPanel storeId={storeId} showCheckoutButton />
             </SheetContent>
