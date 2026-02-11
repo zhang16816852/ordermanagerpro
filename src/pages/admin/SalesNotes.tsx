@@ -50,7 +50,7 @@ export default function AdminSalesNotes() {
       if (storeFilter !== "all") {
         query = query.eq("store_id", storeFilter);
       }
-      if (statusFilter !== "all" && (statusFilter === "draft" || statusFilter === "shipped" || statusFilter === "received")) {
+      if (statusFilter !== "all" && (statusFilter === "shipped" || statusFilter === "received")) {
         query = query.eq("status", statusFilter);
       }
 
@@ -162,7 +162,6 @@ export default function AdminSalesNotes() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">所有狀態</SelectItem>
-                <SelectItem value="draft">草稿</SelectItem>
                 <SelectItem value="shipped">已出貨</SelectItem>
                 <SelectItem value="received">已收貨</SelectItem>
               </SelectContent>
@@ -191,6 +190,7 @@ export default function AdminSalesNotes() {
         open={!!selectedNote}
         onOpenChange={(open) => !open && setSelectedNote(null)}
         note={dialogData}
+        enablePayment={true}
       />
     </div>
   );

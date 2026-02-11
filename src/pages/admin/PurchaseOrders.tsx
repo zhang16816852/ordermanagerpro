@@ -41,7 +41,11 @@ import {
   Building2,
   Eye,
   Check,
+  Download,
+  CreditCard,
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -57,6 +61,10 @@ interface Supplier {
   address: string | null;
   notes: string | null;
   is_active: boolean;
+}
+
+interface ProductWithPrice extends Product {
+  base_wholesale_price: number;
 }
 
 interface PurchaseOrder {
@@ -100,7 +108,10 @@ export default function AdminPurchaseOrders() {
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);
   const [supplierDialogOpen, setSupplierDialogOpen] = useState(false);
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
+
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [receiveDialogOpen, setReceiveDialogOpen] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [viewingOrder, setViewingOrder] = useState<PurchaseOrder | null>(null);
   const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null);
 
@@ -139,12 +150,55 @@ export default function AdminPurchaseOrders() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, name, sku, has_variants')
+        .select('id, name, sku, has_variants, base_wholesale_price')
         .eq('status', 'active')
         .order('name');
       if (error) throw error;
-      return data as Product[];
+      return data as ProductWithPrice[];
     },
+  });
+
+  const { data: accounts = [] } = useQuery({
+    queryKey: ['accounts-for-payment'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('accounts')
+        .select('id, name, balance')
+        .eq('is_active', true)
+        .order('name');
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['accounting-categories'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('accounting_categories')
+        .select('id, name, type')
+        .eq('is_active', true);
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  const { data: existingPayment } = useQuery({
+    queryKey: ['purchase-order-payment', viewingOrder?.id],
+    queryFn: async () => {
+      if (!viewingOrder) return null;
+      const { data, error } = await (supabase as any)
+        .from('accounting_entries')
+        .select('id, amount, transaction_date')
+        .eq('reference_id', viewingOrder.id)
+        .eq('reference_type', 'purchase_order')
+        .eq('type', 'expense')
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') throw error; // Ignore no rows found
+      return data;
+    },
+    enabled: !!viewingOrder
   });
 
   const { data: orderItems = [] } = useQuery({
@@ -329,6 +383,85 @@ export default function AdminPurchaseOrders() {
       toast.success('收貨已記錄');
     },
     onError: () => toast.error('記錄失敗'),
+  });
+
+  const batchAddItemMutation = useMutation({
+    mutationFn: async (items: Partial<PurchaseOrderItem>[]) => {
+      const { error } = await (supabase as any).from('purchase_order_items').insert(items);
+      if (error) throw error;
+
+      if (viewingOrder) {
+        const addedAmount = items.reduce((sum, item) => sum + (item.quantity || 0) * (item.unit_cost || 0), 0);
+        const newTotal = viewingOrder.total_amount + addedAmount;
+        await (supabase as any)
+          .from('purchase_orders')
+          .update({ total_amount: newTotal })
+          .eq('id', viewingOrder.id);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-items'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      setImportDialogOpen(false);
+      toast.success('已批次匯入品項');
+    },
+    onError: () => toast.error('匯入失敗'),
+  });
+
+  const makePaymentMutation = useMutation({
+    mutationFn: async ({ orderId, accountId, amount, date }: { orderId: string; accountId: string; amount: number; date: string }) => {
+
+      // Auto-assign category
+      let categoryId = null;
+      if (categories.length > 0) {
+        // Try to find a 'Purchase' or 'Cost' category
+        const purchaseCategory = categories.find((c: any) =>
+          c.type === 'expense' && (c.name.includes('進貨') || c.name.includes('採購') || c.name.includes('成本') || c.name.includes('Purchase') || c.name.includes('Cost'))
+        );
+        if (purchaseCategory) {
+          categoryId = purchaseCategory.id;
+        } else {
+          // Fallback to any expense category or stay null
+          const anyExpense = categories.find((c: any) => c.type === 'expense');
+          if (anyExpense) categoryId = anyExpense.id;
+        }
+      }
+
+      // 1. Create Accounting Entry
+      const { error: entryError } = await (supabase as any)
+        .from('accounting_entries')
+        .insert({
+          type: 'expense',
+          amount: amount,
+          paid_amount: amount,
+          payment_status: 'paid',
+          transaction_date: date,
+          description: `支付採購單: ${orderId.slice(0, 8)}`,
+          reference_type: 'purchase_order',
+          reference_id: orderId,
+          account_id: accountId,
+          category_id: categoryId,
+          created_by: user?.id,
+        });
+      if (entryError) throw entryError;
+
+      // 2. Update Account Balance
+      const account = accounts.find((a: any) => a.id === accountId);
+      if (account) {
+        const { error: accError } = await (supabase as any)
+          .from('accounts')
+          .update({ balance: account.balance - amount })
+          .eq('id', accountId);
+        if (accError) throw accError;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['accounts-for-payment'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-payment'] });
+      setPaymentDialogOpen(false);
+      toast.success('付款已記錄');
+    },
+    onError: () => toast.error('付款失敗'),
   });
 
   const getStatusBadge = (status: PurchaseOrderStatus) => {
@@ -554,6 +687,18 @@ export default function AdminPurchaseOrders() {
                       <Button variant="outline" size="sm" onClick={() => setItemDialogOpen(true)}>
                         <Plus className="h-4 w-4 mr-1" /> 新增品項
                       </Button>
+                      <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
+                        <Download className="h-4 w-4 mr-1" /> 從訂單匯入
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPaymentDialogOpen(true)}
+                        disabled={!!existingPayment}
+                      >
+                        <CreditCard className="h-4 w-4 mr-1" />
+                        {existingPayment ? "已付款" : "付款"}
+                      </Button>
                       <Button size="sm" onClick={() => setReceiveDialogOpen(true)}>
                         <Truck className="h-4 w-4 mr-1" /> 收貨
                       </Button>
@@ -624,6 +769,31 @@ export default function AdminPurchaseOrders() {
         </DialogContent>
       </Dialog>
 
+      {/* Import Import Dialog */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>從銷售訂單匯入</DialogTitle>
+          </DialogHeader>
+          <ImportFromOrdersDialog
+            products={products as ProductWithPrice[]}
+            onSubmit={(items) => {
+              if (viewingOrder) {
+                const purchaseItems = items.map(item => ({
+                  purchase_order_id: viewingOrder.id,
+                  product_id: item.product_id,
+                  variant_id: item.variant_id,
+                  quantity: item.quantity,
+                  unit_cost: item.unit_cost,
+                }));
+                batchAddItemMutation.mutate(purchaseItems);
+              }
+            }}
+            isLoading={batchAddItemMutation.isPending}
+          />
+        </DialogContent>
+      </Dialog>
+
       {/* Receive Dialog */}
       <Dialog open={receiveDialogOpen} onOpenChange={setReceiveDialogOpen}>
         <DialogContent>
@@ -634,6 +804,28 @@ export default function AdminPurchaseOrders() {
             items={orderItems}
             onSubmit={(data) => receiveItemsMutation.mutate(data)}
             isLoading={receiveItemsMutation.isPending}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Dialog */}
+      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>記錄付款</DialogTitle>
+          </DialogHeader>
+          <PaymentForm
+            accounts={accounts}
+            amount={viewingOrder?.total_amount || 0}
+            onSubmit={(data) => {
+              if (viewingOrder) {
+                makePaymentMutation.mutate({
+                  orderId: viewingOrder.id,
+                  ...data,
+                });
+              }
+            }}
+            isLoading={makePaymentMutation.isPending}
           />
         </DialogContent>
       </Dialog>
@@ -933,6 +1125,203 @@ function ReceiveForm({
           disabled={isLoading}
         >
           {isLoading ? '處理中...' : '確認收貨'}
+        </Button>
+      </DialogFooter>
+    </div>
+  );
+}
+
+function ImportFromOrdersDialog({
+  products,
+  onSubmit,
+  isLoading
+}: {
+  products: ProductWithPrice[];
+  onSubmit: (items: { product_id: string; variant_id: string | null; quantity: number; unit_cost: number }[]) => void;
+  isLoading: boolean;
+}) {
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+
+  // Fetch pending order items
+  const { data: pendingItems = [], isLoading: dataLoading } = useQuery({
+    queryKey: ['pending-order-items-for-po'],
+    queryFn: async () => {
+      // Fetch orders processing or pending
+      const { data: orders, error } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          created_at,
+          order_items (
+            id,
+            quantity,
+            shipped_quantity,
+            product_id,
+            variant_id,
+            products (id, name, sku),
+            product_variants (id, name, sku, wholesale_price)
+          )
+        `)
+        .in('status', ['pending', 'processing'])
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Flatten items and filter those that need purchasing (simple logic: not fully shipped)
+      const items: any[] = [];
+      orders?.forEach((order: any) => {
+        order.order_items?.forEach((item: any) => {
+          if (item.quantity > item.shipped_quantity) {
+            items.push({
+              _id: item.id, // Unique Key
+              order_id: order.id,
+              order_date: order.created_at,
+              product_id: item.product_id,
+              variant_id: item.variant_id,
+              product_name: item.products?.name,
+              variant_name: item.product_variants?.name,
+              sku: item.product_variants?.sku || item.products?.sku,
+              quantity: item.quantity - item.shipped_quantity, // Remaining needed
+              estimated_cost: item.product_variants?.wholesale_price ||
+                products.find(p => p.id === item.product_id)?.base_wholesale_price || 0,
+            });
+          }
+        });
+      });
+      return items;
+    }
+  });
+
+  const handleToggle = (id: string, checked: boolean) => {
+    const next = new Set(selectedItems);
+    if (checked) next.add(id);
+    else next.delete(id);
+    setSelectedItems(next);
+  };
+
+  const handleConfirm = () => {
+    const itemsToImport = pendingItems
+      .filter((item: any) => selectedItems.has(item._id))
+      .map((item: any) => ({
+        product_id: item.product_id,
+        variant_id: item.variant_id,
+        quantity: item.quantity,
+        unit_cost: item.estimated_cost
+      }));
+    onSubmit(itemsToImport);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="border rounded-md max-h-[400px] overflow-y-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[50px]">
+                <Checkbox
+                  checked={pendingItems.length > 0 && selectedItems.size === pendingItems.length}
+                  onCheckedChange={(c) => {
+                    if (c) setSelectedItems(new Set(pendingItems.map((i: any) => i._id)));
+                    else setSelectedItems(new Set());
+                  }}
+                />
+              </TableHead>
+              <TableHead>來源訂單</TableHead>
+              <TableHead>SKU</TableHead>
+              <TableHead>產品</TableHead>
+              <TableHead className="text-right">需採購數</TableHead>
+              <TableHead className="text-right">預估成本</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {dataLoading ? (
+              <TableRow><TableCell colSpan={6} className="text-center py-8">載入中...</TableCell></TableRow>
+            ) : pendingItems.length === 0 ? (
+              <TableRow><TableCell colSpan={6} className="text-center py-8">沒有待採購項目</TableCell></TableRow>
+            ) : (
+              pendingItems.map((item: any) => (
+                <TableRow key={item._id}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedItems.has(item._id)}
+                      onCheckedChange={(c) => handleToggle(item._id, !!c)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <div className="font-mono text-xs">{item.order_id.slice(0, 8)}</div>
+                    <div className="text-xs text-muted-foreground">{format(new Date(item.order_date), 'MM/dd')}</div>
+                  </TableCell>
+                  <TableCell className="font-mono text-sm">{item.sku}</TableCell>
+                  <TableCell>
+                    {item.product_name}
+                    {item.variant_name && <span className="text-muted-foreground ml-1">- {item.variant_name}</span>}
+                  </TableCell>
+                  <TableCell className="text-right">{item.quantity}</TableCell>
+                  <TableCell className="text-right text-muted-foreground">${item.estimated_cost}</TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+      <DialogFooter>
+        <div className="flex-1 text-sm text-muted-foreground self-center">
+          已選擇 {selectedItems.size} 個項目
+        </div>
+        <Button onClick={handleConfirm} disabled={selectedItems.size === 0 || isLoading}>
+          {isLoading ? '處理中...' : '匯入選取項目'}
+        </Button>
+      </DialogFooter>
+    </div>
+  );
+}
+
+function PaymentForm({
+  accounts,
+  amount: initialAmount,
+  onSubmit,
+  isLoading,
+}: {
+  accounts: any[];
+  amount: number;
+  onSubmit: (data: { accountId: string; amount: number; date: string }) => void;
+  isLoading: boolean;
+}) {
+  const [accountId, setAccountId] = useState('');
+  const [amount, setAmount] = useState(initialAmount.toString());
+  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label>付款帳戶</Label>
+        <Select value={accountId} onValueChange={setAccountId}>
+          <SelectTrigger>
+            <SelectValue placeholder="選擇帳戶" />
+          </SelectTrigger>
+          <SelectContent>
+            {accounts.map((acc) => (
+              <SelectItem key={acc.id} value={acc.id}>
+                {acc.name} (餘額: ${acc.balance.toLocaleString()})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>金額</Label>
+        <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label>付款日期</Label>
+        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      </div>
+      <DialogFooter>
+        <Button
+          onClick={() => onSubmit({ accountId, amount: parseFloat(amount), date })}
+          disabled={!accountId || !amount || isLoading}
+        >
+          {isLoading ? '處理中...' : '確認付款'}
         </Button>
       </DialogFooter>
     </div>
