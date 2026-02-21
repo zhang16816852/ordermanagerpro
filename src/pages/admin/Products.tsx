@@ -258,6 +258,7 @@ export default function AdminProducts() {
             product_sku: p.sku,
             product_name: p.name,
             description: p.description || '',
+            category_id: p.category_id || '',
             category: p.category || '',
             brand: p.brand || '',
             model: p.model || '',
@@ -265,6 +266,7 @@ export default function AdminProducts() {
             base_wholesale_price: p.base_wholesale_price,
             base_retail_price: p.base_retail_price,
             product_status: p.status,
+            table_settings: p.table_settings ? JSON.stringify(p.table_settings) : '',
 
             variant_sku: v.sku,
             variant_name: v.name,
@@ -274,6 +276,7 @@ export default function AdminProducts() {
             variant_wholesale_price: v.wholesale_price,
             variant_retail_price: v.retail_price,
             variant_status: v.status,
+            variant_table_settings: v.table_settings ? JSON.stringify(v.table_settings) : '',
 
             barcode: `'${v.barcode}` || '',
           });
@@ -283,11 +286,13 @@ export default function AdminProducts() {
           product_sku: p.sku,
           product_name: p.name,
           description: p.description || '',
+          category_id: p.category_id || '',
           category: p.category || '',
           brand: p.brand || '',
           base_wholesale_price: p.base_wholesale_price,
           base_retail_price: p.base_retail_price,
           product_status: p.status,
+          table_settings: p.table_settings ? JSON.stringify(p.table_settings) : '',
 
           variant_sku: '',
           variant_name: '',
@@ -297,6 +302,7 @@ export default function AdminProducts() {
           variant_wholesale_price: '',
           variant_retail_price: '',
           variant_status: '',
+          variant_table_settings: '',
           barcode: '',
         });
       }

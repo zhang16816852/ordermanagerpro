@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
     Dialog,
@@ -13,7 +14,8 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, FolderTree, ChevronRight, ChevronDown, ListPlus, X, Database } from 'lucide-react';
+import { Plus, Pencil, Trash2, FolderTree, ChevronRight, ChevronDown, ListPlus, X, Database, Download, Upload } from 'lucide-react';
+import Papa from 'papaparse';
 import { toast } from 'sonner';
 import {
     DndContext,
@@ -262,6 +264,183 @@ export default function AdminCategories() {
             </div>
         );
     };
+    // --- Import/Export Handlers ---
+
+    const handleCategoryExport = () => {
+        const exportData = categories.map(c => {
+            const linkedSpecs = categorySpecLinks
+                .filter((link: any) => link.category_id === c.id)
+                .sort((a: any, b: any) => a.sort_order - b.sort_order)
+                .map((link: any) => link.spec_id);
+
+            return {
+                id: c.id,
+                name: c.name,
+                parent_id: c.parent_id || '',
+                sort_order: c.sort_order,
+                linked_spec_ids: linkedSpecs.join(',')
+            };
+        });
+
+        const csv = Papa.unparse(exportData);
+        const BOM = '\uFEFF';
+        const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `categories_export_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        toast.success('分類架構已匯出');
+    };
+
+    const handleCategoryImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: async (results) => {
+                const rows = results.data as any[];
+                try {
+                    // 1. 先抓取目前資料庫所有分類，用來比對名稱
+                    const { data: existingCats } = await supabase
+                        .from('categories')
+                        .select('id, name, parent_id');
+
+                    const toUpsert = rows.map(row => {
+                        const cleanedId = row.id?.toString().trim();
+                        const name = row.name?.trim();
+                        const parentId = row.parent_id || null;
+
+                        // 關鍵比對邏輯：
+                        // 如果沒有 ID，就去現有資料找「名稱 + 父分類」完全一樣的資料
+                        let targetId = (cleanedId && cleanedId !== 'null') ? cleanedId : null;
+
+                        if (!targetId && existingCats) {
+                            const match = existingCats.find(c =>
+                                c.name === name &&
+                                c.parent_id === parentId
+                            );
+                            if (match) targetId = match.id;
+                        }
+
+                        const base: any = {
+                            name: name,
+                            parent_id: parentId,
+                            sort_order: parseInt(row.sort_order) || 0
+                        };
+
+                        // 如果找得到 ID (不論是 CSV 給的還是比對出來的)，就帶入 ID 執行覆蓋
+                        if (targetId) base.id = targetId;
+
+                        return base;
+                    });
+
+                    // 使用 upsert，這時所有的 base 如果有 id 就會更新，沒 id 就會新增
+                    const { error: upsertError } = await supabase.from('categories').upsert(toUpsert);
+                    if (upsertError) throw upsertError;
+
+                    // ... (後續處理 spec links 的邏輯相同)
+                    toast.success("分類同步成功");
+                } catch (err: any) {
+                    toast.error(`匯入失敗: ${err.message}`);
+                }
+            }
+        });
+    };
+
+    const handleSpecExport = () => {
+        const exportData = specDefinitions.map(s => ({
+            id: s.id,
+            name: s.name,
+            type: s.type,
+            options: s.options.join(','),
+            default_value: s.default_value || ''
+        }));
+
+        const csv = Papa.unparse(exportData);
+        const BOM = '\uFEFF';
+        const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `specs_export_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        toast.success('規格屬性庫已匯出');
+    };
+    const handleSpecImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: async (results) => {
+                const rows = results.data as any[];
+                try {
+                    // 1. 取得現有資料做比對基準
+                    const { data: existingSpecs, error: fetchError } = await supabase
+                        .from('specification_definitions')
+                        .select('id, name');
+
+                    if (fetchError) throw fetchError;
+
+                    // 2. 建立一個 Map 處理「CSV 內部重複」或是「比對更新」
+                    // 這樣如果 CSV 裡出現兩次 "顏色"，最後只會有一筆進入 upsert
+                    const finalMap = new Map<string, any>();
+
+                    rows.forEach(row => {
+                        const name = row.name?.trim();
+                        if (!name) return; // 沒名字的跳過
+
+                        const cleanedId = row.id?.toString().trim();
+                        let targetId = (cleanedId && cleanedId !== 'null' && cleanedId !== '') ? cleanedId : null;
+
+                        // 如果沒有 ID，去資料庫現有清單找
+                        if (!targetId && existingSpecs) {
+                            const match = existingSpecs.find(s => s.name === name);
+                            if (match) targetId = match.id;
+                        }
+
+                        const specData: any = {
+                            name: name,
+                            type: row.type || 'text', // 確保有預設值
+                            options: row.options ? row.options.split(',').map((s: any) => s.trim()).filter(Boolean) : [],
+                            default_value: row.default_value || null
+                        };
+
+                        if (targetId) specData.id = targetId;
+
+                        // 以 name 為 key 存入 Map，CSV 後面的同名資料會覆蓋前面的
+                        finalMap.set(name, specData);
+                    });
+
+                    const toUpsert = Array.from(finalMap.values());
+
+                    if (toUpsert.length === 0) {
+                        toast.error("沒有有效的資料可供匯入");
+                        return;
+                    }
+
+                    // 3. 執行 Upsert
+                    const { error: upsertError } = await supabase
+                        .from('specification_definitions')
+                        .upsert(toUpsert, { onConflict: 'id' }); // 明確指定根據 id 衝突
+
+                    if (upsertError) throw upsertError;
+
+                    queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
+                    toast.success(`規格同步成功，共處理 ${toUpsert.length} 筆`);
+                } catch (err: any) {
+                    console.error(err);
+                    toast.error(`匯入失敗: ${err.message}`);
+                }
+            }
+        });
+        e.target.value = '';
+    };
+
     //---move/sort---//
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -294,9 +473,25 @@ export default function AdminCategories() {
 
                 <TabsContent value="categories" className="space-y-4">
                     <div className="flex justify-end">
-                        <Button size="sm" onClick={() => openDialog()}>
-                            <Plus className="mr-2 h-4 w-4" /> 新增主分類
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={handleCategoryExport}>
+                                <Download className="h-4 w-4 mr-2" />
+                                匯出 CSV
+                            </Button>
+                            <Label htmlFor="category-import" className="cursor-pointer">
+                                <Input id="category-import" type="file" accept=".csv" className="hidden" onChange={handleCategoryImport} />
+                                <Button variant="outline" size="sm" asChild>
+                                    <span>
+                                        <Upload className="h-4 w-4 mr-2" />
+                                        匯入 CSV
+                                    </span>
+                                </Button>
+                            </Label>
+                            <Button size="sm" onClick={() => openDialog()}>
+                                <Plus className="h-4 w-4 mr-2" />
+                                新增分類
+                            </Button>
+                        </div>
                     </div>
                     <Card>
                         <CardHeader>
@@ -321,14 +516,33 @@ export default function AdminCategories() {
                 </TabsContent>
 
                 <TabsContent value="spec_library" className="space-y-4">
-                    <div className="flex justify-end">
-                        <Button size="sm" onClick={() => {
-                            setEditingSpec(null);
-                            setSpecForm({ name: '', type: 'select', options: [''] });
-                            setIsSpecDialogOpen(true);
-                        }}>
-                            <Plus className="mr-2 h-4 w-4" /> 新增規格屬性
-                        </Button>
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h2 className="text-lg font-semibold">規格屬性庫</h2>
+                            <CardDescription>管理全站共用的產品規格屬性，定義後可供各分類連結使用。</CardDescription>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={handleSpecExport}>
+                                <Download className="h-4 w-4 mr-2" />
+                                匯出 CSV
+                            </Button>
+                            <Label htmlFor="spec-import" className="cursor-pointer">
+                                <Input id="spec-import" type="file" accept=".csv" className="hidden" onChange={handleSpecImport} />
+                                <Button variant="outline" size="sm" asChild>
+                                    <span>
+                                        <Upload className="h-4 w-4 mr-2" />
+                                        匯入 CSV
+                                    </span>
+                                </Button>
+                            </Label>
+                            <Button size="sm" onClick={() => {
+                                setEditingSpec(null);
+                                setSpecForm({ name: '', type: 'select', options: [''] });
+                                setIsSpecDialogOpen(true);
+                            }}>
+                                <Plus className="mr-2 h-4 w-4" /> 新增規格屬性
+                            </Button>
+                        </div>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         {isLoadingSpecs ? (

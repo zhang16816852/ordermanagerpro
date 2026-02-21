@@ -32,19 +32,21 @@ import {
 import { Upload, AlertCircle, Check, X, FileSpreadsheet, Pencil, Info, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-
+import { useQuery } from '@tanstack/react-query';
 interface ImportRow {
     // 主產品欄位
     product_sku: string;
     product_name: string;
     description: string;
     category: string;
+    category_id?: string;
     brand: string;
     model: string;
     series: string;
     base_wholesale_price: number;
     base_retail_price: number;
     product_status: 'active' | 'discontinued' | 'preorder' | 'sold_out';
+    table_settings?: string; // JSON string from CSV
 
     // 變體欄位（選填）
     variant_sku?: string;
@@ -55,6 +57,7 @@ interface ImportRow {
     variant_wholesale_price?: number;
     variant_retail_price?: number;
     variant_status?: 'active' | 'discontinued' | 'preorder' | 'sold_out';
+    variant_table_settings?: string; // JSON string from CSV
     barcode?: string;
 
     // 內部使用
@@ -69,13 +72,23 @@ interface UnifiedProductImportProps {
 }
 
 const PRODUCT_REQUIRED = ['product_sku', 'product_name'];
-const PRODUCT_OPTIONAL = ['description', 'category', 'brand', 'model', 'series', 'base_wholesale_price', 'base_retail_price', 'product_status'];
-const VARIANT_FIELDS = ['variant_sku', 'variant_name', 'option_1', 'option_2', 'option_3', 'variant_wholesale_price', 'variant_retail_price', 'variant_status', 'barcode'];
+const PRODUCT_OPTIONAL = ['description', 'category', 'category_id', 'brand', 'model', 'series', 'base_wholesale_price', 'base_retail_price', 'product_status', 'table_settings'];
+const VARIANT_FIELDS = ['variant_sku', 'variant_name', 'option_1', 'option_2', 'option_3', 'variant_wholesale_price', 'variant_retail_price', 'variant_status', 'variant_table_settings', 'barcode'];
 
 export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImportProps) {
     const queryClient = useQueryClient();
     const [step, setStep] = useState<'upload' | 'preview'>('upload');
     const [importData, setImportData] = useState<ImportRow[]>([]);
+
+    const { data: categories = [] } = useQuery({
+        queryKey: ['categories'],
+        queryFn: async () => {
+            const { data, error } = await (supabase.from('categories' as any) as any)
+                .select('*');
+            if (error) return [];
+            return data;
+        },
+    });
 
     const resetState = () => {
         setStep('upload');
@@ -91,15 +104,15 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
     const downloadTemplate = () => {
         // 統一範本包含所有欄位，使用者可以選擇性填寫
         const csvContent = [
-            'product_sku,product_name,description,category,brand,model,series,base_wholesale_price,base_retail_price,product_status,variant_sku,variant_name,option_1,option_2,option_3,variant_wholesale_price,variant_retail_price,variant_status,barcode',
+            'product_sku,product_name,description,category,category_id,brand,model,series,base_wholesale_price,base_retail_price,product_status,table_settings,variant_sku,variant_name,option_1,option_2,option_3,variant_wholesale_price,variant_retail_price,variant_status,variant_table_settings,barcode',
             '# 範例1：純產品（不填寫 variant_* 欄位）',
-            'PROD-001,基本款T恤,純棉舒適T恤,服飾,100,150,active,,,,,,,,,',
-            'PROD-002,經典牛仔褲,耐穿牛仔褲,服飾,200,300,active,,,,,,,,,',
+            'PROD-001,基本款T恤,純棉舒適T恤,服飾,,100,150,active,{},,,,,,,,,,,',
+            'PROD-002,經典牛仔褲,耐穿牛仔褲,服飾,,200,300,active,{},,,,,,,,,,,',
             '',
             '# 範例2：產品+變體（填寫 variant_* 欄位，同一產品可重複多列）',
-            'SHIRT-001,彩色襯衫,舒適透氣的彩色襯衫,服飾,100,150,active,SHIRT-001-RED-S,紅色 S,紅色,S,,,,,',
-            'SHIRT-001,彩色襯衫,舒適透氣的彩色襯衫,服飾,100,150,active,SHIRT-001-RED-M,紅色 M,紅色,M,,,,,',
-            'SHIRT-001,彩色襯衫,舒適透氣的彩色襯衫,服飾,100,150,active,SHIRT-001-BLUE-S,藍色 S,藍色,S,,,,,',
+            'SHIRT-001,彩色襯衫,舒適透氣的彩色襯衫,服飾,,100,150,active,{},SHIRT-001-RED-S,紅色 S,紅色,S,,,{},',
+            'SHIRT-001,彩色襯衫,舒適透氣的彩色襯衫,服飾,,100,150,active,{},SHIRT-001-RED-M,紅色 M,紅色,M,,,{},',
+            'SHIRT-001,彩色襯衫,舒適透氣的彩色襯衫,服飾,,100,150,active,{},SHIRT-001-BLUE-S,藍色 S,藍色,S,,,{},',
         ].join('\n');
 
         const filename = '產品匯入範本.csv';
@@ -201,12 +214,14 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                         const series = getField('series');
                         const description = getField('description');
                         const category = getField('category');
+                        const category_id = getField('category_id');
                         const base_wholesale_price = parseFloat(getField('base_wholesale_price')) || 0;
                         const base_retail_price = parseFloat(getField('base_retail_price')) || 0;
                         const productStatusRaw = getField('product_status')?.toLowerCase();
                         const product_status = (['active', 'discontinued', 'preorder', 'sold_out'].includes(productStatusRaw)
                             ? productStatusRaw
                             : 'active') as ImportRow['product_status'];
+                        const table_settings = getField('table_settings');
 
                         // 變體欄位
                         const variant_sku = getField('variant_sku');
@@ -220,9 +235,10 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                         const variant_status = (['active', 'discontinued', 'preorder', 'sold_out'].includes(variantStatusRaw)
                             ? variantStatusRaw
                             : undefined) as ImportRow['variant_status'];
+                        const variant_table_settings = getField('variant_table_settings');
                         const barcode = getField('barcode');
 
-                        const baseRow = {
+                        const baseRow: Omit<ImportRow, 'errors' | 'isValid' | 'hasVariant'> = {
                             product_sku,
                             product_name,
                             brand,
@@ -230,9 +246,11 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                             series,
                             description,
                             category,
+                            category_id,
                             base_wholesale_price,
                             base_retail_price,
                             product_status,
+                            table_settings,
                             variant_sku,
                             variant_name,
                             option_1,
@@ -241,6 +259,7 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                             variant_wholesale_price,
                             variant_retail_price,
                             variant_status,
+                            variant_table_settings,
                             barcode,
                         };
 
@@ -359,19 +378,38 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                 }
             });
 
-            const productsToInsert = Array.from(uniqueProducts.values()).map(row => ({
-                sku: row.product_sku,
-                name: row.product_name,
-                description: row.description || null,
-                model: row.option_2 || null,
-                series: row.series || null,
-                brand: row.brand || null,
-                category: row.category || null,
-                base_wholesale_price: row.base_wholesale_price,
-                base_retail_price: row.base_retail_price,
-                status: row.product_status,
-                has_variants: row.hasVariant,
-            }));
+            const productsToInsert = Array.from(uniqueProducts.values()).map(row => {
+                let category_id = row.category_id;
+                if (!category_id && row.category) {
+                    const match = categories.find(c => c.name === row.category);
+                    if (match) category_id = match.id;
+                }
+
+                let parsedSettings = {};
+                if (row.table_settings) {
+                    try {
+                        parsedSettings = JSON.parse(row.table_settings);
+                    } catch (e) {
+                        console.error('Failed to parse table_settings', e);
+                    }
+                }
+
+                return {
+                    sku: row.product_sku,
+                    name: row.product_name,
+                    description: row.description || null,
+                    model: row.model || null, // Fixed: was using option_2
+                    series: row.series || null,
+                    brand: row.brand || null,
+                    category: row.category || null,
+                    category_id: category_id || null,
+                    base_wholesale_price: row.base_wholesale_price,
+                    base_retail_price: row.base_retail_price,
+                    status: row.product_status,
+                    has_variants: row.hasVariant,
+                    table_settings: parsedSettings,
+                };
+            });
 
             const { error: productError } = await supabase
                 .from('products')
@@ -392,18 +430,30 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                 const productIdMap = new Map(products?.map(p => [p.sku, p.id]) || []);
 
                 // 因為已在預覽階段檢測重複，這裡不需要再去重
-                const variantsToInsert = productsWithVariants.map(row => ({
-                    product_id: productIdMap.get(row.product_sku)!,
-                    sku: row.variant_sku!,
-                    name: row.variant_name!,
-                    option_1: row.option_1 || null,
-                    option_2: row.option_2 || null,
-                    option_3: row.option_3 || null,
-                    wholesale_price: row.variant_wholesale_price || row.base_wholesale_price,
-                    retail_price: row.variant_retail_price || row.base_retail_price,
-                    barcode: normalizeBarcode(row.barcode) || null,
-                    status: row.variant_status || row.product_status,
-                }));
+                const variantsToInsert = productsWithVariants.map(row => {
+                    let parsedSettings = {};
+                    if (row.variant_table_settings) {
+                        try {
+                            parsedSettings = JSON.parse(row.variant_table_settings);
+                        } catch (e) {
+                            console.error('Failed to parse variant_table_settings', e);
+                        }
+                    }
+
+                    return {
+                        product_id: productIdMap.get(row.product_sku)!,
+                        sku: row.variant_sku!,
+                        name: row.variant_name!,
+                        option_1: row.option_1 || null,
+                        option_2: row.option_2 || null,
+                        option_3: row.option_3 || null,
+                        wholesale_price: row.variant_wholesale_price || row.base_wholesale_price,
+                        retail_price: row.variant_retail_price || row.base_retail_price,
+                        barcode: normalizeBarcode(row.barcode) || null,
+                        status: row.variant_status || row.product_status,
+                        table_settings: parsedSettings,
+                    };
+                });
 
                 const { error: variantError } = await supabase
                     .from('product_variants')
