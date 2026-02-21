@@ -46,7 +46,39 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
 
     const selectedCategoryId = form.watch('category_id');
     const selectedCategory = categoryOptions.find(c => c.id === selectedCategoryId);
-    const specFields = selectedCategory?.spec_schema?.fields || [];
+
+    // Fetch specs for the selected category
+    const { data: specFields = [] } = useQuery({
+        queryKey: ['category_specs', selectedCategoryId],
+        enabled: !!selectedCategoryId,
+        queryFn: async () => {
+            const { data, error } = await (supabase
+                .from('category_spec_links' as any) as any)
+                .select(`
+                    spec_id,
+                    sort_order,
+                    specification_definitions (
+                        id,
+                        name,
+                        type,
+                        options,
+                        default_value
+                    )
+                `)
+                .eq('category_id', selectedCategoryId)
+                .order('sort_order', { ascending: true });
+
+            if (error) return [];
+            return data.map((d: any) => ({
+                id: d.specification_definitions.id,
+                name: d.specification_definitions.name,
+                key: d.specification_definitions.name, // Using name as key for table_settings
+                type: d.specification_definitions.type,
+                options: d.specification_definitions.options,
+                defaultValue: d.specification_definitions.default_value
+            }));
+        },
+    });
 
     return (
         <Form {...form}>

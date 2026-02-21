@@ -41,20 +41,39 @@ export function VariantEditDialog({
 }: VariantEditDialogProps) {
     const queryClient = useQueryClient();
 
-    // Fetch category spec_schema
     const categoryId = (product as any)?.category_id;
-    const { data: category } = useQuery({
-        queryKey: ['category', categoryId],
-        queryFn: async () => {
-            if (!categoryId) return null;
-            const { data, error } = await (supabase.from('categories' as any) as any).select('*').eq('id', categoryId).single();
-            if (error) return null;
-            return data;
-        },
+    // Fetch specs for the selected category
+    const { data: specFields = [] } = useQuery({
+        queryKey: ['category_specs', categoryId],
         enabled: !!categoryId,
-    });
+        queryFn: async () => {
+            const { data, error } = await (supabase
+                .from('category_spec_links' as any) as any)
+                .select(`
+                    spec_id,
+                    sort_order,
+                    specification_definitions (
+                        id,
+                        name,
+                        type,
+                        options,
+                        default_value
+                    )
+                `)
+                .eq('category_id', categoryId)
+                .order('sort_order', { ascending: true });
 
-    const specFields = category?.spec_schema?.fields || [];
+            if (error) return [];
+            return data.map((d: any) => ({
+                id: d.specification_definitions.id,
+                name: d.specification_definitions.name,
+                key: d.specification_definitions.name,
+                type: d.specification_definitions.type,
+                options: d.specification_definitions.options,
+                defaultValue: d.specification_definitions.default_value
+            }));
+        },
+    });
 
     // Reset form or state if needed when opening/closing could be handled by key or uncontrolled inputs with defaultValues
     // using uncontrolled form submission for simplicity as per original implementation

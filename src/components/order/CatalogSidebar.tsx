@@ -51,13 +51,32 @@ export function CatalogSidebar({
         return build();
     }, [categories]);
 
-    // Extract available specs for the selected category (OR use the spec_schema if category is selected)
+    // Fetch specs for the selected category
+    const { data: specFields = [] } = useQuery({
+        queryKey: ['category_specs', selectedCategory],
+        enabled: !!selectedCategory,
+        queryFn: async () => {
+            const { data, error } = await (supabase
+                .from('category_spec_links' as any) as any)
+                .select(`
+                    specification_definitions (
+                        name
+                    )
+                `)
+                .eq('category_id', selectedCategory);
+
+            if (error) return [];
+            return data.map((d: any) => d.specification_definitions.name);
+        },
+    });
+
+    // Extract available specs for the selected category
     const availableSpecs = useMemo(() => {
         const specs: Record<string, Set<string>> = {};
 
-        // If a category is selected and it has a spec_schema, we prioritize those keys
+        // Use the fetched spec names as keys
+        const definedSpecKeys = specFields;
         const selectedCatDetails = categories.find((c: any) => c.id === selectedCategory);
-        const definedSpecKeys = (selectedCatDetails as any)?.spec_schema?.fields?.map((f: any) => f.key) || [];
 
         products.forEach((p) => {
             // Filter by category_id (or legacy category name if no match)
