@@ -13,12 +13,14 @@ const productSchema = z.object({
   name: z.string().min(1, '產品名稱為必填'),
   sku: z.string().min(1, 'SKU 為必填'),
   category: z.string().nullable().optional(),
+  category_id: z.string().uuid().nullable().optional(),
   brand: z.string().nullable().optional(),
   model: z.string().nullable().optional(),
   base_wholesale_price: z.coerce.number().min(0),
   base_retail_price: z.coerce.number().min(0),
   status: z.enum(['active', 'discontinued', 'preorder', 'sold_out']),
   has_variants: z.boolean().default(false),
+  table_settings: z.any().nullable().optional(),
 });
 
 type Product = Tables<'products'>;
@@ -38,9 +40,10 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
   const form = useForm<z.infer<typeof productSchema>>({
     resolver: zodResolver(productSchema),
     defaultValues: {
-      name: '', sku: '', category: '', brand: '', model: '',
+      name: '', sku: '', category: '', category_id: null, brand: '', model: '',
       base_wholesale_price: 0, base_retail_price: 0,
       status: 'active', has_variants: false,
+      table_settings: {},
     },
   });
 
@@ -51,9 +54,10 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
         form.reset(initialData);
       } else {
         form.reset({
-          name: '', sku: '', category: '', brand: '', model: '',
+          name: '', sku: '', category: '', category_id: null, brand: '', model: '',
           base_wholesale_price: 0, base_retail_price: 0,
           status: 'active', has_variants: false,
+          table_settings: {},
         });
       }
       setActiveTab('basic'); // 每次打開預設回到基本資訊

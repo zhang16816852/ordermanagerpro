@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables, TablesInsert } from '@/integrations/supabase/types';
 import { Button } from '@/components/ui/button';
@@ -40,6 +40,21 @@ export function VariantEditDialog({
     onSuccess,
 }: VariantEditDialogProps) {
     const queryClient = useQueryClient();
+
+    // Fetch category spec_schema
+    const categoryId = (product as any)?.category_id;
+    const { data: category } = useQuery({
+        queryKey: ['category', categoryId],
+        queryFn: async () => {
+            if (!categoryId) return null;
+            const { data, error } = await (supabase.from('categories' as any) as any).select('*').eq('id', categoryId).single();
+            if (error) return null;
+            return data;
+        },
+        enabled: !!categoryId,
+    });
+
+    const specFields = category?.spec_schema?.fields || [];
 
     // Reset form or state if needed when opening/closing could be handled by key or uncontrolled inputs with defaultValues
     // using uncontrolled form submission for simplicity as per original implementation
@@ -85,7 +100,15 @@ export function VariantEditDialog({
         if (!product) return;
 
         const formData = new FormData(e.currentTarget);
-        const variantData = {
+
+        // Collect dynamic specs into table_settings
+        const table_settings: Record<string, any> = {};
+        const specKeys = JSON.parse(formData.get('_spec_keys') as string || '[]');
+        specKeys.forEach((key: string) => {
+            table_settings[key] = formData.get(`spec_${key}`);
+        });
+
+        const variantData: any = {
             product_id: product.id,
             sku: formData.get('sku') as string,
             name: formData.get('name') as string,
@@ -97,6 +120,7 @@ export function VariantEditDialog({
             wholesale_price: parseFloat(formData.get('wholesale_price') as string) || 0,
             retail_price: parseFloat(formData.get('retail_price') as string) || 0,
             status: formData.get('status') as ProductVariant['status'],
+            table_settings,
         };
 
         if (variant) {
@@ -228,6 +252,39 @@ export function VariantEditDialog({
                             </Select>
                         </div>
                     </div>
+
+                    {specFields.length > 0 && (
+                        <div className="space-y-3 p-4 border rounded-lg bg-muted/20">
+                            <Label className="text-xs font-bold uppercase text-primary">規格參數</Label>
+                            <input type="hidden" name="_spec_keys" value={JSON.stringify(specFields.map((f: any) => f.key))} />
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                {specFields.map((f: any) => (
+                                    <div key={f.key} className="space-y-1.5">
+                                        <Label htmlFor={`spec_${f.key}`} className="text-xs">{f.key}</Label>
+                                        {f.type === 'text' ? (
+                                            <Input
+                                                id={`spec_${f.key}`}
+                                                name={`spec_${f.key}`}
+                                                defaultValue={(variant?.table_settings as any)?.[f.key] || ''}
+                                                className="h-8 text-sm"
+                                            />
+                                        ) : (
+                                            <Select name={`spec_${f.key}`} defaultValue={(variant?.table_settings as any)?.[f.key] || ''}>
+                                                <SelectTrigger className="h-8 text-sm">
+                                                    <SelectValue placeholder="選擇" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {f.options?.map((opt: string) => (
+                                                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     <div className="flex justify-end gap-2 pt-4">
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

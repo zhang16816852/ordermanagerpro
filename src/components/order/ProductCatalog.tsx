@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Search, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -13,11 +14,16 @@ import {
 import { ProductWithPricing, VariantWithPricing } from "@/hooks/useProductCache";
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
 import { StatusBadge } from "../ProductStatusBadge";
+import { toast } from 'sonner';
+import { ProductDetailDialog } from "./ProductDetailDialog";
+import { Info, LayoutGrid, List } from "lucide-react";
 interface ProductCatalogProps {
   products: ProductWithPricing[];
   isLoading: boolean;
   storeId: string;
-  viewMode?: 'products' | 'variants';
+  viewMode?: 'products' | 'variants' | 'gallery';
+  categoryFilter?: string | null;
+  specFilters?: Record<string, string[]>;
 }
 
 export default function ProductCatalog({
@@ -25,9 +31,12 @@ export default function ProductCatalog({
   isLoading,
   storeId,
   viewMode = 'products',
+  categoryFilter = null,
+  specFilters = {},
 }: ProductCatalogProps) {
   const [search, setSearch] = useState("");
   const [variantDialogProduct, setVariantDialogProduct] = useState<ProductWithPricing | null>(null);
+  const [detailProduct, setDetailProduct] = useState<ProductWithPricing | null>(null);
 
   const { addItem, getItemQuantity, getTotalProductQuantity } = useStoreDraft(storeId);
 
@@ -39,6 +48,39 @@ export default function ProductCatalog({
     .filter(Boolean);
 
   const filteredProducts = products
+    .filter((product) => {
+      // 1. Category Filter
+      if (categoryFilter) {
+        const pCategoryId = (product as any).category_id;
+        if (pCategoryId) {
+          if (pCategoryId !== categoryFilter) return false;
+        } else if (product.category !== categoryFilter) {
+          // Fallback to string match for legacy data
+          return false;
+        }
+      }
+
+      // 2. Spec Filters (AND between keys, OR between values in same key)
+      const specKeys = Object.keys(specFilters);
+      if (specKeys.length > 0) {
+        const matchesSpec = (settings: any) => {
+          if (!settings || typeof settings !== 'object') return false;
+          return specKeys.every((key) => {
+            const allowedValues = specFilters[key];
+            if (!allowedValues || allowedValues.length === 0) return true;
+            const actualValue = String(settings[key]);
+            return allowedValues.includes(actualValue);
+          });
+        };
+
+        const productMatches = matchesSpec(product.table_settings);
+        const anyVariantMatches = product.variants?.some((v) => matchesSpec(v.table_settings));
+
+        if (!productMatches && !anyVariantMatches) return false;
+      }
+
+      return true;
+    })
     .map((product) => {
       if (keywords.length === 0) return product;
 
@@ -68,8 +110,6 @@ export default function ProductCatalog({
           );
         }) ?? [];
 
-      // 產品命中 → 保留全部 variants
-      // 變體命中 → 只保留命中的 variants
       return {
         ...product,
         variants: productMatched ? product.variants : matchedVariants,
@@ -86,24 +126,32 @@ export default function ProductCatalog({
         productTexts.every((text) => text.includes(keyword))
       );
 
-      // 產品命中就保留（即使沒 variants）
       if (productMatched) return true;
 
-      // 沒命中產品本身，就看有沒有命中的 variants
       return (product.variants?.length ?? 0) > 0;
     });
 
 
   const handleProductClick = (product: ProductWithPricing) => {
-    if (product.has_variants && product.variants && product.variants.length > 0) {
+    if (product.has_variants && product.variants && product.variants.length > 1) {
+      // 多變體 → 打開選擇對話框
       setVariantDialogProduct(product);
+    } else if (product.has_variants && product.variants && product.variants.length === 1) {
+      // 單變體 → 直接加入，傳入變體
+      const variant = product.variants[0];
+      addItem(product, variant as VariantWithPricing);
+      toast.success(`${product.name} (${variant.name}) 已加入購物車`);
     } else {
+      // 無變體 → 直接加入
       addItem(product);
+      toast.success(`${product.name} 已加入購物車`);
     }
   };
 
+
   const handleVariantSelect = (product: ProductWithPricing, variant: VariantWithPricing) => {
     addItem(product, variant);
+    toast.success(`${variant ? `(${variant.name})` : ''} 已加入購物車`);
     setVariantDialogProduct(null);
   };
 
@@ -113,11 +161,18 @@ export default function ProductCatalog({
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>產品目錄</CardTitle>
-            {viewMode === 'variants' && (
-              <Badge variant="outline" className="text-xs">
-                顯示所有規格單品
-              </Badge>
-            )}
+            <div className="flex items-center gap-2">
+              {viewMode === 'variants' && (
+                <Badge variant="outline" className="text-xs">
+                  顯示所有規格單品
+                </Badge>
+              )}
+              {viewMode === 'gallery' && (
+                <Badge variant="outline" className="text-xs">
+                  圖卡檢視
+                </Badge>
+              )}
+            </div>
           </div>
           <div className="relative mt-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -135,7 +190,6 @@ export default function ProductCatalog({
           ) : filteredProducts.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">沒有找到符合的產品</div>
           ) : viewMode === 'products' ? (
-            // 產品檢視模式 (原有邏輯)
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredProducts.map((product) => {
                 const totalInCart = getTotalProductQuantity(product.id);
@@ -144,7 +198,7 @@ export default function ProductCatalog({
                 return (
                   <div
                     key={product.id}
-                    className="p-3 border rounded-lg hover:border-primary cursor-pointer transition-colors"
+                    className="p-3 border rounded-lg hover:border-primary cursor-pointer transition-colors group relative"
                     onClick={() => handleProductClick(product)}
                   >
                     <div className="flex justify-between items-start">
@@ -162,13 +216,77 @@ export default function ProductCatalog({
                         </div>
                       </div>
                       <div className="text-right flex items-center gap-2">
-                        <div>
+                        <div className="flex flex-col items-end">
                           <div className="font-medium">${product.wholesale_price}</div>
                           {totalInCart > 0 && (
                             <div className="text-sm text-primary">已加入 x{totalInCart}</div>
                           )}
                         </div>
-                        {hasVariants && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDetailProduct(product);
+                            }}
+                          >
+                            <Info className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                          {hasVariants && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : viewMode === 'gallery' ? (
+            // 圖卡檢視模式
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {filteredProducts.map((product) => {
+                const totalInCart = getTotalProductQuantity(product.id);
+                const hasVariants = product.has_variants && product.variants && product.variants.length > 0;
+
+                return (
+                  <div
+                    key={product.id}
+                    className="flex flex-col border rounded-xl overflow-hidden hover:border-primary cursor-pointer transition-all hover:shadow-md group"
+                    onClick={() => handleProductClick(product)}
+                  >
+                    <div className="aspect-square bg-muted relative flex items-center justify-center border-b">
+                      <div className="text-muted-foreground/40 font-bold uppercase tracking-widest text-[10px]">No Image</div>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="absolute top-2 right-2 h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDetailProduct(product);
+                        }}
+                      >
+                        <Info className="h-3 w-3" />
+                      </Button>
+                      {totalInCart > 0 && (
+                        <Badge className="absolute top-2 left-2 px-1.5 h-5 min-w-[20px] justify-center">
+                          {totalInCart}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="p-3 flex flex-col flex-1">
+                      <div className="font-medium text-sm line-clamp-2 min-h-[40px]">
+                        {product.name}
+                      </div>
+                      <div className="mt-auto pt-2 flex items-center justify-between">
+                        <div className="text-primary font-bold">
+                          ${product.wholesale_price}
+                        </div>
+                        {hasVariants && (
+                          <Badge variant="secondary" className="text-[9px] h-4 px-1">
+                            {product.variants!.length} 規格
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -207,7 +325,14 @@ export default function ProductCatalog({
                   <div
                     key={key}
                     className="p-3 border rounded-lg hover:border-primary cursor-pointer transition-colors"
-                    onClick={() => variant ? handleVariantSelect(product, variant as VariantWithPricing) : addItem(product)}
+                    onClick={() => {
+                      if (variant) {
+                        handleVariantSelect(product, variant as VariantWithPricing);
+                      } else {
+                        addItem(product);
+                        toast.success(`${product.name} 已加入購物車`);
+                      }
+                    }}
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex-1 min-w-0">
@@ -237,10 +362,11 @@ export default function ProductCatalog({
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card >
 
       {/* 變體選擇對話框 */}
-      <Dialog open={!!variantDialogProduct} onOpenChange={() => setVariantDialogProduct(null)}>
+      < Dialog open={!!variantDialogProduct
+      } onOpenChange={() => setVariantDialogProduct(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>選擇規格</DialogTitle>
@@ -282,7 +408,13 @@ export default function ProductCatalog({
             </div>
           )}
         </DialogContent>
-      </Dialog>
+      </Dialog >
+      <ProductDetailDialog
+        product={detailProduct}
+        open={!!detailProduct}
+        onOpenChange={(open) => !open && setDetailProduct(null)}
+        storeId={storeId}
+      />
     </>
   );
 }

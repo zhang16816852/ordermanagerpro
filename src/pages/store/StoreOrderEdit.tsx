@@ -5,30 +5,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { useStoreProductCache } from '@/hooks/useProductCache';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowLeft, Save, Plus, Lock } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { OrderItemsTable } from '@/components/order/OrderItemsTable';
+import { OrderEditHeader } from '@/components/order/OrderEditHeader';
+import { OrderNotesCard } from '@/components/order/OrderNotesCard';
+import { AddProductCard } from '@/components/order/AddProductCard';
+import { LockedOrderView } from '@/components/order/LockedOrderView';
 
 const statusLabels = {
   pending: { label: '未確認', className: 'bg-warning text-warning-foreground', editable: true },
@@ -181,18 +167,6 @@ export default function StoreOrderEdit() {
     setSelectedProductId('');
   };
 
-  const getProductName = (productId: string) => {
-    const product = products.find(p => p.id === productId);
-    return product?.name || '未知產品';
-  };
-
-  const getProductSku = (productId: string) => {
-    const product = products.find(p => p.id === productId);
-    return product?.sku || '';
-  };
-
-  /* Helper functions removed */
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -206,7 +180,6 @@ export default function StoreOrderEdit() {
       <div className="flex flex-col items-center justify-center h-64 gap-4">
         <p className="text-muted-foreground">找不到訂單</p>
         <Button onClick={() => navigate('/orders')}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
           返回訂單列表
         </Button>
       </div>
@@ -221,130 +194,36 @@ export default function StoreOrderEdit() {
 
   if (!isEditable) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => navigate('/orders')}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            返回
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">訂單詳情</h1>
-            <p className="text-muted-foreground font-mono text-sm">{order.id}</p>
-          </div>
-        </div>
-
-        <Card className="border-warning">
-          <CardContent className="flex items-center gap-4 py-6">
-            <Lock className="h-8 w-8 text-warning" />
-            <div>
-              <h3 className="font-semibold">訂單已鎖定</h3>
-              <p className="text-muted-foreground">
-                此訂單已進入處理階段，無法再進行修改。如需修改請聯繫管理員。
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* 顯示訂單詳情（只讀） */}
-        <Card>
-          <CardHeader>
-            <CardTitle>訂單項目</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>產品名稱</TableHead>
-                  <TableHead className="text-right">單價</TableHead>
-                  <TableHead className="text-right">數量</TableHead>
-                  <TableHead className="text-right">小計</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {order.order_items.map((item: any) => (
-                  <TableRow key={item.id}>
-                    <TableCell>{item.products?.name}</TableCell>
-                    <TableCell className="text-right">${item.unit_price}</TableCell>
-                    <TableCell className="text-right">{item.quantity}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      ${(item.quantity * item.unit_price).toFixed(2)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <div className="text-right mt-4 text-lg font-semibold">
-              總計：${order.order_items.reduce((sum: number, item: any) =>
-                sum + item.quantity * item.unit_price, 0).toFixed(2)}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <LockedOrderView
+        orderId={order.id}
+        orderItems={order.order_items}
+        onBack={() => navigate('/orders')}
+      />
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => navigate('/orders')}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            返回
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">編輯訂單</h1>
-            <p className="text-muted-foreground font-mono text-sm">{order.id}</p>
-          </div>
-        </div>
-        <Badge className={statusInfo.className}>{statusInfo.label}</Badge>
-      </div>
+      <OrderEditHeader
+        orderId={order.id}
+        statusLabel={statusInfo.label}
+        statusClassName={statusInfo.className}
+        onBack={() => navigate('/orders')}
+      />
 
-      {/* 訂單資訊 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>訂單備註</CardTitle>
-          <CardDescription>
-            建立時間：{format(new Date(order.created_at), 'yyyy/MM/dd HH:mm', { locale: zhTW })}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            placeholder="輸入訂單備註..."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={3}
-          />
-        </CardContent>
-      </Card>
+      <OrderNotesCard
+        notes={notes}
+        createdAt={format(new Date(order.created_at), 'yyyy/MM/dd HH:mm', { locale: zhTW })}
+        onNotesChange={setNotes}
+      />
 
-      {/* 新增產品 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>新增產品</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4">
-            <Select value={selectedProductId} onValueChange={setSelectedProductId}>
-              <SelectTrigger className="flex-1">
-                <SelectValue placeholder="選擇產品" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableProducts.map(product => (
-                  <SelectItem key={product.id} value={product.id}>
-                    {product.sku} - {product.name} (${product.wholesale_price})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button onClick={handleAddProduct} disabled={!selectedProductId}>
-              <Plus className="mr-2 h-4 w-4" />
-              新增
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <AddProductCard
+        availableProducts={availableProducts}
+        selectedProductId={selectedProductId}
+        onProductSelect={setSelectedProductId}
+        onAddProduct={handleAddProduct}
+      />
 
-      {/* 訂單項目 */}
       <Card>
         <CardHeader>
           <CardTitle>訂單項目</CardTitle>

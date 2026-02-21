@@ -4,15 +4,50 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UseFormReturn } from 'react-hook-form';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useMemo } from 'react';
 
 interface BasicInfoFormProps {
-    form: UseFormReturn<any>; // 接收父層傳來的 form
+    form: UseFormReturn<any>;
     onSubmit: (data: any) => void;
     isLoading?: boolean;
     onCancel: () => void;
 }
 
 export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfoFormProps) {
+    const { data: categories = [] } = useQuery({
+        queryKey: ['categories'],
+        queryFn: async () => {
+            const { data, error } = await (supabase
+                .from('categories' as any) as any)
+                .select('*')
+                .order('sort_order', { ascending: true });
+            if (error) {
+                console.error('Categories table may not exist yet:', error);
+                return [];
+            }
+            return data;
+        },
+    });
+
+    // Build flat tree for select
+    const categoryOptions = useMemo(() => {
+        const build = (pid: string | null = null, level = 0): any[] => {
+            return categories
+                .filter((c: any) => c.parent_id === pid)
+                .flatMap((c: any) => [
+                    { id: c.id, name: c.name, level, spec_schema: c.spec_schema },
+                    ...build(c.id, level + 1),
+                ]);
+        };
+        return build();
+    }, [categories]);
+
+    const selectedCategoryId = form.watch('category_id');
+    const selectedCategory = categoryOptions.find(c => c.id === selectedCategoryId);
+    const specFields = selectedCategory?.spec_schema?.fields || [];
+
     return (
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -72,20 +107,43 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
                         )}
                     />
 
-                    {/* 類別 */}
+                    {/* 類別 (UUID) */}
                     <FormField
                         control={form.control}
-                        name="category"
+                        name="category_id"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel>類別</FormLabel>
-                                <FormControl>
-                                    <Input placeholder="例如：外套" {...field} value={field.value || ''} />
-                                </FormControl>
+                                <FormLabel>產品分類</FormLabel>
+                                <Select
+                                    onValueChange={(val) => {
+                                        field.onChange(val);
+                                        // Sync name to legacy category string field
+                                        const cat = categoryOptions.find(c => c.id === val);
+                                        if (cat) form.setValue('category', cat.name);
+                                    }}
+                                    value={field.value || ''}
+                                >
+                                    <FormControl>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="選擇分類" />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        {categoryOptions.map((cat) => (
+                                            <SelectItem key={cat.id} value={cat.id}>
+                                                {"\u00A0".repeat(cat.level * 4)}{cat.name}
+                                            </SelectItem>
+                                        ))}
+                                        {categoryOptions.length === 0 && (
+                                            <SelectItem value="none" disabled>請先建立分類</SelectItem>
+                                        )}
+                                    </SelectContent>
+                                </Select>
                                 <FormMessage />
                             </FormItem>
                         )}
                     />
+
                     <FormField
                         control={form.control}
                         name="brand"
@@ -129,22 +187,45 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
                             </FormItem>
                         )}
                     />
-
-                    {/* 零售價 */}
-                    <FormField
-                        control={form.control}
-                        name="base_retail_price"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>基準零售價</FormLabel>
-                                <FormControl>
-                                    <Input type="number" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
                 </div>
+
+                {/* 動態規格欄位 (table_settings) */}
+                {specFields.length > 0 && (
+                    <div className="space-y-4 p-4 border rounded-lg bg-muted/10">
+                        <h3 className="text-sm font-bold flex items-center gap-2">
+                            分類特定規格
+                        </h3>
+                        <div className="grid grid-cols-2 gap-4">
+                            {specFields.map((f: any) => (
+                                <div key={f.key} className="space-y-1.5">
+                                    <label className="text-xs font-medium text-muted-foreground">{f.key}</label>
+                                    {f.type === 'text' ? (
+                                        <Input
+                                            value={form.watch(`table_settings.${f.key}`) || ''}
+                                            onChange={(e) => form.setValue(`table_settings.${f.key}`, e.target.value)}
+                                            placeholder={`輸入${f.key}`}
+                                            className="h-9"
+                                        />
+                                    ) : (
+                                        <Select
+                                            value={form.watch(`table_settings.${f.key}`) || ''}
+                                            onValueChange={(val) => form.setValue(`table_settings.${f.key}`, val)}
+                                        >
+                                            <SelectTrigger className="h-9">
+                                                <SelectValue placeholder="請選擇" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {f.options?.map((opt: string) => (
+                                                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* 變體切換開關 */}
                 <FormField
@@ -169,7 +250,6 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
                         </FormItem>
                     )}
                 />
-
 
                 {/* 按鈕區 */}
                 <div className="flex justify-end gap-3 pt-4 border-t">

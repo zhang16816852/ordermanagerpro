@@ -30,6 +30,7 @@ import {
   LogOut,
   Settings,
   ChevronRight,
+  Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -45,6 +46,7 @@ const adminNavItems: NavItem[] = [
   { title: '總覽', href: '/admin', icon: Home },
   { title: '店鋪管理', href: '/admin/stores', icon: Store },
   { title: '產品管理', href: '/admin/products', icon: PackageSearch },
+  { title: '分類管理', href: '/admin/categories', icon: Layers },
   { title: '品牌價格', href: '/admin/brand-pricing', icon: ShoppingCart },
   { title: '所有訂單', href: '/admin/orders', icon: ClipboardList },
   { title: '出貨池', href: '/admin/shipping-pool', icon: Truck },
