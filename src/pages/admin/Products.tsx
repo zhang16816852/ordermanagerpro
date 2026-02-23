@@ -348,7 +348,7 @@ export default function AdminProducts() {
             variant_status: v.status,
             variant_table_settings: v.table_settings ? JSON.stringify(v.table_settings) : '',
 
-            barcode: `'${v.barcode}` || '',
+            barcode: v.barcode ? `'${v.barcode}` : '',
           });
         });
       } else {
@@ -373,7 +373,7 @@ export default function AdminProducts() {
           variant_retail_price: '',
           variant_status: '',
           variant_table_settings: '',
-          barcode: '',
+          barcode: (p as any).barcode ? `'${(p as any).barcode}` : '',
         });
       }
     });
@@ -473,8 +473,8 @@ export default function AdminProducts() {
                     />
                   </TableHead>
                   <TableHead className="w-[50px]"></TableHead>
-                  <TableHead className="w-[150px]">SKU</TableHead>
                   <TableHead>名稱</TableHead>
+                  <TableHead>類別</TableHead>
                   <TableHead>廠牌/型號</TableHead>
                   <TableHead className="text-right">批發/零售價</TableHead>
                   <TableHead>狀態</TableHead>
@@ -495,7 +495,7 @@ export default function AdminProducts() {
                   ))
                 ) : filteredProducts?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center">
                       找不到符合條件的產品
                     </TableCell>
                   </TableRow>
@@ -526,9 +526,6 @@ export default function AdminProducts() {
                                 </CollapsibleTrigger>
                               )}
                             </TableCell>
-                            <TableCell className="font-mono text-xs text-muted-foreground">
-                              {product.sku}
-                            </TableCell>
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
                                 {product.name}
@@ -537,6 +534,19 @@ export default function AdminProducts() {
                                     <Layers className="h-3 w-3 mr-1" />
                                     {variants.length} 變體
                                   </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap gap-1 max-w-[150px]">
+                                {(product as any).category_names?.length > 0 ? (
+                                  (product as any).category_names.map((name: string) => (
+                                    <Badge key={name} variant="outline" className="text-[10px] px-1 h-5">
+                                      {name}
+                                    </Badge>
+                                  ))
+                                ) : (
+                                  product.category || '-'
                                 )}
                               </div>
                             </TableCell>
