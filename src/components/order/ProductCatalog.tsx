@@ -17,6 +17,9 @@ import { StatusBadge } from "../ProductStatusBadge";
 import { toast } from 'sonner';
 import { ProductDetailDialog } from "./ProductDetailDialog";
 import { Info, LayoutGrid, List } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from '@/integrations/supabase/client';
+import { useMemo } from "react";
 interface ProductCatalogProps {
   products: ProductWithPricing[];
   isLoading: boolean;
@@ -40,6 +43,36 @@ export default function ProductCatalog({
 
   const { addItem, getItemQuantity, getTotalProductQuantity } = useStoreDraft(storeId);
 
+  const { data: categoryHierarchy = [] } = useQuery({
+    queryKey: ['category_hierarchy'],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from('category_hierarchy' as any) as any).select('*');
+      if (error) return [];
+      return data;
+    },
+  });
+
+  // Calculate all child category IDs (inclusive) for filtering
+  const subCategoryIds = useMemo(() => {
+    if (!categoryFilter) return new Set<string>();
+
+    const ids = new Set<string>([categoryFilter]);
+    const queue = [categoryFilter];
+
+    while (queue.length > 0) {
+      const parentId = queue.shift();
+      categoryHierarchy
+        .filter((h: any) => h.parent_id === parentId)
+        .forEach((h: any) => {
+          if (!ids.has(h.child_id)) {
+            ids.add(h.child_id);
+            queue.push(h.child_id);
+          }
+        });
+    }
+    return ids;
+  }, [categoryFilter, categoryHierarchy]);
+
 
   const keywords = search
     .toLowerCase()
@@ -49,15 +82,18 @@ export default function ProductCatalog({
 
   const filteredProducts = products
     .filter((product) => {
-      // 1. Category Filter
+      // 1. Category Filter (Recursive)
       if (categoryFilter) {
+        const pCategoryIds = (product as any).category_ids || [];
         const pCategoryId = (product as any).category_id;
-        if (pCategoryId) {
-          if (pCategoryId !== categoryFilter) return false;
-        } else if (product.category !== categoryFilter) {
-          // Fallback to string match for legacy data
-          return false;
-        }
+
+        // 優先檢查多分類關聯
+        const hasMatchInLinks = pCategoryIds.some((id: string) => subCategoryIds.has(id));
+
+        // 次之檢查舊有的單分類欄位 (相容性)
+        const hasMatchInLegacy = pCategoryId && subCategoryIds.has(pCategoryId);
+
+        if (!hasMatchInLinks && !hasMatchInLegacy) return false;
       }
 
       // 2. Spec Filters (AND between keys, OR between values in same key)
@@ -390,10 +426,9 @@ export default function ProductCatalog({
                       <div className="flex justify-between items-center">
                         <div>
                           <div className="font-medium">{variant.name}</div>
-                          <div className="text-xs text-muted-foreground font-mono">{variant.sku}</div>
                           <div className="flex gap-1 mt-1">
-                            {variant.option_1 && <Badge variant="secondary" className="text-xs">{variant.option_1}</Badge>}
-                            {variant.option_2 && <Badge variant="secondary" className="text-xs">{variant.option_2}</Badge>}
+                            {variant.option_1 && <Badge variant="secondary" className="text-xs">{variant.option_2}</Badge>}
+                            {variant.option_2 && <Badge variant="secondary" className="text-xs">{variant.option_3}</Badge>}
                           </div>
                         </div>
                         <div className="text-right">

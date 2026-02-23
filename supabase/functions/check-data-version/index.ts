@@ -45,10 +45,10 @@ Deno.serve(async (req) => {
     if (clientVersion !== null && clientVersion !== undefined && clientVersion === serverVersion) {
       console.log(`Version match (${serverVersion}), no data transfer needed`)
       return new Response(
-        JSON.stringify({ 
-          needsUpdate: false, 
+        JSON.stringify({
+          needsUpdate: false,
           version: serverVersion,
-          data: null 
+          data: null
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -62,7 +62,10 @@ Deno.serve(async (req) => {
     if (tableName === 'products') {
       const { data: products, error: productsError } = await supabase
         .from('products')
-        .select('*')
+        .select(`
+          *,
+          product_category_links(category_id)
+        `)
         .order('name')
 
       if (productsError) {
@@ -81,10 +84,10 @@ Deno.serve(async (req) => {
     console.log(`Returning ${data?.length || 0} records with version ${serverVersion}`)
 
     return new Response(
-      JSON.stringify({ 
-        needsUpdate: true, 
+      JSON.stringify({
+        needsUpdate: true,
         version: serverVersion,
-        data 
+        data
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )

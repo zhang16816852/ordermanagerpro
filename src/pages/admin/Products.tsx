@@ -5,6 +5,10 @@ import { Tables } from '@/integrations/supabase/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { X } from 'lucide-react';
+import { UseFormReturn } from 'react-hook-form';
 import { Download, Layers } from 'lucide-react';
 import {
   Table,
@@ -90,11 +94,40 @@ export default function AdminProducts() {
   // --- Mutations ---
   const createMutation = useMutation({
     mutationFn: async (values: any) => {
-      const { data, error } = await supabase.from('products').insert(values).select().single();
-      if (error) throw error;
-      return data;
+      const { category_ids, category, category_id, ...productData } = values;
+
+      // 1. Insert product
+      const { data: product, error: productError } = await supabase
+        .from('products')
+        .insert(productData)
+        .select()
+        .single();
+
+      if (productError) throw productError;
+
+      // 2. Insert category links
+      if (category_ids && category_ids.length > 0) {
+        const links = category_ids.map((catId: string) => ({
+          product_id: product.id,
+          category_id: catId
+        }));
+        const { error: linkError } = await (supabase
+          .from('product_category_links' as any) as any)
+          .insert(links);
+
+        if (linkError) throw linkError;
+      }
+
+      // 3. Final update to trigger version bump / Edge Function notification
+      // We no longer write to category_id
+      await supabase.from('products').update({
+        updated_at: new Date().toISOString()
+      }).eq('id', product.id);
+
+      return product;
     },
     onSuccess: () => {
+      forceRefresh();
       queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
       toast.success('產品已新增');
       setIsDialogOpen(false);
@@ -103,11 +136,48 @@ export default function AdminProducts() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, ...updates }: Partial<Product> & { id: string }) => {
-      const { error } = await supabase.from('products').update(updates).eq('id', id);
-      if (error) throw error;
+    mutationFn: async ({ id, values }: { id: string, values: any }) => {
+      const { category_ids, category, category_id, ...productData } = values;
+
+      console.log('[Mutation] Updating product:', id, productData);
+
+      // 1. Clear old links
+      const { error: deleteError } = await (supabase
+        .from('product_category_links' as any) as any)
+        .delete()
+        .eq('product_id', id);
+
+      if (deleteError) throw deleteError;
+
+      // 2. Insert new links
+      if (category_ids && category_ids.length > 0) {
+        console.log(`[Mutation] Inserting ${category_ids.length} category links for product ${id}:`, category_ids);
+        const links = category_ids.map((catId: string) => ({
+          product_id: id,
+          category_id: catId
+        }));
+        const { error: linkError } = await (supabase
+          .from('product_category_links' as any) as any)
+          .insert(links);
+
+        if (linkError) throw linkError;
+      }
+
+      // 3. Update product last to trigger version bump / Edge Function notification
+      const { error: productError } = await supabase
+        .from('products')
+        .update({
+          ...productData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (productError) throw productError;
     },
     onSuccess: () => {
+      console.log('[Mutation] Update successful, forcing refresh...');
+
+      forceRefresh();
       queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
       toast.success('產品已更新');
       setIsDialogOpen(false);
@@ -142,11 +212,11 @@ export default function AdminProducts() {
   });
 
   // --- Handlers ---
-  const handleFormSubmit = (data: any) => {
+  const handleFormSubmit = (values: any) => {
     if (editingProduct?.id) {
-      updateMutation.mutate({ id: editingProduct.id, ...data });
+      updateMutation.mutate({ id: editingProduct.id, values });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(values);
     }
   };
 
@@ -405,7 +475,6 @@ export default function AdminProducts() {
                   <TableHead className="w-[50px]"></TableHead>
                   <TableHead className="w-[150px]">SKU</TableHead>
                   <TableHead>名稱</TableHead>
-                  <TableHead>類別</TableHead>
                   <TableHead>廠牌/型號</TableHead>
                   <TableHead className="text-right">批發/零售價</TableHead>
                   <TableHead>狀態</TableHead>
@@ -471,7 +540,6 @@ export default function AdminProducts() {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell>{product.category || '-'}</TableCell>
                             <TableCell className="text-sm">
                               <span className="text-muted-foreground">{product.brand || '-'}</span>
                               <span className="mx-1 text-slate-300">/</span>

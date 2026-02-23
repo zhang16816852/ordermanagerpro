@@ -71,12 +71,22 @@ export function ProductDetailDialog({
                             </div>
                         </div>
 
-                        {product.category && (
+                        {((product as any).category_names?.length > 0 || product.category) && (
                             <div>
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">類別</h3>
-                                <Badge variant="secondary" className="mt-1">
-                                    {product.category}
-                                </Badge>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                    {(product as any).category_names?.length > 0 ? (
+                                        (product as any).category_names.map((name: string) => (
+                                            <Badge key={name} variant="secondary">
+                                                {name}
+                                            </Badge>
+                                        ))
+                                    ) : (
+                                        <Badge variant="secondary">
+                                            {product.category}
+                                        </Badge>
+                                    )}
+                                </div>
                             </div>
                         )}
 

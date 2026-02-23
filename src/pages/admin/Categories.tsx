@@ -30,9 +30,15 @@ import { SortableItem } from './SortableItem';
 interface Category {
     id: string;
     name: string;
+    // parent_id field will be kept for legacy/compatibility but the source of truth is the hierarchy table
     parent_id: string | null;
     spec_schema: any;
     sort_order: number;
+}
+
+interface CategoryHierarchy {
+    parent_id: string;
+    child_id: string;
 }
 
 interface SpecDefinition {
@@ -52,7 +58,7 @@ export default function AdminCategories() {
 
     // Category Form states
     const [name, setName] = useState('');
-    const [parentId, setParentId] = useState<string | null>(null);
+    const [parentIds, setParentIds] = useState<string[]>([]);
     const [selectedSpecIds, setSelectedSpecIds] = useState<string[]>([]);
 
     // Spec library form states
@@ -101,11 +107,20 @@ export default function AdminCategories() {
         },
     });
 
+    const { data: categoryHierarchy = [] } = useQuery({
+        queryKey: ['category_hierarchy'],
+        queryFn: async () => {
+            const { data, error } = await (supabase.from('category_hierarchy' as any) as any).select('*');
+            if (error) return [];
+            return data as CategoryHierarchy[];
+        },
+    });
+
     // --- Mutations ---
 
     const categoryMutation = useMutation({
         mutationFn: async (data: any) => {
-            const { specIds, ...catData } = data;
+            const { specIds, parentIds, ...catData } = data;
             let catId = editingCategory?.id;
 
             if (editingCategory) {
@@ -115,6 +130,16 @@ export default function AdminCategories() {
                 const { data: newCat, error } = await supabase.from('categories').insert([catData]).select().single();
                 if (error) throw error;
                 catId = newCat.id;
+            }
+
+            // Update hierarchy
+            await (supabase.from('category_hierarchy' as any) as any).delete().eq('child_id', catId);
+            if (parentIds.length > 0) {
+                const hierarchy = parentIds.map((pid: string) => ({
+                    parent_id: pid,
+                    child_id: catId
+                }));
+                await (supabase.from('category_hierarchy' as any) as any).insert(hierarchy);
             }
 
             // Update spec links
@@ -131,6 +156,7 @@ export default function AdminCategories() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['categories'] });
             queryClient.invalidateQueries({ queryKey: ['category_spec_links'] });
+            queryClient.invalidateQueries({ queryKey: ['category_hierarchy'] });
             toast.success('分類已儲存');
             closeDialog();
         },
@@ -161,7 +187,11 @@ export default function AdminCategories() {
         if (cat) {
             setEditingCategory(cat);
             setName(cat.name);
-            setParentId(cat.parent_id);
+            const currentParents = categoryHierarchy
+                .filter(h => h.child_id === cat.id)
+                .map(h => h.parent_id);
+            setParentIds(currentParents);
+
             const currentLinks = categorySpecLinks
                 .filter((l: any) => l.category_id === cat.id)
                 .sort((a: any, b: any) => a.sort_order - b.sort_order)
@@ -170,7 +200,7 @@ export default function AdminCategories() {
         } else {
             setEditingCategory(null);
             setName('');
-            setParentId(defaultParentId);
+            setParentIds(defaultParentId ? [defaultParentId] : []);
             setSelectedSpecIds([]);
         }
         setIsDialogOpen(true);
@@ -185,7 +215,7 @@ export default function AdminCategories() {
         if (!name.trim()) return toast.error('請輸入分類名稱');
         categoryMutation.mutate({
             name,
-            parent_id: parentId,
+            parentIds,
             specIds: selectedSpecIds,
         });
     };
@@ -196,24 +226,51 @@ export default function AdminCategories() {
         );
     };
 
-    const buildTree = (cats: Category[], pid: string | null = null): any[] => {
-        return cats
-            .filter(c => c.parent_id === pid)
-            .map(c => ({
-                ...c,
-                children: buildTree(cats, c.id)
-            }));
+    const buildTree = (cats: Category[], h: CategoryHierarchy[]): any[] => {
+        // Deduplicate hierarchy links
+        const seen = new Set<string>();
+        const uniqueH = h.filter(link => {
+            const key = `${link.parent_id}-${link.child_id}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
+        const hToUse = uniqueH;
+        // Find root nodes: nodes that are NOT children in any hierarchy row
+        const childIds = new Set(hToUse.map(item => item.child_id));
+        const roots = cats.filter(c => !childIds.has(c.id));
+
+        const getChildren = (nodeId: string): any[] => {
+            const childLinks = hToUse.filter(link => link.parent_id === nodeId);
+            return childLinks
+                .map(link => {
+                    const child = cats.find(c => c.id === link.child_id);
+                    if (!child) return null;
+                    return {
+                        ...child,
+                        children: getChildren(child.id)
+                    };
+                })
+                .filter(Boolean);
+        };
+
+        return roots.map(root => ({
+            ...root,
+            children: getChildren(root.id)
+        }));
     };
 
-    const tree = buildTree(categories);
+    const tree = buildTree(categories, categoryHierarchy);
 
-    const renderTreeNode = (node: any, level = 0) => {
+    const renderTreeNode = (node: any, level = 0, path = "root") => {
         const isExpanded = expandedIds.has(node.id);
         const hasChildren = node.children.length > 0;
         const linkedSpecsCount = categorySpecLinks.filter((l: any) => l.category_id === node.id).length;
+        const uniqueKey = `${path}-${node.id}`;
 
         return (
-            <div key={node.id} className="space-y-1">
+            <div key={uniqueKey} className="space-y-1">
                 <div
                     className="flex items-center group py-2 px-3 hover:bg-muted/50 rounded-lg border border-transparent hover:border-border transition-colors cursor-pointer"
                     style={{ marginLeft: `${level * 24}px` }}
@@ -258,7 +315,7 @@ export default function AdminCategories() {
                 </div>
                 {isExpanded && hasChildren && (
                     <div className="space-y-1">
-                        {node.children.map((child: any) => renderTreeNode(child, level + 1))}
+                        {node.children.map((child: any) => renderTreeNode(child, level + 1, node.id))}
                     </div>
                 )}
             </div>
@@ -268,6 +325,10 @@ export default function AdminCategories() {
 
     const handleCategoryExport = () => {
         const exportData = categories.map(c => {
+            const linkedParents = categoryHierarchy
+                .filter(h => h.child_id === c.id)
+                .map(h => h.parent_id);
+
             const linkedSpecs = categorySpecLinks
                 .filter((link: any) => link.category_id === c.id)
                 .sort((a: any, b: any) => a.sort_order - b.sort_order)
@@ -276,7 +337,7 @@ export default function AdminCategories() {
             return {
                 id: c.id,
                 name: c.name,
-                parent_id: c.parent_id || '',
+                parent_ids: linkedParents.join(','),
                 sort_order: c.sort_order,
                 linked_spec_ids: linkedSpecs.join(',')
             };
@@ -303,51 +364,129 @@ export default function AdminCategories() {
             complete: async (results) => {
                 const rows = results.data as any[];
                 try {
-                    // 1. 先抓取目前資料庫所有分類，用來比對名稱
-                    const { data: existingCats } = await supabase
+                    // 1. Fetch ALL existing categories and specs for name-to-ID resolution
+                    const { data: existingData, error: fetchError } = await supabase
                         .from('categories')
-                        .select('id, name, parent_id');
+                        .select('id, name');
+                    if (fetchError) throw fetchError;
 
-                    const toUpsert = rows.map(row => {
-                        const cleanedId = row.id?.toString().trim();
+                    const { data: specDefs, error: specError } = await supabase
+                        .from('specification_definitions')
+                        .select('id, name');
+                    if (specError) throw specError;
+
+                    const nameToExistingId = new Map(existingData.map(c => [c.name.trim(), c.id]));
+                    const idToExistingId = new Map(existingData.map(c => [c.id, c.id]));
+                    const specNameToId = new Map(specDefs.map(s => [s.name.trim(), s.id]));
+                    const specIdToId = new Map(specDefs.map(s => [s.id, s.id]));
+
+                    // Session mapping: will store Name/OldID -> CurrentUUID
+                    const sessionMap = new Map<string, string>();
+
+                    // 2. Determine IDs for all rows before upserting
+                    const categoriesToUpsert = rows.map(row => {
                         const name = row.name?.trim();
-                        const parentId = row.parent_id || null;
+                        const rawId = row.id?.toString().trim();
 
-                        // 關鍵比對邏輯：
-                        // 如果沒有 ID，就去現有資料找「名稱 + 父分類」完全一樣的資料
-                        let targetId = (cleanedId && cleanedId !== 'null') ? cleanedId : null;
+                        let targetId = null;
 
-                        if (!targetId && existingCats) {
-                            const match = existingCats.find(c =>
-                                c.name === name &&
-                                c.parent_id === parentId
-                            );
-                            if (match) targetId = match.id;
+                        // Priority 1: Check if provided ID already exists
+                        if (rawId && idToExistingId.has(rawId)) {
+                            targetId = rawId;
+                        }
+                        // Priority 2: Check if name already exists
+                        else if (name && nameToExistingId.has(name)) {
+                            targetId = nameToExistingId.get(name);
+                        }
+                        // Priority 3: Use provided ID if it looks like a UUID but is new
+                        else if (rawId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId)) {
+                            targetId = rawId;
+                        }
+                        // Priority 4: Generate new UUID
+                        else {
+                            targetId = crypto.randomUUID();
                         }
 
-                        const base: any = {
+                        if (name) sessionMap.set(name, targetId!);
+                        if (rawId) sessionMap.set(rawId, targetId!);
+
+                        return {
+                            id: targetId,
                             name: name,
-                            parent_id: parentId,
                             sort_order: parseInt(row.sort_order) || 0
                         };
-
-                        // 如果找得到 ID (不論是 CSV 給的還是比對出來的)，就帶入 ID 執行覆蓋
-                        if (targetId) base.id = targetId;
-
-                        return base;
                     });
 
-                    // 使用 upsert，這時所有的 base 如果有 id 就會更新，沒 id 就會新增
-                    const { error: upsertError } = await supabase.from('categories').upsert(toUpsert);
+                    // Perform the Categories Upsert
+                    const { error: upsertError } = await supabase.from('categories').upsert(categoriesToUpsert);
                     if (upsertError) throw upsertError;
 
-                    // ... (後續處理 spec links 的邏輯相同)
-                    toast.success("分類同步成功");
+                    // 3. Resolve Hierarchy and Spec Links using names or IDs
+                    const newHierarchy: any[] = [];
+                    const newSpecLinks: any[] = [];
+                    const importedIds = categoriesToUpsert.map(c => c.id);
+
+                    rows.forEach(row => {
+                        const currentId = sessionMap.get(row.name?.trim()) || sessionMap.get(row.id?.trim());
+                        if (!currentId) return;
+
+                        // Parent Resolution (Names or IDs)
+                        const parentsRaw = row.parent_ids || row.parent_id;
+                        if (parentsRaw) {
+                            const tokens = parentsRaw.split(',').map((s: string) => s.trim()).filter(Boolean);
+                            tokens.forEach((token: string) => {
+                                // Try sessionMap (which contains new & matched existing), then fallback to existing
+                                const resolvedPid = sessionMap.get(token) || nameToExistingId.get(token) || idToExistingId.get(token);
+
+                                if (resolvedPid && resolvedPid !== currentId) {
+                                    newHierarchy.push({ parent_id: resolvedPid, child_id: currentId });
+                                }
+                            });
+                        }
+
+                        // Specs Resolution (Names or IDs)
+                        if (row.linked_spec_ids) {
+                            const tokens = row.linked_spec_ids.split(',').map((s: string) => s.trim()).filter(Boolean);
+                            tokens.forEach((token: string, idx: number) => {
+                                const resolvedSid = specNameToId.get(token) || specIdToId.get(token);
+                                if (resolvedSid) {
+                                    newSpecLinks.push({
+                                        category_id: currentId,
+                                        spec_id: resolvedSid,
+                                        sort_order: idx
+                                    });
+                                }
+                            });
+                        }
+                    });
+
+                    // 4. Batch update relationships
+                    if (importedIds.length > 0) {
+                        // Clear associations for the categories we just processed
+                        await (supabase.from('category_hierarchy' as any) as any).delete().in('child_id', importedIds);
+                        if (newHierarchy.length > 0) {
+                            const { error: hError } = await (supabase.from('category_hierarchy' as any) as any).insert(newHierarchy);
+                            if (hError) throw hError;
+                        }
+
+                        await (supabase.from('category_spec_links' as any) as any).delete().in('category_id', importedIds);
+                        if (newSpecLinks.length > 0) {
+                            const { error: sError } = await (supabase.from('category_spec_links' as any) as any).insert(newSpecLinks);
+                            if (sError) throw sError;
+                        }
+                    }
+
+                    queryClient.invalidateQueries({ queryKey: ['categories'] });
+                    queryClient.invalidateQueries({ queryKey: ['category_hierarchy'] });
+                    queryClient.invalidateQueries({ queryKey: ['category_spec_links'] });
+                    toast.success(`成功匯入 ${categoriesToUpsert.length} 筆分類`);
                 } catch (err: any) {
+                    console.error('Import error:', err);
                     toast.error(`匯入失敗: ${err.message}`);
                 }
             }
         });
+        e.target.value = '';
     };
 
     const handleSpecExport = () => {
@@ -592,6 +731,29 @@ export default function AdminCategories() {
                         <div className="space-y-2">
                             <label className="text-sm font-medium">分類名稱</label>
                             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="後台分類名稱" />
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="text-sm font-medium flex items-center gap-2">
+                                <FolderTree className="h-4 w-4" /> 父分類 (可多選)
+                            </label>
+                            <div className="grid grid-cols-2 gap-2 p-4 bg-muted/30 rounded-lg border border-dashed max-h-[200px] overflow-y-auto">
+                                {categories
+                                    .filter(c => c.id !== editingCategory?.id) // Prevent self-parenting
+                                    .map(cat => (
+                                        <div
+                                            key={cat.id}
+                                            className={`flex items-center gap-2 p-2 rounded border transition-colors cursor-pointer ${parentIds.includes(cat.id) ? 'bg-primary/5 border-primary/30' : 'hover:bg-muted'
+                                                }`}
+                                            onClick={() => setParentIds(prev =>
+                                                prev.includes(cat.id) ? prev.filter(id => id !== cat.id) : [...prev, cat.id]
+                                            )}
+                                        >
+                                            <Checkbox checked={parentIds.includes(cat.id)} onCheckedChange={() => { }} />
+                                            <span className="text-sm truncate">{cat.name}</span>
+                                        </div>
+                                    ))}
+                            </div>
                         </div>
 
                         <div className="space-y-4">

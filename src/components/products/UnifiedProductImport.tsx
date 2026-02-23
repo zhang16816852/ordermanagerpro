@@ -398,11 +398,9 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                     sku: row.product_sku,
                     name: row.product_name,
                     description: row.description || null,
-                    model: row.model || null, // Fixed: was using option_2
+                    model: row.model || null,
                     series: row.series || null,
                     brand: row.brand || null,
-                    category: row.category || null,
-                    category_id: category_id || null,
                     base_wholesale_price: row.base_wholesale_price,
                     base_retail_price: row.base_retail_price,
                     status: row.product_status,
@@ -417,17 +415,55 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
 
             if (productError) throw productError;
 
-            // 第二步：如果有變體，匯入變體
+            // 取得產品 ID 映射
+            const { data: products, error: fetchError } = await supabase
+                .from('products')
+                .select('id, sku')
+                .in('sku', Array.from(uniqueProducts.keys()));
+
+            if (fetchError) throw fetchError;
+            const productIdMap = new Map(products?.map(p => [p.sku, p.id]) || []);
+
+            // 第二步：匯入分類連結
+            const categoryLinksToInsert: any[] = [];
+
+            // 處理每個不重複產品的分類
+            Array.from(uniqueProducts.values()).forEach(row => {
+                let category_id = row.category_id;
+                if (!category_id && row.category) {
+                    const match = categories.find(c => c.name === row.category);
+                    if (match) category_id = match.id;
+                }
+
+                if (category_id) {
+                    const productId = productIdMap.get(row.product_sku);
+                    if (productId) {
+                        categoryLinksToInsert.push({
+                            product_id: productId,
+                            category_id: category_id
+                        });
+                    }
+                }
+            });
+
+            if (categoryLinksToInsert.length > 0) {
+                // 先刪除舊有的連結（如果是覆蓋更新的話）
+                const productIds = Array.from(productIdMap.values());
+                await (supabase
+                    .from('product_category_links' as any) as any)
+                    .delete()
+                    .in('product_id', productIds);
+
+                // 插入新連結
+                const { error: linkError } = await (supabase
+                    .from('product_category_links' as any) as any)
+                    .insert(categoryLinksToInsert);
+
+                if (linkError) throw linkError;
+            }
+
+            // 第三步：如果有變體，匯入變體 (原本的第二步)
             if (productsWithVariants.length > 0) {
-                // 取得產品 ID 映射
-                const { data: products, error: fetchError } = await supabase
-                    .from('products')
-                    .select('id, sku')
-                    .in('sku', Array.from(uniqueProducts.keys()));
-
-                if (fetchError) throw fetchError;
-
-                const productIdMap = new Map(products?.map(p => [p.sku, p.id]) || []);
 
                 // 因為已在預覽階段檢測重複，這裡不需要再去重
                 const variantsToInsert = productsWithVariants.map(row => {

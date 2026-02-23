@@ -12,8 +12,7 @@ import { VariantSection } from './VariantSection';
 const productSchema = z.object({
   name: z.string().min(1, '產品名稱為必填'),
   sku: z.string().min(1, 'SKU 為必填'),
-  category: z.string().nullable().optional(),
-  category_id: z.string().uuid().nullable().optional(),
+  category_ids: z.array(z.string().uuid()).default([]),
   brand: z.string().nullable().optional(),
   model: z.string().nullable().optional(),
   base_wholesale_price: z.coerce.number().min(0),
@@ -29,7 +28,7 @@ interface ProductFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: any) => void;
-  initialData: Product | null;
+  initialData: Product & { category_ids?: string[] } | null;
   isLoading?: boolean;
 }
 
@@ -40,7 +39,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
   const form = useForm<z.infer<typeof productSchema>>({
     resolver: zodResolver(productSchema),
     defaultValues: {
-      name: '', sku: '', category: '', category_id: null, brand: '', model: '',
+      name: '', sku: '', category_ids: [], brand: '', model: '',
       base_wholesale_price: 0, base_retail_price: 0,
       status: 'active', has_variants: false,
       table_settings: {},
@@ -51,10 +50,15 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
   useEffect(() => {
     if (open) {
       if (initialData) {
-        form.reset(initialData);
+        console.log('[ProductFormDialog] Resetting form with initialData:', initialData);
+        // 確保 category_ids 為陣列，防止 undefined
+        form.reset({
+          ...initialData,
+          category_ids: (initialData as any).category_ids || []
+        });
       } else {
         form.reset({
-          name: '', sku: '', category: '', category_id: null, brand: '', model: '',
+          name: '', sku: '', category_ids: [], brand: '', model: '',
           base_wholesale_price: 0, base_retail_price: 0,
           status: 'active', has_variants: false,
           table_settings: {},
@@ -66,12 +70,12 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col p-0 ">
         <DialogHeader className="p-6 pb-0">
           <DialogTitle>{initialData ? `編輯產品: ${initialData.name}` : '新增產品'}</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
           <div className="px-6 border-b">
             <TabsList className="w-full justify-start h-12 bg-transparent p-0 gap-6">
               <TabsTrigger value="basic" className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none">
@@ -88,7 +92,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
           </div>
 
           <div className="flex-1 overflow-y-auto p-6">
-            <TabsContent value="basic" className="m-0 focus-visible:ring-0">
+            <TabsContent value="basic" className="min-h-0 focus-visible:ring-0">
               {/* 3. 將 form 物件傳遞給子組件 */}
               <BasicInfoForm
                 form={form}

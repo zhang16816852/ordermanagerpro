@@ -3,6 +3,10 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { X, Plus } from 'lucide-react';
 import { UseFormReturn } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,6 +20,9 @@ interface BasicInfoFormProps {
 }
 
 export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfoFormProps) {
+    console.log('[BasicInfoForm] Form data:', form.getValues());
+    const selectedCategoryIds = form.watch('category_ids') || [];
+    console.log('[BasicInfoForm] Current selectedCategoryIds:', selectedCategoryIds);
     const { data: categories = [] } = useQuery({
         queryKey: ['categories'],
         queryFn: async () => {
@@ -23,38 +30,86 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
                 .from('categories' as any) as any)
                 .select('*')
                 .order('sort_order', { ascending: true });
-            if (error) {
-                console.error('Categories table may not exist yet:', error);
-                return [];
-            }
+            if (error) return [];
             return data;
         },
     });
 
-    // Build flat tree for select
+    const { data: categoryHierarchy = [] } = useQuery({
+        queryKey: ['category_hierarchy'],
+        queryFn: async () => {
+            const { data, error } = await (supabase.from('category_hierarchy' as any) as any).select('*');
+            if (error) return [];
+            return data;
+        },
+    });
+
+    // Build flat tree for select using the hierarchy table
     const categoryOptions = useMemo(() => {
-        const build = (pid: string | null = null, level = 0): any[] => {
-            return categories
-                .filter((c: any) => c.parent_id === pid)
-                .flatMap((c: any) => [
-                    { id: c.id, name: c.name, level, spec_schema: c.spec_schema },
-                    ...build(c.id, level + 1),
-                ]);
+        // Deduplicate hierarchy links to prevent recursive duplicates if DB has duplicate rows
+        const seenLinks = new Set<string>();
+        const hierarchy = categoryHierarchy.filter((h: any) => {
+            const key = `${h.parent_id}_${h.child_id}`;
+            if (seenLinks.has(key)) return false;
+            seenLinks.add(key);
+            return true;
+        });
+
+        const childIds = new Set(hierarchy.map((h: any) => h.child_id));
+        const roots = categories.filter((c: any) => !childIds.has(c.id));
+
+        const build = (nodeId: string, level = 0, path: string[] = []): any[] => {
+            const childLinks = hierarchy.filter((h: any) => h.parent_id === nodeId);
+            return childLinks.flatMap((link: any) => {
+                const child = categories.find((c: any) => c.id === link.child_id);
+                if (!child) return [];
+                const newPath = [...path, child.id]; // 每個節點都記錄完整路徑
+                const uniqueValue = newPath.join('-'); // 這樣每個節點唯一，即使同一個子分類出現多次
+
+                // For the tree UI, we want to show everything, but keys/values must be unique
+                // We'll use "parentID_childID" as the unique value for the Select component
+
+                return [
+                    {
+                        id: child.id,
+                        uniqueValue,
+                        name: child.name,
+                        level: level + 1,
+                        spec_schema: child.spec_schema
+                    },
+                    ...build(child.id, level + 1, newPath)
+                ];
+            });
         };
-        return build();
-    }, [categories]);
 
-    const selectedCategoryId = form.watch('category_id');
-    const selectedCategory = categoryOptions.find(c => c.id === selectedCategoryId);
+        console.log('[BasicInfoForm] Data check - categories loaded:', categories.length);
+        console.log('[BasicInfoForm] Rebuilding categoryOptions tree...');
 
-    // Fetch specs for the selected category
+        return roots.flatMap(root => [
+            {
+                id: root.id,
+                uniqueValue: `root-${root.id}`,
+                name: root.name,
+                level: 0,
+                spec_schema: root.spec_schema
+            },
+            ...build(root.id, 0, [root.id])
+        ]);
+    }, [categories, categoryHierarchy]);
+
+    const selectedCategories = useMemo(() =>
+        categories.filter((c: any) => selectedCategoryIds.includes(c.id)),
+        [categories, selectedCategoryIds]);
+
+    // Fetch specs for all selected categories
     const { data: specFields = [] } = useQuery({
-        queryKey: ['category_specs', selectedCategoryId],
-        enabled: !!selectedCategoryId,
+        queryKey: ['category_specs', selectedCategoryIds],
+        enabled: selectedCategoryIds.length > 0,
         queryFn: async () => {
             const { data, error } = await (supabase
                 .from('category_spec_links' as any) as any)
                 .select(`
+                    category_id,
                     spec_id,
                     sort_order,
                     specification_definitions (
@@ -65,18 +120,30 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
                         default_value
                     )
                 `)
-                .eq('category_id', selectedCategoryId)
+                .in('category_id', selectedCategoryIds)
                 .order('sort_order', { ascending: true });
 
             if (error) return [];
-            return data.map((d: any) => ({
-                id: d.specification_definitions.id,
-                name: d.specification_definitions.name,
-                key: d.specification_definitions.name, // Using name as key for table_settings
-                type: d.specification_definitions.type,
-                options: d.specification_definitions.options,
-                defaultValue: d.specification_definitions.default_value
-            }));
+
+            // Deduplicate specs if multiple categories have the same spec
+            const seenSpecs = new Set<string>();
+            const result: any[] = [];
+
+            data.forEach((d: any) => {
+                const spec = d.specification_definitions;
+                if (!spec || seenSpecs.has(spec.id)) return;
+                seenSpecs.add(spec.id);
+                result.push({
+                    id: spec.id,
+                    name: spec.name,
+                    key: spec.id,
+                    type: spec.type,
+                    options: spec.options,
+                    defaultValue: spec.default_value
+                });
+            });
+
+            return result;
         },
     });
 
@@ -139,38 +206,173 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
                         )}
                     />
 
-                    {/* 類別 (UUID) */}
+                    {/* 類別 (UUID Array) */}
                     <FormField
                         control={form.control}
-                        name="category_id"
+                        name="category_ids"
                         render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>產品分類</FormLabel>
-                                <Select
-                                    onValueChange={(val) => {
-                                        field.onChange(val);
-                                        // Sync name to legacy category string field
-                                        const cat = categoryOptions.find(c => c.id === val);
-                                        if (cat) form.setValue('category', cat.name);
-                                    }}
-                                    value={field.value || ''}
-                                >
-                                    <FormControl>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="選擇分類" />
-                                        </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                        {categoryOptions.map((cat) => (
-                                            <SelectItem key={cat.id} value={cat.id}>
-                                                {"\u00A0".repeat(cat.level * 4)}{cat.name}
-                                            </SelectItem>
-                                        ))}
-                                        {categoryOptions.length === 0 && (
-                                            <SelectItem value="none" disabled>請先建立分類</SelectItem>
-                                        )}
-                                    </SelectContent>
-                                </Select>
+                            <FormItem className="col-span-2">
+                                <FormLabel>產品分類 (可多選)</FormLabel>
+
+                                {/* 已選擇的 Badge */}
+                                <div className="flex flex-wrap gap-2 mb-2 p-2 min-h-[40px] border rounded-md bg-muted/5">
+                                    {selectedCategoryIds.length === 0 ? (
+                                        <span className="text-sm text-muted-foreground italic">
+                                            尚未選擇分類
+                                        </span>
+                                    ) : (
+                                        <>
+                                            {selectedCategories.length === 0 && categories.length > 0 ? (
+                                                <span className="text-sm text-destructive italic">
+                                                    找不到對應的分類資料 (ID: {selectedCategoryIds.join(', ')})
+                                                </span>
+                                            ) : selectedCategories.length === 0 ? (
+                                                <span className="text-sm text-muted-foreground animate-pulse">
+                                                    載入中...
+                                                </span>
+                                            ) : (
+                                                selectedCategories.map((cat: any) => (
+                                                    <Badge
+                                                        key={cat.id}
+                                                        variant="secondary"
+                                                        className="flex items-center gap-1 pr-1"
+                                                    >
+                                                        {cat.name}
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-4 w-4 rounded-full hover:bg-muted p-0"
+                                                            onClick={() => {
+                                                                const next = selectedCategoryIds.filter(id => id !== cat.id);
+                                                                field.onChange(next);
+                                                            }}
+                                                        >
+                                                            <X className="h-3 w-3" />
+                                                        </Button>
+                                                    </Badge>
+                                                ))
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Popover */}
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="w-full justify-start text-muted-foreground font-normal"
+                                        >
+                                            <Plus className="mr-2 h-4 w-4" />
+                                            {selectedCategoryIds.length > 0
+                                                ? `已選擇 ${selectedCategoryIds.length} 個分類`
+                                                : '新增分類...'}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[300px] p-0" align="start">
+                                        <div className="p-2 border-b">
+                                            <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                                                選擇分類
+                                            </h4>
+                                        </div>
+
+                                        <div className="max-h-[300px] overflow-y-auto w-full custom-scrollbar">
+                                            <div className="p-2 space-y-1">
+                                                {categoryOptions.map((cat) => {
+                                                    const isSelected = selectedCategoryIds.includes(cat.id);
+
+                                                    // 階層選擇邏輯
+                                                    const toggleCategory = () => {
+                                                        let next: string[];
+                                                        if (isSelected) {
+                                                            // 取消勾選：根據使用者需求，取消該分類及其所有子分類
+                                                            // 也取消父分類 (如果父分類下沒有其他被選中的子分類，這裡採連鎖取消)
+                                                            const toRemove = new Set<string>();
+
+                                                            // 1. 找出所有子代
+                                                            const getDescendants = (id: string) => {
+                                                                const children = categoryHierarchy
+                                                                    .filter((h: any) => h.parent_id === id)
+                                                                    .map((h: any) => h.child_id);
+                                                                children.forEach(childId => {
+                                                                    toRemove.add(childId);
+                                                                    getDescendants(childId);
+                                                                });
+                                                            };
+
+                                                            toRemove.add(cat.id);
+                                                            getDescendants(cat.id);
+
+                                                            // 2. 處理父代 (使用者要求取消子分類時父分類也要取消)
+                                                            const getAncestors = (id: string) => {
+                                                                const parents = categoryHierarchy
+                                                                    .filter((h: any) => h.child_id === id)
+                                                                    .map((h: any) => h.parent_id);
+                                                                parents.forEach(parentId => {
+                                                                    toRemove.add(parentId);
+                                                                    getAncestors(parentId);
+                                                                });
+                                                            };
+                                                            getAncestors(cat.id);
+
+                                                            next = selectedCategoryIds.filter(id => !toRemove.has(id));
+                                                            console.log('[BasicInfoForm] Removing categories:', Array.from(toRemove));
+                                                        } else {
+                                                            // 勾選：自動勾選所有父分類
+                                                            const toAdd = new Set<string>([cat.id]);
+                                                            const getAncestors = (id: string) => {
+                                                                const parents = categoryHierarchy
+                                                                    .filter((h: any) => h.child_id === id)
+                                                                    .map((h: any) => h.parent_id);
+                                                                console.log(`[BasicInfoForm] Finding ancestors for ${id}:`, parents);
+                                                                parents.forEach(parentId => {
+                                                                    if (!toAdd.has(parentId)) {
+                                                                        toAdd.add(parentId);
+                                                                        getAncestors(parentId);
+                                                                    }
+                                                                });
+                                                            };
+                                                            getAncestors(cat.id);
+
+                                                            const combined = new Set([...selectedCategoryIds, ...toAdd]);
+                                                            next = Array.from(combined);
+                                                            console.log('[BasicInfoForm] Adding categories (with ancestors):', next);
+                                                        }
+                                                        field.onChange(next);
+                                                    };
+
+                                                    return (
+                                                        <div
+                                                            key={cat.uniqueValue}
+                                                            className={`flex items-center gap-2 p-1.5 rounded-md hover:bg-muted cursor-pointer transition-colors ${isSelected ? 'bg-primary/5 text-primary' : ''
+                                                                }`}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                toggleCategory();
+                                                            }}
+                                                        >
+                                                            <Checkbox
+                                                                checked={isSelected}
+                                                                className="pointer-events-none"
+                                                                onCheckedChange={toggleCategory}
+                                                            />
+                                                            <span className="text-sm">{'\u00A0'.repeat(cat.level * 2) + cat.name}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                                {categoryOptions.length === 0 && (
+                                                    <p className="text-xs text-center py-4 text-muted-foreground">
+                                                        尚未建立分類
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+
                                 <FormMessage />
                             </FormItem>
                         )}
@@ -230,12 +432,12 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
                         <div className="grid grid-cols-2 gap-4">
                             {specFields.map((f: any) => (
                                 <div key={f.key} className="space-y-1.5">
-                                    <label className="text-xs font-medium text-muted-foreground">{f.key}</label>
+                                    <label className="text-xs font-medium text-muted-foreground">{f.name}</label>
                                     {f.type === 'text' ? (
                                         <Input
                                             value={form.watch(`table_settings.${f.key}`) || ''}
                                             onChange={(e) => form.setValue(`table_settings.${f.key}`, e.target.value)}
-                                            placeholder={`輸入${f.key}`}
+                                            placeholder={`輸入${f.name}`}
                                             className="h-9"
                                         />
                                     ) : (

@@ -182,10 +182,10 @@ export function AppLayout({ children }: AppLayoutProps) {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>我的帳號</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate('/settings')}>
+            {/*          <DropdownMenuItem onClick={() => navigate('/settings')}>
               <Settings className="mr-2 h-4 w-4" />
               設定
-            </DropdownMenuItem>
+            </DropdownMenuItem>*/}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
               <LogOut className="mr-2 h-4 w-4" />

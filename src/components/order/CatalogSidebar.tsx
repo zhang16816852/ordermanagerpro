@@ -39,17 +39,48 @@ export function CatalogSidebar({
         },
     });
 
+    const { data: categoryHierarchy = [] } = useQuery({
+        queryKey: ['category_hierarchy'],
+        queryFn: async () => {
+            const { data, error } = await (supabase.from('category_hierarchy' as any) as any).select('*');
+            if (error) return [];
+            return data;
+        },
+    });
+
     const categoryTree = useMemo(() => {
-        const build = (pid: string | null = null): any[] => {
-            return categories
-                .filter((c: any) => c.parent_id === pid)
-                .map((c: any) => ({
-                    ...c,
-                    children: build(c.id)
-                }));
+        // Deduplicate hierarchy links
+        const seen = new Set<string>();
+        const hierarchy = categoryHierarchy.filter((h: any) => {
+            const key = `${h.parent_id}-${h.child_id}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
+        // Find nodes that are NOT children in any hierarchy row (Roots)
+        const childIds = new Set(hierarchy.map((h: any) => h.child_id));
+        const roots = categories.filter((c: any) => !childIds.has(c.id));
+
+        const build = (nodeId: string): any[] => {
+            const childLinks = hierarchy.filter((h: any) => h.parent_id === nodeId);
+            return childLinks
+                .map((link: any) => {
+                    const child = categories.find((c: any) => c.id === link.child_id);
+                    if (!child) return null;
+                    return {
+                        ...child,
+                        children: build(child.id)
+                    };
+                })
+                .filter(Boolean);
         };
-        return build();
-    }, [categories]);
+
+        return roots.map(root => ({
+            ...root,
+            children: build(root.id)
+        }));
+    }, [categories, categoryHierarchy]);
 
     // Fetch specs for the selected category
     const { data: specFields = [] } = useQuery({
@@ -60,13 +91,17 @@ export function CatalogSidebar({
                 .from('category_spec_links' as any) as any)
                 .select(`
                     specification_definitions (
+                        id,
                         name
                     )
                 `)
                 .eq('category_id', selectedCategory);
 
             if (error) return [];
-            return data.map((d: any) => d.specification_definitions.name);
+            return data.map((d: any) => ({
+                id: d.specification_definitions.id,
+                name: d.specification_definitions.name
+            }));
         },
     });
 
@@ -74,24 +109,30 @@ export function CatalogSidebar({
     const availableSpecs = useMemo(() => {
         const specs: Record<string, Set<string>> = {};
 
-        // Use the fetched spec names as keys
-        const definedSpecKeys = specFields;
+        // Use the fetched spec IDs as the keys for filtering table_settings
+        const definedSpecIds = specFields.map(f => f.id);
+        const definedSpecNames = specFields.map(f => f.name);
         const selectedCatDetails = categories.find((c: any) => c.id === selectedCategory);
 
         products.forEach((p) => {
-            // Filter by category_id (or legacy category name if no match)
+            // 檢查產品是否屬於當前選擇的分類
+            const pCategoryIds = (p as any).category_ids || [];
             const pCategoryId = (p as any).category_id;
-            if (selectedCategory && pCategoryId !== selectedCategory) {
-                // Backward compatibility check: if p.category matches the name of selectedCategory
-                if (p.category !== (selectedCatDetails as any)?.name) return;
+
+            if (selectedCategory) {
+                const hasMatchInLinks = pCategoryIds.includes(selectedCategory);
+                const hasMatchInLegacy = pCategoryId === selectedCategory || p.category === (selectedCatDetails as any)?.name;
+
+                if (!hasMatchInLinks && !hasMatchInLegacy) return;
             }
 
             // Scan product table_settings
             const pSettings = p.table_settings as Record<string, any> | null;
             if (pSettings && typeof pSettings === 'object') {
                 Object.entries(pSettings).forEach(([key, value]) => {
-                    // If we have defined keys, only include those
-                    if (definedSpecKeys.length > 0 && !definedSpecKeys.includes(key)) return;
+                    // key could be ID or Name (for legacy data)
+                    // We check if it matches either the defined IDs or Names
+                    if (definedSpecIds.length > 0 && !definedSpecIds.includes(key) && !definedSpecNames.includes(key)) return;
                     if (!specs[key]) specs[key] = new Set();
                     if (value !== null && value !== undefined) specs[key].add(String(value));
                 });
@@ -102,7 +143,7 @@ export function CatalogSidebar({
                 const vSettings = v.table_settings as Record<string, any> | null;
                 if (vSettings && typeof vSettings === 'object') {
                     Object.entries(vSettings).forEach(([key, value]) => {
-                        if (definedSpecKeys.length > 0 && !definedSpecKeys.includes(key)) return;
+                        if (definedSpecIds.length > 0 && !definedSpecIds.includes(key) && !definedSpecNames.includes(key)) return;
                         if (!specs[key]) specs[key] = new Set();
                         if (value !== null && value !== undefined) specs[key].add(String(value));
                     });
@@ -118,7 +159,7 @@ export function CatalogSidebar({
             }
         });
         return result;
-    }, [products, selectedCategory, categories]);
+    }, [products, selectedCategory, categories, specFields]);
 
     const hasActiveFilters = selectedCategory !== null || Object.keys(selectedSpecs).length > 0;
 
@@ -131,13 +172,14 @@ export function CatalogSidebar({
         });
     };
 
-    const renderCategoryNode = (node: any, level = 0) => {
+    const renderCategoryNode = (node: any, level = 0, path = "root") => {
         const isSelected = selectedCategory === node.id;
         const isExpanded = expandedCategories.has(node.id);
         const hasChildren = node.children.length > 0;
+        const uniqueKey = `${path}-${node.id}`;
 
         return (
-            <div key={node.id} className="space-y-1">
+            <div key={uniqueKey} className="space-y-1">
                 <div className="flex items-center gap-1 group">
                     {hasChildren ? (
                         <Button
@@ -164,7 +206,7 @@ export function CatalogSidebar({
                 </div>
                 {isExpanded && hasChildren && (
                     <div className="pl-4 border-l ml-6 space-y-1">
-                        {node.children.map((child: any) => renderCategoryNode(child, level + 1))}
+                        {node.children.map((child: any) => renderCategoryNode(child, level + 1, node.id))}
                     </div>
                 )}
             </div>
@@ -219,35 +261,41 @@ export function CatalogSidebar({
                     <div className="space-y-5">
                         <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">進階規格</h3>
                         {Object.entries(availableSpecs).length > 0 ? (
-                            Object.entries(availableSpecs).map(([key, values]) => (
-                                <div key={key} className="space-y-3">
-                                    <h4 className="text-xs font-semibold text-foreground/80">{key}</h4>
-                                    <div className="space-y-2">
-                                        {values.map((val) => (
-                                            <div key={val} className="flex items-center space-x-2">
-                                                <Checkbox
-                                                    id={`spec-${key}-${val}`}
-                                                    checked={(selectedSpecs[key] || []).includes(val)}
-                                                    onCheckedChange={(checked) => {
-                                                        const current = selectedSpecs[key] || [];
-                                                        if (checked) {
-                                                            onSpecChange(key, [...current, val]);
-                                                        } else {
-                                                            onSpecChange(key, current.filter((v) => v !== val));
-                                                        }
-                                                    }}
-                                                />
-                                                <Label
-                                                    htmlFor={`spec-${key}-${val}`}
-                                                    className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground"
-                                                >
-                                                    {val}
-                                                </Label>
-                                            </div>
-                                        ))}
+                            Object.entries(availableSpecs).map(([key, values]) => {
+                                // Resolve key (ID or Name) to a display name
+                                const specDef = specFields.find(f => f.id === key || f.name === key);
+                                const displayName = specDef ? specDef.name : key;
+
+                                return (
+                                    <div key={key} className="space-y-3">
+                                        <h4 className="text-xs font-semibold text-foreground/80">{displayName}</h4>
+                                        <div className="space-y-2">
+                                            {values.map((val) => (
+                                                <div key={val} className="flex items-center space-x-2">
+                                                    <Checkbox
+                                                        id={`spec-${key}-${val}`}
+                                                        checked={(selectedSpecs[key] || []).includes(val)}
+                                                        onCheckedChange={(checked) => {
+                                                            const current = selectedSpecs[key] || [];
+                                                            if (checked) {
+                                                                onSpecChange(key, [...current, val]);
+                                                            } else {
+                                                                onSpecChange(key, current.filter((v) => v !== val));
+                                                            }
+                                                        }}
+                                                    />
+                                                    <Label
+                                                        htmlFor={`spec-${key}-${val}`}
+                                                        className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground"
+                                                    >
+                                                        {val}
+                                                    </Label>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
-                            ))
+                                );
+                            })
                         ) : (
                             <div className="text-center py-4 bg-muted/20 rounded-lg border border-dashed">
                                 <p className="text-[10px] text-muted-foreground italic">目前無可用的規格篩選</p>

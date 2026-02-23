@@ -7,9 +7,14 @@ import type { Tables } from '@/integrations/supabase/types';
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;
 
+export type ProductWithCategories = Product & {
+  category_ids: string[];
+  category_names: string[];
+};
+
 interface ProductCache {
   version: number;
-  products: Product[];
+  products: ProductWithCategories[];
 }
 
 const CACHE_KEY = 'products_cache_v2';
@@ -25,12 +30,60 @@ function getLocalCache(): ProductCache | null {
   }
 }
 
-function setLocalCache(products: Product[], version: number) {
+function setLocalCache(products: ProductWithCategories[], version: number) {
   const cache: ProductCache = { version, products };
   localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
 }
 
-async function checkVersionAndFetch(): Promise<{ products: Product[]; version: number }> {
+function normalizeProduct(p: any): ProductWithCategories {
+  // Check if we are receiving the junction table data
+  const hasLinksProperty = Object.prototype.hasOwnProperty.call(p, 'product_category_links');
+  const links = p.product_category_links || [];
+
+  if (!hasLinksProperty && p.sku) {
+    console.warn(`[ProductCache] Warning: 'product_category_links' property is missing for SKU ${p.sku}. Check if Edge Function is deployed with the latest query.`);
+  }
+
+  // Priority: 
+  // 1. Junction table (product_category_links)
+  // 2. Legacy array field if exists (from previous migrations maybe)
+  // 3. Singular legacy field (category_id)
+  let category_ids: string[] = [];
+
+  if (hasLinksProperty) {
+    category_ids = links.map((l: any) => l.category_id);
+  } else if (Array.isArray(p.category_ids) && p.category_ids.length > 0) {
+    category_ids = p.category_ids;
+  } else if (p.category_id) {
+    category_ids = [p.category_id];
+  }
+
+  // Debug log for specific products for troubleshooting
+  if (p.sku && p.sku.includes('IMOSCASE')) {
+    console.log(`[ProductCache] Normalized SKU ${p.sku}:`, {
+      source: hasLinksProperty ? 'junction_table' : (p.category_id ? 'legacy_id' : 'none'),
+      count: category_ids.length,
+      ids: category_ids
+    });
+  }
+
+  const category_names = (links.length > 0)
+    ? links.map((l: any) => l.categories?.name).filter(Boolean)
+    : (p.category_names && p.category_names.length > 0 ? p.category_names : (p.category ? [p.category] : []));
+
+  // Placeholder if names are missing but IDs exist
+  const final_category_names = (category_names.length === 0 && category_ids.length > 0)
+    ? category_ids.map(() => '...')
+    : category_names;
+
+  return {
+    ...p,
+    category_ids,
+    category_names: final_category_names
+  };
+}
+
+async function checkVersionAndFetch(): Promise<{ products: ProductWithCategories[]; version: number }> {
   const cache = getLocalCache();
   const clientVersion = cache?.version ?? null;
 
@@ -45,20 +98,34 @@ async function checkVersionAndFetch(): Promise<{ products: Product[]; version: n
     // Fallback to direct fetch if edge function fails
     const { data: products, error: fetchError } = await supabase
       .from('products')
-      .select('*')
+      .select(`
+        *,
+        product_category_links(category_id, categories(name))
+      `)
       .order('name');
 
     if (fetchError) throw fetchError;
-    return { products: products || [], version: clientVersion || 0 };
+
+    // Map internal property to category_ids and category_names
+    const mappedProducts = (products || []).map(normalizeProduct);
+
+    console.log('[ProductCache] Direct fetch completed. Sample product category_ids:', mappedProducts[0]?.category_ids);
+    return { products: mappedProducts, version: clientVersion || 0 };
   }
 
-  const { needsUpdate, version, data: products } = data;
+  const { needsUpdate, version, data: rawData } = data;
 
   if (!needsUpdate && cache) {
     console.log('[ProductCache] Using cached data, version:', version);
-    return { products: cache.products, version };
+    // Even if using cache, run through normalize to ensure legacy fields are mapped if needed
+    const normalizedProducts = cache.products.map(normalizeProduct);
+    return { products: normalizedProducts, version };
   }
 
+  // Map internal property if updated data received
+  const products = (rawData || []).map(normalizeProduct);
+
+  console.log('[ProductCache] Edge function data mapped. Sample product category_ids:', products[0]?.category_ids);
   console.log('[ProductCache] Updated data received, version:', version);
   setLocalCache(products, version);
   return { products, version };
@@ -66,9 +133,9 @@ async function checkVersionAndFetch(): Promise<{ products: Product[]; version: n
 
 export function useProductCache() {
   const queryClient = useQueryClient();
-  const [localProducts, setLocalProducts] = useState<Product[]>(() => {
+  const [localProducts, setLocalProducts] = useState<ProductWithCategories[]>(() => {
     const cache = getLocalCache();
-    return cache?.products || [];
+    return (cache?.products || []).map(normalizeProduct);
   });
 
   const { data, isLoading, error, refetch } = useQuery({
