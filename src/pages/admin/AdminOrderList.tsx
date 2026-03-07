@@ -555,8 +555,8 @@ export default function AdminOrderList() {
                           {statusTab === 'pending' && (
                             <TableCell>
                               <Checkbox
-                                checked={selectedOrderIds.has(order.id)}
-                                onCheckedChange={(checked) => toggleOrderSelection(order.id, !!checked)}
+                                checked={selectedOrderIds.has(order.code || order.id)}
+                                onCheckedChange={(checked) => toggleOrderSelection(order.code || order.id, !!checked)}
                               />
                             </TableCell>
                           )}

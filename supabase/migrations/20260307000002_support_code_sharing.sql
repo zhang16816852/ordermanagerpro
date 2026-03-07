@@ -1,4 +1,8 @@
--- 1. 更新獲取分享訂單詳情的函數：支援 UUID 或流水號 (code)
+-- 1. 移除舊的函數簽章 (避免參數名稱不一致導致 404)
+DROP FUNCTION IF EXISTS public.get_shared_order_details(UUID, TEXT);
+DROP FUNCTION IF EXISTS public.get_shared_sales_note_details(UUID, TEXT);
+
+-- 2. 建立新的獲取分享訂單詳情函數：支援 UUID 或 流水號 (code)
 CREATE OR REPLACE FUNCTION public.get_shared_order_details(
   p_identifier TEXT, -- 可以是 UUID 或是 流水號 (code)
   p_token TEXT
@@ -29,7 +33,7 @@ BEGIN
         'status', o.status,
         'notes', o.notes,
         'store_name', s.name,
-        'access_token', o.access_token -- 前端驗證 token 用
+        'access_token', o.access_token 
       )
       FROM public.orders o
       JOIN public.stores s ON s.id = o.store_id
@@ -54,7 +58,6 @@ BEGIN
     )
   ) INTO v_result;
 
-  -- 如果沒找到訂單，回傳 NULL 或空 JSON，讓前端處理錯誤
   IF (v_result->>'order') IS NULL THEN
     RETURN NULL;
   END IF;
@@ -63,7 +66,7 @@ BEGIN
 END;
 $$;
 
--- 2. 更新獲取分享銷貨單詳情的函數：支援 UUID 或流水號 (code)
+-- 3. 建立新的獲取分享銷貨單詳情函數：支援 UUID 或 流水號 (code)
 CREATE OR REPLACE FUNCTION public.get_shared_sales_note_details(
   p_identifier TEXT, -- 可以是 UUID 或是 流水號 (code)
   p_token TEXT
