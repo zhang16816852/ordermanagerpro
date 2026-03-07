@@ -597,7 +597,6 @@ export default function AdminProducts() {
                                     <Table>
                                       <TableHeader className="bg-transparent border-b">
                                         <TableRow className="hover:bg-transparent border-none">
-                                          <TableHead className="h-8 text-xs">變體 SKU</TableHead>
                                           <TableHead className="h-8 text-xs">變體名稱</TableHead>
                                           <TableHead className="h-8 text-xs">規格</TableHead>
                                           <TableHead className="h-8 text-xs text-right">狀態</TableHead>
@@ -608,7 +607,6 @@ export default function AdminProducts() {
                                       <TableBody>
                                         {variants.map((v) => (
                                           <TableRow key={v.id} className="hover:bg-background border-none">
-                                            <TableCell className="py-1 font-mono text-xs">{v.sku}</TableCell>
                                             <TableCell className="py-1 text-sm font-medium">{v.name}</TableCell>
                                             <TableCell className="py-1 text-xs text-muted-foreground">
                                               {[v.option_1, v.option_2, v.option_3].filter(Boolean).join(' / ')}

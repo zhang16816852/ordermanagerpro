@@ -8,6 +8,7 @@ import { OrderStatusBadge } from './OrderStatusBadge';
 
 interface OrderWithItems {
     id: string;
+    code?: string;
     created_at: string;
     status: 'pending' | 'processing' | 'shipped';
     notes: string | null;
@@ -59,7 +60,7 @@ export function OrdersCardView({
                                 {/* 頂部：編號與操作 */}
                                 <div className="flex justify-between items-start">
                                     <div className="space-y-1">
-                                        <div className="text-xs font-mono text-muted-foreground">#{order.id.slice(0, 8)}</div>
+                                        <div className="text-xs font-mono text-muted-foreground">#{order.code || order.id.slice(0, 8)}</div>
                                         <OrderStatusBadge status={itemStatus} type="shipping" />
                                     </div>
                                     <div className="flex gap-1">

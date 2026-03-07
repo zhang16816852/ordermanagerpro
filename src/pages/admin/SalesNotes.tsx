@@ -14,8 +14,7 @@ export default function AdminSalesNotes() {
   const [search, setSearch] = useState("");
   const [storeFilter, setStoreFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [selectedNote, setSelectedNote] = useState<any>(null); // Keep as any from react-query for now, or map it
-
+  const [selectedNote, setSelectedNote] = useState<typeof salesNotes[number] | null>(null);
   const { data: stores } = useQuery({
     queryKey: ["admin-stores"],
     queryFn: async () => {
@@ -64,6 +63,7 @@ export default function AdminSalesNotes() {
     const searchLower = search.toLowerCase();
     return (
       note.id.toLowerCase().includes(searchLower) ||
+      (note.code && note.code.toLowerCase().includes(searchLower)) ||
       note.store?.name?.toLowerCase().includes(searchLower) ||
       note.store?.code?.toLowerCase().includes(searchLower)
     );
@@ -88,6 +88,7 @@ export default function AdminSalesNotes() {
   // Map data for the table component
   const tableData = filteredNotes?.map(note => ({
     id: note.id,
+    code: note.code,
     storeName: note.store?.name,
     storeCode: note.store?.code,
     status: note.status,
@@ -101,6 +102,7 @@ export default function AdminSalesNotes() {
   // Map data for the dialog component
   const dialogData: SalesNoteDetail | null = selectedNote ? {
     id: selectedNote.id,
+    code: selectedNote.code,
     storeName: selectedNote.store?.name,
     storeCode: selectedNote.store?.code,
     status: selectedNote.status,

@@ -22,6 +22,7 @@ interface OrderItem {
 
 interface OrderDetail {
     id: string;
+    code?: string;
     created_at: string;
     source_type?: 'frontend' | 'admin_proxy';
     status: string;
@@ -59,7 +60,7 @@ export function OrderDetailDialog({ order, open, onOpenChange }: OrderDetailDial
                 <div className="flex flex-col flex-1 min-h-0 gap-2 ">
                     {/* Order Basic Info */}
                     <OrderInfo
-                        orderId={order.id}
+                        orderId={order.code || order.id}
                         storeName={order.stores?.name}
                         createdAt={formattedDate}
                         sourceType={order.source_type}

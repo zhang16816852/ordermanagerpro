@@ -38,7 +38,7 @@ export default function AdminOrderComposer() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selectedStoreId, setSelectedStoreId] = useState<string>("");
-  const [createdOrder, setCreatedOrder] = useState<{ id: string; access_token: string } | null>(null);
+  const [createdOrder, setCreatedOrder] = useState<{ id: string; code?: string | null; access_token: string } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
 
   const { data: stores = [], isLoading: storesLoading } = useQuery({
@@ -94,7 +94,7 @@ export default function AdminOrderComposer() {
       toast.success("訂單已成功建立！");
       clearDraft();
       queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
-      setCreatedOrder({ id: data.id, access_token: data.access_token });
+      setCreatedOrder({ id: data.id, code: data.code, access_token: data.access_token });
     },
     onError: (error: any) => {
       toast.error(error.message || "建立訂單失敗");
@@ -107,7 +107,7 @@ export default function AdminOrderComposer() {
 
   const getShareLink = () => {
     if (!createdOrder) return "";
-    return `${window.location.origin}/share/order/${createdOrder.id}?token=${createdOrder.access_token}`;
+    return `${window.location.origin}/share/order/${createdOrder.code || createdOrder.id}?token=${createdOrder.access_token}`;
   };
 
   const copyToClipboard = () => {

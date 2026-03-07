@@ -9,6 +9,7 @@ import { Json } from "@/integrations/supabase/types";
 import { Eye, Trash2, Copy, Calendar, Package, Store } from "lucide-react";
 interface SalesNoteSummary {
     id: string;
+    code?: string;
     storeName?: string;
     storeCode?: string;
     status: string;
@@ -40,7 +41,7 @@ export function SalesNoteListTable({
             toast.error("無法取得分享連結");
             return;
         }
-        const link = `${window.location.origin}/share/sale/${note.id}?token=${token}`;
+        const link = `${window.location.origin}/share/sale/${note.code || note.id}?token=${token}`;
         navigator.clipboard.writeText(link);
         toast.success("連結已複製到剪貼簿");
     };
@@ -116,7 +117,7 @@ export function SalesNoteListTable({
                     <TableBody>
                         {data.map((note) => (
                             <TableRow key={note.id} className="hover:bg-muted/50 transition-colors">
-                                <TableCell className="font-mono text-xs font-medium">{note.id.slice(0, 8)}...</TableCell>
+                                <TableCell className="font-mono text-xs font-medium">{note.code || note.id.slice(0, 8)}</TableCell>
                                 {showStoreColumn && (
                                     <TableCell>
                                         <div className="font-medium text-sm">{note.storeName}</div>
@@ -165,7 +166,7 @@ export function SalesNoteListTable({
                         {/* 頂部：狀態與編號 */}
                         <div className="flex justify-between items-start">
                             <div className="space-y-1">
-                                <div className="text-xs font-mono text-muted-foreground">#{note.id.slice(0, 8)}</div>
+                                <div className="text-xs font-mono text-muted-foreground">#{note.code || note.id.slice(0, 8)}</div>
                                 <SalesNoteStatusBadge status={note.status} />
                             </div>
                             <div className="flex gap-1">

@@ -9,6 +9,7 @@ import type { SalesNoteDetail } from '@/components/sales/SalesNoteDetailDialog';
 
 interface SalesNoteWithItems {
   id: string;
+  code?: string;
   status: 'draft' | 'shipped' | 'received';
   shipped_at: string | null;
   received_at: string | null;
@@ -27,6 +28,7 @@ interface SalesNoteWithItems {
 
 interface SalesNoteSummary {
   id: string;
+  code?: string;
   status: string;
   itemCount: number;
   created_at: string;
@@ -48,6 +50,7 @@ export default function StoreSalesNotes() {
         .from('sales_notes')
         .select(`
           id,
+          code,
           status,
           shipped_at,
           received_at,
@@ -98,6 +101,7 @@ export default function StoreSalesNotes() {
     if (!salesNotes) return [];
     return salesNotes.map((note) => ({
       id: note.id,
+      code: note.code,
       status: note.status,
       itemCount: note.sales_note_items.length,
       created_at: note.created_at,
@@ -114,6 +118,7 @@ export default function StoreSalesNotes() {
 
     return {
       id: note.id,
+      code: note.code,
       status: note.status,
       created_at: note.created_at,
       shipped_at: note.shipped_at,

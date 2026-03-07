@@ -15,6 +15,7 @@ import { OrderStatusBadge } from './OrderStatusBadge';
 
 interface OrderWithItems {
     id: string;
+    code?: string;
     created_at: string;
     status: 'pending' | 'processing' | 'shipped';
     notes: string | null;
@@ -83,8 +84,8 @@ export function OrdersTableView({
                             const canEdit = order.status === 'pending';
                             return (
                                 <TableRow key={order.id}>
-                                    <TableCell className="font-mono text-sm">
-                                        {order.id.slice(0, 8)}...
+                                    <TableCell className="font-mono text-xs font-medium">
+                                        {order.code || order.id.slice(0, 8)}
                                     </TableCell>
                                     <TableCell>{order.order_items.length}</TableCell>
                                     <TableCell className="text-right font-medium">

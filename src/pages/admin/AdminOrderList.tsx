@@ -40,6 +40,7 @@ import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 
 interface OrderWithDetails {
   id: string;
+  code?: string;
   created_at: string;
   source_type: 'frontend' | 'admin_proxy';
   status: 'pending' | 'processing' | 'shipped';
@@ -141,6 +142,7 @@ export default function AdminOrderList() {
         .from('orders')
         .select(`
           id,
+          code,
           created_at,
           source_type,
           status,
@@ -208,7 +210,8 @@ export default function AdminOrderList() {
     return (
       order.stores?.name.toLowerCase().includes(searchLower) ||
       order.stores?.code?.toLowerCase().includes(searchLower) ||
-      order.id.toLowerCase().includes(searchLower)
+      order.id.toLowerCase().includes(searchLower) ||
+      (order.code && order.code.toLowerCase().includes(searchLower))
     );
   });
 
@@ -557,8 +560,8 @@ export default function AdminOrderList() {
                               />
                             </TableCell>
                           )}
-                          <TableCell className="font-mono text-sm">
-                            {order.id.slice(0, 8)}...
+                          <TableCell className="font-mono text-xs font-medium">
+                            {order.code || order.id.slice(0, 8)}
                           </TableCell>
                           <TableCell>
                             <div className="font-medium">{order.stores?.name}</div>

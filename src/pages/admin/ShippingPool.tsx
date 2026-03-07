@@ -25,6 +25,7 @@ interface ShippingPoolItem {
   order_item: {
     id: string;
     order_id: string;
+    order?: { code: string };
     quantity: number;
     shipped_quantity: number;
     unit_price: number;
@@ -74,6 +75,7 @@ export default function AdminShippingPool() {
           order_item:order_items(
             id,
             order_id,
+            order:orders(code),
             quantity,
             shipped_quantity,
             unit_price,
@@ -383,6 +385,9 @@ export default function AdminShippingPool() {
                                     - {item.order_item.product_variant.name}
                                   </span>
                                 )}
+                                <div className="text-[10px] text-muted-foreground mt-1">
+                                  來源單號: {item.order_item?.order?.code || item.order_item?.order_id.slice(0, 8)}
+                                </div>
                               </TableCell>
                               <TableCell className="text-right">{item.quantity}</TableCell>
                               <TableCell className="text-right">

@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Card, CardContent } from '@/components/ui/card';
+import z from "zod";
 
 export interface SalesNoteItem {
     id: string;
@@ -27,6 +28,7 @@ export interface SalesNoteItem {
 
 export interface SalesNoteDetail {
     id: string;
+    code?: string;
     storeName?: string;
     storeCode?: string;
     status: string;
@@ -129,7 +131,7 @@ export function SalesNoteDetailDialog({
                     paid_amount: amount,
                     payment_status: 'paid',
                     transaction_date: date,
-                    description: `銷貨單收款: ${note.id.slice(0, 8)}`,
+                    description: `銷貨單收款: ${note.code || note.id.slice(0, 8)}`,
                     reference_type: 'sales_note',
                     reference_id: note.id,
                     account_id: accountId,
@@ -157,11 +159,13 @@ export function SalesNoteDetailDialog({
         onError: (error: any) => {
             toast.error(`收款記錄失敗: ${error.message}`);
         },
+
     });
 
     if (!note) return null;
 
     return (
+
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
@@ -176,7 +180,7 @@ export function SalesNoteDetailDialog({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-muted/20 p-4 rounded-lg border">
                         <div className="space-y-1">
                             <span className="text-muted-foreground flex items-center gap-1"><Info className="h-3.5 w-3.5" /> 編號</span>
-                            <div className="font-mono text-xs font-bold break-all">{note.id}</div>
+                            <div className="font-mono text-xs font-bold break-all">{note.code || note.id}</div>
                         </div>
 
                         {note.storeName && (

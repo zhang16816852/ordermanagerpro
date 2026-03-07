@@ -15,6 +15,7 @@ import { ItemsCardView } from '@/components/order/ItemsCardView';
 
 interface OrderWithItems {
   id: string;
+  code?: string;
   created_at: string;
   status: 'pending' | 'processing' | 'shipped';
   notes: string | null;
@@ -61,6 +62,7 @@ export default function StoreOrderList() {
         .from('orders')
         .select(`
           id,
+          code,
           created_at,
           status,
           notes,
@@ -107,6 +109,7 @@ export default function StoreOrderList() {
     const searchLower = search.toLowerCase();
     return (
       order.id.toLowerCase().includes(searchLower) ||
+      (order.code && order.code.toLowerCase().includes(searchLower)) ||
       order.order_items.some((item) =>
         item.products?.name.toLowerCase().includes(searchLower) ||
         item.products?.sku.toLowerCase().includes(searchLower)

@@ -152,7 +152,7 @@ export default function StoreReceiving() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">編號：</span>
-                  <span className="font-mono">{selectedNote.id}</span>
+                  <span className="font-mono">{selectedNote.code || selectedNote.id}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">出貨時間：</span>
