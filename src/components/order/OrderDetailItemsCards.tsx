@@ -7,8 +7,8 @@ interface OrderItem {
     shipped_quantity: number;
     unit_price: number;
     status: string;
-    products: { name: string; sku: string } | null;
-    product_variants: { name: string } | null;
+    product: { name: string; sku: string } | null;
+    product_variant: { name: string } | null;
 }
 
 interface OrderItemsCardsProps {
@@ -23,7 +23,8 @@ export function OrderDetailItemsCards({ items }: OrderItemsCardsProps) {
                     <CardContent className="p-2 space-y-3 text-sm">
                         <div className="font-medium min-w-0">
                             <span className="block text-muted-foreground ml-1 break-all">
-                                {item.product_variants?.name || item.products?.name}
+                                {item.product?.name}
+                                {item.product_variant && ` - ${item.product_variant.name}`}
                             </span>
                         </div>
 

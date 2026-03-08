@@ -17,8 +17,8 @@ interface OrderItem {
     shipped_quantity: number;
     unit_price: number;
     status: string;
-    products: { name: string; sku: string } | null;
-    product_variants: { name: string } | null;
+    product: { name: string; sku: string } | null;
+    product_variant: { name: string } | null;
     orderId: string;
     orderCreatedAt: string;
     orderStatus: string;
@@ -70,10 +70,10 @@ export function ItemsTableView({ items, isLoading, statusLabels }: ItemsTableVie
                             return (
                                 <TableRow key={item.id}>
                                     <TableCell>
-                                        {item.products?.name}
-                                        {item.product_variants && (
+                                        {item.product?.name}
+                                        {item.product_variant && (
                                             <span className="text-muted-foreground ml-1">
-                                                - {item.product_variants.name}
+                                                - {item.product_variant.name}
                                             </span>
                                         )}
                                     </TableCell>

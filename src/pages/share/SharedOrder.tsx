@@ -25,8 +25,9 @@ interface SharedOrderData {
   };
   items: {
     product_name: string;
+    variant_name?: string | null;
     quantity: number;
-    unit_price: number | null;
+    unit_price: number;
   }[];
 }
 
@@ -204,7 +205,14 @@ export default function SharedOrder() {
             <TableBody>
               {items.map((item: any, index: number) => (
                 <TableRow key={index}>
-                  <TableCell className="pl-6 font-medium">{item.product_name}</TableCell>
+                  <TableCell className="pl-6 font-medium">
+                    {item.product_name}
+                    {item.variant_name && (
+                      <span className="text-muted-foreground ml-1">
+                        - {item.variant_name}
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right pr-6">{item.quantity}</TableCell>
                   {showPrice && (
                     <>

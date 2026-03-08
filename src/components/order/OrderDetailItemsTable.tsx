@@ -14,8 +14,8 @@ interface OrderItem {
     shipped_quantity: number;
     unit_price: number;
     status: string;
-    products: { name: string; sku: string } | null;
-    product_variants: { name: string } | null;
+    product: { name: string; sku: string } | null;
+    product_variant: { name: string } | null;
 }
 
 interface OrderItemsTableProps {
@@ -39,9 +39,10 @@ export function OrderDetailItemsTable({ items }: OrderItemsTableProps) {
                     {items.map((item) => (
                         <TableRow key={item.id}>
                             <TableCell>
-                                {item.product_variants && (
+                                {item.product?.name}
+                                {item.product_variant && (
                                     <span className="text-muted-foreground ml-1">
-                                        {item.product_variants?.name || item.products?.name}
+                                        - {item.product_variant.name}
                                     </span>
                                 )}
                             </TableCell>

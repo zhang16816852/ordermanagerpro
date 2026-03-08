@@ -16,8 +16,8 @@ interface OrderItem {
     shipped_quantity: number;
     unit_price: number;
     status: string;
-    products: { name: string; sku: string } | null;
-    product_variants: { name: string; } | null;
+    product: { name: string; sku: string } | null;
+    product_variant: { name: string; } | null;
 }
 
 interface OrderDetail {

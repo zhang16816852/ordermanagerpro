@@ -25,8 +25,8 @@ interface OrderWithItems {
     shipped_quantity: number;
     unit_price: number;
     status: string;
-    products: { name: string; sku: string } | null;
-    product_variants: { name: string; } | null;
+    product: { name: string; sku: string } | null;
+    product_variant: { name: string; } | null;
   }[];
 }
 
@@ -72,8 +72,8 @@ export default function StoreOrderList() {
             shipped_quantity,
             unit_price,
             status,
-            products (name, sku),
-            product_variants (name)
+            product:products (name, sku),
+            product_variant:product_variants (name)
           )
         `)
         .eq('store_id', storeId)
@@ -92,8 +92,8 @@ export default function StoreOrderList() {
         if (!productFilter) return true;
         const searchLower = productFilter.toLowerCase();
         return (
-          item.products?.name.toLowerCase().includes(searchLower) ||
-          item.products?.sku.toLowerCase().includes(searchLower)
+          item.product?.name.toLowerCase().includes(searchLower) ||
+          item.product?.sku.toLowerCase().includes(searchLower)
         );
       })
       .map(item => ({
@@ -111,8 +111,8 @@ export default function StoreOrderList() {
       order.id.toLowerCase().includes(searchLower) ||
       (order.code && order.code.toLowerCase().includes(searchLower)) ||
       order.order_items.some((item) =>
-        item.products?.name.toLowerCase().includes(searchLower) ||
-        item.products?.sku.toLowerCase().includes(searchLower)
+        item.product?.name.toLowerCase().includes(searchLower) ||
+        item.product?.sku.toLowerCase().includes(searchLower)
       )
     );
   });

@@ -10,8 +10,8 @@ interface OrderItem {
     shipped_quantity: number;
     unit_price: number;
     status: string;
-    products: { name: string; sku: string } | null;
-    product_variants: { name: string } | null;
+    product: { name: string; sku: string } | null;
+    product_variant: { name: string } | null;
     orderId: string;
     orderCreatedAt: string;
     orderStatus: string;
@@ -49,7 +49,7 @@ export function ItemsCardView({ items, isLoading, statusLabels }: ItemsCardViewP
                                     {/* 商品資訊 */}
                                     <div className="flex-1">
                                         <div className="font-semibold text-base leading-snug">
-                                            {item.product_variants?.name || item.products?.name}
+                                            {item.product_variant?.name || item.product?.name}
                                         </div>
                                     </div>
 

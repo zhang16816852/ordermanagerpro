@@ -20,8 +20,8 @@ interface SalesNoteWithItems {
     quantity: number;
     order_items: {
       id: string;
-      products: { name: string; sku: string } | null;
-      product_variants: { name: string } | null;
+      product: { name: string; sku: string } | null;
+      product_variant: { name: string } | null;
     } | null;
   }[];
 }
@@ -61,8 +61,8 @@ export default function StoreSalesNotes() {
             quantity,
             order_items (
               id,
-              products (name, sku),
-              product_variants (name)
+              product:products (name, sku),
+              product_variant:product_variants (name)
             )
           )
         `)
@@ -127,9 +127,9 @@ export default function StoreSalesNotes() {
       items: note.sales_note_items.map((item) => ({
         id: item.id,
         quantity: item.quantity,
-        productSku: item.order_items?.products?.sku || '',
-        productName: item.order_items?.products?.name || '',
-        variantName: item.order_items?.product_variants?.name || null,
+        productSku: item.order_items?.product?.sku || '',
+        productName: item.order_items?.product?.name || '',
+        variantName: item.order_items?.product_variant?.name || null,
       })),
     };
   }, [selectedNoteId, salesNotes]);

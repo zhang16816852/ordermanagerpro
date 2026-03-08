@@ -54,8 +54,8 @@ interface OrderWithDetails {
     unit_price: number;
     status: string;
     store_id: string;
-    products: { name: string; sku: string } | null;
-    product_variants: { name: string; option_1: string | null; option_2: string | null } | null;
+    product: { name: string; sku: string } | null;
+    product_variant: { name: string; option_1: string | null; option_2: string | null } | null;
   }[];
 }
 
@@ -158,8 +158,8 @@ export default function AdminOrderList() {
             store_id,
             status,
             store_id,
-            products (name, sku),
-            product_variants (name, option_1, option_2)
+            product:products (name, sku),
+            product_variant:product_variants (name, option_1, option_2)
           )
         `)
         .eq('status', statusTab)
@@ -189,8 +189,8 @@ export default function AdminOrderList() {
         if (!productFilter) return true;
         const searchLower = productFilter.toLowerCase();
         return (
-          item.products?.name.toLowerCase().includes(searchLower) ||
-          item.products?.sku.toLowerCase().includes(searchLower)
+          item.product?.name.toLowerCase().includes(searchLower) ||
+          item.product?.sku.toLowerCase().includes(searchLower)
         );
       })
       .map(item => ({
@@ -253,8 +253,8 @@ export default function AdminOrderList() {
         itemId: item.id,
         quantity: item.pendingQuantity,
         maxQuantity: item.pendingQuantity,
-        productName: item.products?.name || '',
-        sku: item.products?.sku || '',
+        productName: item.product?.name || '',
+        sku: item.product?.sku || '',
         storeId: item.storeId,
         storeName: item.storeName,
       });
@@ -628,8 +628,8 @@ export default function AdminOrderList() {
                                 itemId: item.id,
                                 quantity: item.pendingQuantity,
                                 maxQuantity: item.pendingQuantity,
-                                productName: item.products?.name || '',
-                                sku: item.products?.sku || '',
+                                productName: item.product?.name || '',
+                                sku: item.product?.sku || '',
                                 storeId: item.storeId,
                                 storeName: item.storeName,
                               });
@@ -692,12 +692,12 @@ export default function AdminOrderList() {
                               <div className="text-xs text-muted-foreground">{item.storeCode}</div>
                             )}
                           </TableCell>
-                          <TableCell className="font-mono text-sm">{item.products?.sku}</TableCell>
+                          <TableCell className="font-mono text-sm">{item.product?.sku}</TableCell>
                           <TableCell>
-                            {item.products?.name}
-                            {item.product_variants && (
+                            {item.product?.name}
+                            {item.product_variant && (
                               <span className="text-muted-foreground ml-1">
-                                - {item.product_variants.name}
+                                - {item.product_variant.name}
                               </span>
                             )}
                           </TableCell>
