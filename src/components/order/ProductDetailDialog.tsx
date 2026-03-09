@@ -11,6 +11,8 @@ import { ProductWithPricing, VariantWithPricing } from "@/hooks/useProductCache"
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
 import { toast } from "sonner";
 import { ShoppingCart, ImageIcon } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ProductDetailDialogProps {
     product: ProductWithPricing | null;
@@ -26,6 +28,15 @@ export function ProductDetailDialog({
     storeId,
 }: ProductDetailDialogProps) {
     const { addItem, getItemQuantity } = useStoreDraft(storeId);
+
+    const { data: specDefinitions = [] } = useQuery({
+        queryKey: ['spec_definitions'],
+        queryFn: async () => {
+            const { data, error } = await (supabase.from('specification_definitions' as any) as any).select('*');
+            if (error) return [];
+            return data;
+        },
+    });
 
     if (!product) return null;
 
@@ -105,6 +116,34 @@ export function ProductDetailDialog({
                                 {product.description || "尚無詳細描述。"}
                             </div>
                         </div>
+
+                        {product.table_settings && Object.keys(product.table_settings).length > 0 && (
+                            <div className="pt-4 border-t">
+                                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">產品規格</h3>
+                                <div className="space-y-2">
+                                    {Object.entries(product.table_settings as Record<string, any>).map(([key, val]) => {
+                                        if (val === null || val === undefined || val === '') return null;
+
+                                        const specDef = specDefinitions.find((s: any) => s.id === key || s.name === key);
+                                        const displayName = specDef ? specDef.name : key;
+                                        let displayVal = val;
+
+                                        if (specDef?.type === 'boolean') {
+                                            displayVal = val === 'true' ? '支援' : (val === 'false' ? '不支援' : val);
+                                        } else if (specDef?.type === 'number_with_unit') {
+                                            displayVal = `${val}${specDef.options?.[0] || ''}`;
+                                        }
+
+                                        return (
+                                            <div key={key} className="flex justify-between text-sm py-1 border-b last:border-0 border-muted">
+                                                <span className="text-muted-foreground">{displayName}</span>
+                                                <span className="font-medium text-right">{displayVal}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="pt-6">
                             <Button

@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, FolderTree, ChevronRight, ChevronDown, ListPlus, X, Database, Download, Upload } from 'lucide-react';
+import { Plus, Pencil, Trash2, FolderTree, ChevronRight, ChevronDown, ListPlus, X, Database, Download, Upload, Tag } from 'lucide-react';
 import Papa from 'papaparse';
 import { toast } from 'sonner';
 import {
@@ -44,9 +44,16 @@ interface CategoryHierarchy {
 interface SpecDefinition {
     id: string;
     name: string;
-    type: 'select' | 'multiselect' | 'text';
+    type: 'select' | 'multiselect' | 'text' | 'boolean' | 'number_with_unit';
     options: string[];
     default_value?: string;
+}
+
+interface Brand {
+    id: string;
+    name: string;
+    description: string | null;
+    sort_order: number;
 }
 
 export default function AdminCategories() {
@@ -68,6 +75,15 @@ export default function AdminCategories() {
         name: '',
         type: 'select',
         options: [''],
+    });
+
+    // Brand form states
+    const [isBrandDialogOpen, setIsBrandDialogOpen] = useState(false);
+    const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
+    const [brandForm, setBrandForm] = useState<Partial<Brand>>({
+        name: '',
+        description: '',
+        sort_order: 0,
     });
 
     // --- Queries ---
@@ -113,6 +129,24 @@ export default function AdminCategories() {
             const { data, error } = await (supabase.from('category_hierarchy' as any) as any).select('*');
             if (error) return [];
             return data as CategoryHierarchy[];
+        },
+    });
+
+    const { data: brands = [], isLoading: isLoadingBrands } = useQuery({
+        queryKey: ['brands'],
+        queryFn: async () => {
+            try {
+                // Ignore error if table doesn't exist yet in case migration isn't fully applied
+                const { data, error } = await (supabase.from('brands' as any) as any)
+                    .select('*')
+                    .order('sort_order', { ascending: true })
+                    .order('name', { ascending: true });
+                if (error) return [];
+                return data as Brand[];
+            } catch (err) {
+                console.error('Error fetching brands:', err);
+                return [];
+            }
         },
     });
 
@@ -178,6 +212,25 @@ export default function AdminCategories() {
             queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
             toast.success('規格屬性已儲存');
             setIsSpecDialogOpen(false);
+        },
+    });
+
+    const brandMutation = useMutation({
+        mutationFn: async (data: any) => {
+            if (editingBrand) {
+                const { error } = await (supabase.from('brands' as any) as any)
+                    .update(data)
+                    .eq('id', editingBrand.id);
+                if (error) throw error;
+            } else {
+                const { error } = await (supabase.from('brands' as any) as any).insert([data]);
+                if (error) throw error;
+            }
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['brands'] });
+            toast.success('品牌已儲存');
+            setIsBrandDialogOpen(false);
         },
     });
 
@@ -262,7 +315,6 @@ export default function AdminCategories() {
     };
 
     const tree = buildTree(categories, categoryHierarchy);
-
     const renderTreeNode = (node: any, level = 0, path = "root") => {
         const isExpanded = expandedIds.has(node.id);
         const hasChildren = node.children.length > 0;
@@ -608,6 +660,10 @@ export default function AdminCategories() {
                         <Database className="h-4 w-4" />
                         規格屬性庫
                     </TabsTrigger>
+                    <TabsTrigger value="brands" className="flex items-center gap-2">
+                        <Tag className="h-4 w-4" />
+                        品牌管理
+                    </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="categories" className="space-y-4">
@@ -694,7 +750,10 @@ export default function AdminCategories() {
                                         <Badge variant="outline" className="text-[10px]">{spec.type}</Badge>
                                     </div>
                                     <CardDescription className="text-xs truncate">
-                                        {spec.type === 'text' ? '自定義文字輸入' : spec.options.join(' / ')}
+                                        {spec.type === 'text' ? '自定義文字輸入' :
+                                            spec.type === 'boolean' ? '支援/不支援 (開關)' :
+                                                spec.type === 'number_with_unit' ? `數值輸入 (單位: ${spec.options?.[0] || '無'})` :
+                                                    spec.options.join(' / ')}
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="flex justify-end gap-2 py-2 bg-muted/30">
@@ -709,6 +768,69 @@ export default function AdminCategories() {
                                         if (confirm(`確定要刪除規格「${spec.name}」嗎？這將導致所有關聯分類失去該欄位。`)) {
                                             (supabase.from('specification_definitions' as any) as any).delete().eq('id', spec.id).then(() => {
                                                 queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
+                                            });
+                                        }
+                                    }}>
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="brands" className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h2 className="text-lg font-semibold">品牌管理</h2>
+                            <CardDescription>管理全站產品品牌，建立後可在新增產品時直接選擇。</CardDescription>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button size="sm" onClick={() => {
+                                setEditingBrand(null);
+                                setBrandForm({ name: '', description: '', sort_order: 0 });
+                                setIsBrandDialogOpen(true);
+                            }}>
+                                <Plus className="mr-2 h-4 w-4" /> 新增品牌
+                            </Button>
+                        </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        {isLoadingBrands ? (
+                            <div className="col-span-full py-12 text-center text-muted-foreground">正在載入品牌...</div>
+                        ) : brands.length === 0 ? (
+                            <div className="col-span-full py-12 text-center border-2 border-dashed rounded-xl space-y-3">
+                                <Tag className="h-12 w-12 text-muted-foreground/30 mx-auto" />
+                                <p className="text-muted-foreground text-sm">尚未建立任何品牌</p>
+                            </div>
+                        ) : brands.map((brand: any) => (
+                            <Card key={brand.id} className="relative group overflow-hidden border-primary/10 hover:border-primary/50 transition-colors">
+                                <CardHeader className="pb-2">
+                                    <div className="flex justify-between items-start">
+                                        <CardTitle className="text-lg">{brand.name}</CardTitle>
+                                    </div>
+                                    {brand.description && (
+                                        <CardDescription className="text-xs truncate" title={brand.description}>
+                                            {brand.description}
+                                        </CardDescription>
+                                    )}
+                                </CardHeader>
+                                <CardContent className="flex justify-end gap-2 py-2 bg-muted/30">
+                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                                        setEditingBrand(brand);
+                                        setBrandForm({ name: brand.name, description: brand.description || '', sort_order: brand.sort_order || 0 });
+                                        setIsBrandDialogOpen(true);
+                                    }}>
+                                        <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => {
+                                        if (confirm(`確定要刪除品牌「${brand.name}」嗎？`)) {
+                                            (supabase.from('brands' as any) as any).delete().eq('id', brand.id).then(({ error }: any) => {
+                                                if (error) {
+                                                    toast.error(`刪除失敗: 該品牌可能已被產品關聯`);
+                                                } else {
+                                                    queryClient.invalidateQueries({ queryKey: ['brands'] });
+                                                }
                                             });
                                         }
                                     }}>
@@ -814,6 +936,8 @@ export default function AdminCategories() {
                                 <option value="select">單選下拉 (Select)</option>
                                 <option value="multiselect">多選 (Multi-select)</option>
                                 <option value="text">文字輸入 (Text)</option>
+                                <option value="boolean">是否支援 (Boolean開關)</option>
+                                <option value="number_with_unit">數值輸入 (附帶單位)</option>
                             </select>
                         </div>
 
@@ -913,6 +1037,16 @@ export default function AdminCategories() {
                                 />
                             </div>
                         )}
+                        {specForm.type === 'number_with_unit' && (
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">數值單位 (例如: W, mAh, cm, kg)</label>
+                                <Input
+                                    value={specForm.options?.[0] || ''}
+                                    onChange={(e) => setSpecForm(prev => ({ ...prev, options: [e.target.value] }))}
+                                    placeholder="請輸入單位名稱"
+                                />
+                            </div>
+                        )}
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsSpecDialogOpen(false)}>取消</Button>
@@ -924,6 +1058,53 @@ export default function AdminCategories() {
                             disabled={specMutation.isPending}
                         >
                             儲存規格
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Brand Dialog */}
+            <Dialog open={isBrandDialogOpen} onOpenChange={setIsBrandDialogOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>{editingBrand ? '編輯品牌' : '新增品牌'}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">品牌名稱</label>
+                            <Input
+                                value={brandForm.name}
+                                onChange={(e) => setBrandForm(prev => ({ ...prev, name: e.target.value }))}
+                                placeholder="輸入品牌名稱"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">品牌說明 (選填)</label>
+                            <Input
+                                value={brandForm.description || ''}
+                                onChange={(e) => setBrandForm(prev => ({ ...prev, description: e.target.value }))}
+                                placeholder="簡單描述"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">排序 (數字越小越前面)</label>
+                            <Input
+                                type="number"
+                                value={brandForm.sort_order ?? 0}
+                                onChange={(e) => setBrandForm(prev => ({ ...prev, sort_order: parseInt(e.target.value) || 0 }))}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsBrandDialogOpen(false)}>取消</Button>
+                        <Button
+                            onClick={() => {
+                                if (!brandForm.name?.trim()) return toast.error('請輸入品牌名稱');
+                                brandMutation.mutate(brandForm);
+                            }}
+                            disabled={brandMutation.isPending}
+                        >
+                            儲存品牌
                         </Button>
                     </DialogFooter>
                 </DialogContent>

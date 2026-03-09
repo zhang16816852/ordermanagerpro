@@ -44,6 +44,23 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
         },
     });
 
+    const { data: brands = [], isLoading: isLoadingBrands } = useQuery({
+        queryKey: ['brands'],
+        queryFn: async () => {
+            try {
+                const { data, error } = await (supabase.from('brands' as any) as any)
+                    .select('*')
+                    .order('sort_order', { ascending: true })
+                    .order('name', { ascending: true });
+                if (error) return [];
+                return data;
+            } catch (err) {
+                console.error('Error fetching brands:', err);
+                return [];
+            }
+        },
+    });
+
     // Build flat tree for select using the hierarchy table
     const categoryOptions = useMemo(() => {
         // Deduplicate hierarchy links to prevent recursive duplicates if DB has duplicate rows
@@ -380,13 +397,28 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
 
                     <FormField
                         control={form.control}
-                        name="brand"
+                        name="brand_id"
                         render={({ field }) => (
                             <FormItem>
                                 <FormLabel>品牌</FormLabel>
-                                <FormControl>
-                                    <Input {...field} value={field.value || ''} />
-                                </FormControl>
+                                <Select onValueChange={field.onChange} value={field.value || undefined} disabled={isLoadingBrands}>
+                                    <FormControl>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder={isLoadingBrands ? "載入中..." : "選擇品牌"} />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="none" disabled className="hidden">無</SelectItem>
+                                        {brands.map((brand: any) => (
+                                            <SelectItem key={brand.id} value={brand.id}>
+                                                {brand.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {brands.length === 0 && !isLoadingBrands && (
+                                    <p className="text-[10px] text-muted-foreground mt-1">尚未建立任何品牌，請至分類管理新增</p>
+                                )}
                                 <FormMessage />
                             </FormItem>
                         )}
@@ -433,7 +465,31 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
                             {specFields.map((f: any) => (
                                 <div key={f.key} className="space-y-1.5">
                                     <label className="text-xs font-medium text-muted-foreground">{f.name}</label>
-                                    {f.type === 'text' ? (
+                                    {f.type === 'boolean' ? (
+                                        <div className="flex items-center space-x-2 h-9 border rounded-md px-3 bg-background">
+                                            <Checkbox
+                                                id={`spec-${f.key}`}
+                                                checked={form.watch(`table_settings.${f.key}`) === 'true'}
+                                                onCheckedChange={(checked) => form.setValue(`table_settings.${f.key}`, checked ? 'true' : 'false')}
+                                            />
+                                            <label htmlFor={`spec-${f.key}`} className="text-sm cursor-pointer select-none flex-1">
+                                                支援
+                                            </label>
+                                        </div>
+                                    ) : f.type === 'number_with_unit' ? (
+                                        <div className="flex items-center space-x-2">
+                                            <Input
+                                                type="number"
+                                                value={form.watch(`table_settings.${f.key}`) || ''}
+                                                onChange={(e) => form.setValue(`table_settings.${f.key}`, e.target.value)}
+                                                placeholder={`輸入數值`}
+                                                className="h-9"
+                                            />
+                                            {f.options?.[0] && (
+                                                <span className="text-sm text-muted-foreground whitespace-nowrap">{f.options[0]}</span>
+                                            )}
+                                        </div>
+                                    ) : f.type === 'text' ? (
                                         <Input
                                             value={form.watch(`table_settings.${f.key}`) || ''}
                                             onChange={(e) => form.setValue(`table_settings.${f.key}`, e.target.value)}

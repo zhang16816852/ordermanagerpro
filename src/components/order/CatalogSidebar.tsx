@@ -15,6 +15,8 @@ interface CatalogSidebarProps {
     onCategoryChange: (categoryId: string | null) => void;
     selectedSpecs: Record<string, string[]>;
     onSpecChange: (key: string, values: string[]) => void;
+    selectedBrands?: string[];
+    onBrandChange?: (brands: string[]) => void;
     onClearFilters: () => void;
 }
 
@@ -24,6 +26,8 @@ export function CatalogSidebar({
     onCategoryChange,
     selectedSpecs,
     onSpecChange,
+    selectedBrands = [],
+    onBrandChange,
     onClearFilters,
 }: CatalogSidebarProps) {
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -45,6 +49,22 @@ export function CatalogSidebar({
             const { data, error } = await (supabase.from('category_hierarchy' as any) as any).select('*');
             if (error) return [];
             return data;
+        },
+    });
+
+    const { data: brands = [] } = useQuery({
+        queryKey: ['brands'],
+        queryFn: async () => {
+            try {
+                const { data, error } = await (supabase.from('brands' as any) as any)
+                    .select('*')
+                    .order('sort_order', { ascending: true })
+                    .order('name', { ascending: true });
+                if (error) return [];
+                return data;
+            } catch (err) {
+                return [];
+            }
         },
     });
 
@@ -92,7 +112,9 @@ export function CatalogSidebar({
                 .select(`
                     specification_definitions (
                         id,
-                        name
+                        name,
+                        type,
+                        options
                     )
                 `)
                 .eq('category_id', selectedCategory);
@@ -100,7 +122,9 @@ export function CatalogSidebar({
             if (error) return [];
             return data.map((d: any) => ({
                 id: d.specification_definitions.id,
-                name: d.specification_definitions.name
+                name: d.specification_definitions.name,
+                type: d.specification_definitions.type,
+                options: d.specification_definitions.options
             }));
         },
     });
@@ -161,7 +185,7 @@ export function CatalogSidebar({
         return result;
     }, [products, selectedCategory, categories, specFields]);
 
-    const hasActiveFilters = selectedCategory !== null || Object.keys(selectedSpecs).length > 0;
+    const hasActiveFilters = selectedCategory !== null || Object.keys(selectedSpecs).length > 0 || selectedBrands.length > 0;
 
     const toggleExpand = (id: string) => {
         setExpandedCategories(prev => {
@@ -255,6 +279,37 @@ export function CatalogSidebar({
                         </div>
                     </div>
 
+                    {/* Brands */}
+                    {brands.length > 0 && (
+                        <div className="space-y-3">
+                            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">品牌</h3>
+                            <div className="space-y-2">
+                                {brands.map((brand: any) => (
+                                    <div key={brand.id} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`brand-${brand.id}`}
+                                            checked={selectedBrands.includes(brand.id)}
+                                            onCheckedChange={(checked) => {
+                                                if (onBrandChange) {
+                                                    if (checked) {
+                                                        onBrandChange([...selectedBrands, brand.id]);
+                                                    } else {
+                                                        onBrandChange(selectedBrands.filter((id) => id !== brand.id));
+                                                    }
+                                                }
+                                            }}
+                                        />
+                                        <Label
+                                            htmlFor={`brand-${brand.id}`}
+                                            className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground"
+                                        >
+                                            {brand.name}
+                                        </Label>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                     <Separator />
 
                     {/* Dynamic Specs */}
@@ -270,28 +325,36 @@ export function CatalogSidebar({
                                     <div key={key} className="space-y-3">
                                         <h4 className="text-xs font-semibold text-foreground/80">{displayName}</h4>
                                         <div className="space-y-2">
-                                            {values.map((val) => (
-                                                <div key={val} className="flex items-center space-x-2">
-                                                    <Checkbox
-                                                        id={`spec-${key}-${val}`}
-                                                        checked={(selectedSpecs[key] || []).includes(val)}
-                                                        onCheckedChange={(checked) => {
-                                                            const current = selectedSpecs[key] || [];
-                                                            if (checked) {
-                                                                onSpecChange(key, [...current, val]);
-                                                            } else {
-                                                                onSpecChange(key, current.filter((v) => v !== val));
-                                                            }
-                                                        }}
-                                                    />
-                                                    <Label
-                                                        htmlFor={`spec-${key}-${val}`}
-                                                        className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground"
-                                                    >
-                                                        {val}
-                                                    </Label>
-                                                </div>
-                                            ))}
+                                            {values.map((val) => {
+                                                let displayVal = val;
+                                                if (specDef?.type === 'boolean') {
+                                                    displayVal = val === 'true' ? '支援' : (val === 'false' ? '不支援' : val);
+                                                } else if (specDef?.type === 'number_with_unit') {
+                                                    displayVal = `${val}${specDef.options?.[0] || ''}`;
+                                                }
+                                                return (
+                                                    <div key={val} className="flex items-center space-x-2">
+                                                        <Checkbox
+                                                            id={`spec-${key}-${val}`}
+                                                            checked={(selectedSpecs[key] || []).includes(val)}
+                                                            onCheckedChange={(checked) => {
+                                                                const current = selectedSpecs[key] || [];
+                                                                if (checked) {
+                                                                    onSpecChange(key, [...current, val]);
+                                                                } else {
+                                                                    onSpecChange(key, current.filter((v) => v !== val));
+                                                                }
+                                                            }}
+                                                        />
+                                                        <Label
+                                                            htmlFor={`spec-${key}-${val}`}
+                                                            className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground"
+                                                        >
+                                                            {displayVal}
+                                                        </Label>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 );

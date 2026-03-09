@@ -24,6 +24,7 @@ export default function StoreCatalog() {
   // Filter states
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedSpecs, setSelectedSpecs] = useState<Record<string, string[]>>({});
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
 
   const handleSpecChange = useCallback((key: string, values: string[]) => {
     setSelectedSpecs(prev => {
@@ -37,9 +38,14 @@ export default function StoreCatalog() {
     });
   }, []);
 
+  const handleBrandChange = useCallback((brands: string[]) => {
+    setSelectedBrands(brands);
+  }, []);
+
   const clearFilters = useCallback(() => {
     setSelectedCategory(null);
     setSelectedSpecs({});
+    setSelectedBrands([]);
   }, []);
 
   if (!storeId) {
@@ -60,6 +66,8 @@ export default function StoreCatalog() {
           onCategoryChange={setSelectedCategory}
           selectedSpecs={selectedSpecs}
           onSpecChange={handleSpecChange}
+          selectedBrands={selectedBrands}
+          onBrandChange={handleBrandChange}
           onClearFilters={clearFilters}
         />
       </aside>
@@ -87,6 +95,8 @@ export default function StoreCatalog() {
                   onCategoryChange={setSelectedCategory}
                   selectedSpecs={selectedSpecs}
                   onSpecChange={handleSpecChange}
+                  selectedBrands={selectedBrands}
+                  onBrandChange={handleBrandChange}
                   onClearFilters={clearFilters}
                 />
               </SheetContent>
@@ -152,6 +162,7 @@ export default function StoreCatalog() {
           viewMode={viewMode}
           categoryFilter={selectedCategory}
           specFilters={selectedSpecs}
+          brandFilter={selectedBrands}
         />
       </div>
     </div>

@@ -27,6 +27,7 @@ interface ProductCatalogProps {
   viewMode?: 'products' | 'variants' | 'gallery';
   categoryFilter?: string | null;
   specFilters?: Record<string, string[]>;
+  brandFilter?: string[];
 }
 
 export default function ProductCatalog({
@@ -36,6 +37,7 @@ export default function ProductCatalog({
   viewMode = 'products',
   categoryFilter = null,
   specFilters = {},
+  brandFilter = [],
 }: ProductCatalogProps) {
   const [search, setSearch] = useState("");
   const [variantDialogProduct, setVariantDialogProduct] = useState<ProductWithPricing | null>(null);
@@ -113,6 +115,20 @@ export default function ProductCatalog({
         const anyVariantMatches = product.variants?.some((v) => matchesSpec(v.table_settings));
 
         if (!productMatches && !anyVariantMatches) return false;
+      }
+
+      // 3. Brand Filter
+      if (brandFilter.length > 0) {
+        const pBrandId = (product as any).brand_id;
+        const legacyBrand = (product as any).brand;
+        // 如果這個產品有 brand_id，就看他有在這清單裡嗎
+        // 為了相容防呆，如果沒有 brand_id，也可以先不用擋 (因為品牌是選填)，但既然使用者會「篩選品牌」，表示產品必須有中
+        // 我們也檢查 legacy brand string (不過因為品牌將獨立，這裡主要還是看 brand_id)
+        if (!pBrandId || !brandFilter.includes(pBrandId)) {
+          // Fallback legacy (如果前端有傳名字也可以)
+          // 這裡目前 brandFilter 是 UUID list
+          return false;
+        }
       }
 
       return true;
