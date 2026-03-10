@@ -24,7 +24,7 @@ import AdminUsers from "./pages/admin/Users";
 import AdminBrandPricing from "./pages/admin/BrandPricing";
 import AdminAccounting from "./pages/admin/Accounting";
 import AdminPurchaseOrders from "./pages/admin/PurchaseOrders";
-import AdminCategories from "./pages/admin/Categories";
+import AdminCategories from "./pages/admin/categories/index";
 
 // Store pages
 import StoreDashboard from "./pages/store/Dashboard";

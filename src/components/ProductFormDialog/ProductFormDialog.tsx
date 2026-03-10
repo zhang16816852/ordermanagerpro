@@ -13,7 +13,7 @@ const productSchema = z.object({
   name: z.string().min(1, '產品名稱為必填'),
   sku: z.string().min(1, 'SKU 為必填'),
   category_ids: z.array(z.string().uuid()).default([]),
-  brand: z.string().nullable().optional(),
+  brand_id: z.string().nullable().optional(),
   model: z.string().nullable().optional(),
   base_wholesale_price: z.coerce.number().min(0),
   base_retail_price: z.coerce.number().min(0),
@@ -39,7 +39,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
   const form = useForm<z.infer<typeof productSchema>>({
     resolver: zodResolver(productSchema),
     defaultValues: {
-      name: '', sku: '', category_ids: [], brand: '', model: '',
+      name: '', sku: '', category_ids: [], brand_id: null, model: '',
       base_wholesale_price: 0, base_retail_price: 0,
       status: 'active', has_variants: false,
       table_settings: {},
@@ -58,7 +58,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
         });
       } else {
         form.reset({
-          name: '', sku: '', category_ids: [], brand: '', model: '',
+          name: '', sku: '', category_ids: [], brand_id: null, model: '',
           base_wholesale_price: 0, base_retail_price: 0,
           status: 'active', has_variants: false,
           table_settings: {},

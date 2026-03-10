@@ -453,6 +453,21 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
                             </FormItem>
                         )}
                     />
+
+                    {/* 零售價 */}
+                    <FormField
+                        control={form.control}
+                        name="base_retail_price"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>基準零售價</FormLabel>
+                                <FormControl>
+                                    <Input type="number" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
                 </div>
 
                 {/* 動態規格欄位 (table_settings) */}
@@ -496,6 +511,34 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
                                             placeholder={`輸入${f.name}`}
                                             className="h-9"
                                         />
+                                    ) : f.type === 'multiselect' ? (
+                                        // 多選：Checkbox 列表
+                                        <div className="flex flex-col gap-1.5 p-2 border rounded-md bg-background max-h-32 overflow-y-auto">
+                                            {f.options?.map((opt: string) => {
+                                                const currentVals: string[] = (() => {
+                                                    const raw = form.watch(`table_settings.${f.key}`);
+                                                    if (Array.isArray(raw)) return raw;
+                                                    if (typeof raw === 'string' && raw) return raw.split(',');
+                                                    return [];
+                                                })();
+                                                const isChecked = currentVals.includes(opt);
+                                                return (
+                                                    <div key={opt} className="flex items-center gap-2">
+                                                        <Checkbox
+                                                            id={`spec-${f.key}-${opt}`}
+                                                            checked={isChecked}
+                                                            onCheckedChange={(checked) => {
+                                                                const next = checked
+                                                                    ? [...currentVals, opt]
+                                                                    : currentVals.filter((v) => v !== opt);
+                                                                form.setValue(`table_settings.${f.key}`, next);
+                                                            }}
+                                                        />
+                                                        <label htmlFor={`spec-${f.key}-${opt}`} className="text-sm cursor-pointer">{opt}</label>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     ) : (
                                         <Select
                                             value={form.watch(`table_settings.${f.key}`) || ''}

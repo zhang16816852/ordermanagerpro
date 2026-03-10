@@ -312,59 +312,69 @@ export function CatalogSidebar({
                     )}
                     <Separator />
 
-                    {/* Dynamic Specs */}
-                    <div className="space-y-5">
-                        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">進階規格</h3>
-                        {Object.entries(availableSpecs).length > 0 ? (
-                            Object.entries(availableSpecs).map(([key, values]) => {
-                                // Resolve key (ID or Name) to a display name
-                                const specDef = specFields.find(f => f.id === key || f.name === key);
-                                const displayName = specDef ? specDef.name : key;
+                    {/* 進階規格：僅在選擇分類後才顯示 */}
+                    {selectedCategory !== null && (
+                        <div className="space-y-5">
+                            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">進階規格</h3>
+                            {Object.entries(availableSpecs).length > 0 ? (
+                                Object.entries(availableSpecs).map(([key, values]) => {
+                                    // 將 key（ID 或 Name）解析為顯示名稱
+                                    const specDef = specFields.find(f => f.id === key || f.name === key);
+                                    const displayName = specDef ? specDef.name : key;
 
-                                return (
-                                    <div key={key} className="space-y-3">
-                                        <h4 className="text-xs font-semibold text-foreground/80">{displayName}</h4>
-                                        <div className="space-y-2">
-                                            {values.map((val) => {
-                                                let displayVal = val;
-                                                if (specDef?.type === 'boolean') {
-                                                    displayVal = val === 'true' ? '支援' : (val === 'false' ? '不支援' : val);
-                                                } else if (specDef?.type === 'number_with_unit') {
-                                                    displayVal = `${val}${specDef.options?.[0] || ''}`;
-                                                }
-                                                return (
-                                                    <div key={val} className="flex items-center space-x-2">
-                                                        <Checkbox
-                                                            id={`spec-${key}-${val}`}
-                                                            checked={(selectedSpecs[key] || []).includes(val)}
-                                                            onCheckedChange={(checked) => {
-                                                                const current = selectedSpecs[key] || [];
-                                                                if (checked) {
-                                                                    onSpecChange(key, [...current, val]);
-                                                                } else {
-                                                                    onSpecChange(key, current.filter((v) => v !== val));
-                                                                }
-                                                            }}
-                                                        />
-                                                        <Label
-                                                            htmlFor={`spec-${key}-${val}`}
-                                                            className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground"
-                                                        >
-                                                            {displayVal}
-                                                        </Label>
-                                                    </div>
-                                                );
-                                            })}
+                                    return (
+                                        <div key={key} className="space-y-3">
+                                            <h4 className="text-xs font-semibold text-foreground/80">{displayName}</h4>
+                                            <div className="space-y-2">
+                                                {values
+                                                    .filter((val) => {
+                                                        if (specDef?.type === "boolean") {
+                                                            return val === "true";
+                                                        }
+                                                        return true;
+                                                    })
+                                                    .map((val) => {
+                                                        let displayVal = val;
+                                                        if (specDef?.type === 'boolean') {
+                                                            displayVal = '支援';
+                                                        } else if (specDef?.type === 'number_with_unit') {
+                                                            displayVal = `${val}${specDef.options?.[0] || ''}`;
+                                                        }
+
+                                                        return (
+                                                            <div key={val} className="flex items-center space-x-2">
+                                                                <Checkbox
+                                                                    id={`spec-${key}-${val}`}
+                                                                    checked={(selectedSpecs[key] || []).includes(val)}
+                                                                    onCheckedChange={(checked) => {
+                                                                        const current = selectedSpecs[key] || [];
+                                                                        if (checked) {
+                                                                            onSpecChange(key, [...current, val]);
+                                                                        } else {
+                                                                            onSpecChange(key, current.filter((v) => v !== val));
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <Label
+                                                                    htmlFor={`spec-${key}-${val}`}
+                                                                    className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground"
+                                                                >
+                                                                    {displayVal}
+                                                                </Label>
+                                                            </div>
+                                                        );
+                                                    })}
+                                            </div>
                                         </div>
-                                    </div>
-                                );
-                            })
-                        ) : (
-                            <div className="text-center py-4 bg-muted/20 rounded-lg border border-dashed">
-                                <p className="text-[10px] text-muted-foreground italic">目前無可用的規格篩選</p>
-                            </div>
-                        )}
-                    </div>
+                                    );
+                                })
+                            ) : (
+                                <div className="text-center py-4 bg-muted/20 rounded-lg border border-dashed">
+                                    <p className="text-[10px] text-muted-foreground italic">目前此分類無可用的規格篩選</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </ScrollArea>
         </div>
