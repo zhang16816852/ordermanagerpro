@@ -5,31 +5,15 @@ import { Eye, Pencil, Package, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { OrderStatusBadge } from './OrderStatusBadge';
-
-interface OrderWithItems {
-    id: string;
-    code?: string;
-    created_at: string;
-    status: 'pending' | 'processing' | 'shipped';
-    notes: string | null;
-    order_items: {
-        id: string;
-        quantity: number;
-        shipped_quantity: number;
-        unit_price: number;
-        status: string;
-        product: { name: string; sku: string } | null;
-        product_variant: { name: string } | null;
-    }[];
-}
+import { Order, OrderItem } from '@/types/order';
 
 interface OrdersCardViewProps {
-    orders: OrderWithItems[] | undefined;
+    orders: Order[] | undefined;
     isLoading: boolean;
-    onView: (order: OrderWithItems) => void;
+    onView: (order: Order) => void;
     onEdit: (orderId: string) => void;
-    getOrderShipmentStatus: (items: OrderWithItems['order_items']) => string;
-    getOrderTotal: (items: OrderWithItems['order_items']) => number;
+    getOrderShipmentStatus: (items: OrderItem[]) => string;
+    getOrderTotal: (items: OrderItem[]) => number;
 }
 
 export function OrdersCardView({

@@ -3,22 +3,9 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
-
-interface OrderItem {
-    id: string;
-    quantity: number;
-    shipped_quantity: number;
-    unit_price: number;
-    status: string;
-    product: { name: string; sku: string } | null;
-    product_variant: { name: string } | null;
-    orderId: string;
-    orderCreatedAt: string;
-    orderStatus: string;
-}
-
+import { FlatOrderItem } from '@/types/order';
 interface ItemsCardViewProps {
-    items: OrderItem[];
+    items: FlatOrderItem[];
     isLoading: boolean;
     statusLabels: Record<string, { label: string; className: string }>;
 }

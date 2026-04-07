@@ -1,15 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { OrderStatusBadge } from './OrderStatusBadge';
-
-interface OrderItem {
-    id: string;
-    quantity: number;
-    shipped_quantity: number;
-    unit_price: number;
-    status: string;
-    product: { name: string; sku: string } | null;
-    product_variant: { name: string } | null;
-}
+import { OrderItem } from '@/types/order';
 
 interface OrderItemsCardsProps {
     items: OrderItem[];

@@ -1,0 +1,1 @@
+import os; path = r" c:\Users\qaz20\Desktop\ordermanagerpro-main\src\integrations\supabase\types.ts\; with open(path, \rb\) as f: data = f.read(); try: content = data.decode(\utf-16\); print(\Decoded UTF-16\); except: content = data.decode(\utf-8\); print(\Decoded UTF-8\); print(content[:200])

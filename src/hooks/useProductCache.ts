@@ -4,8 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Tables } from '@/integrations/supabase/types';
 
-type Product = Tables<'products'>;
-type ProductVariant = Tables<'product_variants'>;
+import { Product, ProductVariant, ProductWithPricing, VariantWithPricing } from '@/types/product';
 
 export type ProductWithCategories = Product & {
   category_ids: string[];
@@ -179,19 +178,6 @@ export function useProductCache() {
   };
 }
 
-// Extended product type with pricing and variants
-export interface ProductWithPricing extends Product {
-  wholesale_price: number;
-  retail_price: number;
-  has_store_price: boolean;
-  variants?: ProductVariant[];
-}
-
-export interface VariantWithPricing extends ProductVariant {
-  effective_wholesale_price: number;
-  effective_retail_price: number;
-  has_brand_price: boolean;
-}
 
 // Hook for store-specific products with caching (now uses brand-based pricing)
 export function useStoreProductCache(storeId: string | null) {

@@ -3,7 +3,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { ProductWithPricing } from "@/hooks/useProductCache";
+import { ProductWithPricing } from "@/types/product";
 import { ChevronRight, Filter, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQuery } from '@tanstack/react-query';

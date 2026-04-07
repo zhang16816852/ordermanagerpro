@@ -9,30 +9,10 @@ import {
 import { OrderInfo } from './OrderInfo';
 import { OrderDetailItemsTable } from './OrderDetailItemsTable';
 import { OrderDetailItemsCards } from './OrderDetailItemsCards';
-
-interface OrderItem {
-    id: string;
-    quantity: number;
-    shipped_quantity: number;
-    unit_price: number;
-    status: string;
-    product: { name: string; sku: string } | null;
-    product_variant: { name: string; } | null;
-}
-
-interface OrderDetail {
-    id: string;
-    code?: string;
-    created_at: string;
-    source_type?: 'frontend' | 'admin_proxy';
-    status: string;
-    notes: string | null;
-    stores?: { name: string; code: string | null } | null;
-    order_items: OrderItem[];
-}
+import { Order } from '@/types/order';
 
 interface OrderDetailDialogProps {
-    order: OrderDetail | null;
+    order: Order | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }

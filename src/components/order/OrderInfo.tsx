@@ -1,8 +1,10 @@
+import { OrderSourceType } from '@/types/order';
+
 interface OrderInfoProps {
     orderId: string;
     storeName?: string;
     createdAt: string;
-    sourceType?: 'frontend' | 'admin_proxy';
+    sourceType?: OrderSourceType;
     notes?: string | null;
 }
 

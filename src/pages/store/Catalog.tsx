@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/sheet";
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
 import { CatalogSidebar } from "@/components/order/CatalogSidebar";
+import { ProductWithPricing } from "@/types/product";
 
 export default function StoreCatalog() {
   const { storeId } = useAuth();

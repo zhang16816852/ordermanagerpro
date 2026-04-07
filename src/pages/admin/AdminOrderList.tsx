@@ -29,7 +29,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Search, Eye, Plus, Pencil, Package, Truck, List, LayoutGrid, CheckSquare } from 'lucide-react';
+import { Search, Eye, Plus, Pencil, Package, Truck, List, LayoutGrid, CheckSquare, XCircle, RotateCcw } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
@@ -37,42 +37,9 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { OrderDetailDialog } from '@/components/order/OrderDetailDialog';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
+import { Order, OrderItem, ShipmentSelection, ShippingPoolItem } from '@/types/order';
 
-interface OrderWithDetails {
-  id: string;
-  code?: string;
-  created_at: string;
-  source_type: 'frontend' | 'admin_proxy';
-  status: 'pending' | 'processing' | 'shipped';
-  notes: string | null;
-  store_id: string;
-  stores: { name: string; code: string | null } | null;
-  order_items: {
-    id: string;
-    quantity: number;
-    shipped_quantity: number;
-    unit_price: number;
-    status: string;
-    store_id: string;
-    product: { name: string; sku: string } | null;
-    product_variant: { name: string; option_1: string | null; option_2: string | null } | null;
-  }[];
-}
 
-interface ShipmentSelection {
-  itemId: string;
-  quantity: number;
-  maxQuantity: number;
-  productName: string;
-  sku: string;
-  storeId: string;
-  storeName: string;
-}
-
-interface ShippingPoolItem {
-  order_item_id: string;
-  quantity: number;
-}
 
 const statusLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: '待出貨', className: 'bg-status-waiting text-warning-foreground' },
@@ -80,6 +47,7 @@ const statusLabels: Record<string, { label: string; className: string }> = {
   shipped: { label: '已出貨', className: 'bg-status-shipped text-success-foreground' },
   out_of_stock: { label: '缺貨', className: 'bg-status-out-of-stock text-destructive-foreground' },
   discontinued: { label: '已停售', className: 'bg-status-discontinued text-muted-foreground' },
+  cancelled: { label: '取消/停產', className: 'bg-status-cancelled text-muted-foreground' },
 };
 
 const orderStatusLabels: Record<string, { label: string; className: string }> = {
@@ -95,7 +63,7 @@ export default function AdminOrderList() {
   const [search, setSearch] = useState('');
   const [storeFilter, setStoreFilter] = useState<string>('all');
   const [productFilter, setProductFilter] = useState<string>('');
-  const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [statusTab, setStatusTab] = useState<'pending' | 'processing' | 'shipped'>('pending');
   const [viewMode, setViewMode] = useState<'orders' | 'items'>('orders');
 
@@ -156,8 +124,6 @@ export default function AdminOrderList() {
             unit_price,
             status,
             store_id,
-            status,
-            store_id,
             product:products (name, sku),
             product_variant:product_variants (name, option_1, option_2)
           )
@@ -171,7 +137,7 @@ export default function AdminOrderList() {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as OrderWithDetails[];
+      return data as Order[];
     },
   });
 
@@ -181,10 +147,10 @@ export default function AdminOrderList() {
     return item.quantity - item.shipped_quantity - inPool;
   };
 
-  // 獲取所有待出貨的項目（用於商品視圖）
+  // 獲取所有待出貨的項目（用於商品視圖），排除已取消/停產的品項
   const allPendingItems = orders?.flatMap(order =>
     order.order_items
-      .filter(item => getPendingQuantity(item) > 0)
+      .filter(item => getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued')
       .filter(item => {
         if (!productFilter) return true;
         const searchLower = productFilter.toLowerCase();
@@ -204,6 +170,29 @@ export default function AdminOrderList() {
       }))
   ) || [];
 
+  // 已取消/停產的品項（用於顯示在清單下方）
+  const allCancelledItems = orders?.flatMap(order =>
+    order.order_items
+      .filter(item => item.status === 'cancelled' || item.status === 'discontinued')
+      .filter(item => {
+        if (!productFilter) return true;
+        const searchLower = productFilter.toLowerCase();
+        return (
+          item.product?.name.toLowerCase().includes(searchLower) ||
+          item.product?.sku.toLowerCase().includes(searchLower)
+        );
+      })
+      .map(item => ({
+        ...item,
+        orderId: order.id,
+        orderCreatedAt: order.created_at,
+        storeName: order.stores?.name || '',
+        storeCode: order.stores?.code || '',
+        storeId: order.store_id,
+        pendingQuantity: 0,
+      }))
+  ) || [];
+
   const filteredOrders = orders?.filter((order) => {
     if (!search) return true;
     const searchLower = search.toLowerCase();
@@ -215,16 +204,20 @@ export default function AdminOrderList() {
     );
   });
 
-  const getOrderShipmentStatus = (items: OrderWithDetails['order_items']) => {
+  const getOrderShipmentStatus = (items: OrderItem[]) => {
     if (items.length === 0) return 'waiting';
-    const allShipped = items.every((i) => i.status === 'shipped');
+    // 如果所有品項都是 已出貨、已取消 或 已停售，則視為全單已出貨
+    const allProcessed = items.every((i) =>
+      i.status === 'shipped' || i.status === 'cancelled' || i.status === 'discontinued'
+    );
     const someShipped = items.some((i) => i.shipped_quantity > 0);
-    if (allShipped) return 'shipped';
+
+    if (allProcessed) return 'shipped';
     if (someShipped) return 'partial';
     return 'waiting';
   };
 
-  const getOrderTotal = (items: OrderWithDetails['order_items']) => {
+  const getOrderTotal = (items: OrderItem[]) => {
     return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
   };
 
@@ -320,7 +313,8 @@ export default function AdminOrderList() {
           id,
           order_items (
             quantity,
-            shipped_quantity
+            shipped_quantity,
+            status
           )
         `)
         .eq('status', 'processing');
@@ -333,7 +327,12 @@ export default function AdminOrderList() {
       const ordersToUpdate = processingOrders
         .filter(order => {
           if (!order.order_items || order.order_items.length === 0) return false;
-          return order.order_items.every(item => item.shipped_quantity >= item.quantity);
+          // 訂單結案條件：所有項目 (已出貨數 >= 訂購數) OR 狀態為取消/停產
+          return order.order_items.every(item =>
+            item.shipped_quantity >= item.quantity ||
+            item.status === 'cancelled' ||
+            item.status === 'discontinued'
+          );
         })
         .map(order => order.id);
 
@@ -360,6 +359,45 @@ export default function AdminOrderList() {
     onError: (error: Error) => {
       toast.error(`同步失敗: ${error.message}`);
     },
+  });
+
+  // 標記品項為停產/取消
+  const cancelItemsMutation = useMutation({
+    mutationFn: async (targetStatus: 'cancelled' | 'waiting') => {
+      if (selectedItems.size === 0) throw new Error('請選擇至少一個項目');
+      const itemIds = Array.from(selectedItems.keys());
+      const { error } = await supabase
+        .from('order_items')
+        .update({ status: targetStatus })
+        .in('id', itemIds);
+      if (error) throw error;
+      return { count: itemIds.length, targetStatus };
+    },
+    onSuccess: ({ count, targetStatus }) => {
+      const label = targetStatus === 'cancelled' ? '停產/取消' : '還原待出貨';
+      toast.success(`已將 ${count} 個品項標記為「${label}」`);
+      setSelectedItems(new Map());
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  // 已取消品項直接還原（從已取消清單操作）
+  const restoreItemMutation = useMutation({
+    mutationFn: async (itemId: string) => {
+      const { error } = await supabase
+        .from('order_items')
+        .update({ status: 'waiting' })
+        .eq('id', itemId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('已還原品項');
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
   // 加入出貨池（使用新的 shipping_pool 資料表）
@@ -491,12 +529,22 @@ export default function AdminOrderList() {
             </Button>
           )}
 
-          {/* 加入出貨池按鈕 */}
+          {/* 加入出貨池 / 停產取消 按鈕 */}
           {viewMode === 'items' && selectedItems.size > 0 && (
-            <Button onClick={() => setShowShipDialog(true)}>
-              <Truck className="h-4 w-4 mr-2" />
-              加入出貨池 ({selectedItems.size})
-            </Button>
+            <>
+              <Button onClick={() => setShowShipDialog(true)}>
+                <Truck className="h-4 w-4 mr-2" />
+                加入出貨池 ({selectedItems.size})
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => cancelItemsMutation.mutate('cancelled')}
+                disabled={cancelItemsMutation.isPending}
+              >
+                <XCircle className="h-4 w-4 mr-2" />
+                標記停產/取消 ({selectedItems.size})
+              </Button>
+            </>
           )}
         </div>
 
@@ -668,23 +716,78 @@ export default function AdminOrderList() {
                         <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                       </TableRow>
                     ))
-                  ) : allPendingItems.length === 0 ? (
+                  ) : allPendingItems.length === 0 && allCancelledItems.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
-                        沒有待出貨的商品
+                        沒有的商品
                       </TableCell>
                     </TableRow>
                   ) : (
-                    allPendingItems.map((item) => {
-                      const inPool = shippingPoolMap.get(item.id) || 0;
-                      const selection = selectedItems.get(item.id);
-                      return (
-                        <TableRow key={item.id} className={selection ? 'bg-muted/50' : ''}>
+                    <>
+                      {allPendingItems.map((item) => {
+                        const inPool = shippingPoolMap.get(item.id) || 0;
+                        const selection = selectedItems.get(item.id);
+                        return (
+                          <TableRow key={item.id} className={selection ? 'bg-muted/50' : ''}>
+                            <TableCell>
+                              <Checkbox
+                                checked={!!selection}
+                                onCheckedChange={(checked) => toggleItemSelection(item, !!checked)}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-medium">{item.storeName}</div>
+                              {item.storeCode && (
+                                <div className="text-xs text-muted-foreground">{item.storeCode}</div>
+                              )}
+                            </TableCell>
+                            <TableCell className="font-mono text-sm">{item.product?.sku}</TableCell>
+                            <TableCell>
+                              {item.product?.name}
+                              {item.product_variant && (
+                                <span className="text-muted-foreground ml-1">
+                                  - {item.product_variant.name}
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">{item.quantity}</TableCell>
+                            <TableCell className="text-right">{item.shipped_quantity}</TableCell>
+                            <TableCell className="text-right">
+                              {inPool > 0 && (
+                                <Badge variant="outline" className="bg-warning/10">
+                                  {inPool}
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Badge variant={item.pendingQuantity > 0 ? 'default' : 'secondary'}>
+                                {item.pendingQuantity}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {selection && (
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={selection.maxQuantity}
+                                  value={selection.quantity}
+                                  onChange={(e) => updateItemQuantity(item.id, parseInt(e.target.value) || 1)}
+                                  className="w-20 h-8"
+                                />
+                              )}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {format(new Date(item.orderCreatedAt), 'MM/dd', { locale: zhTW })}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+
+                      {/* 已停產/取消的品項（灰色呈現，可還原）*/}
+                      {allCancelledItems.map((item) => (
+                        <TableRow key={`cancelled-${item.id}`} className="opacity-50">
                           <TableCell>
-                            <Checkbox
-                              checked={!!selection}
-                              onCheckedChange={(checked) => toggleItemSelection(item, !!checked)}
-                            />
+                            {/* 已取消品項不可勾選加入出貨池 */}
                           </TableCell>
                           <TableCell>
                             <div className="font-medium">{item.storeName}</div>
@@ -694,45 +797,41 @@ export default function AdminOrderList() {
                           </TableCell>
                           <TableCell className="font-mono text-sm">{item.product?.sku}</TableCell>
                           <TableCell>
-                            {item.product?.name}
+                            <div className="flex items-center gap-2">
+                              <span className="line-through text-muted-foreground">{item.product?.name}</span>
+                              <Badge variant="destructive" className="text-[10px] py-0">
+                                {item.status === 'cancelled' ? '已取消' : '已停產'}
+                              </Badge>
+                            </div>
                             {item.product_variant && (
-                              <span className="text-muted-foreground ml-1">
-                                - {item.product_variant.name}
+                              <span className="text-muted-foreground ml-1 text-xs">
+                                {item.product_variant.name}
                               </span>
                             )}
                           </TableCell>
-                          <TableCell className="text-right">{item.quantity}</TableCell>
-                          <TableCell className="text-right">{item.shipped_quantity}</TableCell>
-                          <TableCell className="text-right">
-                            {inPool > 0 && (
-                              <Badge variant="outline" className="bg-warning/10">
-                                {inPool}
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Badge variant={item.pendingQuantity > 0 ? 'default' : 'secondary'}>
-                              {item.pendingQuantity}
-                            </Badge>
-                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">{item.quantity}</TableCell>
+                          <TableCell className="text-right">-</TableCell>
+                          <TableCell className="text-right">-</TableCell>
+                          <TableCell className="text-right">-</TableCell>
                           <TableCell>
-                            {selection && (
-                              <Input
-                                type="number"
-                                min={1}
-                                max={selection.maxQuantity}
-                                value={selection.quantity}
-                                onChange={(e) => updateItemQuantity(item.id, parseInt(e.target.value) || 1)}
-                                className="w-20 h-8"
-                              />
-                            )}
+                            {/* 還原按鈕 */}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => restoreItemMutation.mutate(item.id)}
+                              disabled={restoreItemMutation.isPending}
+                            >
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              還原
+                            </Button>
                           </TableCell>
                           <TableCell className="text-muted-foreground">
                             {format(new Date(item.orderCreatedAt), 'MM/dd', { locale: zhTW })}
                           </TableCell>
                         </TableRow>
-                      );
-                    })
+                      ))}
+                    </>
                   )}
                 </TableBody>
               </Table>

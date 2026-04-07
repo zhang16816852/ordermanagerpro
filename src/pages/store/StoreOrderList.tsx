@@ -12,23 +12,7 @@ import { OrdersTableView } from '@/components/order/OrdersTableView';
 import { OrdersCardView } from '@/components/order/OrdersCardView';
 import { ItemsTableView } from '@/components/order/ItemsTableView';
 import { ItemsCardView } from '@/components/order/ItemsCardView';
-
-interface OrderWithItems {
-  id: string;
-  code?: string;
-  created_at: string;
-  status: 'pending' | 'processing' | 'shipped';
-  notes: string | null;
-  order_items: {
-    id: string;
-    quantity: number;
-    shipped_quantity: number;
-    unit_price: number;
-    status: string;
-    product: { name: string; sku: string } | null;
-    product_variant: { name: string; } | null;
-  }[];
-}
+import { Order, OrderItem } from '@/types/order';
 
 const statusLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: '待出貨', className: 'bg-status-waiting text-warning-foreground' },
@@ -36,6 +20,7 @@ const statusLabels: Record<string, { label: string; className: string }> = {
   shipped: { label: '已出貨', className: 'bg-status-shipped text-success-foreground' },
   out_of_stock: { label: '缺貨', className: 'bg-status-out-of-stock text-destructive-foreground' },
   discontinued: { label: '已停售', className: 'bg-status-discontinued text-muted-foreground' },
+  cancelled: { label: '已取消', className: 'bg-status-cancelled text-muted-foreground' },
 };
 
 const orderStatusLabels: Record<string, { label: string; className: string }> = {
@@ -50,7 +35,7 @@ export default function StoreOrderList() {
   const storeId = storeRoles[0]?.store_id;
   const [search, setSearch] = useState('');
   const [productFilter, setProductFilter] = useState('');
-  const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [statusTab, setStatusTab] = useState<'pending' | 'processing' | 'shipped'>('pending');
   const [viewMode, setViewMode] = useState<'orders' | 'items'>('orders');
 
@@ -80,7 +65,7 @@ export default function StoreOrderList() {
         .eq('status', statusTab)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data as OrderWithItems[];
+      return data as unknown as Order[];
     },
     enabled: !!storeId,
   });
@@ -117,7 +102,7 @@ export default function StoreOrderList() {
     );
   });
 
-  const getOrderShipmentStatus = (items: OrderWithItems['order_items']) => {
+  const getOrderShipmentStatus = (items: OrderItem[]) => {
     if (items.length === 0) return 'waiting';
     const allShipped = items.every((i) => i.status === 'shipped');
     const someShipped = items.some((i) => i.shipped_quantity > 0);
@@ -126,7 +111,7 @@ export default function StoreOrderList() {
     return 'waiting';
   };
 
-  const getOrderTotal = (items: OrderWithItems['order_items']) => {
+  const getOrderTotal = (items: OrderItem[]) => {
     return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
   };
 

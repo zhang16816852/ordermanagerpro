@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ProductWithPricing, VariantWithPricing } from "@/hooks/useProductCache";
+import { ProductWithPricing, VariantWithPricing } from "@/types/product";
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
 import { StatusBadge } from "../ProductStatusBadge";
 import { toast } from 'sonner';
@@ -355,7 +355,7 @@ export default function ProductCatalog({
                 return [{ product, variant: null }];
               }).map(({ product, variant }) => {
                 // 如果是變體，使用變體 ID 作為 Key，否則使用產品 ID
-                const key = variant ? `${product.id}-${variant.id}` : product.id;
+                const key = variant ? `${product.id} -${variant.id} ` : product.id;
 
                 // 計算購物車數量
                 const qty = variant

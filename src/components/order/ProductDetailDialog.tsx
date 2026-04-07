@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ProductWithPricing, VariantWithPricing } from "@/hooks/useProductCache";
+import { ProductWithPricing, VariantWithPricing } from "@/types/product";
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
 import { toast } from "sonner";
 import { ShoppingCart, ImageIcon } from "lucide-react";

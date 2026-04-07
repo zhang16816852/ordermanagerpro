@@ -1,7 +1,7 @@
 // src/stores/useOrderDraftStore.ts
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { ProductWithPricing, VariantWithPricing } from "@/hooks/useProductCache";
+import { ProductWithPricing, VariantWithPricing } from "@/types/product";
 
 export interface OrderDraftItem {
   id: string; // unique key: `${productId}-${variantId || 'base'}`

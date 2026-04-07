@@ -8,7 +8,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Plus } from 'lucide-react';
-import { ProductWithPricing } from '@/hooks/useProductCache';
+import { ProductWithPricing } from '@/types/product';
 
 interface AddProductCardProps {
     availableProducts: ProductWithPricing[];

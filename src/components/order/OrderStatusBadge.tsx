@@ -17,6 +17,7 @@ const SHIPPING_STATUS_LABELS: Record<string, { label: string; className: string 
     shipped: { label: '已出貨', className: 'bg-status-shipped text-success-foreground' },
     out_of_stock: { label: '缺貨', className: 'bg-status-out-of-stock text-destructive-foreground' },
     discontinued: { label: '已停售', className: 'bg-status-discontinued text-muted-foreground' },
+    cancelled: { label: '取消/停產', className: 'bg-status-cancelled text-muted-foreground' },
 };
 
 export function OrderStatusBadge({ status, type = 'shipping' }: OrderStatusBadgeProps) {
