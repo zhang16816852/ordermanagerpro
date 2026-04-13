@@ -1,0 +1,248 @@
+import { useState, useCallback } from 'react';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { Tables } from '@/integrations/supabase/types';
+import { useProductCache } from '@/hooks/useProductCache';
+import { toast } from 'sonner';
+import Papa from 'papaparse';
+
+type Product = Tables<'products'>;
+
+export function useProductsList() {
+    const queryClient = useQueryClient();
+    const { products, isLoading, version, forceRefresh } = useProductCache();
+
+    // --- UI States ---
+    const [search, setSearch] = useState('');
+    const [activeTab, setActiveTab] = useState<'list' | 'variants' | 'models'>('list');
+    const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+    const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
+
+    // --- Dialog States ---
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isImportOpen, setIsImportOpen] = useState(false);
+    const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+    const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
+
+    // --- Queries ---
+    const { data: allVariants = [], isLoading: variantsLoading } = useQuery({
+        queryKey: ['all-product-variants'],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('product_variants')
+                .select('*, variant_model_links(model_id, device_models(name))')
+                .order('sku');
+            if (error) throw error;
+            return data || [];
+        },
+    });
+
+    const { data: allModelLinks = [], isLoading: modelsLoading } = useQuery({
+        queryKey: ['all-product-model-links'],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('product_model_links')
+                .select('product_id, model_id, device_models(name)')
+            if (error) throw error;
+            return (data as any) || [];
+        },
+    });
+
+    // --- Helpers ---
+    const toggleExpanded = (productId: string) => {
+        setExpandedProducts(prev => {
+            const next = new Set(prev);
+            if (next.has(productId)) next.delete(productId);
+            else next.add(productId);
+            return next;
+        });
+    };
+
+    const getProductVariants = useCallback((productId: string) => {
+        return allVariants.filter(v => v.product_id === productId);
+    }, [allVariants]);
+
+    const getProductModels = useCallback((productId: string) => {
+        return allModelLinks
+            .filter((l: any) => l.product_id === productId)
+            .map((l: any) => l.device_models?.name)
+            .filter(Boolean);
+    }, [allModelLinks]);
+
+    const filteredProducts = products?.filter(
+        (p) =>
+            p.name.toLowerCase().includes(search.toLowerCase()) ||
+            p.sku.toLowerCase().includes(search.toLowerCase()) ||
+            (p.brand && p.brand.toLowerCase().includes(search.toLowerCase())) ||
+            (p.model && p.model.toLowerCase().includes(search.toLowerCase()))
+    );
+
+    // --- Selection Logic ---
+    const isAllSelected = filteredProducts && filteredProducts.length > 0 &&
+        filteredProducts.every(p => selectedProductIds.has(p.id));
+
+    const toggleSelectAll = (checked: boolean) => {
+        if (checked) {
+            const allIds = filteredProducts?.map(p => p.id) || [];
+            setSelectedProductIds(prev => {
+                const next = new Set(prev);
+                allIds.forEach(id => next.add(id));
+                return next;
+            });
+        } else {
+            setSelectedProductIds(prev => {
+                const next = new Set(prev);
+                filteredProducts?.forEach(p => next.delete(p.id));
+                return next;
+            });
+        }
+    };
+
+    const toggleSelect = (id: string) => {
+        setSelectedProductIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    // --- Mutations ---
+    const createMutation = useMutation({
+        mutationFn: async (values: any) => {
+            const { category_ids, device_model_ids, category, category_id, device_models, ...productData } = values;
+            const { data: product, error: productError } = await supabase.from('products').insert(productData).select().single();
+            if (productError) throw productError;
+            if (category_ids?.length > 0) {
+                const links = category_ids.map((catId: string) => ({ product_id: product.id, category_id: catId }));
+                await (supabase.from('product_category_links' as any) as any).insert(links);
+            }
+            if (device_model_ids?.length > 0) {
+                const links = device_model_ids.map((modelId: string) => ({ product_id: product.id, model_id: modelId }));
+                await (supabase.from('product_model_links' as any) as any).insert(links);
+            }
+            return product;
+        },
+        onSuccess: () => {
+            forceRefresh();
+            queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
+            queryClient.invalidateQueries({ queryKey: ['all-product-model-links'] });
+            queryClient.invalidateQueries({ queryKey: ['all-product-variants'] });
+            toast.success('產品已新增');
+            setIsDialogOpen(false);
+        },
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: async ({ id, values }: { id: string, values: any }) => {
+            const { category_ids, device_model_ids, category, category_id, device_models, ...productData } = values;
+            await (supabase.from('product_category_links' as any) as any).delete().eq('product_id', id);
+            if (category_ids?.length > 0) {
+                const links = category_ids.map((catId: string) => ({ product_id: id, category_id: catId }));
+                await (supabase.from('product_category_links' as any) as any).insert(links);
+            }
+            
+            await (supabase.from('product_model_links' as any) as any).delete().eq('product_id', id);
+            if (device_model_ids?.length > 0) {
+                const links = device_model_ids.map((modelId: string) => ({ product_id: id, model_id: modelId }));
+                await (supabase.from('product_model_links' as any) as any).insert(links);
+            }
+
+            const { error: productError } = await supabase.from('products').update({ ...productData, updated_at: new Date().toISOString() }).eq('id', id);
+            if (productError) throw productError;
+        },
+        onSuccess: () => {
+            forceRefresh();
+            queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
+            queryClient.invalidateQueries({ queryKey: ['all-product-model-links'] });
+            queryClient.invalidateQueries({ queryKey: ['all-product-variants'] });
+            toast.success('產品已更新');
+            setIsDialogOpen(false);
+            setEditingProduct(null);
+        },
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: async (id: string) => {
+            const { error } = await supabase.from('products').delete().eq('id', id);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
+            toast.success('產品已刪除');
+            setDeleteProduct(null);
+        },
+    });
+
+    const updateVariantPriceMutation = useMutation({
+        mutationFn: async ({ id, ...updates }: { id: string, wholesale_price?: number, retail_price?: number, status?: any }) => {
+            const { error } = await supabase.from('product_variants').update(updates).eq('id', id);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['all-product-variants'] });
+            toast.success('變體已更新');
+        },
+    });
+
+    const handleCopy = async (product: Product) => {
+        const newName = `${product.name} (複製)`;
+        const newSku = `${product.sku}-COPY-${Math.floor(Math.random() * 1000)}`;
+        try {
+            const { data: newProductId, error } = await (supabase.rpc as any)('duplicate_product_with_variants', {
+                target_product_id: product.id,
+                new_name: newName,
+                new_sku: newSku,
+            });
+            if (error) throw error;
+            queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
+            toast.success('產品及其變體已完整複製');
+            if (newProductId) {
+                const { data: newProduct } = await supabase.from('products').select('*').eq('id', newProductId).single();
+                if (newProduct) { setEditingProduct(newProduct); setIsDialogOpen(true); }
+            }
+        } catch (error: any) { toast.error(`複製失敗：${error.message}`); }
+    };
+
+    const handleBatchExport = () => {
+        const selected = products?.filter(p => selectedProductIds.has(p.id)) || [];
+        const exportData: any[] = [];
+        selected.forEach(p => {
+            const variants = getProductVariants(p.id);
+            const productModels = getProductModels(p.id).join(',');
+            if (variants.length > 0) {
+                variants.forEach(v => {
+                    const variantModels = v.variant_model_links?.map((l: any) => l.device_models?.name).filter(Boolean).join(',') || '';
+                    exportData.push({
+                        product_sku: p.sku, product_name: p.name, brand: p.brand || '', base_wholesale_price: p.base_wholesale_price, base_retail_price: p.base_retail_price, device_models: productModels,
+                        variant_sku: v.sku, variant_name: v.name, barcode: v.barcode ? `'${v.barcode}` : '', variant_device_models: variantModels,
+                    });
+                });
+            } else {
+                exportData.push({
+                    product_sku: p.sku, product_name: p.name, brand: p.brand || '', base_wholesale_price: p.base_wholesale_price, base_retail_price: p.base_retail_price, device_models: productModels,
+                    variant_sku: '', variant_name: '', barcode: (p as any).barcode ? `'${(p as any).barcode}` : '', variant_device_models: '',
+                });
+            }
+        });
+        const csv = Papa.unparse(exportData);
+        const BOM = '\uFEFF';
+        const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `products_export_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+    };
+
+    return {
+        products, isLoading, version, forceRefresh,
+        search, setSearch, activeTab, setActiveTab,
+        selectedProductIds, toggleSelect, toggleSelectAll, isAllSelected,
+        expandedProducts, toggleExpanded, filteredProducts,
+        isDialogOpen, setIsDialogOpen, isImportOpen, setIsImportOpen,
+        editingProduct, setEditingProduct, deleteProduct, setDeleteProduct,
+        handleCopy, handleBatchExport, getProductVariants, getProductModels,
+        createMutation, updateMutation, deleteMutation, updateVariantPriceMutation,
+    };
+}

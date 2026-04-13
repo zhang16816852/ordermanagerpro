@@ -31,8 +31,11 @@ import {
   Settings,
   ChevronRight,
   Layers,
+  History as HistoryIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { GlobalSearch } from './GlobalSearch';
+import { NotificationDropdown } from './NotificationDropdown';
 
 interface NavItem {
   title: string;
@@ -46,6 +49,7 @@ const adminNavItems: NavItem[] = [
   { title: '總覽', href: '/admin', icon: Home },
   { title: '店鋪管理', href: '/admin/stores', icon: Store },
   { title: '產品管理', href: '/admin/products', icon: PackageSearch },
+  { title: '庫存管理', href: '/admin/inventory', icon: Package },
   { title: '分類管理', href: '/admin/categories', icon: Layers },
   { title: '品牌價格', href: '/admin/brand-pricing', icon: ShoppingCart },
   { title: '所有訂單', href: '/admin/orders', icon: ClipboardList },
@@ -54,6 +58,7 @@ const adminNavItems: NavItem[] = [
   { title: '採購管理', href: '/admin/purchase-orders', icon: Truck },
   { title: '會計管理', href: '/admin/accounting', icon: FileText },
   { title: '人員管理', href: '/admin/users', icon: Users },
+  { title: '操作日誌', href: '/admin/audit-logs', icon: HistoryIcon },
 ];
 // ← 新增這兩行：取得購物車總件數
 
@@ -204,6 +209,16 @@ export function AppLayout({ children }: AppLayoutProps) {
         <NavContent />
       </aside>
 
+      {/* Desktop Header (New) */}
+      <header className="hidden lg:flex fixed top-0 right-0 left-64 h-14 items-center justify-between px-6 bg-background/60 backdrop-blur-md border-b z-30">
+        <div className="flex-1 max-w-xl">
+          <GlobalSearch />
+        </div>
+        <div className="flex items-center gap-4">
+          <NotificationDropdown />
+        </div>
+      </header>
+
       {/* Mobile Header */}
       <header className="lg:hidden sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-card px-4">
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
@@ -218,16 +233,14 @@ export function AppLayout({ children }: AppLayoutProps) {
         </Sheet>
 
         <div className="flex-1">
-          <h1 className="text-lg font-semibold">訂單系統</h1>
+          <GlobalSearch />
         </div>
 
-        <Button variant="ghost" size="icon" onClick={() => navigate('/notifications')}>
-          <Bell className="h-5 w-5" />
-        </Button>
+        <NotificationDropdown />
       </header>
 
       {/* Main Content */}
-      <main className="lg:pl-64">
+      <main className="lg:pl-64 lg:pt-14">
         <div className="container py-6">{children}</div>
       </main>
     </div>

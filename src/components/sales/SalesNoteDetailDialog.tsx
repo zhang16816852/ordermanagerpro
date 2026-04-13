@@ -6,10 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Package, Check, CreditCard, Calendar, Store, Info } from "lucide-react";
+import { Package, Check, CreditCard, Calendar, Store, Info, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { SalesNoteStatusBadge } from "./SalesNoteStatusBadge";
+import { exportToPDF } from "@/lib/exportUtils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -175,7 +176,7 @@ export function SalesNoteDetailDialog({
                     </DialogTitle>
                 </DialogHeader>
 
-                <div className="space-y-6">
+                <div className="space-y-6" id="sales-note-content">
                     {/* 基本資訊區塊 */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm bg-muted/20 p-4 rounded-lg border">
                         <div className="space-y-1">
@@ -298,8 +299,8 @@ export function SalesNoteDetailDialog({
                     )}
 
                     {/* 操作按鈕 */}
-                    <div className="flex flex-col sm:flex-row justify-between gap-3 pt-4 border-t">
-                        <div>
+                    <div className="flex flex-col sm:flex-row justify-between gap-3 pt-4 border-t print:hidden">
+                        <div className="flex flex-wrap gap-2">
                             {enablePayment && totalAmount > 0 && (
                                 <Button
                                     variant={existingPayment ? "secondary" : "outline"}
@@ -312,6 +313,15 @@ export function SalesNoteDetailDialog({
                                     {existingPayment ? "已完成收款登記" : "登記收款"}
                                 </Button>
                             )}
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full sm:w-auto"
+                                onClick={() => exportToPDF("sales-note-content", `銷售單_${note.code || note.id.slice(0, 8)}`)}
+                            >
+                                <FileText className="h-4 w-4 mr-2" />
+                                匯出 PDF
+                            </Button>
                         </div>
 
                         {onConfirmReceive && note.status === 'shipped' && (

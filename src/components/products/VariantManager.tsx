@@ -73,7 +73,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
       if (!selectedProductId) return [];
       const { data, error } = await supabase
         .from('product_variants')
-        .select('*')
+        .select('*, variant_model_links(model_id, device_models(name))')
         .eq('product_id', selectedProductId)
         .order('sku');
       if (error) throw error;
@@ -208,6 +208,15 @@ export function VariantManager({ products, search }: VariantManagerProps) {
                       <Badge variant={variant.status === 'active' ? 'default' : 'secondary'}>
                         {STATUS_LABELS[variant.status]}
                       </Badge>
+                      {variant.variant_model_links && variant.variant_model_links.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {variant.variant_model_links.map((link: any) => (
+                            <Badge key={link.model_id} variant="secondary" className="text-[9px] px-1 h-3.5 bg-amber-100 text-amber-800 hover:bg-amber-100/80 border-transparent">
+                              {link.device_models?.name}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">

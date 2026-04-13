@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables, TablesInsert } from '@/integrations/supabase/types';
@@ -19,6 +19,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { StandaloneDeviceModelSelectField } from './StandaloneDeviceModelSelectField';
 
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;
@@ -40,6 +41,16 @@ export function VariantEditDialog({
     onSuccess,
 }: VariantEditDialogProps) {
     const queryClient = useQueryClient();
+    const [selectedModels, setSelectedModels] = useState<string[]>([]);
+    
+    // 初始化模型的 state
+    useEffect(() => {
+        if (open && variant) {
+            setSelectedModels((variant as any).variant_model_links?.map((l: any) => l.model_id) || []);
+        } else if (open && !variant) {
+            setSelectedModels([]);
+        }
+    }, [open, variant]);
 
     const categoryId = (product as any)?.category_id;
     // Fetch specs for the selected category
@@ -79,9 +90,18 @@ export function VariantEditDialog({
     // using uncontrolled form submission for simplicity as per original implementation
 
     const createMutation = useMutation({
-        mutationFn: async (variantData: VariantInsert) => {
-            const { error } = await supabase.from('product_variants').insert(variantData);
+        mutationFn: async (variantData: VariantInsert & { device_model_ids?: string[] }) => {
+            const { device_model_ids, ...dataToInsert } = variantData;
+            const { data, error } = await supabase.from('product_variants').insert(dataToInsert as any).select().single();
             if (error) throw error;
+
+            if (device_model_ids && device_model_ids.length > 0) {
+                 const links = device_model_ids.map((model_id: string) => ({
+                     variant_id: data.id,
+                     model_id
+                 }));
+                 await supabase.from('variant_model_links').insert(links);
+            }
         },
         onSuccess: () => {
             if (product) {
@@ -97,9 +117,21 @@ export function VariantEditDialog({
     });
 
     const updateMutation = useMutation({
-        mutationFn: async ({ id, ...updates }: Partial<ProductVariant> & { id: string }) => {
-            const { error } = await supabase.from('product_variants').update(updates).eq('id', id);
+        mutationFn: async ({ id, device_model_ids, ...updates }: Partial<ProductVariant> & { id: string, device_model_ids?: string[] }) => {
+            const { error } = await supabase.from('product_variants').update(updates as any).eq('id', id);
             if (error) throw error;
+            
+            // update variant_model_links
+            if (device_model_ids !== undefined) {
+                 await supabase.from('variant_model_links').delete().eq('variant_id', id);
+                 if (device_model_ids.length > 0) {
+                     const links = device_model_ids.map((model_id: string) => ({
+                         variant_id: id,
+                         model_id
+                     }));
+                     await supabase.from('variant_model_links').insert(links);
+                 }
+            }
         },
         onSuccess: () => {
             if (product) {
@@ -143,9 +175,9 @@ export function VariantEditDialog({
         };
 
         if (variant) {
-            updateMutation.mutate({ id: variant.id, ...variantData });
+            updateMutation.mutate({ id: variant.id, device_model_ids: selectedModels, ...variantData });
         } else {
-            createMutation.mutate(variantData);
+            createMutation.mutate({ ...variantData, device_model_ids: selectedModels });
         }
     };
 
@@ -304,6 +336,11 @@ export function VariantEditDialog({
                             </div>
                         </div>
                     )}
+                    
+                    <StandaloneDeviceModelSelectField 
+                        value={selectedModels} 
+                        onChange={setSelectedModels} 
+                    />
 
                     <div className="flex justify-end gap-2 pt-4">
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

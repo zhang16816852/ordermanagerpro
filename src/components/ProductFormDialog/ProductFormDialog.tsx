@@ -5,6 +5,7 @@ import * as z from 'zod';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tables } from '@/integrations/supabase/types';
+import { supabase } from '@/integrations/supabase/client';
 import { BasicInfoForm } from './BasicInfoForm';
 import { VariantSection } from './VariantSection';
 
@@ -13,6 +14,7 @@ const productSchema = z.object({
   name: z.string().min(1, '產品名稱為必填'),
   sku: z.string().min(1, 'SKU 為必填'),
   category_ids: z.array(z.string().uuid()).default([]),
+  device_model_ids: z.array(z.string().uuid()).default([]),
   brand_id: z.string().nullable().optional(),
   model: z.string().nullable().optional(),
   base_wholesale_price: z.coerce.number().min(0),
@@ -39,7 +41,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
   const form = useForm<z.infer<typeof productSchema>>({
     resolver: zodResolver(productSchema),
     defaultValues: {
-      name: '', sku: '', category_ids: [], brand_id: null, model: '',
+      name: '', sku: '', category_ids: [], device_model_ids: [], brand_id: null, model: '',
       base_wholesale_price: 0, base_retail_price: 0,
       status: 'active', has_variants: false,
       table_settings: {},
@@ -51,14 +53,25 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
     if (open) {
       if (initialData) {
         console.log('[ProductFormDialog] Resetting form with initialData:', initialData);
-        // 確保 category_ids 為陣列，防止 undefined
+        // 先設定基本資料
         form.reset({
           ...initialData,
-          category_ids: (initialData as any).category_ids || []
+          category_ids: (initialData as any).category_ids || [],
+          device_model_ids: [], // 先預設空陣列，等 fetch 完覆蓋
         });
+
+        // 讀取型號標籤的多對多關聯
+        if (initialData.id) {
+          supabase.from('product_model_links').select('model_id').eq('product_id', initialData.id)
+            .then(({ data }) => {
+              if (data) {
+                form.setValue('device_model_ids', data.map(d => d.model_id));
+              }
+            });
+        }
       } else {
         form.reset({
-          name: '', sku: '', category_ids: [], brand_id: null, model: '',
+          name: '', sku: '', category_ids: [], device_model_ids: [], brand_id: null, model: '',
           base_wholesale_price: 0, base_retail_price: 0,
           status: 'active', has_variants: false,
           table_settings: {},
