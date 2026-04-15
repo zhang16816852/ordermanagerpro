@@ -6,56 +6,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { UseFormReturn } from 'react-hook-form';
 import { supabase } from '@/integrations/supabase/client';
 
+import { useCategorySpecs } from '@/hooks/useCategorySpecs';
+
 interface DynamicSpecsFieldsProps {
     form: UseFormReturn<any>;
 }
 
 export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
     const selectedCategoryIds = form.watch('category_ids') || [];
-
-    const { data: specFields = [] } = useQuery({
-        queryKey: ['category_specs', selectedCategoryIds],
-        enabled: selectedCategoryIds.length > 0,
-        queryFn: async () => {
-            const { data, error } = await (supabase
-                .from('category_spec_links' as any) as any)
-                .select(`
-                    category_id,
-                    spec_id,
-                    sort_order,
-                    specification_definitions (
-                        id,
-                        name,
-                        type,
-                        options,
-                        default_value
-                    )
-                `)
-                .in('category_id', selectedCategoryIds)
-                .order('sort_order', { ascending: true });
-
-            if (error) return [];
-
-            const seenSpecs = new Set<string>();
-            const result: any[] = [];
-
-            data.forEach((d: any) => {
-                const spec = d.specification_definitions;
-                if (!spec || seenSpecs.has(spec.id)) return;
-                seenSpecs.add(spec.id);
-                result.push({
-                    id: spec.id,
-                    name: spec.name,
-                    key: spec.id,
-                    type: spec.type,
-                    options: spec.options,
-                    defaultValue: spec.default_value
-                });
-            });
-
-            return result;
-        },
-    });
+    const { data: specFields = [] } = useCategorySpecs(selectedCategoryIds);
 
     if (specFields.length === 0) return null;
 

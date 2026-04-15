@@ -23,6 +23,12 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
     const {
         step,
         importData,
+        filteredData,
+        filterCategory,
+        setFilterCategory,
+        filterStatus,
+        setFilterStatus,
+        categories,
         isLoading,
         handleFileUpload,
         updateRow,
@@ -67,7 +73,12 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                         <div className="space-y-6">
                             <ValidationSummary data={importData} />
                             <PreviewTable
-                                data={importData}
+                                data={filteredData}
+                                categories={categories}
+                                filterCategory={filterCategory}
+                                onFilterChange={setFilterCategory}
+                                filterStatus={filterStatus}
+                                onStatusFilterChange={setFilterStatus}
                                 onUpdate={updateRow}
                                 onRemove={removeRow}
                             />

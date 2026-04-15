@@ -8,6 +8,8 @@ import { Tables } from '@/integrations/supabase/types';
 import { supabase } from '@/integrations/supabase/client';
 import { BasicInfoForm } from './BasicInfoForm';
 import { VariantSection } from './VariantSection';
+import { VariantSpecsMatrix } from './sections/VariantSpecsMatrix';
+import { VariantModelMatrix } from './sections/VariantModelMatrix';
 
 // 統一定義 Schema
 const productSchema = z.object({
@@ -99,7 +101,14 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
                 disabled={!initialData || !form.watch('has_variants')} // 即時監控 Form 內的 has_variants
                 className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
               >
-                變體管理 {!initialData && '(儲存後可用)'}
+                變體列表 {!initialData && '(儲存後可用)'}
+              </TabsTrigger>
+              <TabsTrigger
+                value="specs"
+                disabled={!initialData || !form.watch('has_variants')}
+                className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
+              >
+                變體規格與型號
               </TabsTrigger>
             </TabsList>
           </div>
@@ -117,6 +126,20 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
 
             <TabsContent value="variants" className="m-0 focus-visible:ring-0">
               {initialData && <VariantSection product={initialData} />}
+            </TabsContent>
+
+            <TabsContent value="specs" className="m-0 focus-visible:ring-0">
+              {initialData && (
+                <div className="space-y-8">
+                  <VariantSpecsMatrix
+                    productId={initialData.id}
+                    categoryIds={form.watch('category_ids')}
+                  />
+                  <VariantModelMatrix
+                    productId={initialData.id}
+                  />
+                </div>
+              )}
             </TabsContent>
           </div>
         </Tabs>

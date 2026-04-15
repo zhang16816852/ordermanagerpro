@@ -94,7 +94,7 @@ export function ProductRowItem({
                                     </Badge>
                                 ))
                             ) : (
-                                <span className="text-xs text-muted-foreground">{product.category || '-'}</span>
+                                <span className="text-xs text-muted-foreground">-</span>
                             )}
                         </div>
                     </TableCell>

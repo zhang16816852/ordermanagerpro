@@ -141,7 +141,7 @@ export function useProductsList() {
                 const links = category_ids.map((catId: string) => ({ product_id: id, category_id: catId }));
                 await (supabase.from('product_category_links' as any) as any).insert(links);
             }
-            
+
             await (supabase.from('product_model_links' as any) as any).delete().eq('product_id', id);
             if (device_model_ids?.length > 0) {
                 const links = device_model_ids.map((modelId: string) => ({ product_id: id, model_id: modelId }));
@@ -204,28 +204,102 @@ export function useProductsList() {
         } catch (error: any) { toast.error(`複製失敗：${error.message}`); }
     };
 
-    const handleBatchExport = () => {
+    const handleBatchExport = async () => {
+        const STATUS_LABELS: Record<string, string> = {
+            active: '上架中',
+            discontinued: '已停售',
+            preorder: '預購中',
+            sold_out: '售完停產',
+        };
+
+        // 1. Get all specification definitions to map IDs to names
+        const { data: specDefs } = await supabase.from('specification_definitions').select('id, name');
+        const specNameMap: Record<string, string> = {};
+        specDefs?.forEach(d => { specNameMap[d.id] = d.name; });
+
         const selected = products?.filter(p => selectedProductIds.has(p.id)) || [];
         const exportData: any[] = [];
+
+        // 2. Identify all spec keys present in selected products/variants to create columns
+        const allSpecKeys = new Set<string>();
+        selected.forEach(p => {
+            if (p.table_settings) Object.keys(p.table_settings).forEach(k => allSpecKeys.add(k));
+            const variants = getProductVariants(p.id);
+            variants.forEach(v => {
+                if (v.table_settings) Object.keys(v.table_settings).forEach(k => allSpecKeys.add(k));
+            });
+        });
+
         selected.forEach(p => {
             const variants = getProductVariants(p.id);
             const productModels = getProductModels(p.id).join(',');
+            const categoryStr = p.category_names?.join(',') || '';
+
+            // 3. Build condensed spec string for product
+            const formatSpecs = (settings: any) => {
+                if (!settings) return '';
+                return Object.entries(settings)
+                    .map(([id, val]) => {
+                        const name = specNameMap[id] || id;
+                        const valueStr = Array.isArray(val) ? val.join('/') : String(val);
+                        return `${name}:${valueStr}`;
+                    })
+                    .join(', ');
+            };
+
+            const productBase = {
+                product_sku: p.sku,
+                product_name: p.name,
+                description: p.description || '',
+                brand: p.brand || '',
+                model: p.model || '',
+                series: p.series || '',
+                category: categoryStr,
+                base_wholesale_price: p.base_wholesale_price,
+                base_retail_price: p.base_retail_price,
+                product_status: STATUS_LABELS[p.status] || p.status || '上架中',
+                device_models: productModels,
+                規格: formatSpecs(p.table_settings)
+            };
+
             if (variants.length > 0) {
                 variants.forEach(v => {
                     const variantModels = v.variant_model_links?.map((l: any) => l.device_models?.name).filter(Boolean).join(',') || '';
+
                     exportData.push({
-                        product_sku: p.sku, product_name: p.name, brand: p.brand || '', base_wholesale_price: p.base_wholesale_price, base_retail_price: p.base_retail_price, device_models: productModels,
-                        variant_sku: v.sku, variant_name: v.name, barcode: v.barcode ? `'${v.barcode}` : '', variant_device_models: variantModels,
+                        ...productBase,
+                        變體規格: formatSpecs(v.table_settings),
+                        variant_sku: v.sku,
+                        variant_name: v.name,
+                        option_1: v.option_1 || '',
+                        option_2: v.option_2 || '',
+                        option_3: v.option_3 || '',
+                        variant_wholesale_price: v.wholesale_price,
+                        variant_retail_price: v.retail_price,
+                        variant_status: STATUS_LABELS[v.status] || v.status || '上架中',
+                        barcode: v.barcode ? `'${v.barcode}` : '',
+                        variant_device_models: variantModels,
                     });
                 });
             } else {
                 exportData.push({
-                    product_sku: p.sku, product_name: p.name, brand: p.brand || '', base_wholesale_price: p.base_wholesale_price, base_retail_price: p.base_retail_price, device_models: productModels,
-                    variant_sku: '', variant_name: '', barcode: (p as any).barcode ? `'${(p as any).barcode}` : '', variant_device_models: '',
+                    ...productBase,
+                    變體規格: '',
+                    variant_sku: '',
+                    variant_name: '',
+                    option_1: '',
+                    option_2: '',
+                    option_3: '',
+                    variant_wholesale_price: '',
+                    variant_retail_price: '',
+                    variant_status: '',
+                    barcode: (p as any).barcode ? `'${(p as any).barcode}` : '',
+                    variant_device_models: '',
                 });
             }
         });
         const csv = Papa.unparse(exportData);
+        console.log("匯出資料", exportData);
         const BOM = '\uFEFF';
         const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);

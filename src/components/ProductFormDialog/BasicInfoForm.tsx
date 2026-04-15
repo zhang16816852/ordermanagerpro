@@ -34,12 +34,16 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
                     {/* 價格與型號 */}
                     <PricingFields form={form} />
 
-                    {/* 適用設備型號 (多選標籤) */}
-                    <DeviceModelSelectField form={form} />
+                    {/* 適用設備型號 (多選標籤) - 僅在無變體時顯示 */}
+                    {!form.watch('has_variants') && (
+                        <DeviceModelSelectField form={form} />
+                    )}
                 </div>
 
-                {/* 動態規格欄位 (根據分類自動顯示) */}
-                <DynamicSpecsFields form={form} />
+                {/* 動態規格欄位 (根據分類自動顯示) - 僅在無變體時顯示 */}
+                {!form.watch('has_variants') && (
+                    <DynamicSpecsFields form={form} />
+                )}
 
                 {/* 變體切換開關 */}
                 <FormField

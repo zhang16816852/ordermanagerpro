@@ -28,7 +28,7 @@ function InlineBadge({ children, variant = 'default', className = '' }: any) {
 export function SpecLibraryTab() {
     const queryClient = useQueryClient();
     const { specDefinitions, isLoadingSpecs, specMutation, handleSpecExport, handleSpecImport } = useSpecData();
-
+    console.log("規格屬性庫", specDefinitions);
     const [isSpecDialogOpen, setIsSpecDialogOpen] = useState(false);
     const [editingSpec, setEditingSpec] = useState<SpecDefinition | null>(null);
     const [specForm, setSpecForm] = useState<Partial<SpecDefinition>>({

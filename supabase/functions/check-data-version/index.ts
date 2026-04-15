@@ -64,7 +64,10 @@ Deno.serve(async (req) => {
         .from('products')
         .select(`
           *,
-          product_category_links(category_id)
+          product_category_links(
+            category_id,
+            categories(name)
+          )
         `)
         .order('name')
 

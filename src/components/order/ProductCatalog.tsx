@@ -87,15 +87,10 @@ export default function ProductCatalog({
       // 1. Category Filter (Recursive)
       if (categoryFilter) {
         const pCategoryIds = (product as any).category_ids || [];
-        const pCategoryId = (product as any).category_id;
-
-        // 優先檢查多分類關聯
-        const hasMatchInLinks = pCategoryIds.some((id: string) => subCategoryIds.has(id));
-
-        // 次之檢查舊有的單分類欄位 (相容性)
-        const hasMatchInLegacy = pCategoryId && subCategoryIds.has(pCategoryId);
-
-        if (!hasMatchInLinks && !hasMatchInLegacy) return false;
+        // 僅檢查多分類關聯
+        if (!pCategoryIds.some((id: string) => subCategoryIds.has(id))) {
+          return false;
+        }
       }
 
       // 2. Spec Filters (AND between keys, OR between values in same key)

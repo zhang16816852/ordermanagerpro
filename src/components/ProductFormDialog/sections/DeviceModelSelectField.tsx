@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useDeviceModels } from '@/hooks/useDeviceModels';
 import { FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -18,24 +19,22 @@ export function DeviceModelSelectField({ form }: DeviceModelSelectFieldProps) {
     const selectedModelIds = form.watch('device_model_ids') || [];
     const [search, setSearch] = useState('');
 
-    const { data: models = [] } = useQuery({
-        queryKey: ['device_models_active'],
-        queryFn: async () => {
-            const { data, error } = await supabase
-                .from('device_models')
-                .select('*')
-                .eq('is_active', true)
-                .order('sort_order', { ascending: true })
-                .order('name', { ascending: true });
-            if (error) return [];
-            return data;
-        },
-    });
+    const { data: models = [] } = useDeviceModels();
 
     const filteredModels = useMemo(() => {
-        if (!search) return models;
-        return models.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
-    }, [models, search]);
+        let base = models;
+        if (search) {
+            base = models.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
+        }
+        
+        // Sort: selected models to top
+        return [...base].sort((a, b) => {
+            const aSelected = selectedModelIds.includes(a.id) ? 1 : 0;
+            const bSelected = selectedModelIds.includes(b.id) ? 1 : 0;
+            if (aSelected !== bSelected) return bSelected - aSelected;
+            return (a.sort_order || 0) - (b.sort_order || 0);
+        });
+    }, [models, search, selectedModelIds]);
 
     const selectedModels = useMemo(() =>
         models.filter(m => selectedModelIds.includes(m.id)),
