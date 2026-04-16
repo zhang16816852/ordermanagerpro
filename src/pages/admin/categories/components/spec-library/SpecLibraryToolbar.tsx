@@ -15,7 +15,7 @@ interface ToolbarProps {
     onImportCSV: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
-export function SpecLibraryToolbar({
+export function Toolbar({
     viewMode,
     onViewModeChange,
     onAdd,

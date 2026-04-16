@@ -392,9 +392,8 @@ export default function ProductCatalog({
                         <div className="flex flex-wrap gap-1 mt-1">
                           {variant && (
                             <>
-                              {variant.option_1 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_1}</Badge>}
-                              {variant.option_2 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_2}</Badge>}
-                              {variant.option_3 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_3}</Badge>}
+                              {variant.option_1 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_2}</Badge>}
+                              {variant.option_2 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_3}</Badge>}
                             </>
                           )}
                         </div>

@@ -14,7 +14,7 @@ interface SpecCardProps {
     showRelations?: boolean;
 }
 
-export function SpecLibraryCard({ spec, relation, onEdit, onDelete, showRelations = true }: SpecCardProps) {
+export function SpecCard({ spec, relation, onEdit, onDelete, showRelations = true }: SpecCardProps) {
     return (
         <Card className="relative group overflow-hidden border-primary/10 hover:border-primary/40 hover:shadow-md transition-all duration-200">
             <CardHeader className="pb-2 space-y-1">

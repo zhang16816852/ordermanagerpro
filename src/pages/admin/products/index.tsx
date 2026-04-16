@@ -8,16 +8,8 @@ import { useProductsList } from './hooks/useProductsList';
 import { ProductsTable } from './components/ProductsTable';
 import { ProductDialogs } from './components/ProductDialogs';
 import { DeviceModelManager } from './components/DeviceModelManager';
-import { useBrandStore } from '@/store/useBrandStore';
-import { useEffect } from 'react';
 
 export default function AdminProducts() {
-    const { fetchBrands } = useBrandStore();
-
-    useEffect(() => {
-        fetchBrands();
-    }, [fetchBrands]);
-
     const {
         products, isLoading, version, forceRefresh,
         search, setSearch, activeTab, setActiveTab,

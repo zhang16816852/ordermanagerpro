@@ -27,36 +27,30 @@ export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
     if (!specFields || specFields.length === 0) return null;
 
     /**
-     * 遞迴渲染規格樹 (v4.11 修復：使用完整 Path Key 進行階層比對)
+     * 遞迴渲染規格樹 (v4.5 以 visibleInfo 鍵值為準)
      */
-    const renderSpecTree = (parentPath: string = 'root', level = 0) => {
-        // v4.11 強制型別斷言為 string[]
-        const keys = Array.from(visibleInfo.keys()) as string[];
-        
-        // v4.11 修正：過濾出父路徑為 parentPath 且「多一層級」的子項
-        const parentPartsCount = parentPath.split(':').length;
-        const visibleKeys = keys.filter(k => 
-            k.startsWith(`${parentPath}:`) && 
-            k.split(':').length === parentPartsCount + 1
-        );
+    const renderSpecTree = (parentId: string = 'root', level = 0) => {
+        // v4.5 改為從 visibleInfo 獲取路徑 Key
+        const visibleKeys = Array.from(visibleInfo.keys()).filter(k => k.startsWith(`${parentId}:`));
 
         if (visibleKeys.length === 0) return null;
 
         return (
             <div className={`space-y-4 ${level > 0 ? 'ml-6 pl-4 border-l-2 border-primary/10' : ''}`}>
                 {visibleKeys.map(pathKey => {
-                    const pKey = pathKey as string;
-                    const specId = pKey.split(':').pop()!;
+                    const [_, specId] = pathKey.split(':');
+                    // 優先從 specFields 找定義，若無則回退至全域 specMap
                     const spec = specFields.find(f => f.id === specId) || specMap.get(specId);
                     
                     if (!spec) return null;
 
-                    const value = (tableSettings[pKey] !== undefined && tableSettings[pKey] !== '')
-                        ? tableSettings[pKey] 
+                    // v4.4 智慧回退
+                    const value = tableSettings[pathKey] !== undefined && tableSettings[pathKey] !== ''
+                        ? tableSettings[pathKey] 
                         : (tableSettings[`root:${specId}`] || '');
 
                     return (
-                        <div key={pKey} className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div key={pathKey} className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
                             <div className="space-y-1.5 min-h-[60px]">
                                 <label className="text-xs font-semibold text-muted-foreground flex justify-between">
                                     {spec.name}
@@ -64,12 +58,12 @@ export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
                                 <SpecValueEditor 
                                     spec={spec}
                                     value={value}
-                                    onChange={(val) => form.setValue(`table_settings.${pKey}`, val, { shouldDirty: true })}
-                                    sourceValue={visibleInfo.get(pKey)?.sourceValue}
+                                    onChange={(val) => form.setValue(`table_settings.${pathKey}`, val, { shouldDirty: true })}
+                                    sourceValue={visibleInfo.get(pathKey)?.sourceValue}
                                     variantMode={false}
                                 />
                             </div>
-                            {renderSpecTree(pKey, level + 1)}
+                            {renderSpecTree(spec.id, level + 1)}
                         </div>
                     );
                 })}

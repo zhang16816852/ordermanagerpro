@@ -1,7 +1,7 @@
 import React from 'react';
 import { SpecDefinition } from '../../types';
 import { SpecTreeNode } from '../../hooks/useSpecRelations';
-import { SpecLibraryCard } from './SpecLibraryCard';
+import { SpecCard } from './SpecCard';
 import { CornerDownRight, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
@@ -14,15 +14,13 @@ interface TreeViewProps {
 /**
  * v4.10 規格樹節點元件 (遞迴渲染)
  */
-function TreeNode({ node, level, onEdit, onDelete }: {
-    node: SpecTreeNode;
-    level: number;
-    onEdit: (spec: SpecDefinition) => void;
+function TreeNode({ node, level, onEdit, onDelete }: { 
+    node: SpecTreeNode; 
+    level: number; 
+    onEdit: (spec: SpecDefinition) => void; 
     onDelete: (spec: SpecDefinition) => void;
-
 }) {
     return (
-
         <div className="space-y-4">
             <div className="flex gap-4">
                 {/* 視覺引導：左側邊界線與箭頭 */}
@@ -33,7 +31,7 @@ function TreeNode({ node, level, onEdit, onDelete }: {
                         {node.children.length > 0 && <div className="w-px grow bg-primary/20" />}
                     </div>
                 )}
-
+                
                 <div className="flex-1 space-y-2">
                     {/* 觸發條件提示 */}
                     {node.onValue && (
@@ -44,26 +42,26 @@ function TreeNode({ node, level, onEdit, onDelete }: {
                             </Badge>
                         </div>
                     )}
-
+                    
                     <div className="max-w-md">
-                        <SpecLibraryCard
-                            spec={node.spec}
-                            onEdit={onEdit}
-                            onDelete={onDelete}
+                        <SpecCard 
+                            spec={node.spec} 
+                            onEdit={onEdit} 
+                            onDelete={onDelete} 
                             showRelations={false} // 樹狀模式下不需要 Badge Relations
                         />
                     </div>
-
+                    
                     {/* 遞迴渲染子節點 */}
                     {node.children.length > 0 && (
                         <div className="pt-2 animate-in fade-in duration-500">
                             {node.children.map((child, idx) => (
-                                <TreeNode
-                                    key={`${child.id}-${idx}`}
-                                    node={child}
-                                    level={level + 1}
-                                    onEdit={onEdit}
-                                    onDelete={onDelete}
+                                <TreeNode 
+                                    key={`${child.id}-${idx}`} 
+                                    node={child} 
+                                    level={level + 1} 
+                                    onEdit={onEdit} 
+                                    onDelete={onDelete} 
                                 />
                             ))}
                         </div>
@@ -74,7 +72,7 @@ function TreeNode({ node, level, onEdit, onDelete }: {
     );
 }
 
-export function SpecLibraryTreeView({ treeData, onEdit, onDelete }: TreeViewProps) {
+export function TreeView({ treeData, onEdit, onDelete }: TreeViewProps) {
     if (treeData.length === 0) {
         return <div className="py-20 text-center animate-pulse text-muted-foreground">目前查無規格邏輯樹。</div>;
     }

@@ -19,8 +19,8 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
     const queryClient = useQueryClient();
     const { specMap } = useSpecStore();
     const { data: specFields = [], isLoading: specsLoading } = useCategorySpecs(categoryIds);
-
-    const [localData, setLocalData] = useState<Record<string, Record<string, any>>>({});
+    
+    const [localData, setLocalData] = useState<Record<string, Record<string, any>>>({}); 
 
     const { data: variants = [], isLoading: variantsLoading } = useQuery({
         queryKey: ['product-variants-specs', productId],
@@ -40,7 +40,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
         if (variants.length > 0) {
             const initial: Record<string, any> = {};
             variants.forEach(v => {
-                initial[v.id] = deserializeSpecs(v.table_settings as any);
+                initial[v.id] = deserializeSpecs(v.table_settings);
             });
             setLocalData(initial);
         }
@@ -51,7 +51,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
      */
     const visiblePathRows = useMemo(() => {
         if (specFields.length === 0 || Object.keys(localData).length === 0) return [];
-
+        
         // 1. 收集「所有變體」目前可見的總合路徑地圖
         const aggregatedVisible = new Map<string, any>();
         Object.keys(localData).forEach(vId => {
@@ -63,19 +63,14 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
         const sortedPaths = getTreeSortedVisiblePaths(specFields, aggregatedVisible);
 
         return sortedPaths.map(({ pathKey, level }) => {
-            const parts = pathKey.split(':');
-            const specId = parts[parts.length - 1]; // 永遠取最後一個部分作為當前 ID
+            const [_, specId] = pathKey.split(':');
             const spec = specFields.find(s => s.id === specId) || specMap.get(specId);
-
-            // 計算真正的父項 ID 作為顯示參考
-            const parentId = parts.length > 2 ? parts[parts.length - 2] : 'root';
-
-            return {
-                pathKey,
-                spec,
+            return { 
+                pathKey, 
+                spec, 
                 level,
                 name: spec?.name || specId,
-                parentId: parentId
+                parentId: pathKey.split(':')[0]
             };
         });
     }, [specFields, localData, specMap]);
@@ -113,7 +108,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
             });
             return next;
         });
-        const specId = pathKey.split(':').pop()!;
+        const [_, specId] = pathKey.split(':');
         toast.info(`已同步「${specMap.get(specId)?.name || specId}」至所有變體`);
     };
 
@@ -122,7 +117,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
     }
 
     if (visiblePathRows.length === 0 || variants.length === 0) return null;
-    console.log(specFields)
+
     return (
         <div className="space-y-4 border rounded-xl overflow-hidden bg-background shadow-sm">
             <div className="bg-muted/30 p-4 border-b flex justify-between items-center">
@@ -152,7 +147,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                     <TableBody>
                         {visiblePathRows.map(row => (
                             <TableRow key={row.pathKey} className="group hover:bg-muted/5 transition-colors border-b last:border-0">
-                                <TableCell
+                                <TableCell 
                                     className="font-medium bg-muted/20 sticky left-0 z-10 border-r group-hover:bg-muted/30 transition-colors"
                                     style={{ paddingLeft: `${row.level * 1.5 + 1}rem` }}
                                 >
@@ -172,16 +167,18 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                     const vSettings = localData[v.id] || {};
                                     const vVisiblePaths = getVisibleSpecsTree(specFields, vSettings);
                                     const isVis = vVisiblePaths.has(row.pathKey);
-
-                                    // v4.11 嚴格路徑讀取：不再回退到單一 ID
-                                    const value = vSettings[row.pathKey] !== undefined ? vSettings[row.pathKey] : '';
+                                    
+                                    const [_, specId] = row.pathKey.split(':');
+                                    const value = vSettings[row.pathKey] !== undefined && vSettings[row.pathKey] !== ''
+                                        ? vSettings[row.pathKey]
+                                        : (vSettings[`root:${specId}`] || '');
 
                                     return (
                                         <TableCell key={v.id} className={`p-2 border-r last:border-r-0 transition-all ${!isVis ? 'bg-muted/5' : ''}`}>
                                             <div className="flex justify-center w-full">
                                                 {isVis && row.spec ? (
                                                     <div className="w-full max-w-[140px] opacity-100 scale-100 transition-all duration-200">
-                                                        <SpecValueEditor
+                                                       <SpecValueEditor 
                                                             spec={row.spec}
                                                             value={value}
                                                             onChange={(val) => handleValueChange(v.id, row.pathKey, val)}
@@ -199,13 +196,16 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                     );
                                 })}
                                 <TableCell className="text-center bg-primary/5 group-hover:bg-primary/10 transition-colors">
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10" 
                                         onClick={() => {
+                                            const [_, specId] = row.pathKey.split(':');
                                             const firstVData = localData[variants[0].id] || {};
-                                            const firstValue = firstVData[row.pathKey] !== undefined ? firstVData[row.pathKey] : '';
+                                            const firstValue = firstVData[row.pathKey] !== undefined && firstVData[row.pathKey] !== ''
+                                                ? firstVData[row.pathKey]
+                                                : (firstVData[`root:${specId}`] || '');
                                             applyToAll(row.pathKey, firstValue);
                                         }}
                                     >
