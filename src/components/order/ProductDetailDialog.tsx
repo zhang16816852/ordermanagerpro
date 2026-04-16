@@ -14,6 +14,7 @@ import { ShoppingCart, ImageIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatSpecValue } from "@/utils/specLogic";
+import { useBrands } from "@/hooks/useBrands";
 
 interface ProductDetailDialogProps {
     product: ProductWithPricing | null;
@@ -29,6 +30,7 @@ export function ProductDetailDialog({
     storeId,
 }: ProductDetailDialogProps) {
     const { addItem, getItemQuantity } = useStoreDraft(storeId);
+    const { getBrandName } = useBrands();
 
     const { data: specDefinitions = [] } = useQuery({
         queryKey: ['spec_definitions'],
@@ -100,7 +102,7 @@ export function ProductDetailDialog({
                             <div>
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">品牌 / 型號</h3>
                                 <p className="mt-1">
-                                    {product.brand_id || '-'} / {product.model || '-'}
+                                    {getBrandName(product.brand_id)} / {product.model || '-'}
                                 </p>
                             </div>
                         )}

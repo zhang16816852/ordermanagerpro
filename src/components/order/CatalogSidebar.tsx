@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { deserializeSpecs, formatSpecValue } from "@/utils/specLogic";
+import { useBrands } from "@/hooks/useBrands";
 
 interface CatalogSidebarProps {
     products: ProductWithPricing[];
@@ -53,21 +54,7 @@ export function CatalogSidebar({
         },
     });
 
-    const { data: brands = [] } = useQuery({
-        queryKey: ['brands'],
-        queryFn: async () => {
-            try {
-                const { data, error } = await (supabase.from('brands' as any) as any)
-                    .select('*')
-                    .order('sort_order', { ascending: true })
-                    .order('name', { ascending: true });
-                if (error) return [];
-                return data;
-            } catch (err) {
-                return [];
-            }
-        },
-    });
+    const { brands } = useBrands();
 
     const categoryTree = useMemo(() => {
         // Deduplicate hierarchy links
@@ -154,9 +141,11 @@ export function CatalogSidebar({
             // Scan product table_settings
             const pSettings = deserializeSpecs(p.table_settings);
             Object.entries(pSettings).forEach(([key, value]) => {
+                const specId = key.includes(':') ? key.split(':').pop()! : key;
                 // key could be ID or Name (for legacy data)
                 // We check if it matches either the defined IDs or Names
-                if (definedSpecIds.length > 0 && !definedSpecIds.includes(key) && !definedSpecNames.includes(key)) return;
+                if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId) && !definedSpecNames.includes(specId)) return;
+                
                 if (!specs[key]) specs[key] = new Set();
                 
                 if (value !== null && value !== undefined) {
@@ -168,7 +157,9 @@ export function CatalogSidebar({
             p.variants?.forEach((v) => {
                 const vSettings = deserializeSpecs(v.table_settings);
                 Object.entries(vSettings).forEach(([key, value]) => {
-                    if (definedSpecIds.length > 0 && !definedSpecIds.includes(key) && !definedSpecNames.includes(key)) return;
+                    const specId = key.includes(':') ? key.split(':').pop()! : key;
+                    if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId) && !definedSpecNames.includes(specId)) return;
+                    
                     if (!specs[key]) specs[key] = new Set();
                     
                     if (value !== null && value !== undefined) {
@@ -322,7 +313,8 @@ export function CatalogSidebar({
                             {Object.entries(availableSpecs).length > 0 ? (
                                 Object.entries(availableSpecs).map(([key, values]) => {
                                     // 將 key（ID 或 Name）解析為顯示名稱
-                                    const specDef = specFields.find(f => f.id === key || f.name === key);
+                                    const specId = key.includes(':') ? key.split(':').pop()! : key;
+                                    const specDef = specFields.find(f => f.id === specId || f.name === specId);
                                     const displayName = specDef ? specDef.name : key;
 
                                     return (

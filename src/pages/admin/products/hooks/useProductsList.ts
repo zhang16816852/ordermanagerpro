@@ -5,6 +5,7 @@ import { Tables } from '@/integrations/supabase/types';
 import { useProductCache } from '@/hooks/useProductCache';
 import { toast } from 'sonner';
 import { formatSpecsToCondensedString } from '@/utils/specLogic';
+import { useBrands } from '@/hooks/useBrands';
 import Papa from 'papaparse';
 
 type Product = Tables<'products'>;
@@ -12,6 +13,7 @@ type Product = Tables<'products'>;
 export function useProductsList() {
     const queryClient = useQueryClient();
     const { products, isLoading, version, forceRefresh } = useProductCache();
+    const { brandMap } = useBrands();
 
     // --- UI States ---
     const [search, setSearch] = useState('');
@@ -27,21 +29,6 @@ export function useProductsList() {
 
     // --- Queries ---
 
-    // v4.9 獲取品牌庫並建立對照表
-    const { data: brands = [] } = useQuery({
-        queryKey: ['all-brands'],
-        queryFn: async () => {
-            const { data, error } = await supabase.from('brands').select('*').order('sort_order');
-            if (error) throw error;
-            return data || [];
-        }
-    });
-
-    const brandMap = useMemo(() => {
-        const map: Record<string, string> = {};
-        brands.forEach(b => { map[b.id] = b.name; });
-        return map;
-    }, [brands]);
 
     const { data: allVariants = [], isLoading: variantsLoading } = useQuery({
         queryKey: ['all-product-variants'],
@@ -257,7 +244,7 @@ export function useProductsList() {
             const productModels = getProductModels(p.id).join(',');
             const categoryStr = p.category_names?.join(',') || '';
 
-            // v4.9 品牌處理
+            // v4.9 品牌處理 - 使用全域 brandMap
             const displayBrand = (p.brand_id ? brandMap[p.brand_id] : p.brand_id) || '';
 
             // 3. 使用統一工具函式構建規格字串
