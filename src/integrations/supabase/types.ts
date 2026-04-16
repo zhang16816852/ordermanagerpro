@@ -794,7 +794,6 @@ export type Database = {
           barcode: string | null
           base_retail_price: number
           base_wholesale_price: number
-          brand: string | null
           brand_id: string | null
           color: string | null
           created_at: string
@@ -813,7 +812,6 @@ export type Database = {
           barcode?: string | null
           base_retail_price?: number
           base_wholesale_price?: number
-          brand?: string | null
           brand_id?: string | null
           color?: string | null
           created_at?: string
@@ -832,7 +830,6 @@ export type Database = {
           barcode?: string | null
           base_retail_price?: number
           base_wholesale_price?: number
-          brand?: string | null
           brand_id?: string | null
           color?: string | null
           created_at?: string
