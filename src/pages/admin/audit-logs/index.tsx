@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { History, Search, Filter, Eye, User, FileJson } from 'lucide-react';
 import { DataTable } from '@/components/shared/DataTable';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -150,6 +150,9 @@ export default function AdminAuditLogs() {
                             <FileJson className="h-5 w-5 text-primary" />
                             變更細節對比
                         </DialogTitle>
+                        <DialogDescription>
+                            對比該筆稽核紀錄在更新前與更新後的 JSON 資料結構差異。
+                        </DialogDescription>
                     </DialogHeader>
 
                     {selectedLog && (

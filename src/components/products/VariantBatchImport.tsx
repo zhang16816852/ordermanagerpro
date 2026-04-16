@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   Table,
@@ -305,6 +306,9 @@ export function VariantBatchImport({ open, onOpenChange }: VariantBatchImportPro
               <Badge variant="outline" className="ml-2">預覽確認</Badge>
             )}
           </DialogTitle>
+          <DialogDescription>
+            請上傳 CSV 檔案以批次建立產品變體。您可以在預覽步驟中檢查 SKU 是否重複或主產品是否存在。
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-auto">

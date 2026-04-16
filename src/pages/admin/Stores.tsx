@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Plus, Pencil, Search, Users } from 'lucide-react';
@@ -139,6 +140,9 @@ export default function AdminStores() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{editingStore ? '編輯店鋪' : '新增店鋪'}</DialogTitle>
+              <DialogDescription>
+                請輸入店鋪的基本聯絡資訊與系統識別代碼。這些資訊將用於訂單歸屬與物流配送。
+              </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">

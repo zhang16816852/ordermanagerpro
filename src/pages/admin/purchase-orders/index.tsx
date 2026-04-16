@@ -1,21 +1,21 @@
 import { useState } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ClipboardList, Users, Plus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-
-import { usePurchaseOrders } from './hooks/usePurchaseOrders';
 import { OrderListTab } from './components/OrderListTab';
 import { SupplierTab } from './components/SupplierTab';
 import { OrderForm } from './components/OrderForm';
 import { SupplierForm } from './components/SupplierForm';
 import { OrderDetailDialog } from './components/OrderDetailDialog';
 import { PurchaseOrder } from './types';
+import { usePurchaseOrders } from './hooks/usePurchaseOrders';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ClipboardList, Users, Plus } from 'lucide-react';
 
 export default function AdminPurchaseOrders() {
   const [activeTab, setActiveTab] = useState('orders');
@@ -100,6 +100,9 @@ export default function AdminPurchaseOrders() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingOrder ? '編輯採購單' : '建立採購單'}</DialogTitle>
+            <DialogDescription>
+              填寫採購單的基本資訊，包含供應商選擇與預期到貨日期。
+            </DialogDescription>
           </DialogHeader>
           <OrderForm
             order={editingOrder}
@@ -125,6 +128,9 @@ export default function AdminPurchaseOrders() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>新增供應商</DialogTitle>
+            <DialogDescription>
+              建立新的供應商聯絡資訊，以便後續進行採購與產品對照管理。
+            </DialogDescription>
           </DialogHeader>
           <SupplierForm
             isLoading={createSupplierMutation.isPending}
@@ -144,6 +150,9 @@ export default function AdminPurchaseOrders() {
             <DialogTitle className="flex items-center gap-2">
               採購單詳情
             </DialogTitle>
+            <DialogDescription>
+              檢視此採購單的所有品項、收貨進度與付款對帳紀錄。
+            </DialogDescription>
           </DialogHeader>
           {viewingOrder && (
             <OrderDetailDialog

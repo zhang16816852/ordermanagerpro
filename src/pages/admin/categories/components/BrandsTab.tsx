@@ -8,6 +8,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogFooter,
+    DialogDescription,
 } from '@/components/ui/dialog';
 import { Pencil, Trash2, Plus, Tag } from 'lucide-react';
 import { toast } from 'sonner';
@@ -108,6 +109,9 @@ export function BrandsTab() {
                 <DialogContent className="max-w-md">
                     <DialogHeader>
                         <DialogTitle>{editingBrand ? '編輯品牌' : '新增品牌'}</DialogTitle>
+                        <DialogDescription>
+                            請設定品牌名稱及其顯示順序。品牌建立後可用於產品標籤與分類過濾。
+                        </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">

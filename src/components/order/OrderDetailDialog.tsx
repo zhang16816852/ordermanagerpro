@@ -5,6 +5,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
 } from '@/components/ui/dialog';
 import { OrderInfo } from './OrderInfo';
 import { OrderDetailItemsTable } from './OrderDetailItemsTable';
@@ -35,6 +36,9 @@ export function OrderDetailDialog({ order, open, onOpenChange }: OrderDetailDial
             <DialogContent className="max-w-1xl max-h-[70vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>訂單詳情</DialogTitle>
+                    <DialogDescription>
+                        檢視此銷售訂單的摘要、購買品項清單及總計金額。
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="flex flex-col flex-1 min-h-0 gap-2 ">

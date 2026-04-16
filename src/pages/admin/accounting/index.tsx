@@ -12,6 +12,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
@@ -142,6 +143,9 @@ export default function AdminAccounting() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editingEntry ? '編輯收支記錄' : '新增收支記錄'}</DialogTitle>
+            <DialogDescription>
+              記錄店鋪的日常收入或支出明細，包含日期、類型以及金額。
+            </DialogDescription>
           </DialogHeader>
           <EntryForm
             entry={editingEntry}
@@ -167,6 +171,9 @@ export default function AdminAccounting() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>新增帳戶</DialogTitle>
+            <DialogDescription>
+              建立新的資金帳戶（如銀行帳戶、現金或電子錢包），以便追蹤資金流向。
+            </DialogDescription>
           </DialogHeader>
           <AccountForm
             isLoading={createAccountMutation.isPending}
@@ -184,6 +191,9 @@ export default function AdminAccounting() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>新增收支類型</DialogTitle>
+            <DialogDescription>
+              自定義會計分類標籤，方便後續產出收支分析報告。
+            </DialogDescription>
           </DialogHeader>
           <CategoryForm
             isLoading={createCategoryMutation.isPending}

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Search, Users, Store, UserPlus, Mail, Clock, Trash2, Copy } from "lucide-react";
@@ -409,6 +409,9 @@ export default function AdminUsers() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>指派到店鋪</DialogTitle>
+            <DialogDescription>
+              將選定的使用者分配到特定店鋪，並設定其在該店鋪中的管理或員工角色。
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -459,6 +462,9 @@ export default function AdminUsers() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>發送邀請</DialogTitle>
+            <DialogDescription>
+              輸入 Email 以邀請新成員加入系統。您可以預先設定受邀者的所屬店鋪與權限。
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>

@@ -12,6 +12,7 @@ type Product = Tables<'products'>;
 
 interface ProductRowItemProps {
     product: Product;
+    brandMap: Record<string, string>;
     variants: any[];
     models: string[];
     isExpanded: boolean;
@@ -40,6 +41,7 @@ const STATUS_VARIANTS: Record<string, string> = {
 
 export function ProductRowItem({
     product,
+    brandMap,
     variants,
     models,
     isExpanded,
@@ -52,6 +54,9 @@ export function ProductRowItem({
     onUpdateVariant
 }: ProductRowItemProps) {
     const hasVariants = product.has_variants && variants.length > 0;
+    
+    // v4.9 獲取顯示品牌名稱 (優先從字典對照，無則回退至舊有 brand 欄位)
+    const displayBrand = (product.brand_id ? brandMap[product.brand_id] : (product as any).brand) || '-';
 
     return (
         <Collapsible open={isExpanded} onOpenChange={onToggleExpand} asChild>
@@ -101,7 +106,7 @@ export function ProductRowItem({
                     <TableCell className="text-xs">
                         <div className="flex flex-col gap-1 max-w-[150px]">
                             <div className="flex items-center flex-wrap">
-                                <span className="text-muted-foreground font-mono truncate">{product.brand || '-'}</span>
+                                <span className="text-muted-foreground font-mono truncate" title={displayBrand}>{displayBrand}</span>
                                 <span className="mx-1 text-slate-300">/</span>
                                 <span className="text-slate-500 truncate">{product.model || '-'}</span>
                             </div>

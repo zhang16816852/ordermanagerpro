@@ -5,6 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   Table,
@@ -83,7 +84,12 @@ export function OrderDetailDialog({
               <Button size="sm" variant="outline"><Plus className="h-4 w-4 mr-1" />預算外品項</Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>新增品項</DialogTitle></DialogHeader>
+              <DialogHeader>
+                <DialogTitle>新增品項</DialogTitle>
+                <DialogDescription>
+                  請手動輸入產品與變體資訊，以新增預算外獲額外採購的品項。
+                </DialogDescription>
+              </DialogHeader>
               <ItemForm products={products} isLoading={isLoading} onSubmit={(data) => { onAddItem(data); setAddItemOpen(false); }} />
             </DialogContent>
           </Dialog>
@@ -93,7 +99,12 @@ export function OrderDetailDialog({
               <Button size="sm" variant="outline"><Download className="h-4 w-4 mr-1" />匯入銷售需求</Button>
             </DialogTrigger>
             <DialogContent className="max-w-3xl">
-              <DialogHeader><DialogTitle>匯入待採購品項</DialogTitle></DialogHeader>
+              <DialogHeader>
+                <DialogTitle>匯入待採購品項</DialogTitle>
+                <DialogDescription>
+                  從現有的銷售訂單中選取待採購的需求，自動填入採購清單。
+                </DialogDescription>
+              </DialogHeader>
               <ImportFromOrdersDialog products={products} isLoading={isLoading} onSubmit={(items) => { onImportItems(items); setImportOpen(false); }} />
             </DialogContent>
           </Dialog>
@@ -112,7 +123,12 @@ export function OrderDetailDialog({
             </DialogTrigger>
             {order.supplier_id && (
               <DialogContent className="max-w-3xl">
-                <DialogHeader><DialogTitle>從廠商 Excel 匯入</DialogTitle></DialogHeader>
+                <DialogHeader>
+                  <DialogTitle>從廠商 Excel 匯入</DialogTitle>
+                  <DialogDescription>
+                    上傳供應商提供的特定格式 Excel 檔案，系統將自動解析並載入採購品項。
+                  </DialogDescription>
+                </DialogHeader>
                 <ExcelImportDialog 
                   supplierId={order.supplier_id} 
                   isLoading={isLoading} 
@@ -172,7 +188,12 @@ export function OrderDetailDialog({
               </Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>記錄收貨</DialogTitle></DialogHeader>
+              <DialogHeader>
+                <DialogTitle>記錄收貨</DialogTitle>
+                <DialogDescription>
+                  請核對收到的實物數量，錄入系統以增加庫存。支援部分收貨。
+                </DialogDescription>
+              </DialogHeader>
               <ReceiveForm items={orderItems} isLoading={isLoading} onSubmit={(data) => { onReceiveItems(data); setReceiveOpen(false); }} />
             </DialogContent>
           </Dialog>
@@ -184,7 +205,12 @@ export function OrderDetailDialog({
               </Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>記錄付款</DialogTitle></DialogHeader>
+              <DialogHeader>
+                <DialogTitle>記錄付款</DialogTitle>
+                <DialogDescription>
+                  記錄對供應商的付款流水，關聯至特定帳戶以進行對帳。
+                </DialogDescription>
+              </DialogHeader>
               <PaymentForm accounts={accounts} amount={order.total_amount} isLoading={isLoading} onSubmit={(data) => { onMakePayment(data); setPaymentOpen(false); }} />
             </DialogContent>
           </Dialog>

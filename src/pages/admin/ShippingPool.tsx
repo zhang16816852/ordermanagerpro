@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Search, Package, Truck, Send, Store, Trash2 } from "lucide-react";
@@ -429,7 +429,11 @@ export default function AdminShippingPool() {
               <Send className="h-5 w-5" />
               確認出貨
             </DialogTitle>
+            <DialogDescription>
+              將選定店家的待出貨品項合併產生銷售單，並更新系統訂單狀態。出貨後資料將從集貨池中移除。
+            </DialogDescription>
           </DialogHeader>
+ bitumen
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               將選中店家的出貨池項目合併為銷售單並標記為已出貨：

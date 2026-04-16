@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 interface AuditDetailDialogProps {
   selectedLog: any;
@@ -12,6 +12,9 @@ export function AuditDetailDialog({ selectedLog, onClose }: AuditDetailDialogPro
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>日誌詳情</DialogTitle>
+          <DialogDescription>
+            檢視特定操作的詳細異動紀錄，包含修改時間、操作者以及資料的新舊值對照。
+          </DialogDescription>
         </DialogHeader>
         {selectedLog && (
           <div className="space-y-4">

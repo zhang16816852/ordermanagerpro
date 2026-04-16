@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   Table,
@@ -269,6 +270,9 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
               </Badge>
             )}
           </DialogTitle>
+          <DialogDescription>
+            請上傳 CSV 檔案以批次建立產品基本資訊。您可以在預覽步驟中檢查重複的 SKU 或格式錯誤。
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-auto">

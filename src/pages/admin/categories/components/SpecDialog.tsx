@@ -7,6 +7,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogFooter,
+    DialogDescription
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -53,7 +54,7 @@ export function SpecDialog({
     const updateTrigger = (index: number, field: string, value: any, targetId?: string) => {
         const triggers = [...(specForm.logic_config?.triggers || [])];
         const trigger = { ...triggers[index] };
-        
+
         if (field === 'target_toggle') {
             // 切換目標規格的選取狀態
             const targets = [...(trigger.targets || [])];
@@ -66,13 +67,13 @@ export function SpecDialog({
             trigger.targets = targets;
         } else if (field === 'target_is_detail') {
             // 切換某個目標是否為數量明細
-            trigger.targets = trigger.targets?.map(t => 
+            trigger.targets = trigger.targets?.map(t =>
                 t.id === targetId ? { ...t, is_quantity_detail: !t.is_quantity_detail } : t
             );
         } else {
             (trigger as any)[field] = value;
         }
-        
+
         triggers[index] = trigger;
         setSpecForm(prev => ({
             ...prev,
@@ -105,6 +106,9 @@ export function SpecDialog({
             <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-0">
                 <DialogHeader className="p-6 pb-2">
                     <DialogTitle>{editingSpec ? '編輯規格定義' : '新增規格定義'}</DialogTitle>
+                    <DialogDescription>
+                        請在此定義規格屬性的名稱、輸入型態以及連動觸發規則。定義後的規格可以用於產品分類與變體設定。
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="flex-1 overflow-y-auto p-6 pt-2 space-y-4">

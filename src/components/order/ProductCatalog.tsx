@@ -10,6 +10,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { ProductWithPricing, VariantWithPricing } from "@/types/product";
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
@@ -420,7 +421,11 @@ export default function ProductCatalog({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>選擇規格</DialogTitle>
+            <DialogDescription>
+              此產品包含多種規格選項，請點擊下方清單以選擇欲加入購物車的特定型號。
+            </DialogDescription>
           </DialogHeader>
+ bitumen
           {variantDialogProduct && (
             <div className="space-y-4">
               <div className="text-sm text-muted-foreground">{variantDialogProduct.name}</div>

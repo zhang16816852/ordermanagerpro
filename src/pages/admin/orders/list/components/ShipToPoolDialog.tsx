@@ -4,6 +4,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -34,6 +35,9 @@ export function ShipToPoolDialog({
             <Truck className="h-6 w-6 text-primary" />
             確認加入出貨池
           </DialogTitle>
+          <DialogDescription>
+            請核對即將加入出貨池的品項清單。加入後，倉庫人員將可看到這些需求並開始進行配貨。
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-8">

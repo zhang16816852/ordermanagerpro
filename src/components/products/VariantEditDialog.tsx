@@ -10,6 +10,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
+    DialogDescription,
 } from '@/components/ui/dialog';
 import {
     Select,
@@ -195,6 +196,9 @@ export function VariantEditDialog({
             <DialogContent className="max-w-lg" key={dialogKey}>
                 <DialogHeader>
                     <DialogTitle>{variant ? '編輯變體' : '新增變體'}</DialogTitle>
+                    <DialogDescription>
+                        請在此設定產品變體的 SKU、名稱及相關規格。變體可用於區分不同的規格組合（如顏色、容量）。
+                    </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid gap-4 sm:grid-cols-2">

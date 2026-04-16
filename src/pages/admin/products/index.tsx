@@ -12,6 +12,7 @@ import { DeviceModelManager } from './components/DeviceModelManager';
 export default function AdminProducts() {
     const {
         products, isLoading, version, forceRefresh,
+        brandMap,
         search, setSearch, activeTab, setActiveTab,
         selectedProductIds, toggleSelect, toggleSelectAll, isAllSelected,
         expandedProducts, toggleExpanded, filteredProducts,
@@ -92,6 +93,7 @@ export default function AdminProducts() {
                     <ProductsTable
                         products={filteredProducts}
                         isLoading={isLoading}
+                        brandMap={brandMap}
                         selectedIds={selectedProductIds}
                         isAllSelected={isAllSelected || false}
                         expandedIds={expandedProducts}
@@ -106,6 +108,7 @@ export default function AdminProducts() {
                         onUpdateVariant={(id, updates) => updateVariantPriceMutation.mutate({ id, ...updates })}
                     />
                 </TabsContent>
+
 
                 <TabsContent value="variants" className="mt-6 outline-none">
                     <div className="rounded-xl border bg-card shadow-sm p-1">

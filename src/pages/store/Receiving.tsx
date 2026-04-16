@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Package, CheckCircle, Truck } from "lucide-react";
 import { toast } from "sonner";
@@ -146,6 +146,9 @@ export default function StoreReceiving() {
               <Package className="h-5 w-5" />
               銷售單詳情
             </DialogTitle>
+            <DialogDescription>
+              請核對此銷售單包含的產品項目與數量。確認無誤後點擊「確認收貨」以入庫。
+            </DialogDescription>
           </DialogHeader>
           {selectedNote && (
             <div className="space-y-4">

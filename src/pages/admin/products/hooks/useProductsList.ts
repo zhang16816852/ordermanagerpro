@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
@@ -25,6 +25,23 @@ export function useProductsList() {
     const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
 
     // --- Queries ---
+
+    // v4.9 獲取品牌庫並建立對照表
+    const { data: brands = [] } = useQuery({
+        queryKey: ['all-brands'],
+        queryFn: async () => {
+            const { data, error } = await supabase.from('brands').select('*').order('sort_order');
+            if (error) throw error;
+            return data || [];
+        }
+    });
+
+    const brandMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        brands.forEach(b => { map[b.id] = b.name; });
+        return map;
+    }, [brands]);
+
     const { data: allVariants = [], isLoading: variantsLoading } = useQuery({
         queryKey: ['all-product-variants'],
         queryFn: async () => {
@@ -69,12 +86,16 @@ export function useProductsList() {
             .filter(Boolean);
     }, [allModelLinks]);
 
+    // v4.9 搜尋邏輯升級：支援 brand_id 對照名稱搜尋
     const filteredProducts = products?.filter(
-        (p) =>
-            p.name.toLowerCase().includes(search.toLowerCase()) ||
-            p.sku.toLowerCase().includes(search.toLowerCase()) ||
-            (p.brand && p.brand.toLowerCase().includes(search.toLowerCase())) ||
-            (p.model && p.model.toLowerCase().includes(search.toLowerCase()))
+        (p) => {
+            const brandName = (p.brand_id ? brandMap[p.brand_id] : p.brand_id) || '';
+            const searchLower = search.toLowerCase();
+            return p.name.toLowerCase().includes(searchLower) ||
+                p.sku.toLowerCase().includes(searchLower) ||
+                brandName.toLowerCase().includes(searchLower) ||
+                (p.model && p.model.toLowerCase().includes(searchLower));
+        }
     );
 
     // --- Selection Logic ---
@@ -235,6 +256,9 @@ export function useProductsList() {
             const productModels = getProductModels(p.id).join(',');
             const categoryStr = p.category_names?.join(',') || '';
 
+            // v4.9 品牌處理
+            const displayBrand = (p.brand_id ? brandMap[p.brand_id] : p.brand_id) || '';
+
             // 3. Build condensed spec string for product
             const formatSpecs = (settings: any) => {
                 if (!settings) return '';
@@ -263,7 +287,7 @@ export function useProductsList() {
                 product_sku: p.sku,
                 product_name: p.name,
                 description: p.description || '',
-                brand: p.brand || '',
+                brand: displayBrand,
                 model: p.model || '',
                 series: p.series || '',
                 category: categoryStr,
@@ -323,6 +347,7 @@ export function useProductsList() {
 
     return {
         products, isLoading, version, forceRefresh,
+        brandMap,
         search, setSearch, activeTab, setActiveTab,
         selectedProductIds, toggleSelect, toggleSelectAll, isAllSelected,
         expandedProducts, toggleExpanded, filteredProducts,

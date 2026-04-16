@@ -9,6 +9,7 @@ type Product = Tables<'products'>;
 interface ProductsTableProps {
     products: Product[] | undefined;
     isLoading: boolean;
+    brandMap: Record<string, string>;
     selectedIds: Set<string>;
     isAllSelected: boolean;
     expandedIds: Set<string>;
@@ -26,6 +27,7 @@ interface ProductsTableProps {
 export function ProductsTable({
     products,
     isLoading,
+    brandMap,
     selectedIds,
     isAllSelected,
     expandedIds,
@@ -100,6 +102,7 @@ export function ProductsTable({
                             <ProductRowItem
                                 key={product.id}
                                 product={product}
+                                brandMap={brandMap}
                                 variants={getVariants(product.id)}
                                 models={getModels ? getModels(product.id) : []}
                                 isSelected={selectedIds.has(product.id)}

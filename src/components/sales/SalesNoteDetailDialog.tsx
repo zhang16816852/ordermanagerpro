@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -174,6 +174,9 @@ export function SalesNoteDetailDialog({
                         <Package className="h-5 w-5 text-primary" />
                         銷售單詳情
                     </DialogTitle>
+                    <DialogDescription>
+                        檢視此銷售單的產品細節、店鋪資訊與目前的物流狀態。
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-6" id="sales-note-content">
@@ -343,6 +346,9 @@ export function SalesNoteDetailDialog({
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
                         <DialogTitle>記錄收款金額</DialogTitle>
+                        <DialogDescription>
+                            請選擇入帳帳戶並確認實收金額，提交後將自動更新帳戶餘額。
+                        </DialogDescription>
                     </DialogHeader>
                     <PaymentForm
                         accounts={accounts}

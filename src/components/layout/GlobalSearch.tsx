@@ -10,7 +10,7 @@ import {
     Loader2
 } from 'lucide-react';
 import { useGlobalSearch } from '@/hooks/useGlobalSearch';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 
 export function GlobalSearch() {
@@ -54,6 +54,12 @@ export function GlobalSearch() {
 
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent className="p-0 border-none shadow-2xl max-w-2xl bg-transparent top-[20%] translate-y-0">
+                    <DialogHeader className="sr-only">
+                        <DialogTitle>全站搜尋</DialogTitle>
+                        <DialogDescription>
+                            輸入關鍵字以搜尋店鋪、產品 SKU 或訂單編號。支援快捷鍵組合呼叫（⌘K）。
+                        </DialogDescription>
+                    </DialogHeader>
                     <Command className="rounded-xl border bg-card/80 backdrop-blur-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                         <div className="flex items-center border-b px-4 py-3 gap-3">
                             <Search className="h-5 w-5 text-muted-foreground" />

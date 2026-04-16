@@ -5,6 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -60,6 +61,9 @@ export function PaymentDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>記錄付款</DialogTitle>
+          <DialogDescription>
+            請輸入付款金額並選擇支付帳戶，系統將自動扣除待付餘額並記錄交易水單。
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div>

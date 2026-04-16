@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -235,6 +235,9 @@ export default function StoreTeam() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>邀請成員</DialogTitle>
+            <DialogDescription>
+              請輸入受邀者的 Email 並分配權限。受邀者將收到一封包含登入連結的電子郵件。
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>

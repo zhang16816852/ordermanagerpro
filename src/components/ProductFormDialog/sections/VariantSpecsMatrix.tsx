@@ -19,8 +19,8 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
     const queryClient = useQueryClient();
     const { specMap } = useSpecStore();
     const { data: specFields = [], isLoading: specsLoading } = useCategorySpecs(categoryIds);
-    
-    const [localData, setLocalData] = useState<Record<string, Record<string, any>>>({}); 
+    console.log("變體資料", specFields)
+    const [localData, setLocalData] = useState<Record<string, Record<string, any>>>({});
 
     const { data: variants = [], isLoading: variantsLoading } = useQuery({
         queryKey: ['product-variants-specs', productId],
@@ -51,7 +51,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
      */
     const visiblePathRows = useMemo(() => {
         if (specFields.length === 0 || Object.keys(localData).length === 0) return [];
-        
+
         // 1. 收集「所有變體」目前可見的總合路徑地圖
         const aggregatedVisible = new Map<string, any>();
         Object.keys(localData).forEach(vId => {
@@ -65,9 +65,9 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
         return sortedPaths.map(({ pathKey, level }) => {
             const [_, specId] = pathKey.split(':');
             const spec = specFields.find(s => s.id === specId) || specMap.get(specId);
-            return { 
-                pathKey, 
-                spec, 
+            return {
+                pathKey,
+                spec,
                 level,
                 name: spec?.name || specId,
                 parentId: pathKey.split(':')[0]
@@ -147,7 +147,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                     <TableBody>
                         {visiblePathRows.map(row => (
                             <TableRow key={row.pathKey} className="group hover:bg-muted/5 transition-colors border-b last:border-0">
-                                <TableCell 
+                                <TableCell
                                     className="font-medium bg-muted/20 sticky left-0 z-10 border-r group-hover:bg-muted/30 transition-colors"
                                     style={{ paddingLeft: `${row.level * 1.5 + 1}rem` }}
                                 >
@@ -167,7 +167,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                     const vSettings = localData[v.id] || {};
                                     const vVisiblePaths = getVisibleSpecsTree(specFields, vSettings);
                                     const isVis = vVisiblePaths.has(row.pathKey);
-                                    
+
                                     const [_, specId] = row.pathKey.split(':');
                                     const value = vSettings[row.pathKey] !== undefined && vSettings[row.pathKey] !== ''
                                         ? vSettings[row.pathKey]
@@ -178,7 +178,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                             <div className="flex justify-center w-full">
                                                 {isVis && row.spec ? (
                                                     <div className="w-full max-w-[140px] opacity-100 scale-100 transition-all duration-200">
-                                                       <SpecValueEditor 
+                                                        <SpecValueEditor
                                                             spec={row.spec}
                                                             value={value}
                                                             onChange={(val) => handleValueChange(v.id, row.pathKey, val)}
@@ -196,10 +196,10 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                     );
                                 })}
                                 <TableCell className="text-center bg-primary/5 group-hover:bg-primary/10 transition-colors">
-                                    <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10" 
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
                                         onClick={() => {
                                             const [_, specId] = row.pathKey.split(':');
                                             const firstVData = localData[variants[0].id] || {};

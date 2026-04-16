@@ -4,6 +4,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogFooter,
+    DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -60,6 +61,9 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                             </Badge>
                         )}
                     </DialogTitle>
+                    <DialogDescription>
+                        請上傳符合格式的 Excel 或 CSV 檔案以進行批次產品匯入。您可以在此步驟預覽資料並修正錯誤。
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="flex-1 overflow-auto p-6 bg-background">

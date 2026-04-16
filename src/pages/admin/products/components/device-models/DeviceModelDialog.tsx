@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -38,6 +38,9 @@ export function DeviceModelDialog({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingData?.id ? '編輯型號標籤' : '新增型號標籤'}</DialogTitle>
+            <DialogDescription>
+              請定義設備型號的詳細資訊，包含廠牌、系列以及發布日期。型號標籤可用於變體快速選取。
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
@@ -154,7 +157,12 @@ export function DeviceModelDialog({
 
       <Dialog open={newBrandOpen} onOpenChange={setNewBrandOpen}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>新增設備廠牌</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>新增設備廠牌</DialogTitle>
+            <DialogDescription>
+              輸入新的設備廠牌名稱（例如：Apple, Samsung），新增後可立即套用。
+            </DialogDescription>
+          </DialogHeader>
           <div className="py-4">
             <Input
               placeholder="如: Apple, Samsung..."

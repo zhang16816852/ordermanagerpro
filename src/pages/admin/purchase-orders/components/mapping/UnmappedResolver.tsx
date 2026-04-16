@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { PlusCircle, Link as LinkIcon, CheckCircle2 } from 'lucide-react';
 import { InternalProductSelector } from './InternalProductSelector';
 import { ProductFormDialog } from '@/components/ProductFormDialog/ProductFormDialog';
@@ -130,7 +130,11 @@ export function UnmappedResolver({ supplierId, unmappedItems, onRuleCreated, onA
         <DialogContent>
           <DialogHeader>
             <DialogTitle>指派內部產品對應 (廠商代號: {resolvingItem?.vendor_product_id})</DialogTitle>
+            <DialogDescription>
+              請搜尋並選擇系統內的產品與變體，以建立與廠商代號的連結對照關係。
+            </DialogDescription>
           </DialogHeader>
+ bitumen
           {selectorOpen && (
             <InternalProductSelector
               onSelect={handleAssignCurrent}

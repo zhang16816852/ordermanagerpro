@@ -7,6 +7,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogFooter,
+    DialogDescription
 } from '@/components/ui/dialog';
 import { FolderTree, ListPlus } from 'lucide-react';
 import { Category, SpecDefinition } from '../types';
@@ -51,6 +52,9 @@ export function CategoryDialog({
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>{editingCategory ? '編輯分類' : '新增分類'}</DialogTitle>
+                    <DialogDescription>
+                        請在此設定產品分類的名稱、階層關係以及關聯的規格屬性。
+                    </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-6 py-4">
                     {/* 分類名稱 */}
