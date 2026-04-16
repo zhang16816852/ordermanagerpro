@@ -8,6 +8,12 @@ export interface CategorySpec {
     type: 'text' | 'select' | 'boolean' | 'multiselect' | 'number_with_unit';
     options: string[];
     defaultValue: string;
+    logicConfig?: {
+        triggers?: {
+            on_value: string;
+            targets: { id: string; is_quantity_detail?: boolean }[];
+        }[];
+    };
 }
 
 export function useCategorySpecs(categoryIds: string[]) {
@@ -26,7 +32,8 @@ export function useCategorySpecs(categoryIds: string[]) {
                         name,
                         type,
                         options,
-                        default_value
+                        default_value,
+                        logic_config
                     )
                 `)
                 .in('category_id', categoryIds)
@@ -50,7 +57,8 @@ export function useCategorySpecs(categoryIds: string[]) {
                     key: spec.id,
                     type: spec.type,
                     options: spec.options || [],
-                    defaultValue: spec.default_value || ''
+                    defaultValue: spec.default_value || '',
+                    logicConfig: spec.logic_config as any
                 });
             });
 

@@ -4,13 +4,14 @@ import { toast } from 'sonner';
 import Papa from 'papaparse';
 import { SpecDefinition } from '../types';
 
-// 規格屬性庫資料層：包含 Query、Mutation、以及 CSV 匯出/匯入（以名稱為主）
+/**
+ * v4.8 規格屬性庫資料層：實作 JSON 100% 保真資料交換
+ */
 
 export function useSpecData() {
     const queryClient = useQueryClient();
 
     // --- Query ---
-
     const { data: specDefinitions = [], isLoading: isLoadingSpecs } = useQuery({
         queryKey: ['spec_definitions'],
         queryFn: async () => {
@@ -23,38 +24,75 @@ export function useSpecData() {
     });
 
     // --- Mutation ---
-
     const specMutation = useMutation({
         mutationFn: async (data: { spec: Partial<SpecDefinition>; editingSpecId?: string }) => {
             const { spec, editingSpecId } = data;
             if (editingSpecId) {
-                // 更新既有規格
                 const { error } = await (supabase.from('specification_definitions' as any) as any)
                     .update(spec)
                     .eq('id', editingSpecId);
                 if (error) throw error;
             } else {
-                // 新增規格
                 const { error } = await (supabase.from('specification_definitions' as any) as any).insert([spec]);
                 if (error) throw error;
             }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
-            toast.success('規格屬性已儲存');
+            toast.success('規格定義已同步至雲端');
         },
     });
 
-    // --- 匯出 CSV（以名稱為主）---
+    // --- JSON 匯出 (100% 保真) ---
+    const handleSpecExportJSON = () => {
+        const dataStr = JSON.stringify(specDefinitions, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `specs_full_backup_${new Date().toISOString().slice(0, 10)}.json`;
+        link.click();
+        toast.success('規格庫已匯出 (JSON 格式)');
+    };
 
+    // --- JSON 匯入 ---
+    const handleSpecImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const json = JSON.parse(event.target?.result as string);
+                const items = Array.isArray(json) ? json : [json];
+                
+                // 批次 Upsert，以 ID 或名稱為基準
+                const { error } = await supabase
+                    .from('specification_definitions')
+                    .upsert(items, { onConflict: 'id' });
+
+                if (error) throw error;
+                
+                queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
+                toast.success(`JSON 匯入成功，共處理 ${items.length} 筆規格`);
+            } catch (err: any) {
+                toast.error('JSON 匯入失敗：' + err.message);
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    };
+
+    // --- 匯出 CSV (基本屬性相容) ---
     const handleSpecExport = () => {
         const exportData = specDefinitions.map(s => ({
             name: s.name,
             type: s.type,
             options: s.options.join(','),
             default_value: s.default_value || '',
-            // 備查欄位（ID）
             id: s.id,
+            // v4.8 額外包含 logic_config 字串
+            logic_config: JSON.stringify(s.logic_config || {})
         }));
 
         const csv = Papa.unparse(exportData);
@@ -63,13 +101,12 @@ export function useSpecData() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `specs_export_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.download = `specs_simple_list_${new Date().toISOString().slice(0, 10)}.csv`;
         link.click();
-        toast.success('規格屬性庫已匯出');
+        toast.success('規格屬性庫已匯出 (CSV)');
     };
 
-    // --- 匯入 CSV（以名稱解析，向下相容舊版 ID）---
-
+    // --- 匯入 CSV ---
     const handleSpecImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -80,73 +117,45 @@ export function useSpecData() {
             complete: async (results) => {
                 const rows = results.data as any[];
                 try {
-                    // 1. 取得現有規格清單供名稱比對
-                    const { data: existingSpecs, error: fetchError } = await supabase
+                    const { data: existingSpecs } = await supabase
                         .from('specification_definitions')
                         .select('id, name');
-                    if (fetchError) throw fetchError;
 
-                    // 以 name 為 key，先過濾 CSV 內部重複（後面的同名覆蓋前面的）
-                    const finalMap = new Map<string, any>();
-
-                    rows.forEach(row => {
+                    const finalItems = rows.map(row => {
                         const name = row.name?.trim();
-                        if (!name) return;
+                        if (!name) return null;
 
-                        const cleanedId = row.id?.toString().trim();
-                        let targetId = (cleanedId && cleanedId !== 'null' && cleanedId !== '') ? cleanedId : null;
-
-                        // 若無 ID，以名稱查找現有資料
+                        let targetId = (row.id && row.id !== 'null' && row.id !== '') ? row.id : null;
                         if (!targetId && existingSpecs) {
-                            const match = existingSpecs.find(s => s.name === name);
-                            if (match) targetId = match.id;
+                            targetId = existingSpecs.find(s => s.name === name)?.id || null;
                         }
 
-                        const specData: any = {
+                        // v4.8 嘗試解析 logic_config
+                        let logic_config = { triggers: [] };
+                        try {
+                            if (row.logic_config) logic_config = JSON.parse(row.logic_config);
+                        } catch (e) {}
+
+                        return {
+                            id: targetId || undefined,
                             name: name,
                             type: row.type || 'text',
-                            options: row.options
-                                ? row.options.split(',').map((s: any) => s.trim()).filter(Boolean)
-                                : [],
-                            default_value: row.default_value || null
+                            options: row.options ? row.options.split(',').map((s: any) => s.trim()) : [],
+                            default_value: row.default_value || null,
+                            logic_config
                         };
+                    }).filter(Boolean);
 
-                        if (targetId) specData.id = targetId;
+                    const { error } = await supabase
+                        .from('specification_definitions')
+                        .upsert(finalItems, { onConflict: 'id' });
 
-                        finalMap.set(name, specData);
-                    });
-
-                    const toUpsert = Array.from(finalMap.values()).filter((s: any) => !!s.id);
-                    const toInsert = Array.from(finalMap.values()).filter((s: any) => !s.id);
-                    const totalCount = toUpsert.length + toInsert.length;
-
-                    if (totalCount === 0) {
-                        toast.error('沒有有效的資料可供匯入');
-                        return;
-                    }
-
-                    // 2a. 更新/覆寫：有 ID 的規格（既有資料或從 CSV id 欄取得）
-                    if (toUpsert.length > 0) {
-                        const { error: upsertError } = await supabase
-                            .from('specification_definitions')
-                            .upsert(toUpsert, { onConflict: 'id' });
-                        if (upsertError) throw upsertError;
-                    }
-
-                    // 2b. 新增：沒有 ID 的全新規格，讓資料庫自動產生 UUID
-                    if (toInsert.length > 0) {
-                        const { error: insertError } = await supabase
-                            .from('specification_definitions')
-                            .insert(toInsert);
-                        if (insertError) throw insertError;
-                    }
-
+                    if (error) throw error;
                     queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
-                    toast.success(`規格同步成功，共處理 ${totalCount} 筆（更新 ${toUpsert.length} 筆、新增 ${toInsert.length} 筆）`);
+                    toast.success('CSV 匯入成功');
 
                 } catch (err: any) {
-                    console.error(err);
-                    toast.error(`匯入失敗: ${err.message}`);
+                    toast.error(`CSV 匯入失敗: ${err.message}`);
                 }
             }
         });
@@ -159,5 +168,7 @@ export function useSpecData() {
         specMutation,
         handleSpecExport,
         handleSpecImport,
+        handleSpecExportJSON,
+        handleSpecImportJSON
     };
 }

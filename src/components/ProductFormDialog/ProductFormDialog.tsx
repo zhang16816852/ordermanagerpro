@@ -36,8 +36,12 @@ interface ProductFormDialogProps {
   isLoading?: boolean;
 }
 
+import { serializeSpecs, deserializeSpecs } from '@/utils/specLogic';
+import { useSpecStore } from '@/store/useSpecStore';
+
 export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, isLoading }: ProductFormDialogProps) {
   const [activeTab, setActiveTab] = useState('basic');
+  const { specMap, fetchSpecs } = useSpecStore();
 
   // 1. 在父層初始化 Form
   const form = useForm<z.infer<typeof productSchema>>({
@@ -53,6 +57,9 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
   // 2. 當切換編輯對象或 Dialog 開關時，同步 Form 資料
   useEffect(() => {
     if (open) {
+      // 開啟時同步抓取規格定義（快取會處理避免重複抓取）
+      fetchSpecs();
+
       if (initialData) {
         console.log('[ProductFormDialog] Resetting form with initialData:', initialData);
         // 先設定基本資料
@@ -60,6 +67,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
           ...initialData,
           category_ids: (initialData as any).category_ids || [],
           device_model_ids: [], // 先預設空陣列，等 fetch 完覆蓋
+          table_settings: deserializeSpecs(initialData.table_settings),
         });
 
         // 讀取型號標籤的多對多關聯
@@ -81,7 +89,17 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
       }
       setActiveTab('basic'); // 每次打開預設回到基本資訊
     }
-  }, [open, initialData, form]);
+  }, [open, initialData, form, fetchSpecs]);
+
+  // 封裝 Submit 以進行資料轉換 (Object -> Array)
+  const handleWrappedSubmit = (values: any) => {
+    // 將前端的路徑 Object 轉換為後端的易讀 Array
+    const serializedSettings = serializeSpecs(values.table_settings, specMap);
+    onSubmit({
+      ...values,
+      table_settings: serializedSettings as any
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -118,7 +136,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
               {/* 3. 將 form 物件傳遞給子組件 */}
               <BasicInfoForm
                 form={form}
-                onSubmit={onSubmit}
+                onSubmit={handleWrappedSubmit}
                 isLoading={isLoading}
                 onCancel={() => onOpenChange(false)}
               />

@@ -82,21 +82,15 @@ export function ProductDetailDialog({
                             </div>
                         </div>
 
-                        {((product as any).category_names?.length > 0 || product.category) && (
+                        {((product as any).category_names?.length > 0) && (
                             <div>
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">類別</h3>
                                 <div className="flex flex-wrap gap-1 mt-1">
-                                    {(product as any).category_names?.length > 0 ? (
-                                        (product as any).category_names.map((name: string) => (
-                                            <Badge key={name} variant="secondary">
-                                                {name}
-                                            </Badge>
-                                        ))
-                                    ) : (
-                                        <Badge variant="secondary">
-                                            {product.category}
+                                    {(product as any).category_names.map((name: string) => (
+                                        <Badge key={name} variant="secondary">
+                                            {name}
                                         </Badge>
-                                    )}
+                                    ))}
                                 </div>
                             </div>
                         )}
@@ -117,30 +111,50 @@ export function ProductDetailDialog({
                             </div>
                         </div>
 
-                        {product.table_settings && Object.keys(product.table_settings).length > 0 && (
+                        {product.table_settings && (Array.isArray(product.table_settings) ? product.table_settings.length > 0 : Object.keys(product.table_settings).length > 0) && (
                             <div className="pt-4 border-t">
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">產品規格</h3>
                                 <div className="space-y-2">
-                                    {Object.entries(product.table_settings as Record<string, any>).map(([key, val]) => {
-                                        if (val === null || val === undefined || val === '') return null;
+                                    {Array.isArray(product.table_settings) ? (
+                                        product.table_settings.map((entry: any) => {
+                                            if (entry.value === null || entry.value === undefined || entry.value === '') return null;
+                                            
+                                            let displayVal = entry.value;
+                                            if (typeof entry.value === 'object') {
+                                                displayVal = Object.entries(entry.value).map(([k, v]) => `${k}*${v}`).join(', ');
+                                            } else if (entry.value === 'true') {
+                                                displayVal = '支援';
+                                            } else if (entry.value === 'false') {
+                                                displayVal = '不支援';
+                                            }
 
-                                        const specDef = specDefinitions.find((s: any) => s.id === key || s.name === key);
-                                        const displayName = specDef ? specDef.name : key;
-                                        let displayVal = val;
+                                            return (
+                                                <div key={entry.path} className="flex justify-between text-sm py-1 border-b last:border-0 border-muted">
+                                                    <span className="text-muted-foreground">{entry.path}</span>
+                                                    <span className="font-medium text-right">{displayVal}</span>
+                                                </div>
+                                            );
+                                        })
+                                    ) : (
+                                        Object.entries(product.table_settings as Record<string, any>).map(([key, val]) => {
+                                            if (val === null || val === undefined || val === '') return null;
+                                            const specDef = specDefinitions.find((s: any) => s.id === key || s.name === key);
+                                            const displayName = specDef ? specDef.name : key;
+                                            let displayVal = val;
+                                            if (specDef?.type === 'boolean') {
+                                                displayVal = val === 'true' ? '支援' : (val === 'false' ? '不支援' : val);
+                                            } else if (specDef?.type === 'number_with_unit') {
+                                                displayVal = `${val}${specDef.options?.[0] || ''}`;
+                                            }
 
-                                        if (specDef?.type === 'boolean') {
-                                            displayVal = val === 'true' ? '支援' : (val === 'false' ? '不支援' : val);
-                                        } else if (specDef?.type === 'number_with_unit') {
-                                            displayVal = `${val}${specDef.options?.[0] || ''}`;
-                                        }
-
-                                        return (
-                                            <div key={key} className="flex justify-between text-sm py-1 border-b last:border-0 border-muted">
-                                                <span className="text-muted-foreground">{displayName}</span>
-                                                <span className="font-medium text-right">{displayVal}</span>
-                                            </div>
-                                        );
-                                    })}
+                                            return (
+                                                <div key={key} className="flex justify-between text-sm py-1 border-b last:border-0 border-muted">
+                                                    <span className="text-muted-foreground">{displayName}</span>
+                                                    <span className="font-medium text-right">{displayVal}</span>
+                                                </div>
+                                            );
+                                        })
+                                    )}
                                 </div>
                             </div>
                         )}

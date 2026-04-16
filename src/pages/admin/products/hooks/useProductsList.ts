@@ -241,7 +241,19 @@ export function useProductsList() {
                 return Object.entries(settings)
                     .map(([id, val]) => {
                         const name = specNameMap[id] || id;
-                        const valueStr = Array.isArray(val) ? val.join('/') : String(val);
+                        let valueStr = '';
+
+                        if (Array.isArray(val)) {
+                            valueStr = val.join('/');
+                        } else if (typeof val === 'object' && val !== null) {
+                            // Handle Quantity Details JSON: {"Type-C": 1} -> Type-C*1/USB-A*2
+                            valueStr = Object.entries(val)
+                                .map(([opt, qty]) => `${opt}*${qty}`)
+                                .join('/');
+                        } else {
+                            valueStr = String(val);
+                        }
+
                         return `${name}:${valueStr}`;
                     })
                     .join(', ');

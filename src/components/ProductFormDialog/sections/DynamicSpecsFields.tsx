@@ -1,12 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
-import { FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UseFormReturn } from 'react-hook-form';
-import { supabase } from '@/integrations/supabase/client';
-
+import { SpecValueEditor } from './SpecValueEditor';
+import { getVisibleSpecsTree } from '@/utils/specLogic';
 import { useCategorySpecs } from '@/hooks/useCategorySpecs';
+import { useSpecStore } from '@/store/useSpecStore';
 
 interface DynamicSpecsFieldsProps {
     form: UseFormReturn<any>;
@@ -14,95 +10,79 @@ interface DynamicSpecsFieldsProps {
 
 export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
     const selectedCategoryIds = form.watch('category_ids') || [];
-    const { data: specFields = [] } = useCategorySpecs(selectedCategoryIds);
+    const { specMap } = useSpecStore();
+    const { data: specFields = [], isLoading: isLoadingSpecs } = useCategorySpecs(selectedCategoryIds);
+    const tableSettings = form.watch('table_settings') || {};
 
-    if (specFields.length === 0) return null;
+    // 使用中央計算器 (v4.3 支持純物件)
+    const visibleInfo = getVisibleSpecsTree(specFields, tableSettings);
+
+    if (isLoadingSpecs) return <div className="py-4 text-center">正在載入規格...</div>;
+    
+    // 如果規格定義 Map 還沒載入好，先顯示提示
+    if (specMap.size === 0 && specFields.length > 0) {
+        return <div className="py-4 text-center text-muted-foreground">正在初始化規格字典...</div>;
+    }
+
+    if (!specFields || specFields.length === 0) return null;
+
+    /**
+     * 遞迴渲染規格樹 (v4.11 修復：使用完整 Path Key 進行階層比對)
+     */
+    const renderSpecTree = (parentPath: string = 'root', level = 0) => {
+        // v4.11 強制型別斷言為 string[]
+        const keys = Array.from(visibleInfo.keys()) as string[];
+        
+        // v4.11 修正：過濾出父路徑為 parentPath 且「多一層級」的子項
+        const parentPartsCount = parentPath.split(':').length;
+        const visibleKeys = keys.filter(k => 
+            k.startsWith(`${parentPath}:`) && 
+            k.split(':').length === parentPartsCount + 1
+        );
+
+        if (visibleKeys.length === 0) return null;
+
+        return (
+            <div className={`space-y-4 ${level > 0 ? 'ml-6 pl-4 border-l-2 border-primary/10' : ''}`}>
+                {visibleKeys.map(pathKey => {
+                    const pKey = pathKey as string;
+                    const specId = pKey.split(':').pop()!;
+                    const spec = specFields.find(f => f.id === specId) || specMap.get(specId);
+                    
+                    if (!spec) return null;
+
+                    const value = (tableSettings[pKey] !== undefined && tableSettings[pKey] !== '')
+                        ? tableSettings[pKey] 
+                        : (tableSettings[`root:${specId}`] || '');
+
+                    return (
+                        <div key={pKey} className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                            <div className="space-y-1.5 min-h-[60px]">
+                                <label className="text-xs font-semibold text-muted-foreground flex justify-between">
+                                    {spec.name}
+                                </label>
+                                <SpecValueEditor 
+                                    spec={spec}
+                                    value={value}
+                                    onChange={(val) => form.setValue(`table_settings.${pKey}`, val, { shouldDirty: true })}
+                                    sourceValue={visibleInfo.get(pKey)?.sourceValue}
+                                    variantMode={false}
+                                />
+                            </div>
+                            {renderSpecTree(pKey, level + 1)}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
 
     return (
         <div className="space-y-4 p-4 border rounded-lg bg-muted/10">
             <h3 className="text-sm font-bold flex items-center gap-2">
                 分類特定規格
             </h3>
-            <div className="grid grid-cols-2 gap-4">
-                {specFields.map((f: any) => (
-                    <div key={f.key} className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground">{f.name}</label>
-                        {f.type === 'boolean' ? (
-                            <div className="flex items-center space-x-2 h-9 border rounded-md px-3 bg-background">
-                                <Checkbox
-                                    id={`spec-${f.key}`}
-                                    checked={form.watch(`table_settings.${f.key}`) === 'true'}
-                                    onCheckedChange={(checked) => form.setValue(`table_settings.${f.key}`, checked ? 'true' : 'false')}
-                                />
-                                <label htmlFor={`spec-${f.key}`} className="text-sm cursor-pointer select-none flex-1">
-                                    支援
-                                </label>
-                            </div>
-                        ) : f.type === 'number_with_unit' ? (
-                            <div className="flex items-center space-x-2">
-                                <Input
-                                    type="number"
-                                    value={form.watch(`table_settings.${f.key}`) || ''}
-                                    onChange={(e) => form.setValue(`table_settings.${f.key}`, e.target.value)}
-                                    placeholder={`輸入數值`}
-                                    className="h-9"
-                                />
-                                {f.options?.[0] && (
-                                    <span className="text-sm text-muted-foreground whitespace-nowrap">{f.options[0]}</span>
-                                )}
-                            </div>
-                        ) : f.type === 'text' ? (
-                            <Input
-                                value={form.watch(`table_settings.${f.key}`) || ''}
-                                onChange={(e) => form.setValue(`table_settings.${f.key}`, e.target.value)}
-                                placeholder={`輸入${f.name}`}
-                                className="h-9"
-                            />
-                        ) : f.type === 'multiselect' ? (
-                            <div className="flex flex-col gap-1.5 p-2 border rounded-md bg-background max-h-32 overflow-y-auto">
-                                {f.options?.map((opt: string) => {
-                                    const currentVals: string[] = (() => {
-                                        const raw = form.watch(`table_settings.${f.key}`);
-                                        if (Array.isArray(raw)) return raw;
-                                        if (typeof raw === 'string' && raw) return raw.split(',');
-                                        return [];
-                                    })();
-                                    const isChecked = currentVals.includes(opt);
-                                    return (
-                                        <div key={opt} className="flex items-center gap-2">
-                                            <Checkbox
-                                                id={`spec-${f.key}-${opt}`}
-                                                checked={isChecked}
-                                                onCheckedChange={(checked) => {
-                                                    const next = checked
-                                                        ? [...currentVals, opt]
-                                                        : currentVals.filter((v) => v !== opt);
-                                                    form.setValue(`table_settings.${f.key}`, next);
-                                                }}
-                                            />
-                                            <label htmlFor={`spec-${f.key}-${opt}`} className="text-sm cursor-pointer">{opt}</label>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            <Select
-                                value={form.watch(`table_settings.${f.key}`) || ''}
-                                onValueChange={(val) => form.setValue(`table_settings.${f.key}`, val)}
-                            >
-                                <SelectTrigger className="h-9">
-                                    <SelectValue placeholder="請選擇" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {f.options?.map((opt: string) => (
-                                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        )}
-                    </div>
-                ))}
-            </div>
+            {renderSpecTree('root')}
         </div>
     );
 }

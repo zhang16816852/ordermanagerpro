@@ -91,9 +91,23 @@ export function CategoryTab() {
 
     // 切換規格選取
     const toggleSpecSelection = (id: string) => {
-        setSelectedSpecIds(prev =>
-            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-        );
+        setSelectedSpecIds(prev => {
+            const isSelecting = !prev.includes(id);
+            if (isSelecting) {
+                // 自動勾選連動目標
+                const spec = specDefinitions.find(s => s.id === id);
+                const targets = spec?.logic_config?.triggers?.flatMap(t => {
+                    const tgs = t.targets || (t as any).target_ids?.map((tid: string) => ({ id: tid })) || [];
+                    return tgs.map((tar: any) => tar.id);
+                }) || [];
+                
+                const combined = [...prev, id, ...targets];
+                return Array.from(new Set(combined));
+            } else {
+                // 取消勾選時採「只減不增」，且不連動刪除（保險起見）
+                return prev.filter(i => i !== id);
+            }
+        });
     };
 
     // 提交表單

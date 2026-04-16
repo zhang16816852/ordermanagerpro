@@ -20,6 +20,12 @@ export interface SpecDefinition {
     type: 'select' | 'multiselect' | 'text' | 'boolean' | 'number_with_unit';
     options: string[];
     default_value?: string;
+    logic_config?: {
+        triggers?: {
+            on_value: string;
+            targets: { id: string; is_quantity_detail?: boolean }[];
+        }[];
+    };
 }
 
 export interface Brand {

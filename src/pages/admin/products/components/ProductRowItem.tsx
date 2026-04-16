@@ -5,8 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, Pencil, Copy, Trash2, ChevronRight, ChevronDown, Layers } from 'lucide-react';
+import { MoreHorizontal, Pencil, Copy, Trash2, ChevronRight, ChevronDown, Layers, Tag } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
+import { useBrandStore } from '@/store/useBrandStore';
 
 type Product = Tables<'products'>;
 
@@ -51,7 +52,11 @@ export function ProductRowItem({
     onDelete,
     onUpdateVariant
 }: ProductRowItemProps) {
+    const { brandMap } = useBrandStore();
     const hasVariants = product.has_variants && variants.length > 0;
+    
+    // v4.11 優先從字典查表，沒有則回退到舊欄位
+    const brandName = brandMap.get(product.brand_id || '') || (product as any).brand || '-';
 
     return (
         <Collapsible open={isExpanded} onOpenChange={onToggleExpand} asChild>
@@ -101,7 +106,7 @@ export function ProductRowItem({
                     <TableCell className="text-xs">
                         <div className="flex flex-col gap-1 max-w-[150px]">
                             <div className="flex items-center flex-wrap">
-                                <span className="text-muted-foreground font-mono truncate">{product.brand || '-'}</span>
+                                <span className="text-primary font-bold truncate max-w-[100px]" title={brandName}>{brandName}</span>
                                 <span className="mx-1 text-slate-300">/</span>
                                 <span className="text-slate-500 truncate">{product.model || '-'}</span>
                             </div>

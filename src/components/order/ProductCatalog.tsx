@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { ProductWithPricing, VariantWithPricing } from "@/types/product";
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
+import { getSpecValue } from "@/utils/specLogic";
 import { StatusBadge } from "../ProductStatusBadge";
 import { toast } from 'sonner';
 import { ProductDetailDialog } from "./ProductDetailDialog";
@@ -97,11 +98,11 @@ export default function ProductCatalog({
       const specKeys = Object.keys(specFilters);
       if (specKeys.length > 0) {
         const matchesSpec = (settings: any) => {
-          if (!settings || typeof settings !== 'object') return false;
+          if (!settings) return false;
           return specKeys.every((key) => {
             const allowedValues = specFilters[key];
             if (!allowedValues || allowedValues.length === 0) return true;
-            const actualValue = String(settings[key]);
+            const actualValue = String(getSpecValue(settings, key) || '');
             return allowedValues.includes(actualValue);
           });
         };
@@ -176,8 +177,11 @@ export default function ProductCatalog({
       if (productMatched) return true;
 
       return (product.variants?.length ?? 0) > 0;
-    });
+    }
 
+    );
+
+  console.log("篩選產品", filteredProducts)
 
   const handleProductClick = (product: ProductWithPricing) => {
     if (product.has_variants && product.variants && product.variants.length > 1) {
@@ -201,7 +205,6 @@ export default function ProductCatalog({
     toast.success(`${variant ? `(${variant.name})` : ''} 已加入購物車`);
     setVariantDialogProduct(null);
   };
-
   return (
     <>
       <Card>
@@ -389,8 +392,9 @@ export default function ProductCatalog({
                         <div className="flex flex-wrap gap-1 mt-1">
                           {variant && (
                             <>
-                              {variant.option_1 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_2}</Badge>}
-                              {variant.option_2 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_3}</Badge>}
+                              {variant.option_1 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_1}</Badge>}
+                              {variant.option_2 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_2}</Badge>}
+                              {variant.option_3 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_3}</Badge>}
                             </>
                           )}
                         </div>

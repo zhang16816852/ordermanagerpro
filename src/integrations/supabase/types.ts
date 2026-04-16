@@ -1128,6 +1128,7 @@ export type Database = {
           created_at: string | null
           default_value: string | null
           id: string
+          logic_config: Json | null
           name: string
           options: Json | null
           type: string
@@ -1137,6 +1138,7 @@ export type Database = {
           created_at?: string | null
           default_value?: string | null
           id?: string
+          logic_config?: Json | null
           name: string
           options?: Json | null
           type: string
@@ -1146,6 +1148,7 @@ export type Database = {
           created_at?: string | null
           default_value?: string | null
           id?: string
+          logic_config?: Json | null
           name?: string
           options?: Json | null
           type?: string
