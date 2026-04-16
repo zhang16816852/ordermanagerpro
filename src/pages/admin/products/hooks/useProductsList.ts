@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { useProductCache } from '@/hooks/useProductCache';
 import { toast } from 'sonner';
+import { formatSpecsToCondensedString } from '@/utils/specLogic';
 import Papa from 'papaparse';
 
 type Product = Tables<'products'>;
@@ -259,29 +260,8 @@ export function useProductsList() {
             // v4.9 品牌處理
             const displayBrand = (p.brand_id ? brandMap[p.brand_id] : p.brand_id) || '';
 
-            // 3. Build condensed spec string for product
-            const formatSpecs = (settings: any) => {
-                if (!settings) return '';
-                return Object.entries(settings)
-                    .map(([id, val]) => {
-                        const name = specNameMap[id] || id;
-                        let valueStr = '';
-
-                        if (Array.isArray(val)) {
-                            valueStr = val.join('/');
-                        } else if (typeof val === 'object' && val !== null) {
-                            // Handle Quantity Details JSON: {"Type-C": 1} -> Type-C*1/USB-A*2
-                            valueStr = Object.entries(val)
-                                .map(([opt, qty]) => `${opt}*${qty}`)
-                                .join('/');
-                        } else {
-                            valueStr = String(val);
-                        }
-
-                        return `${name}:${valueStr}`;
-                    })
-                    .join(', ');
-            };
+            // 3. 使用統一工具函式構建規格字串
+            const productSpecs = formatSpecsToCondensedString(p.table_settings, specNameMap);
 
             const productBase = {
                 product_sku: p.sku,
@@ -295,16 +275,17 @@ export function useProductsList() {
                 base_retail_price: p.base_retail_price,
                 product_status: STATUS_LABELS[p.status] || p.status || '上架中',
                 device_models: productModels,
-                規格: formatSpecs(p.table_settings)
+                規格: productSpecs
             };
 
             if (variants.length > 0) {
                 variants.forEach(v => {
                     const variantModels = v.variant_model_links?.map((l: any) => l.device_models?.name).filter(Boolean).join(',') || '';
+                    const variantSpecs = formatSpecsToCondensedString(v.table_settings, specNameMap);
 
                     exportData.push({
                         ...productBase,
-                        變體規格: formatSpecs(v.table_settings),
+                        變體規格: variantSpecs,
                         variant_sku: v.sku,
                         variant_name: v.name,
                         option_1: v.option_1 || '',

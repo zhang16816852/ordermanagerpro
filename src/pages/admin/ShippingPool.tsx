@@ -433,7 +433,6 @@ export default function AdminShippingPool() {
               將選定店家的待出貨品項合併產生銷售單，並更新系統訂單狀態。出貨後資料將從集貨池中移除。
             </DialogDescription>
           </DialogHeader>
- bitumen
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               將選中店家的出貨池項目合併為銷售單並標記為已出貨：

@@ -38,13 +38,13 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
     },
 
     // 2. 帶單位數字 (Number with Unit)
-    number_with_unit: ({ spec, value, onChange }) => (
+    number_with_unit: ({ spec, value, onChange, sourceValue }) => (
         <div className="flex items-center space-x-2">
             <Input
                 type="number"
                 value={value || ''}
                 onChange={(e) => onChange(e.target.value)}
-                placeholder="數值"
+                placeholder={sourceValue ? `建議值: ${sourceValue}` : "數值"}
                 className="h-9"
             />
             {spec.options?.[0] && (
@@ -93,11 +93,11 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
     ),
 
     // 5. 預設輸入框 (Default)
-    default: ({ spec, value, onChange }) => (
+    default: ({ spec, value, onChange, sourceValue }) => (
         <Input
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
-            placeholder={`輸入${spec.name}`}
+            placeholder={sourceValue ? `來自父級: ${sourceValue}` : `輸入${spec.name}`}
             className="h-9"
         />
     )
@@ -108,7 +108,7 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
  */
 function QuantityAllocationEditor({ spec, value, onChange, sourceValue, variantMode }: SpecValueEditorProps) {
     const targetTotal = parseInt(sourceValue) || 0;
-    const currentValues = (typeof value === 'object' && value !== null) ? value : {};
+    const currentValues = (typeof value === 'object' && value !== null && !Array.isArray(value)) ? value : {};
     const currentTotal = Object.values(currentValues).reduce((sum: number, val: any) => sum + (parseInt(val) || 0), 0) as number;
     const isError = currentTotal !== targetTotal && targetTotal > 0;
 
@@ -197,7 +197,8 @@ export function SpecValueEditor(props: SpecValueEditorProps) {
     const { spec, sourceValue } = props;
 
     // 優先檢查是否為數量明細 (觸發總量連動)
-    if (sourceValue) {
+    // 只有在有選項的情況下才進入分配模式，否則退回一般編輯器
+    if (sourceValue && spec.options?.length > 0) {
         return <QuantityAllocationEditor {...props} />;
     }
 

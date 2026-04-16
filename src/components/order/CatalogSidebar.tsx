@@ -8,6 +8,7 @@ import { ChevronRight, Filter, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { deserializeSpecs, formatSpecValue } from "@/utils/specLogic";
 
 interface CatalogSidebarProps {
     products: ProductWithPricing[];
@@ -145,33 +146,35 @@ export function CatalogSidebar({
 
             if (selectedCategory) {
                 const hasMatchInLinks = pCategoryIds.includes(selectedCategory);
-                const hasMatchInLegacy = pCategoryId === selectedCategory || p.category === (selectedCatDetails as any)?.name;
+                const hasMatchInLegacy = pCategoryId === selectedCategory || p.category_names?.includes((selectedCatDetails as any)?.name);
 
                 if (!hasMatchInLinks && !hasMatchInLegacy) return;
             }
 
             // Scan product table_settings
-            const pSettings = p.table_settings as Record<string, any> | null;
-            if (pSettings && typeof pSettings === 'object') {
-                Object.entries(pSettings).forEach(([key, value]) => {
-                    // key could be ID or Name (for legacy data)
-                    // We check if it matches either the defined IDs or Names
-                    if (definedSpecIds.length > 0 && !definedSpecIds.includes(key) && !definedSpecNames.includes(key)) return;
-                    if (!specs[key]) specs[key] = new Set();
-                    if (value !== null && value !== undefined) specs[key].add(String(value));
-                });
-            }
+            const pSettings = deserializeSpecs(p.table_settings);
+            Object.entries(pSettings).forEach(([key, value]) => {
+                // key could be ID or Name (for legacy data)
+                // We check if it matches either the defined IDs or Names
+                if (definedSpecIds.length > 0 && !definedSpecIds.includes(key) && !definedSpecNames.includes(key)) return;
+                if (!specs[key]) specs[key] = new Set();
+                
+                if (value !== null && value !== undefined) {
+                    specs[key].add(formatSpecValue(value));
+                }
+            });
 
             // Scan variant table_settings
             p.variants?.forEach((v) => {
-                const vSettings = v.table_settings as Record<string, any> | null;
-                if (vSettings && typeof vSettings === 'object') {
-                    Object.entries(vSettings).forEach(([key, value]) => {
-                        if (definedSpecIds.length > 0 && !definedSpecIds.includes(key) && !definedSpecNames.includes(key)) return;
-                        if (!specs[key]) specs[key] = new Set();
-                        if (value !== null && value !== undefined) specs[key].add(String(value));
-                    });
-                }
+                const vSettings = deserializeSpecs(v.table_settings);
+                Object.entries(vSettings).forEach(([key, value]) => {
+                    if (definedSpecIds.length > 0 && !definedSpecIds.includes(key) && !definedSpecNames.includes(key)) return;
+                    if (!specs[key]) specs[key] = new Set();
+                    
+                    if (value !== null && value !== undefined) {
+                        specs[key].add(formatSpecValue(value));
+                    }
+                });
             });
         });
 
@@ -334,12 +337,7 @@ export function CatalogSidebar({
                                                         return true;
                                                     })
                                                     .map((val) => {
-                                                        let displayVal = val;
-                                                        if (specDef?.type === 'boolean') {
-                                                            displayVal = '支援';
-                                                        } else if (specDef?.type === 'number_with_unit') {
-                                                            displayVal = `${val}${specDef.options?.[0] || ''}`;
-                                                        }
+                                                        const displayVal = formatSpecValue(val);
 
                                                         return (
                                                             <div key={val} className="flex items-center space-x-2">

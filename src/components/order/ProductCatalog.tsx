@@ -425,7 +425,6 @@ export default function ProductCatalog({
               此產品包含多種規格選項，請點擊下方清單以選擇欲加入購物車的特定型號。
             </DialogDescription>
           </DialogHeader>
- bitumen
           {variantDialogProduct && (
             <div className="space-y-4">
               <div className="text-sm text-muted-foreground">{variantDialogProduct.name}</div>

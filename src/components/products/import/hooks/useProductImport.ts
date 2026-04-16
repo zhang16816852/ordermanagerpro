@@ -13,6 +13,7 @@ export interface ImportRow {
     category: string;
     category_id?: string;
     brand: string;
+    brand_id?: string;
     model: string;
     series: string;
     base_wholesale_price: number;
@@ -72,6 +73,15 @@ export function useProductImport(onSuccess: () => void) {
             const { data, error } = await supabase.from('device_models').select('*');
             if (error) return [];
             return data;
+        },
+    });
+
+    const { data: allBrands = [] } = useQuery({
+        queryKey: ['brands-all-for-import'],
+        queryFn: async () => {
+            const { data, error } = await supabase.from('brands').select('*');
+            if (error) return [];
+            return (data as any[]) || [];
         },
     });
 
@@ -135,6 +145,12 @@ export function useProductImport(onSuccess: () => void) {
             if (!row.variant_sku) errors.push('變體 SKU 為必填（當有變體資料時）');
             if (!row.variant_name) errors.push('變體名稱為必填（當有變體資料時）');
         }
+        
+        // v4.11 品牌校驗
+        if (row.brand && !row.brand_id) {
+            errors.push(`找不到品牌 "${row.brand}"，請手動修正`);
+        }
+
         return { errors, hasVariant };
     };
 
@@ -225,6 +241,14 @@ export function useProductImport(onSuccess: () => void) {
                             device_models: getField('device_models'),
                             variant_device_models: getField('variant_device_models'),
                         };
+
+                        // v4.11 自動匹配品牌 ID
+                        if (baseRow.brand) {
+                            const matched = allBrands.find(b => b.name.toLowerCase() === baseRow.brand.toLowerCase());
+                            if (matched) {
+                                (baseRow as any).brand_id = matched.id;
+                            }
+                        }
 
                         const { errors, hasVariant } = validateRow(baseRow);
                         return { ...baseRow, hasVariant, errors, isValid: errors.length === 0 };
@@ -318,7 +342,7 @@ export function useProductImport(onSuccess: () => void) {
                     description: row.description || null,
                     model: row.model || null,
                     series: row.series || null,
-                    brand: row.brand || null,
+                    brand_id: row.brand_id || null, // v4.11 優先使用 UUID
                     base_wholesale_price: row.base_wholesale_price,
                     base_retail_price: row.base_retail_price,
                     status: row.product_status,
@@ -441,6 +465,7 @@ export function useProductImport(onSuccess: () => void) {
     return {
         step, setStep, importData, filteredData, filterCategory, setFilterCategory, 
         filterStatus, setFilterStatus, isLoading: importMutation.isPending,
-        handleFileUpload, updateRow, removeRow, importMutation, downloadTemplate, resetState, categories
+        handleFileUpload, updateRow, removeRow, importMutation, downloadTemplate, resetState, categories,
+        allBrands
     };
 }

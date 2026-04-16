@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { ShoppingCart, ImageIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { formatSpecValue } from "@/utils/specLogic";
 
 interface ProductDetailDialogProps {
     product: ProductWithPricing | null;
@@ -95,11 +96,11 @@ export function ProductDetailDialog({
                             </div>
                         )}
 
-                        {(product.brand || product.model) && (
+                        {(product.brand_id || product.model) && (
                             <div>
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">品牌 / 型號</h3>
                                 <p className="mt-1">
-                                    {product.brand || '-'} / {product.model || '-'}
+                                    {product.brand_id || '-'} / {product.model || '-'}
                                 </p>
                             </div>
                         )}
@@ -118,15 +119,8 @@ export function ProductDetailDialog({
                                     {Array.isArray(product.table_settings) ? (
                                         product.table_settings.map((entry: any) => {
                                             if (entry.value === null || entry.value === undefined || entry.value === '') return null;
-                                            
-                                            let displayVal = entry.value;
-                                            if (typeof entry.value === 'object') {
-                                                displayVal = Object.entries(entry.value).map(([k, v]) => `${k}*${v}`).join(', ');
-                                            } else if (entry.value === 'true') {
-                                                displayVal = '支援';
-                                            } else if (entry.value === 'false') {
-                                                displayVal = '不支援';
-                                            }
+
+                                            const displayVal = formatSpecValue(entry.value);
 
                                             return (
                                                 <div key={entry.path} className="flex justify-between text-sm py-1 border-b last:border-0 border-muted">
@@ -140,12 +134,7 @@ export function ProductDetailDialog({
                                             if (val === null || val === undefined || val === '') return null;
                                             const specDef = specDefinitions.find((s: any) => s.id === key || s.name === key);
                                             const displayName = specDef ? specDef.name : key;
-                                            let displayVal = val;
-                                            if (specDef?.type === 'boolean') {
-                                                displayVal = val === 'true' ? '支援' : (val === 'false' ? '不支援' : val);
-                                            } else if (specDef?.type === 'number_with_unit') {
-                                                displayVal = `${val}${specDef.options?.[0] || ''}`;
-                                            }
+                                            const displayVal = formatSpecValue(val);
 
                                             return (
                                                 <div key={key} className="flex justify-between text-sm py-1 border-b last:border-0 border-muted">

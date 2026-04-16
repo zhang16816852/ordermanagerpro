@@ -39,7 +39,7 @@ export function UnmappedResolver({ supplierId, unmappedItems, onRuleCreated, onA
     setResolvedVendorIds(prev => {
       const next = new Set(prev);
       next.add(vendorId);
-      
+
       // 檢查是否全部解決
       if (next.size === unmappedItems.length && onAllResolved) {
         onAllResolved();
@@ -87,7 +87,7 @@ export function UnmappedResolver({ supplierId, unmappedItems, onRuleCreated, onA
                   <TableCell>{item.vendor_product_name}</TableCell>
                   <TableCell>
                     {isResolved ? (
-                      <span className="flex items-center text-green-600 text-sm"><CheckCircle2 className="w-4 h-4 mr-1"/> 已設定</span>
+                      <span className="flex items-center text-green-600 text-sm"><CheckCircle2 className="w-4 h-4 mr-1" /> 已設定</span>
                     ) : (
                       <span className="text-amber-600 text-sm">未對應</span>
                     )}
@@ -134,7 +134,6 @@ export function UnmappedResolver({ supplierId, unmappedItems, onRuleCreated, onA
               請搜尋並選擇系統內的產品與變體，以建立與廠商代號的連結對照關係。
             </DialogDescription>
           </DialogHeader>
- bitumen
           {selectorOpen && (
             <InternalProductSelector
               onSelect={handleAssignCurrent}

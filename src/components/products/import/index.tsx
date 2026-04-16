@@ -36,7 +36,8 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
         removeRow,
         importMutation,
         downloadTemplate,
-        resetState
+        resetState,
+        allBrands
     } = useProductImport(() => onOpenChange(false));
 
     const handleClose = () => {
@@ -85,6 +86,7 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
                                 onStatusFilterChange={setFilterStatus}
                                 onUpdate={updateRow}
                                 onRemove={removeRow}
+                                allBrands={allBrands}
                             />
                         </div>
                     )}

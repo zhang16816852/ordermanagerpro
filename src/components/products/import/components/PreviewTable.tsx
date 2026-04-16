@@ -14,6 +14,9 @@ import { ImportRow } from '../hooks/useProductImport';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { formatSpecValue, formatSpecsToCondensedString } from '@/utils/specLogic';
 
 interface PreviewTableProps {
     data: ImportRow[];
@@ -24,11 +27,13 @@ interface PreviewTableProps {
     onStatusFilterChange: (status: string) => void;
     onUpdate: (index: number, field: keyof ImportRow, value: any) => void;
     onRemove: (index: number) => void;
+    allBrands?: any[];
 }
 
 export function PreviewTable({
     data, categories, filterCategory, onFilterChange,
-    filterStatus, onStatusFilterChange, onUpdate, onRemove
+    filterStatus, onStatusFilterChange, onUpdate, onRemove,
+    allBrands = []
 }: PreviewTableProps) {
     console.log("匯入資料", data)
     return (
@@ -81,11 +86,12 @@ export function PreviewTable({
                                 <TableHead className="w-[120px]">變更內容</TableHead>
                                 <TableHead className="w-[150px]">產品 SKU</TableHead>
                                 <TableHead className="min-w-[180px]">產品名稱</TableHead>
-                                <TableHead className="w-[120px]">品牌/系列</TableHead>
-                                <TableHead className="w-[120px]">分類</TableHead>
-                                <TableHead className="w-[140px] text-right">批發 / 零售</TableHead>
+                                <TableHead className="w-[140px]">品牌庫匹配</TableHead>
+                                <TableHead className="w-[110px]">分類</TableHead>
+                                <TableHead className="w-[130px] text-right">批發 / 零售</TableHead>
+                                <TableHead className="min-w-[120px]">規格摘要</TableHead>
                                 <TableHead className="w-[150px]">變體 SKU</TableHead>
-                                <TableHead className="min-w-[150px]">變體名稱 / 選項</TableHead>
+                                <TableHead className="min-w-[150px]">變體選項</TableHead>
                                 <TableHead className="w-12 text-center"></TableHead>
                             </TableRow>
                         </TableHeader>
@@ -145,20 +151,49 @@ export function PreviewTable({
                                         />
                                     </TableCell>
                                     <TableCell>
-                                        <div className="space-y-1">
-                                            <Input
-                                                value={row.brand}
-                                                placeholder="品牌"
-                                                onChange={(e) => onUpdate(index, 'brand', e.target.value)}
-                                                className="h-7 text-[10px] border-none bg-transparent focus-visible:bg-background"
-                                            />
-                                            <Input
-                                                value={row.series}
-                                                placeholder="系列"
-                                                onChange={(e) => onUpdate(index, 'series', e.target.value)}
-                                                className="h-7 text-[10px] border-none bg-transparent focus-visible:bg-background opacity-70"
-                                            />
-                                        </div>
+                                        {row.brand_id ? (
+                                            <div className="flex flex-col gap-1">
+                                                <Badge variant="outline" className="text-[10px] w-fit border-emerald-500/30 text-emerald-700 bg-emerald-50/50">
+                                                    {row.brand}
+                                                </Badge>
+                                                <span className="text-[9px] text-muted-foreground ml-1">{row.series || '-'}</span>
+                                            </div>
+                                        ) : (
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <Button 
+                                                        variant="outline" 
+                                                        size="sm" 
+                                                        className="h-8 w-full text-[10px] border-destructive/50 text-destructive bg-destructive/5 hover:bg-destructive/10"
+                                                    >
+                                                        {row.brand || '未設定品牌'} ⚠️
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="p-0 w-[200px]" align="start">
+                                                    <Command>
+                                                        <CommandInput placeholder="搜尋品牌..." />
+                                                        <CommandList>
+                                                            <CommandEmpty>找不到品牌</CommandEmpty>
+                                                            <CommandGroup>
+                                                                {allBrands.map((b) => (
+                                                                    <CommandItem
+                                                                        key={b.id}
+                                                                        onSelect={() => {
+                                                                            onUpdate(index, 'brand', b.name);
+                                                                            onUpdate(index, 'brand_id', b.id);
+                                                                        }}
+                                                                        className="text-xs"
+                                                                    >
+                                                                        <Check className={cn("mr-2 h-3 w-3", row.brand_id === b.id ? "opacity-100" : "opacity-0")} />
+                                                                        {b.name}
+                                                                    </CommandItem>
+                                                                ))}
+                                                            </CommandGroup>
+                                                        </CommandList>
+                                                    </Command>
+                                                </PopoverContent>
+                                            </Popover>
+                                        )}
                                     </TableCell>
                                     <TableCell>
                                         <Input
@@ -194,6 +229,22 @@ export function PreviewTable({
                                         </div>
                                     </TableCell>
                                     <TableCell>
+                                        <div className="space-y-1">
+                                            <div 
+                                                className="text-[9px] font-medium text-muted-foreground truncate max-w-[120px]" 
+                                                title={formatSpecValue(row.table_settings)}
+                                            >
+                                                {row.table_settings ? formatSpecValue(row.table_settings) : '-'}
+                                            </div>
+                                            <div 
+                                                className="text-[8px] text-primary/70 opacity-80 truncate max-w-[120px]" 
+                                                title={formatSpecValue(row.variant_table_settings)}
+                                            >
+                                                {row.variant_table_settings ? formatSpecValue(row.variant_table_settings) : ''}
+                                            </div>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
                                         <Input
                                             value={row.variant_sku || ''}
                                             placeholder="-"
@@ -212,11 +263,12 @@ export function PreviewTable({
                                                     row.diff?.includes('變體名稱') && "bg-amber-500/10 text-amber-900"
                                                 )}
                                             />
-                                            <div className={cn(
-                                                "text-[9px] text-muted-foreground px-1 truncate rounded",
-                                                row.diff?.includes('變體規格') && "bg-amber-500/10 text-amber-900 font-bold"
-                                            )}>
-                                                {[row.option_1, row.option_2, row.option_3].filter(Boolean).join(', ') || '-'}
+                                            <div className="flex gap-1 flex-wrap">
+                                                {[row.option_1, row.option_2, row.option_3].filter(Boolean).map((opt, i) => (
+                                                    <Badge key={i} variant="outline" className="text-[8px] px-1 h-3 opacity-60">
+                                                        {opt}
+                                                    </Badge>
+                                                ))}
                                             </div>
                                         </div>
                                     </TableCell>

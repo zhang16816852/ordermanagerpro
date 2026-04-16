@@ -198,3 +198,55 @@ export const getMergedTriggerTargets = (trigger: any) => {
         ...((trigger.target_ids || []).map((id: string) => ({ id, is_quantity_detail: false })))
     ];
 };
+/**
+ * 將單個規格值格式化為易讀字串
+ */
+export function formatSpecValue(val: any): string {
+    if (val === null || val === undefined || val === '') return '';
+    
+    if (Array.isArray(val)) {
+        return val.join('/');
+    }
+    
+    if (typeof val === 'object' && val !== null) {
+        // 處理數量分配格式: {"Type-C": 1} -> Type-C*1/USB-A*1
+        return Object.entries(val)
+            .map(([opt, qty]) => `${opt}*${qty}`)
+            .join('/');
+    }
+    
+    // 處理布林值
+    if (val === 'true' || val === true || val === 'on') return '支援';
+    if (val === 'false' || val === false) return '不支援';
+    
+    return String(val);
+}
+
+/**
+ * 將整個規格集 (table_settings) 轉換為縮略的可讀字串
+ * 支援 CSV 匯出與預覽顯示
+ */
+export function formatSpecsToCondensedString(
+    settings: any, 
+    specNameMap: Record<string, string> = {},
+    delimiter: string = ', '
+): string {
+    if (!settings) return '';
+    
+    // 1. 先反序列化成扁平字典 [id]: value
+    // 備註: deserializeSpecs 會回傳 parentId:specId 格式的 Key
+    const flatMap = deserializeSpecs(settings);
+    
+    // 2. 轉換為 名稱:值
+    return Object.entries(flatMap)
+        .map(([pathKey, val]) => {
+            const specId = pathKey.includes(':') ? pathKey.split(':').pop()! : pathKey;
+            const name = specNameMap[specId] || specId;
+            const formattedVal = formatSpecValue(val);
+            
+            if (!formattedVal) return null;
+            return `${name}:${formattedVal}`;
+        })
+        .filter(Boolean)
+        .join(delimiter);
+}
