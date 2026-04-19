@@ -182,7 +182,6 @@ export default function ProductCatalog({
 
     );
 
-  console.log("篩選產品", filteredProducts)
 
   const handleProductClick = (product: ProductWithPricing) => {
     if (product.has_variants && product.variants && product.variants.length > 1) {

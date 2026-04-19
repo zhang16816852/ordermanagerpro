@@ -1,3 +1,4 @@
+import { useState, useMemo, useEffect } from "react";
 import {
     Dialog,
     DialogContent,
@@ -13,7 +14,7 @@ import { toast } from "sonner";
 import { ShoppingCart, ImageIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { formatSpecValue } from "@/utils/specLogic";
+import { formatSpecValue, deserializeSpecs } from "@/utils/specLogic";
 import { useBrands } from "@/hooks/useBrands";
 
 interface ProductDetailDialogProps {
@@ -31,6 +32,18 @@ export function ProductDetailDialog({
 }: ProductDetailDialogProps) {
     const { addItem, getItemQuantity } = useStoreDraft(storeId);
     const { getBrandName } = useBrands();
+    const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+
+    // 當彈窗開啟或產品改變時，若產品有變體，預設不選中或由外部決定
+    useEffect(() => {
+        if (!open) setSelectedVariantId(null);
+    }, [open]);
+
+    // 獲取目前選中的變體物件
+    const selectedVariant = useMemo(() => {
+        if (!selectedVariantId || !product?.variants) return null;
+        return product.variants.find(v => v.id === selectedVariantId) || null;
+    }, [product?.variants, selectedVariantId]);
 
     const { data: specDefinitions = [] } = useQuery({
         queryKey: ['spec_definitions'],
@@ -41,23 +54,59 @@ export function ProductDetailDialog({
         },
     });
 
+    // --- 關鍵邏輯：合併產品與變體的規格 ---
+    const combinedSpecs = useMemo(() => {
+        if (!product) return [];
+
+        // 1. 標準化產品規格
+        const pSpecs = deserializeSpecs(product.table_settings);
+        
+        // 2. 標準化變體規格 (若有選中)
+        const vSpecs = selectedVariant ? deserializeSpecs(selectedVariant.table_settings) : {};
+
+        // 3. 合併 (變體優先)
+        const merged = { ...pSpecs, ...vSpecs };
+
+        // 4. 轉換回給介面顯示的格式 (path -> value)
+        // 為了維持顯示名稱，我們需要比對 specDefinitions
+        return Object.entries(merged).map(([key, val]) => {
+            const specId = key.includes(':') ? key.split(':').pop()! : key;
+            const def = specDefinitions.find((s: any) => s.id === specId || s.name === specId);
+            return {
+                id: key,
+                name: def ? def.name : key,
+                value: val
+            };
+        }).filter(s => s.value !== null && s.value !== undefined && s.value !== '');
+    }, [product, selectedVariant, specDefinitions]);
+
+    const qty = (product && selectedVariantId) ? getItemQuantity(selectedVariantId) : (product ? getItemQuantity(product.id) : 0);
+
     if (!product) return null;
 
     const handleAddProduct = () => {
-        if (product.has_variants && product.variants && product.variants.length > 0) {
-            // If product has variants, we might want to let them choose in the catalog's variant dialog
-            // For now, we close this and let the parent handle it or provide a basic selection here.
-            // But based on the current flow, ProductCatalog handles variant selection.
-            // We'll just notify that they need to select a variant if they haven't.
-            onOpenChange(false);
+        if (product.has_variants && !selectedVariantId) {
+            toast.error("請先選擇規格");
             return;
         }
 
-        addItem(product);
-        toast.success(`${product.name} 已加入購物車`);
+        if (selectedVariant) {
+            addItem({
+                ...product,
+                id: selectedVariant.id,
+                name: `${product.name} (${selectedVariant.name})`,
+                wholesale_price: selectedVariant.wholesale_price,
+                retail_price: selectedVariant.retail_price,
+            } as any);
+            toast.success(`${product.name} (${selectedVariant.name}) 已加入購物車`);
+        } else {
+            addItem(product);
+            toast.success(`${product.name} 已加入購物車`);
+        }
     };
 
-    const qty = getItemQuantity(product.id);
+    // 獲取目前應顯示的價格
+    const currentPrice = selectedVariant ? selectedVariant.retail_price : product.wholesale_price;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -81,7 +130,7 @@ export function ProductDetailDialog({
                         <div>
                             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">價格</h3>
                             <div className="text-2xl font-bold text-primary mt-1">
-                                ${product.wholesale_price}
+                                ${currentPrice}
                             </div>
                         </div>
 
@@ -114,38 +163,16 @@ export function ProductDetailDialog({
                             </div>
                         </div>
 
-                        {product.table_settings && (Array.isArray(product.table_settings) ? product.table_settings.length > 0 : Object.keys(product.table_settings).length > 0) && (
+                        {combinedSpecs.length > 0 && (
                             <div className="pt-4 border-t">
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">產品規格</h3>
                                 <div className="space-y-2">
-                                    {Array.isArray(product.table_settings) ? (
-                                        product.table_settings.map((entry: any) => {
-                                            if (entry.value === null || entry.value === undefined || entry.value === '') return null;
-
-                                            const displayVal = formatSpecValue(entry.value);
-
-                                            return (
-                                                <div key={entry.path} className="flex justify-between text-sm py-1 border-b last:border-0 border-muted">
-                                                    <span className="text-muted-foreground">{entry.path}</span>
-                                                    <span className="font-medium text-right">{displayVal}</span>
-                                                </div>
-                                            );
-                                        })
-                                    ) : (
-                                        Object.entries(product.table_settings as Record<string, any>).map(([key, val]) => {
-                                            if (val === null || val === undefined || val === '') return null;
-                                            const specDef = specDefinitions.find((s: any) => s.id === key || s.name === key);
-                                            const displayName = specDef ? specDef.name : key;
-                                            const displayVal = formatSpecValue(val);
-
-                                            return (
-                                                <div key={key} className="flex justify-between text-sm py-1 border-b last:border-0 border-muted">
-                                                    <span className="text-muted-foreground">{displayName}</span>
-                                                    <span className="font-medium text-right">{displayVal}</span>
-                                                </div>
-                                            );
-                                        })
-                                    )}
+                                    {combinedSpecs.map((spec) => (
+                                        <div key={spec.id} className="flex justify-between text-sm py-1 border-b last:border-0 border-muted">
+                                            <span className="text-muted-foreground">{spec.name}</span>
+                                            <span className="font-medium text-right">{formatSpecValue(spec.value)}</span>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         )}
@@ -154,10 +181,12 @@ export function ProductDetailDialog({
                             <Button
                                 onClick={handleAddProduct}
                                 className="w-full"
-                                disabled={product.has_variants}
+                                disabled={product.has_variants && !selectedVariantId}
                             >
                                 <ShoppingCart className="mr-2 h-4 w-4" />
-                                {product.has_variants ? "請在列表中選擇規格" : `加入購物車 ${qty > 0 ? `(已選 ${qty})` : ''}`}
+                                {product.has_variants && !selectedVariantId 
+                                    ? "請先選擇規格選項" 
+                                    : `加入購物車 ${qty > 0 ? `(已選 ${qty})` : ''}`}
                             </Button>
                         </div>
                     </div>
@@ -165,11 +194,17 @@ export function ProductDetailDialog({
 
                 {product.has_variants && product.variants && product.variants.length > 0 && (
                     <div className="mt-6 border-t pt-4">
-                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">規格選項縮覽</h3>
+                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">選擇規格選項</h3>
                         <div className="flex flex-wrap gap-2">
                             {product.variants.map((v) => (
-                                <Badge key={v.id} variant="outline" className="px-2 py-1">
+                                <Badge 
+                                    key={v.id} 
+                                    variant={selectedVariantId === v.id ? "default" : "outline"}
+                                    className="px-3 py-1.5 cursor-pointer hover:bg-primary/10 transition-colors text-sm"
+                                    onClick={() => setSelectedVariantId(selectedVariantId === v.id ? null : v.id)}
+                                >
                                     {v.name}
+                                    {selectedVariantId === v.id && <span className="ml-1.5 opacity-70">✓</span>}
                                 </Badge>
                             ))}
                         </div>
