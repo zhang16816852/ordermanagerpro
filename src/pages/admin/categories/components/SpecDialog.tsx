@@ -236,10 +236,18 @@ export function SpecDialog({
                     </div>
 
 
-                    {/* select / multiselect：可拖拽排序的選項清單 */}
-                    {(specForm.type === 'select' || specForm.type === 'multiselect') && (
+                    {/* 選項清單 / 標籤定義 (支援 Dnd 排序) */}
+                    {(['select', 'multiselect', 'text', 'number_with_unit'].includes(specForm.type || '')) && (
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">選項清單</label>
+                            <label className="text-sm font-medium">
+                                {(['text', 'number_with_unit'].includes(specForm.type || '')) ? '欄位標籤定義' : '選項清單'}
+                            </label>
+                            {(['text', 'number_with_unit'].includes(specForm.type || '')) && (
+                                <p className="text-[10px] text-muted-foreground italic mb-2">
+                                    提示：若希望輸入多個數值（如長寬高），請在此新增標籤。
+                                    {specForm.type === 'number_with_unit' && ' 標籤可包含單位，如：長(cm)'}
+                                </p>
+                            )}
                             <DndContext
                                 sensors={sensors}
                                 collisionDetection={closestCenter}
@@ -259,47 +267,65 @@ export function SpecDialog({
                                     {(specForm.options || []).map((opt, i) => (
                                         <SortableItem key={i} id={i.toString()}>
                                             <div className="flex gap-2 items-center">
-                                                <Input
-                                                    name={`spec-option-${i}`}
-                                                    className="flex-1 h-8 text-sm"
-                                                    value={opt}
-                                                    onChange={(e) => {
+                                                {/* 判斷是否為「複合導向」的型態，若是則顯示 標籤+單位 雙軌輸入 */}
+                                                {(specForm.type === 'text' || specForm.type === 'number_with_unit') ? (() => {
+                                                    const match = opt.match(/(.+?)\((.+?)\)/);
+                                                    const label = match ? match[1] : opt;
+                                                    const unit = match ? match[2] : '';
+
+                                                    const updateComposite = (newLabel: string, newUnit: string) => {
                                                         const newOpts = [...(specForm.options || [])];
-                                                        newOpts[i] = e.target.value;
+                                                        newOpts[i] = newUnit.trim() ? `${newLabel.trim()}(${newUnit.trim()})` : newLabel.trim();
                                                         setSpecForm(prev => ({ ...prev, options: newOpts }));
-                                                    }}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter' || e.key === 'Tab') {
-                                                            e.preventDefault();
-                                                            setSpecForm(prev => {
-                                                                const currentValue = prev.options?.[i] || '';
-                                                                const options = [...(prev.options || [])];
-                                                                // 最後一個且非空 → 新增一行
-                                                                if (i === options.length - 1 && currentValue.trim() !== '') {
-                                                                    options.push('');
-                                                                    setTimeout(() => {
-                                                                        const next = document.querySelector<HTMLInputElement>(
-                                                                            `input[name="spec-option-${options.length - 1}"]`
-                                                                        );
-                                                                        next?.focus();
-                                                                    }, 0);
-                                                                } else {
-                                                                    // 移至下一個空白輸入
-                                                                    const firstEmptyIndex = options.findIndex(o => o.trim() === '');
-                                                                    if (firstEmptyIndex >= 0) {
+                                                    };
+
+                                                    return (
+                                                        <div className="flex-1 flex gap-2">
+                                                            <Input
+                                                                placeholder="標籤 (如: 長)"
+                                                                className="flex-[2] h-8 text-xs"
+                                                                value={label}
+                                                                onChange={(e) => updateComposite(e.target.value, unit)}
+                                                            />
+                                                            <Input
+                                                                placeholder="單位 (選填)"
+                                                                className="flex-1 h-8 text-xs"
+                                                                value={unit}
+                                                                onChange={(e) => updateComposite(label, e.target.value)}
+                                                            />
+                                                        </div>
+                                                    );
+                                                })() : (
+                                                    <Input
+                                                        name={`spec-option-${i}`}
+                                                        className="flex-1 h-8 text-sm"
+                                                        value={opt}
+                                                        onChange={(e) => {
+                                                            const newOpts = [...(specForm.options || [])];
+                                                            newOpts[i] = e.target.value;
+                                                            setSpecForm(prev => ({ ...prev, options: newOpts }));
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' || e.key === 'Tab') {
+                                                                e.preventDefault();
+                                                                setSpecForm(prev => {
+                                                                    const currentValue = prev.options?.[i] || '';
+                                                                    const options = [...(prev.options || [])];
+                                                                    if (i === options.length - 1 && currentValue.trim() !== '') {
+                                                                        options.push('');
                                                                         setTimeout(() => {
                                                                             const next = document.querySelector<HTMLInputElement>(
-                                                                                `input[name="spec-option-${firstEmptyIndex}"]`
+                                                                                `input[name="spec-option-${options.length - 1}"]`
                                                                             );
                                                                             next?.focus();
                                                                         }, 0);
                                                                     }
-                                                                }
-                                                                return { ...prev, options };
-                                                            });
-                                                        }
-                                                    }}
-                                                />
+                                                                    return { ...prev, options };
+                                                                });
+                                                            }
+                                                        }}
+                                                    />
+                                                )}
                                                 <Button
                                                     variant="ghost" size="icon" className="h-8 w-8"
                                                     onClick={() => {
@@ -325,29 +351,6 @@ export function SpecDialog({
                         </div>
                     )}
 
-                    {/* text：預設文字值 */}
-                    {specForm.type === 'text' && (
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">預設文字值</label>
-                            <Input
-                                value={specForm.options?.[0] || ''}
-                                onChange={(e) => setSpecForm(prev => ({ ...prev, options: [e.target.value] }))}
-                                placeholder="請輸入預設文字"
-                            />
-                        </div>
-                    )}
-
-                    {/* number_with_unit：數值單位 */}
-                    {specForm.type === 'number_with_unit' && (
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">數值單位 (例如: W, mAh, cm, kg)</label>
-                            <Input
-                                value={specForm.options?.[0] || ''}
-                                onChange={(e) => setSpecForm(prev => ({ ...prev, options: [e.target.value] }))}
-                                placeholder="請輸入單位名稱"
-                            />
-                        </div>
-                    )}
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>

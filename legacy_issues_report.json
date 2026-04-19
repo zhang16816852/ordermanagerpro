@@ -1,0 +1,43 @@
+[
+  {
+    "name": "IMOS GAN 氮化鎵 45W 雙TPEC-C 充電頭 (可搭配萬國頭)",
+    "sku": "IMOW_45W_WH",
+    "issues": [
+      "規格路徑損毀 (UUID)"
+    ]
+  },
+  {
+    "name": "IMOS M系列 軍規防摔殼_IP11 (6.1吋)",
+    "sku": "IMOSCASE_I11",
+    "issues": [
+      "舊版格式 (Object)",
+      "有變體但父層帶有規格",
+      "變體 [IMOSCASE_I11_SV-BK] 舊版格式"
+    ]
+  },
+  {
+    "name": "IMOS TREND BOOST 二代 耐衝擊軍規防摔殼_IPhone 17 AIR (6.6吋)",
+    "sku": "IMOSCASEII_I17AIR",
+    "issues": [
+      "變體 [IMOSCASEII_I17AIR_BT-MAG-CLR] 舊版格式",
+      "變體 [IMOSCASEII_I17AIR_BT-SV-BK] 舊版格式",
+      "變體 [IMOSCASEII_I17AIR_BT-SV-CLR] 舊版格式",
+      "變體 [IMOSCASEII_I17AIR_MAG-BK] 舊版格式",
+      "變體 [IMOSCASEII_I17AIR_MAG-BLB] 舊版格式",
+      "變體 [IMOSCASEII_I17AIR_MAG-LGN] 舊版格式",
+      "變體 [IMOSCASEII_I17AIR_MAG-LIL] 舊版格式",
+      "變體 [IMOSCASEII_I17AIR_MagS-BK] 舊版格式",
+      "變體 [IMOSCASEII_I17AIR_MagS-BLB] 舊版格式",
+      "變體 [IMOSCASEII_I17AIR_MagS-CLR] 舊版格式",
+      "變體 [IMOSCASEII_I17AIR_MagS-LGN] 舊版格式",
+      "變體 [IMOSCASEII_I17AIR_MagS-LIL] 舊版格式"
+    ]
+  },
+  {
+    "name": "商品b",
+    "sku": "Pd_2",
+    "issues": [
+      "規格路徑損毀 (UUID)"
+    ]
+  }
+]

@@ -66,7 +66,7 @@ export function SpecLibraryTab() {
 
         return relations;
     }, [specDefinitions]);
-
+    console.log("規格定義", specDefinitions)
     const openSpecDialog = (spec: SpecDefinition | null = null) => {
         if (spec) {
             setEditingSpec(spec);

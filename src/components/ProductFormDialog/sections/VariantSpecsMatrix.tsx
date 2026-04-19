@@ -79,7 +79,12 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
         mutationFn: async () => {
             const results = await Promise.all(
                 Object.entries(localData).map(([id, pathObj]) => {
-                    const serialized = serializeSpecs(pathObj, specMap);
+                    const originalVariant = variants.find(v => v.id === id);
+                    const serialized = serializeSpecs(
+                        pathObj, 
+                        specMap, 
+                        originalVariant?.table_settings as any
+                    );
                     return supabase.from('product_variants').update({ table_settings: serialized as any }).eq('id', id);
                 })
             );

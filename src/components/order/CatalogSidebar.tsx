@@ -145,9 +145,9 @@ export function CatalogSidebar({
                 // key could be ID or Name (for legacy data)
                 // We check if it matches either the defined IDs or Names
                 if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId) && !definedSpecNames.includes(specId)) return;
-                
+
                 if (!specs[key]) specs[key] = new Set();
-                
+
                 if (value !== null && value !== undefined) {
                     specs[key].add(formatSpecValue(value));
                 }
@@ -159,9 +159,9 @@ export function CatalogSidebar({
                 Object.entries(vSettings).forEach(([key, value]) => {
                     const specId = key.includes(':') ? key.split(':').pop()! : key;
                     if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId) && !definedSpecNames.includes(specId)) return;
-                    
+
                     if (!specs[key]) specs[key] = new Set();
-                    
+
                     if (value !== null && value !== undefined) {
                         specs[key].add(formatSpecValue(value));
                     }
@@ -195,7 +195,6 @@ export function CatalogSidebar({
         const isExpanded = expandedCategories.has(node.id);
         const hasChildren = node.children.length > 0;
         const uniqueKey = `${path}-${node.id}`;
-
         return (
             <div key={uniqueKey} className="space-y-1">
                 <div className="flex items-center gap-1 group">
@@ -316,7 +315,6 @@ export function CatalogSidebar({
                                     const specId = key.includes(':') ? key.split(':').pop()! : key;
                                     const specDef = specFields.find(f => f.id === specId || f.name === specId);
                                     const displayName = specDef ? specDef.name : key;
-
                                     return (
                                         <div key={key} className="space-y-3">
                                             <h4 className="text-xs font-semibold text-foreground/80">{displayName}</h4>

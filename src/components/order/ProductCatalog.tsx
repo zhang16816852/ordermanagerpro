@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { ProductWithPricing, VariantWithPricing } from "@/types/product";
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
-import { getSpecValue } from "@/utils/specLogic";
+import { getSpecValue, formatSpecValue, deserializeSpecs } from "@/utils/specLogic";
 import { StatusBadge } from "../ProductStatusBadge";
 import { toast } from 'sonner';
 import { ProductDetailDialog } from "./ProductDetailDialog";
@@ -98,12 +98,18 @@ export default function ProductCatalog({
       // 2. Spec Filters (AND between keys, OR between values in same key)
       const specKeys = Object.keys(specFilters);
       if (specKeys.length > 0) {
-        const matchesSpec = (settings: any) => {
-          if (!settings) return false;
+        const matchesSpec = (settingsRaw: any) => {
+          if (!settingsRaw) return false;
+          // 將原始數據 (Array 或 Object) 轉換為與篩選器一致的鍵值對格式 (parentId:id -> value)
+          const flatSettings = deserializeSpecs(settingsRaw);
+          
           return specKeys.every((key) => {
             const allowedValues = specFilters[key];
             if (!allowedValues || allowedValues.length === 0) return true;
-            const actualValue = String(getSpecValue(settings, key) || '');
+            
+            // 直接從平坦化的設定中讀取 (key 已包含 parentId:id 格式)
+            const val = flatSettings[key];
+            const actualValue = formatSpecValue(val);
             return allowedValues.includes(actualValue);
           });
         };
@@ -181,7 +187,7 @@ export default function ProductCatalog({
     }
 
     );
-
+  console.log("filteredProducts", filteredProducts)
 
   const handleProductClick = (product: ProductWithPricing) => {
     if (product.has_variants && product.variants && product.variants.length > 1) {

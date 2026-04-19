@@ -45,8 +45,15 @@ export function getSpecValue(data: any, specId: string): any {
 
 /**
  * 將前端路徑字典物件轉換為易讀陣列儲存
+ * @param pathObj 目前表單中的值集
+ * @param specMap 規格定義地圖 (用於還原稱)
+ * @param originalEntries 原始資料庫記錄 (用於保留那些地圖中找不到的「幽靈規格」原始路徑)
  */
-export function serializeSpecs(pathObj: Record<string, any>, specMap: Map<string, CategorySpec>): SpecEntry[] {
+export function serializeSpecs(
+    pathObj: Record<string, any>, 
+    specMap: Map<string, CategorySpec>,
+    originalEntries?: SpecEntry[]
+): SpecEntry[] {
     const entries: SpecEntry[] = [];
     if (!pathObj) return entries;
     
@@ -56,12 +63,31 @@ export function serializeSpecs(pathObj: Record<string, any>, specMap: Map<string
         const [parentId, specId] = pathKey.split(':');
         if (!specId) return;
 
+        // 核心改進：始終嘗試從 specMap (全域字典) 找回名字
         const spec = specMap.get(specId);
         const parent = parentId === 'root' ? null : specMap.get(parentId);
         
-        const pathName = parent 
-            ? `${parent.name} > ${spec?.name || specId}`
-            : (spec?.name || specId);
+        // 優先從 specMap 組合路徑 (自動刷新 UUID 為中文)
+        let pathName;
+        if (spec) {
+            pathName = parent 
+                ? `${parent.name} > ${spec.name}`
+                : spec.name;
+        } else {
+            // 如果地圖真的找不到 (代表規格定義已從資料庫徹底刪除)
+            const original = originalEntries?.find(e => e.id === specId);
+            
+            // 判斷是否為「無效幽靈」：字典找不到 且 原始數據的路徑也是 UUID 或 空白
+            const originalPathValid = original?.path && !original.path.match(/^[0-9a-f-]{36}$/i);
+            
+            if (!originalPathValid) {
+                // 這是無效幽靈規格，執行「洗掉」邏輯：直接跳過不存檔
+                return;
+            }
+            
+            // 如果雖然字典沒了，但原始數據有中文名字，則保留它 (保護歷史數據)
+            pathName = original.path;
+        }
 
         entries.push({
             id: specId,
@@ -209,10 +235,25 @@ export function formatSpecValue(val: any): string {
     }
     
     if (typeof val === 'object' && val !== null) {
-        // 處理數量分配格式: {"Type-C": 1} -> Type-C*1/USB-A*1
+        // 處理複合型規格或數量分配
         return Object.entries(val)
-            .map(([opt, qty]) => `${opt}*${qty}`)
-            .join('/');
+            .map(([label, value]) => {
+                if (!value && value !== 0) return null;
+                
+                // 解析單位：標籤(單位) -> 標籤: 數值單位
+                const unitMatch = label.match(/(.+?)\((.+?)\)/);
+                if (unitMatch) {
+                    const displayName = unitMatch[1];
+                    const unit = unitMatch[2];
+                    return `${displayName}:${value}${unit}`;
+                }
+
+                // 數量分配傳統格式使用 *，一般複合格式使用 :
+                // 啟發式：如果數值是純數字或標題不含特殊標籤，通常是複合規格
+                return `${label}:${value}`;
+            })
+            .filter(Boolean)
+            .join(' / ');
     }
     
     // 處理布林值

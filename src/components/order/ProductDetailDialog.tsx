@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { cn } from "@/lib/utils";
 import {
     Dialog,
     DialogContent,
@@ -14,7 +15,7 @@ import { toast } from "sonner";
 import { ShoppingCart, ImageIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { formatSpecValue, deserializeSpecs } from "@/utils/specLogic";
+import { formatSpecValue, deserializeSpecs, getTreeSortedVisiblePaths } from "@/utils/specLogic";
 import { useBrands } from "@/hooks/useBrands";
 
 interface ProductDetailDialogProps {
@@ -54,30 +55,110 @@ export function ProductDetailDialog({
         },
     });
 
-    // --- 關鍵邏輯：合併產品與變體的規格 ---
+    // --- 核心邏輯：深度彙整與樹狀排序 ---
     const combinedSpecs = useMemo(() => {
-        if (!product) return [];
+        if (!product || specDefinitions.length === 0) return [];
 
-        // 1. 標準化產品規格
-        const pSpecs = deserializeSpecs(product.table_settings);
+        // 1. 建立一個 Map 來存放每一個 pathKey 對應到的所有唯一數值
+        // 使用 JSON.stringify(val) 作為 Set 的判斷依據
+        const specsAggregation = new Map<string, { rawValues: any[], stringifiedSet: Set<string> }>();
         
-        // 2. 標準化變體規格 (若有選中)
-        const vSpecs = selectedVariant ? deserializeSpecs(selectedVariant.table_settings) : {};
+        const addValueToAgg = (key: string, val: any) => {
+            if (val === null || val === undefined || val === '') return;
+            if (!specsAggregation.has(key)) {
+                specsAggregation.set(key, { rawValues: [], stringifiedSet: new Set() });
+            }
+            const agg = specsAggregation.get(key)!;
+            
+            // 處理物件 Key 排序，確保 {"a":1, "b":2} 等於 {"b":2, "a":1}
+            let sVal;
+            if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
+                const sortedObj = Object.keys(val).sort().reduce((acc: any, k) => {
+                    acc[k] = val[k];
+                    return acc;
+                }, {});
+                sVal = JSON.stringify(sortedObj);
+            } else {
+                sVal = JSON.stringify(val);
+            }
 
-        // 3. 合併 (變體優先)
-        const merged = { ...pSpecs, ...vSpecs };
+            if (!agg.stringifiedSet.has(sVal)) {
+                agg.stringifiedSet.add(sVal);
+                agg.rawValues.push(val);
+            }
+        };
 
-        // 4. 轉換回給介面顯示的格式 (path -> value)
-        // 為了維持顯示名稱，我們需要比對 specDefinitions
-        return Object.entries(merged).map(([key, val]) => {
-            const specId = key.includes(':') ? key.split(':').pop()! : key;
+        // 2. 搜集數據
+        if (selectedVariant) {
+            const vSpecs = deserializeSpecs(selectedVariant.table_settings);
+            const pSpecs = deserializeSpecs(product.table_settings);
+            // 變體模式下：變體存在的 key 會覆蓋產品
+            const allKeys = new Set([...Object.keys(pSpecs), ...Object.keys(vSpecs)]);
+            allKeys.forEach(key => {
+                const val = vSpecs[key] !== undefined ? vSpecs[key] : pSpecs[key];
+                addValueToAgg(key, val);
+            });
+        } else if (product.variants && product.variants.length > 0) {
+            // 初始狀態：預覽所有變體的合集
+            product.variants.forEach(v => {
+                const vSpecs = deserializeSpecs(v.table_settings);
+                Object.entries(vSpecs).forEach(([key, val]) => addValueToAgg(key, val));
+            });
+            // 同時也考慮產品本身的規格 (若有的話)
+            const pSpecs = deserializeSpecs(product.table_settings);
+            Object.entries(pSpecs).forEach(([key, val]) => addValueToAgg(key, val));
+        } else {
+            // 單產品模式
+            const pSpecs = deserializeSpecs(product.table_settings);
+            Object.entries(pSpecs).forEach(([key, val]) => addValueToAgg(key, val));
+        }
+
+        // 3. 準備給排序演算法的 Map
+        const visibleInfo = new Map<string, any>();
+        specsAggregation.forEach((_, key) => visibleInfo.set(key, {}));
+
+        // 4. 執行樹狀排序 (parentId -> id)
+        const sortedPaths = getTreeSortedVisiblePaths(specDefinitions, visibleInfo);
+
+        // 5. 轉換為最終顯示格式
+        return sortedPaths.map(({ pathKey, level }) => {
+            const agg = specsAggregation.get(pathKey);
+            if (!agg) return null;
+
+            const specId = pathKey.includes(':') ? pathKey.split(':').pop()! : pathKey;
             const def = specDefinitions.find((s: any) => s.id === specId || s.name === specId);
+            
+            // 如果找不到定義，嘗試從產品的原始 table_settings 中找 path (僅限新格式)
+            let displayName = def?.name;
+            if (!displayName && product.variants) {
+                // 遍歷所有變體找這個 ID 的 path
+                for (const v of product.variants) {
+                    if (Array.isArray(v.table_settings)) {
+                        const entry = (v.table_settings as any[]).find(e => e.id === specId);
+                        if (entry?.path && !entry.path.match(/^[0-9a-f-]{36}$/i)) {
+                            displayName = entry.path.split(' > ').pop();
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 最後還是找不到，才顯示 ID (但去掉 root: 前綴)
+            if (!displayName) {
+                displayName = pathKey.startsWith('root:') ? pathKey.replace('root:', '') : pathKey;
+            }
+
+            // 由於已經過深度比對，rawValues.length 就是唯一值的數量
+            const isConstant = agg.rawValues.length === 1;
+
             return {
-                id: key,
-                name: def ? def.name : key,
-                value: val
+                id: pathKey,
+                name: displayName,
+                value: isConstant ? agg.rawValues[0] : '多種型號可供選擇',
+                isMultiple: !isConstant,
+                level: level
             };
-        }).filter(s => s.value !== null && s.value !== undefined && s.value !== '');
+        }).filter(Boolean) as any[];
     }, [product, selectedVariant, specDefinitions]);
 
     const qty = (product && selectedVariantId) ? getItemQuantity(selectedVariantId) : (product ? getItemQuantity(product.id) : 0);
@@ -169,8 +250,21 @@ export function ProductDetailDialog({
                                 <div className="space-y-2">
                                     {combinedSpecs.map((spec) => (
                                         <div key={spec.id} className="flex justify-between text-sm py-1 border-b last:border-0 border-muted">
-                                            <span className="text-muted-foreground">{spec.name}</span>
-                                            <span className="font-medium text-right">{formatSpecValue(spec.value)}</span>
+                                            <span 
+                                                className={cn(
+                                                    "text-muted-foreground transition-all duration-200",
+                                                    spec.level > 0 && "pl-4 text-xs flex items-center gap-1"
+                                                )}
+                                            >
+                                                {spec.level > 0 && <span className="opacity-50 text-[10px]">└─</span>}
+                                                {spec.name}
+                                            </span>
+                                            <span className={cn(
+                                                "font-medium text-right transition-all duration-200",
+                                                (spec as any).isMultiple && "text-muted-foreground/40 italic font-normal"
+                                            )}>
+                                                {formatSpecValue(spec.value)}
+                                            </span>
                                         </div>
                                     ))}
                                 </div>

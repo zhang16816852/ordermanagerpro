@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { Settings2 } from 'lucide-react';
 import { CategorySpec } from '@/hooks/useCategorySpecs';
+import { formatSpecValue } from '@/utils/specLogic';
 
 interface SpecValueEditorProps {
     spec: CategorySpec;
@@ -37,21 +38,77 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
         );
     },
 
-    // 2. 帶單位數字 (Number with Unit)
-    number_with_unit: ({ spec, value, onChange, sourceValue }) => (
-        <div className="flex items-center space-x-2">
-            <Input
-                type="number"
-                value={value || ''}
-                onChange={(e) => onChange(e.target.value)}
-                placeholder={sourceValue ? `建議值: ${sourceValue}` : "數值"}
-                className="h-9"
-            />
-            {spec.options?.[0] && (
-                <span className="text-sm text-muted-foreground whitespace-nowrap">{spec.options[0]}</span>
-            )}
-        </div>
-    ),
+    // 2. 帶單位數字 (Number with Unit) - 支援複合型
+    number_with_unit: ({ spec, value, onChange, sourceValue, variantMode }) => {
+        const labels = spec.options || [];
+        
+        // 單一欄位模式 (相容舊版或只有一個單位)
+        if (labels.length <= 1) {
+            return (
+                <div className="flex items-center space-x-2">
+                    <Input
+                        type="number"
+                        value={value || ''}
+                        onChange={(e) => onChange(e.target.value)}
+                        placeholder={sourceValue ? `建議值: ${sourceValue}` : "數值"}
+                        className="h-9"
+                    />
+                    {labels[0] && (
+                        <span className="text-sm text-muted-foreground whitespace-nowrap">{labels[0]}</span>
+                    )}
+                </div>
+            );
+        }
+
+        // 複合欄位模式
+        const currentVals = (typeof value === 'object' && value !== null) ? value : {};
+        
+        const content = (
+            <div className={`grid grid-cols-1 ${variantMode ? 'w-56 p-3' : 'sm:grid-cols-2 gap-2 mt-1'}`}>
+                {labels.map((label) => {
+                    const unitMatch = label.match(/(.+?)\((.+?)\)/);
+                    const displayName = unitMatch ? unitMatch[1] : label;
+                    const unit = unitMatch ? unitMatch[2] : null;
+
+                    return (
+                        <div key={label} className="flex items-center space-x-2 bg-muted/20 p-1.5 rounded-md border border-dashed border-muted-foreground/20 mb-2 last:mb-0">
+                            <span className="text-[10px] font-bold text-muted-foreground min-w-[30px] truncate" title={displayName}>{displayName}</span>
+                            <div className="relative flex-1">
+                                <Input
+                                    type="number"
+                                    value={currentVals[label] || ''}
+                                    onChange={(e) => onChange({ ...currentVals, [label]: e.target.value })}
+                                    className="h-7 text-xs pr-8"
+                                />
+                                {unit && <span className="absolute right-2 top-1.5 text-[9px] text-muted-foreground/60">{unit}</span>}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+
+        if (variantMode) {
+            return (
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-8 px-2 text-[10px] w-full justify-between font-normal">
+                            <span className="truncate">{formatSpecValue(value) || '未設定'}</span>
+                            <Settings2 className="h-3 w-3 ml-1 opacity-50 shrink-0" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 p-3" align="center">
+                        <div className="text-xs font-bold mb-3 border-b pb-1 flex items-center gap-2">
+                            <Settings2 className="h-3.3 w-3" /> {spec.name} 詳細數值
+                        </div>
+                        {content}
+                    </PopoverContent>
+                </Popover>
+            );
+        }
+
+        return content;
+    },
 
     // 3. 多選列表 (MultiSelect)
     multiselect: ({ spec, value, onChange }) => {
@@ -92,15 +149,62 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
         </Select>
     ),
 
-    // 5. 預設輸入框 (Default)
-    default: ({ spec, value, onChange, sourceValue }) => (
-        <Input
-            value={value || ''}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={sourceValue ? `來自父級: ${sourceValue}` : `輸入${spec.name}`}
-            className="h-9"
-        />
-    )
+    // 5. 預設輸入框 (Default/Text) - 支援複合型
+    default: ({ spec, value, onChange, sourceValue, variantMode }) => {
+        const labels = spec.options || [];
+
+        // 單一欄位模式 (傳統文字輸入)
+        if (labels.length === 0) {
+            return (
+                <Input
+                    value={value || ''}
+                    onChange={(e) => onChange(e.target.value)}
+                    placeholder={sourceValue ? `來自父級: ${sourceValue}` : `輸入${spec.name}`}
+                    className="h-9"
+                />
+            );
+        }
+
+        // 複合欄位模式
+        const currentVals = (typeof value === 'object' && value !== null) ? value : {};
+        
+        const content = (
+            <div className={`grid grid-cols-1 ${variantMode ? 'w-56 p-3' : 'gap-2 mt-1'}`}>
+                {labels.map((label) => (
+                    <div key={label} className="flex items-center space-x-2 bg-muted/20 p-1.5 rounded-md border border-dashed border-muted-foreground/20 mb-2 last:mb-0">
+                        <span className="text-[10px] font-bold text-muted-foreground min-w-[40px] truncate" title={label}>{label}</span>
+                        <Input
+                            value={currentVals[label] || ''}
+                            onChange={(e) => onChange({ ...currentVals, [label]: e.target.value })}
+                            className="h-7 text-xs flex-1"
+                            placeholder="..."
+                        />
+                    </div>
+                ))}
+            </div>
+        );
+
+        if (variantMode) {
+            return (
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-8 px-2 text-[10px] w-full justify-between font-normal">
+                            <span className="truncate">{formatSpecValue(value) || '未設定'}</span>
+                            <Settings2 className="h-3 w-3 ml-1 opacity-50 shrink-0" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 p-3" align="center">
+                        <div className="text-xs font-bold mb-3 border-b pb-1 flex items-center gap-2">
+                            <Settings2 className="h-3 w-3" /> {spec.name} 詳細內容
+                        </div>
+                        {content}
+                    </PopoverContent>
+                </Popover>
+            );
+        }
+
+        return content;
+    }
 };
 
 /**
@@ -204,8 +308,9 @@ export function SpecValueEditor(props: SpecValueEditorProps) {
 
     // 物件化查找渲染器
     let type = spec.type;
-    // 如果有選項但非 multiselect，預設導向 select
-    if (spec.options?.length > 0 && type !== 'multiselect' && type !== 'number_with_unit' && type !== 'boolean') {
+    // 如果有選項但非 multiselect 且非 text/number/boolean，預設導向 select
+    if (spec.options?.length > 0 && 
+        !['multiselect', 'number_with_unit', 'boolean', 'text', 'default'].includes(type)) {
         type = 'select';
     }
 

@@ -93,8 +93,23 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
 
   // 封裝 Submit 以進行資料轉換 (Object -> Array)
   const handleWrappedSubmit = (values: any) => {
+    // 當產品有變體時，產品層級的 table_settings 應維持為空
+    // 因為規格是記錄在各個變體的 table_settings 裡面
+    if (values.has_variants) {
+      onSubmit({
+        ...values,
+        table_settings: [] // 強制清空產品層級規格
+      });
+      return;
+    }
+
     // 將前端的路徑 Object 轉換為後端的易讀 Array
-    const serializedSettings = serializeSpecs(values.table_settings, specMap);
+    // 傳入原始 table_settings 作為 fallback，防止在找不到定義時把中文 Path 刷成 UUID
+    const serializedSettings = serializeSpecs(
+      values.table_settings, 
+      specMap,
+      (initialData as any)?.table_settings
+    );
     onSubmit({
       ...values,
       table_settings: serializedSettings as any

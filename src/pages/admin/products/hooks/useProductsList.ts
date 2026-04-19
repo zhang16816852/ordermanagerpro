@@ -132,13 +132,14 @@ export function useProductsList() {
             }
             return product;
         },
-        onSuccess: () => {
+        onSuccess: (product) => {
             forceRefresh();
             queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
             queryClient.invalidateQueries({ queryKey: ['all-product-model-links'] });
             queryClient.invalidateQueries({ queryKey: ['all-product-variants'] });
-            toast.success('產品已新增');
-            setIsDialogOpen(false);
+            toast.success('產品已新增，您現在可以繼續設定變體與規格');
+            setEditingProduct(product);
+            // 不關閉彈窗，讓使用者繼續操作變體
         },
     });
 
