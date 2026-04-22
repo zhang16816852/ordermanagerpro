@@ -255,6 +255,15 @@ export function formatSpecValue(val: any): string {
     if (val === null || val === undefined || val === '') return '';
     
     if (Array.isArray(val)) {
+        // v4.11 增加對表格型數據 (Array of Objects) 的易讀化處理
+        if (val.length > 0 && typeof val[0] === 'object' && val[0] !== null && !Array.isArray(val[0])) {
+            return val.map((row: any) => {
+                return Object.values(row)
+                    .map(v => Array.isArray(v) ? v.join(',') : v)
+                    .filter(v => v !== '' && v !== null && v !== undefined)
+                    .join('/');
+            }).filter(s => s !== '').join('; ');
+        }
         return val.join('/');
     }
     

@@ -163,17 +163,105 @@ export function SpecDialog({
                         <select
                             className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                             value={specForm.type}
-                            onChange={(e) => setSpecForm(prev => ({ ...prev, type: e.target.value as any }))}
+                            onChange={(e) => setSpecForm(prev => ({ ...prev, type: e.target.value as SpecDefinition['type'] }))}
                         >
                             <option value="select">單選下拉 (Select)</option>
                             <option value="multiselect">多選 (Multi-select)</option>
                             <option value="text">文字輸入 (Text)</option>
                             <option value="boolean">是否支援 (Boolean開關)</option>
                             <option value="number_with_unit">數值輸入 (附帶單位)</option>
+                            <option value="table">表格型規格 (Table/Grid)</option>
                         </select>
                     </div>
 
-                    {/* 連動邏輯設定 (Triggers模式 V3) */}
+                    {/* 表格列定義 (僅限 table 型態) */}
+                    {specForm.type === 'table' && (
+                        <div className="space-y-3 p-3 border rounded-md bg-blue-50/30 border-blue-100">
+                            <div className="flex justify-between items-center border-b border-blue-100 pb-1">
+                                <h4 className="text-sm font-bold text-blue-800">表格欄位定義 (Columns)</h4>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="h-6 px-2 text-[10px] bg-white" 
+                                    onClick={() => {
+                                        const columns = [...(specForm.configuration?.columns || [])];
+                                        columns.push({ id: Math.random().toString(36).substr(2, 9), name: '', type: 'text' });
+                                        setSpecForm(prev => ({ ...prev, configuration: { ...prev.configuration, columns } }));
+                                    }}
+                                >
+                                    + 新增欄位
+                                </Button>
+                            </div>
+
+                            <div className="space-y-3">
+                                {(specForm.configuration?.columns || []).map((col: any, colIdx: number) => (
+                                    <div key={col.id || colIdx} className="p-2 border rounded bg-background space-y-2 relative group">
+                                        <Button
+                                            variant="ghost" size="icon"
+                                            className="h-5 w-5 absolute -top-1 -right-1 hidden group-hover:flex"
+                                            onClick={() => {
+                                                const columns = (specForm.configuration?.columns || []).filter((_: any, i: number) => i !== colIdx);
+                                                setSpecForm(prev => ({ ...prev, configuration: { ...prev.configuration, columns } }));
+                                            }}
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </Button>
+                                        
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] text-muted-foreground font-bold">欄位名稱</label>
+                                                <Input 
+                                                    className="h-7 text-xs" 
+                                                    placeholder="如：電壓" 
+                                                    value={col.name}
+                                                    onChange={(e) => {
+                                                        const columns = [...(specForm.configuration?.columns || [])];
+                                                        columns[colIdx] = { ...columns[colIdx], name: e.target.value };
+                                                        setSpecForm(prev => ({ ...prev, configuration: { ...prev.configuration, columns } }));
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] text-muted-foreground font-bold">欄位型態</label>
+                                                <select
+                                                    className="flex h-7 w-full rounded-md border border-input bg-background px-2 py-1 text-[11px] shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                                    value={col.type}
+                                                    onChange={(e) => {
+                                                        const columns = [...(specForm.configuration?.columns || [])];
+                                                        columns[colIdx] = { ...columns[colIdx], type: e.target.value as 'text' | 'select' | 'multiselect' };
+                                                        setSpecForm(prev => ({ ...prev, configuration: { ...prev.configuration, columns } }));
+                                                    }}
+                                                >
+                                                    <option value="text">文字輸入</option>
+                                                    <option value="select">單選下拉</option>
+                                                    <option value="multiselect">多選</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {(col.type === 'select' || col.type === 'multiselect') && (
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] text-muted-foreground font-bold">選項 (逗號分隔)</label>
+                                                <Input 
+                                                    className="h-7 text-xs" 
+                                                    placeholder="選項A,選項B,選項C" 
+                                                    value={col.options?.join(',') || ''}
+                                                    onChange={(e) => {
+                                                        const columns = [...(specForm.configuration?.columns || [])];
+                                                        columns[colIdx] = { ...columns[colIdx], options: e.target.value.split(',').map(s => s.trim()) };
+                                                        setSpecForm(prev => ({ ...prev, configuration: { ...prev.configuration, columns } }));
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                                {(specForm.configuration?.columns || []).length === 0 && (
+                                    <p className="text-[10px] text-muted-foreground italic text-center py-2">請先定義表格欄位</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
                     <div className="space-y-3 p-3 border rounded-md bg-muted/20">
                         <div className="flex justify-between items-center border-b pb-1">
                             <h4 className="text-sm font-bold">連動觸發設定 (Triggers)</h4>

@@ -9,7 +9,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "supabase:types": "npx supabase gen types typescript --project-id aweqytcelujpqezjitsk --schema public > src/integrations/supabase/types.ts"
+    "supabase:types": "npx --yes supabase gen types typescript --project-id aweqytcelujpqezjitsk --schema public > src/integrations/supabase/types.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

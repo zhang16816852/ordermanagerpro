@@ -1122,6 +1122,7 @@ export type Database = {
       }
       specification_definitions: {
         Row: {
+          configuration: Json | null
           created_at: string | null
           default_value: string | null
           id: string
@@ -1132,6 +1133,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          configuration?: Json | null
           created_at?: string | null
           default_value?: string | null
           id?: string
@@ -1142,6 +1144,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          configuration?: Json | null
           created_at?: string | null
           default_value?: string | null
           id?: string

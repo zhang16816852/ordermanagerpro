@@ -17,9 +17,17 @@ export interface CategoryHierarchy {
 export interface SpecDefinition {
     id: string;
     name: string;
-    type: 'select' | 'multiselect' | 'text' | 'boolean' | 'number_with_unit';
+    type: 'select' | 'multiselect' | 'text' | 'boolean' | 'number_with_unit' | 'table';
     options: string[];
     default_value?: string;
+    configuration?: {
+        columns: {
+            id: string;
+            name: string;
+            type: 'text' | 'select' | 'multiselect';
+            options?: string[];
+        }[];
+    };
     logic_config?: {
         triggers?: {
             on_value: string;

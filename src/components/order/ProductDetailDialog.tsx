@@ -26,6 +26,47 @@ interface ProductDetailDialogProps {
     storeId: string;
 }
 
+/**
+ * v4.11 表格型規格顯示組件
+ */
+function SpecTableDisplay({ value, columns }: { value: any[], columns: any[] }) {
+    if (!Array.isArray(value) || value.length === 0) return null;
+    return (
+        <div className="mt-1.5 border rounded-md overflow-hidden bg-background/50 shadow-sm w-full">
+            <table className="w-full text-[10px] border-collapse">
+                <thead className="bg-muted/50 border-b">
+                    <tr>
+                        {columns.map(col => (
+                            <th key={col.id || col.name} className="px-2 py-1.5 text-left font-bold text-muted-foreground border-r last:border-r-0 uppercase tracking-tighter">
+                                {col.name}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-muted/30">
+                    {value.map((row, i) => (
+                        <tr key={i} className="hover:bg-muted/20 transition-colors">
+                            {columns.map(col => {
+                                const colKey = col.id || col.name;
+                                const cellVal = row[colKey];
+                                return (
+                                    <td key={colKey} className="px-2 py-1.5 border-r last:border-r-0 align-top">
+                                        {Array.isArray(cellVal) ? (
+                                            <div className="flex flex-wrap gap-1">
+                                                {cellVal.map(v => <Badge key={v} variant="outline" className="text-[8px] px-1 h-3.5 leading-none">{v}</Badge>)}
+                                            </div>
+                                        ) : String(cellVal || '-')}
+                                    </td>
+                                );
+                            })}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
 export function ProductDetailDialog({
     product,
     open,
@@ -254,25 +295,38 @@ export function ProductDetailDialog({
                             <div className="pt-4 border-t">
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">產品規格</h3>
                                 <div className="space-y-2">
-                                    {combinedSpecs.map((spec) => (
-                                        <div key={spec.id} className="flex justify-between text-sm py-1 border-b last:border-0 border-muted">
-                                            <span 
-                                                className={cn(
-                                                    "text-muted-foreground transition-all duration-200",
-                                                    spec.level > 0 && "pl-4 text-xs flex items-center gap-1"
+                                    {combinedSpecs.map((spec) => {
+                                        const specId = spec.id.split(':').pop();
+                                        const def = specDefinitions.find((s: any) => s.id === specId);
+                                        const isTable = def?.type === 'table';
+
+                                        return (
+                                            <div key={spec.id} className="flex flex-col text-sm py-2 border-b last:border-0 border-muted">
+                                                <div className="flex justify-between items-center w-full">
+                                                    <span 
+                                                        className={cn(
+                                                            "text-muted-foreground transition-all duration-200",
+                                                            spec.level > 0 && "pl-4 text-xs flex items-center gap-1"
+                                                        )}
+                                                    >
+                                                        {spec.level > 0 && <span className="opacity-50 text-[10px]">└─</span>}
+                                                        {spec.name}
+                                                    </span>
+                                                    {!isTable && (
+                                                        <span className={cn(
+                                                            "font-medium text-right transition-all duration-200",
+                                                            (spec as any).isMultiple && "text-muted-foreground/40 italic font-normal"
+                                                        )}>
+                                                            {formatSpecValue(spec.value)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {isTable && spec.value && (
+                                                    <SpecTableDisplay value={spec.value} columns={def?.configuration?.columns || []} />
                                                 )}
-                                            >
-                                                {spec.level > 0 && <span className="opacity-50 text-[10px]">└─</span>}
-                                                {spec.name}
-                                            </span>
-                                            <span className={cn(
-                                                "font-medium text-right transition-all duration-200",
-                                                (spec as any).isMultiple && "text-muted-foreground/40 italic font-normal"
-                                            )}>
-                                                {formatSpecValue(spec.value)}
-                                            </span>
-                                        </div>
-                                    ))}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}

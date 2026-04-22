@@ -4,7 +4,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { Settings2 } from 'lucide-react';
+import { Settings2, X } from 'lucide-react';
 import { CategorySpec } from '@/hooks/useCategorySpecs';
 import { formatSpecValue } from '@/utils/specLogic';
 
@@ -204,6 +204,141 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
         }
 
         return content;
+    },
+
+    // 6. 表格型規格 (Table/Grid)
+    table: ({ spec, value, onChange, variantMode }) => {
+        const columns = (spec as any).configuration?.columns || [];
+        const rows = Array.isArray(value) ? value : [];
+
+        const addRow = () => {
+            const newRow = columns.reduce((acc: any, col: any) => {
+                acc[col.id || col.name] = col.type === 'multiselect' ? [] : '';
+                return acc;
+            }, {});
+            onChange([...rows, newRow]);
+        };
+
+        const removeRow = (idx: number) => {
+            onChange(rows.filter((_, i) => i !== idx));
+        };
+
+        const updateCell = (rowIdx: number, colKey: string, val: any) => {
+            const next = [...rows];
+            next[rowIdx] = { ...next[rowIdx], [colKey]: val };
+            onChange(next);
+        };
+
+        const content = (
+            <div className="space-y-3">
+                <div className="overflow-x-auto border rounded-md bg-background">
+                    <table className="w-full text-[11px] border-collapse">
+                        <thead className="bg-muted/50 border-b">
+                            <tr>
+                                {columns.map((col: any) => (
+                                    <th key={col.id || col.name} className="px-2 py-1.5 text-left font-bold text-muted-foreground border-r last:border-r-0">{col.name}</th>
+                                ))}
+                                <th className="w-8"></th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                            {rows.map((row: any, rowIdx: number) => (
+                                <tr key={rowIdx} className="hover:bg-muted/10">
+                                    {columns.map((col: any) => {
+                                        const colKey = col.id || col.name;
+                                        return (
+                                            <td key={colKey} className="p-1 border-r last:border-r-0">
+                                                {col.type === 'select' ? (
+                                                    <select 
+                                                        className="w-full h-7 bg-transparent border-none focus:ring-1 focus:ring-primary rounded px-1 outline-none"
+                                                        value={row[colKey] || ''}
+                                                        onChange={(e) => updateCell(rowIdx, colKey, e.target.value)}
+                                                    >
+                                                        <option value="">-</option>
+                                                        {col.options?.map((o: string) => <option key={o} value={o}>{o}</option>)}
+                                                    </select>
+                                                ) : col.type === 'multiselect' ? (
+                                                    <Popover>
+                                                        <PopoverTrigger asChild>
+                                                            <Button variant="ghost" size="sm" className="h-7 px-1 text-[10px] w-full justify-between hover:bg-muted/50">
+                                                                <span className="truncate">{Array.isArray(row[colKey]) ? row[colKey].join(',') : '-'}</span>
+                                                            </Button>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="w-48 p-2" align="start">
+                                                            <div className="space-y-1">
+                                                                <p className="text-[10px] font-bold text-muted-foreground mb-1 uppercase tracking-tight">選擇多項</p>
+                                                                {col.options?.map((opt: string) => {
+                                                                    const current = Array.isArray(row[colKey]) ? row[colKey] : [];
+                                                                    return (
+                                                                        <div key={opt} className="flex items-center gap-2 hover:bg-muted/30 p-1 rounded">
+                                                                            <Checkbox 
+                                                                                id={`cell-${rowIdx}-${colKey}-${opt}`}
+                                                                                checked={current.includes(opt)}
+                                                                                onCheckedChange={(checked) => {
+                                                                                    const next = checked ? [...current, opt] : current.filter((v: any) => v !== opt);
+                                                                                    updateCell(rowIdx, colKey, next);
+                                                                                }}
+                                                                            />
+                                                                            <label htmlFor={`cell-${rowIdx}-${colKey}-${opt}`} className="text-xs cursor-pointer flex-1">{opt}</label>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                ) : (
+                                                    <Input 
+                                                        className="h-7 px-2 border-none bg-transparent focus-visible:ring-1 focus-visible:ring-primary shadow-none text-xs"
+                                                        value={row[colKey] || ''}
+                                                        onChange={(e) => updateCell(rowIdx, colKey, e.target.value)}
+                                                        placeholder="..."
+                                                    />
+                                                )}
+                                            </td>
+                                        );
+                                    })}
+                                    <td className="p-1 text-center">
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => removeRow(rowIdx)}>
+                                            <X className="h-3.3 w-3.3" />
+                                        </Button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {rows.length === 0 && (
+                        <div className="py-6 text-center">
+                            <p className="text-[11px] text-muted-foreground italic">尚未新增任何數據行</p>
+                        </div>
+                    )}
+                </div>
+                <Button variant="outline" size="sm" className="w-full h-8 border-dashed bg-muted/5 hover:bg-muted/10 text-muted-foreground" onClick={addRow}>
+                    + 新增一行數據
+                </Button>
+            </div>
+        );
+
+        if (variantMode) {
+            return (
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-8 px-2 text-[10px] w-full justify-between font-normal group-hover:border-primary/30 transition-colors">
+                            <span className="truncate">{rows.length > 0 ? `已設定 ${rows.length} 筆資料` : '未設定'}</span>
+                            <Settings2 className="h-3 w-3 ml-1 opacity-50 shrink-0" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-3 shadow-xl" align="center">
+                        <div className="text-xs font-bold mb-3 border-b pb-1.5 flex items-center gap-2">
+                            <Settings2 className="h-3.5 w-3.5 text-primary" />
+                            {spec.name} 詳細數據表
+                        </div>
+                        {content}
+                    </PopoverContent>
+                </Popover>
+            );
+        }
+
+        return content;
     }
 };
 
@@ -308,9 +443,9 @@ export function SpecValueEditor(props: SpecValueEditorProps) {
 
     // 物件化查找渲染器
     let type = spec.type;
-    // 如果有選項但非 multiselect 且非 text/number/boolean，預設導向 select
+    // 如果有選項但非 multiselect 且非 text/number/boolean/table，預設導向 select
     if (spec.options?.length > 0 && 
-        !['multiselect', 'number_with_unit', 'boolean', 'text', 'default'].includes(type)) {
+        !['multiselect', 'number_with_unit', 'boolean', 'text', 'default', 'table'].includes(type)) {
         type = 'select';
     }
 

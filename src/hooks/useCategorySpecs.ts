@@ -5,9 +5,17 @@ export interface CategorySpec {
     id: string;
     name: string;
     key: string;
-    type: 'text' | 'select' | 'boolean' | 'multiselect' | 'number_with_unit';
+    type: 'text' | 'select' | 'boolean' | 'multiselect' | 'number_with_unit' | 'table';
     options: string[];
     defaultValue: string;
+    configuration?: {
+        columns: {
+            id: string;
+            name: string;
+            type: 'text' | 'select' | 'multiselect';
+            options?: string[];
+        }[];
+    } | null;
     logicConfig?: {
         triggers?: {
             on_value: string;
@@ -34,7 +42,8 @@ export function useCategorySpecs(categoryIds: string[]) {
                         type,
                         options,
                         default_value,
-                        logic_config
+                        logic_config,
+                        configuration
                     )
                 `)
                 .in('category_id', categoryIds)
@@ -59,7 +68,8 @@ export function useCategorySpecs(categoryIds: string[]) {
                     type: spec.type,
                     options: spec.options || [],
                     defaultValue: spec.default_value || '',
-                    logicConfig: spec.logic_config as any
+                    logicConfig: spec.logic_config as any,
+                    configuration: spec.configuration
                 });
             });
 
