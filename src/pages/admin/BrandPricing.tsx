@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { calculatePriceRange } from '@/utils/priceUtils';
 import {
   Table,
   TableBody,
@@ -429,10 +430,10 @@ export default function AdminBrandPricing() {
                           )}
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground">
-                          ${product.base_wholesale_price}
+                          {calculatePriceRange(product.base_wholesale_price, variants.map(v => v.wholesale_price)).display}
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground">
-                          ${product.base_retail_price}
+                          {calculatePriceRange(product.base_retail_price, variants.map(v => v.retail_price)).display}
                         </TableCell>
                         <TableCell className="text-right">
                           {!hasVariants ? (

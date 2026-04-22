@@ -52,8 +52,19 @@ export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
                     return (
                         <div key={pathKey} className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
                             <div className="space-y-1.5 min-h-[60px]">
-                                <label className="text-xs font-semibold text-muted-foreground flex justify-between">
-                                    {spec.name}
+                                <label className="text-xs font-semibold text-muted-foreground flex justify-between items-center">
+                                    <span>{spec.name}</span>
+                                    {(() => {
+                                        const info = visibleInfo.get(pathKey);
+                                        if (!info?.sourceName) return null;
+                                        return (
+                                            <span className="text-[10px] font-normal opacity-60">
+                                                來自: {info.sourceName} 
+                                                {info.operator === 'ne' ? ' ≠ ' : ' = '} 
+                                                {info.triggerValue}
+                                            </span>
+                                        );
+                                    })()}
                                 </label>
                                 <SpecValueEditor 
                                     spec={spec}

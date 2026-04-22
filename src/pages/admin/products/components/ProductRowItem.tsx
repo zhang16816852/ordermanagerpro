@@ -6,6 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { MoreHorizontal, Pencil, Copy, Trash2, ChevronRight, ChevronDown, Layers } from 'lucide-react';
+import { calculatePriceRange } from '@/utils/priceUtils';
 import { Tables } from '@/integrations/supabase/types';
 
 type Product = Tables<'products'>;
@@ -122,8 +123,12 @@ export function ProductRowItem({
                         </div>
                     </TableCell>
                     <TableCell className="text-right">
-                        <div className="text-sm font-bold">${product.base_wholesale_price}</div>
-                        <div className="text-[10px] text-muted-foreground">${product.base_retail_price}</div>
+                        <div className="text-sm font-bold">
+                            {calculatePriceRange(product.base_wholesale_price, variants.map(v => v.wholesale_price)).display}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                            {calculatePriceRange(product.base_retail_price, variants.map(v => v.retail_price)).display}
+                        </div>
                     </TableCell>
                     <TableCell>
                         <Badge

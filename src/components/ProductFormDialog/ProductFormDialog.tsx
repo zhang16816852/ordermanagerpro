@@ -106,7 +106,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
     // 將前端的路徑 Object 轉換為後端的易讀 Array
     // 傳入原始 table_settings 作為 fallback，防止在找不到定義時把中文 Path 刷成 UUID
     const serializedSettings = serializeSpecs(
-      values.table_settings, 
+      values.table_settings,
       specMap,
       (initialData as any)?.table_settings
     );
@@ -114,6 +114,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
       ...values,
       table_settings: serializedSettings as any
     });
+
   };
 
   return (

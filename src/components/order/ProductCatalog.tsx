@@ -22,6 +22,7 @@ import { Info, LayoutGrid, List } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from '@/integrations/supabase/client';
 import { useMemo } from "react";
+import { calculatePriceRange } from "@/utils/priceUtils";
 interface ProductCatalogProps {
   products: ProductWithPricing[];
   isLoading: boolean;
@@ -273,7 +274,9 @@ export default function ProductCatalog({
                       </div>
                       <div className="text-right flex items-center gap-2">
                         <div className="flex flex-col items-end">
-                          <div className="font-medium">${product.wholesale_price}</div>
+                          <div className="font-medium">
+                            {calculatePriceRange(product.wholesale_price, product.variants?.map(v => v.effective_wholesale_price) || []).display}
+                          </div>
                           {totalInCart > 0 && (
                             <div className="text-sm text-primary">已加入 x{totalInCart}</div>
                           )}
@@ -336,7 +339,7 @@ export default function ProductCatalog({
                       </div>
                       <div className="mt-auto pt-2 flex items-center justify-between">
                         <div className="text-primary font-bold">
-                          ${product.wholesale_price}
+                          {calculatePriceRange(product.wholesale_price, product.variants?.map(v => v.effective_wholesale_price) || []).display}
                         </div>
                         {hasVariants && (
                           <Badge variant="secondary" className="text-[9px] h-4 px-1">

@@ -43,7 +43,7 @@ export function ProductsTable({
 }: ProductsTableProps) {
     if (isLoading) {
         return (
-            <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="rounded-xl border bg-card overflow-x-auto">
                 <Table>
                     <TableHeader className="bg-muted/50">
                         <TableRow>
@@ -70,7 +70,7 @@ export function ProductsTable({
     }
 
     return (
-        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+        <div className="rounded-xl border bg-card shadow-sm overflow-x-auto">
             <Table>
                 <TableHeader className="bg-muted/50">
                     <TableRow>

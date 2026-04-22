@@ -104,12 +104,18 @@ export function serializeSpecs(
  * 核心：計算目前應該顯示哪些規格路徑
  */
 export function getVisibleSpecsTree(specFields: CategorySpec[], tableSettings: Record<string, any>) {
-    const visible = new Map<string, { sourceValue?: any }>();
+    const visible = new Map<string, { 
+        sourceValue?: any; 
+        sourceName?: string;
+        triggerValue?: string;
+        operator?: string;
+    }>();
     if (!specFields || specFields.length === 0) return visible;
     
     const allTargetIds = new Set<string>();
     specFields.forEach(f => {
-        f.logicConfig?.triggers?.forEach(t => {
+        const triggers = f.logicConfig?.triggers || (f as any).logic_config?.triggers;
+        triggers?.forEach((t: any) => {
             getMergedTriggerTargets(t).forEach((tar: any) => allTargetIds.add(tar.id));
         });
     });
@@ -137,14 +143,20 @@ export function getVisibleSpecsTree(specFields: CategorySpec[], tableSettings: R
 
             if (!spec || val === undefined || val === null || val === '') return;
 
-            spec.logicConfig?.triggers?.forEach(t => {
+            const triggers = spec.logicConfig?.triggers || (spec as any).logic_config?.triggers;
+            triggers?.forEach((t: any) => {
                 const isMatch = checkSpecTriggerMatch(spec.type, val, t.on_value, t.operator);
                 if (isMatch) {
                     getMergedTriggerTargets(t).forEach((tar: any) => {
                         const childPathKey = `${spec.id}:${tar.id}`;
                         if (!visible.has(childPathKey)) {
                             const sourceValue = tar.is_quantity_detail ? val : (info.sourceValue || null);
-                            visible.set(childPathKey, { sourceValue });
+                            visible.set(childPathKey, { 
+                                sourceValue,
+                                sourceName: spec.name,
+                                triggerValue: t.on_value,
+                                operator: t.operator || 'eq'
+                            });
                             changed = true;
                         }
                     });
@@ -202,10 +214,19 @@ export const checkSpecTriggerMatch = (
     const val = value === undefined || value === null ? '' : value;
     
     if (onValue === '*') {
+        let isNotEmpty = false;
         if (specType === 'boolean') {
-            return val === 'true' || val === true || val === 'on';
+            isNotEmpty = val === 'true' || val === true || val === 'on';
+        } else {
+            isNotEmpty = val !== '' && val !== false && val !== 'false';
         }
-        return val !== '' && val !== false && val !== 'false';
+        return operator === 'ne' ? !isNotEmpty : isNotEmpty;
+    }
+
+    // 處理陣列 (多選規格)
+    if (Array.isArray(val)) {
+        const matched = val.includes(onValue);
+        return operator === 'ne' ? !matched : matched;
     }
 
     if (specType === 'boolean') {

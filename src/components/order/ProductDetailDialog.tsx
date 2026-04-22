@@ -17,6 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatSpecValue, deserializeSpecs, getTreeSortedVisiblePaths } from "@/utils/specLogic";
 import { useBrands } from "@/hooks/useBrands";
+import { calculatePriceRange } from "@/utils/priceUtils";
 
 interface ProductDetailDialogProps {
     product: ProductWithPricing | null;
@@ -187,7 +188,10 @@ export function ProductDetailDialog({
     };
 
     // 獲取目前應顯示的價格
-    const currentPrice = selectedVariant ? selectedVariant.retail_price : product.wholesale_price;
+    const currentPriceDisplay = useMemo(() => {
+        if (selectedVariant) return `$${selectedVariant.retail_price}`;
+        return calculatePriceRange(product.wholesale_price, product.variants?.map(v => v.effective_wholesale_price) || []).display;
+    }, [product, selectedVariant]);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -211,7 +215,7 @@ export function ProductDetailDialog({
                         <div>
                             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">價格</h3>
                             <div className="text-2xl font-bold text-primary mt-1">
-                                ${currentPrice}
+                                {currentPriceDisplay}
                             </div>
                         </div>
 

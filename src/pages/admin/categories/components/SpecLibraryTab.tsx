@@ -90,7 +90,8 @@ export function SpecLibraryTab() {
         // 1. 找出所有作為「連動目標」的規格 ID
         const targetIds = new Set<string>();
         specDefinitions.forEach(s => {
-            (s.logic_config?.triggers || []).forEach((t: any) => {
+            const triggers = s.logic_config?.triggers || (s as any).logicConfig?.triggers;
+            (triggers || []).forEach((t: any) => {
                 (t.targets || []).forEach((tar: any) => targetIds.add(tar.id));
             });
         });
@@ -106,12 +107,13 @@ export function SpecLibraryTab() {
                 children: []
             };
 
-            const triggers = spec.logic_config?.triggers || [];
+            const triggers = spec.logic_config?.triggers || (spec as any).logicConfig?.triggers || [];
             triggers.forEach((t: any) => {
+                const prefix = t.operator === 'ne' ? '不等於 ' : '';
                 (t.targets || []).forEach((tar: any) => {
                     const childSpec = specDefinitions.find(s => s.id === tar.id);
                     if (childSpec) {
-                        node.children.push(buildTree(childSpec, t.on_value));
+                        node.children.push(buildTree(childSpec, prefix + t.on_value));
                     }
                 });
             });

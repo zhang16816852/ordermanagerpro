@@ -64,13 +64,15 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
 
         return sortedPaths.map(({ pathKey, level }) => {
             const [_, specId] = pathKey.split(':');
-            const spec = specFields.find(s => s.id === specId) || specMap.get(specId);
+            const spec = specFields.find(f => f.id === specId) || specMap.get(specId);
+            const triggerInfo = aggregatedVisible.get(pathKey);
             return {
                 pathKey,
                 spec,
                 level,
                 name: spec?.name || specId,
-                parentId: pathKey.split(':')[0]
+                parentId: pathKey.split(':')[0],
+                triggerInfo // 將觸發資訊帶出 useMemo
             };
         });
     }, [specFields, localData, specMap]);
@@ -162,7 +164,9 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                             <span className="text-xs font-bold text-primary truncate">{row.name}</span>
                                             {row.level > 0 && (
                                                 <span className="text-[9px] text-muted-foreground/60 truncate">
-                                                    來自: {specMap.get(row.parentId)?.name || '父規格'}
+                                                    來自: {specMap.get(row.parentId)?.name || '父規格'} 
+                                                    {row.triggerInfo?.operator === 'ne' ? ' ≠ ' : ' = '}
+                                                    {row.triggerInfo?.triggerValue}
                                                 </span>
                                             )}
                                         </div>
