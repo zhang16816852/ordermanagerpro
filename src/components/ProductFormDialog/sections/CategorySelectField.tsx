@@ -135,7 +135,7 @@ export function CategorySelectField({ form }: CategorySelectFieldProps) {
                     </div>
 
                     {/* Popover */}
-                    <Popover>
+                    <Popover modal={true}>
                         <PopoverTrigger asChild>
                             <Button
                                 variant="outline"
@@ -148,14 +148,20 @@ export function CategorySelectField({ form }: CategorySelectFieldProps) {
                                     : '新增分類...'}
                             </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-[300px] p-0" align="start">
+                        <PopoverContent 
+                            className="w-[300px] p-0" 
+                            align="start"
+                            onWheel={(e) => e.stopPropagation()}
+                        >
                             <div className="p-2 border-b">
                                 <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                                     選擇分類
                                 </h4>
                             </div>
 
-                            <div className="max-h-[300px] overflow-y-auto w-full custom-scrollbar">
+                            <div 
+                                className="max-h-[300px] overflow-y-auto overflow-x-hidden w-full scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent"
+                            >
                                 <div className="p-2 space-y-1">
                                     {categoryOptions.map((cat) => {
                                         const isSelected = selectedCategoryIds.includes(cat.id);
