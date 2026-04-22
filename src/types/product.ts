@@ -9,7 +9,9 @@ export interface Category {
     id: string;
     name: string;
     parent_id: string | null;
-    level: number;
+    level?: number;
+    sort_order?: number | null;
+    spec_schema?: any;
 }
 
 export interface CategoryHierarchy extends Category {
@@ -41,11 +43,10 @@ export interface SpecDefinition {
 export interface ProductWithDetails extends Product {
     category_names?: string[];
     category_ids?: string[];
+    category_id?: string | null;
     brand_name?: string;
     variants?: ProductVariant[];
-    // Supabase Row 裡已有 category: string | null 與 table_settings: Json | null
-    // 這裡我們將其型別放寬或保持一致
-    table_settings: any;
+    table_settings: any; // 保持為 any 以支援動態規格
 }
 
 export interface ProductWithPricing extends ProductWithDetails {

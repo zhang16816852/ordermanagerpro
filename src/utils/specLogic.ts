@@ -91,7 +91,7 @@ export function serializeSpecs(
 
         entries.push({
             id: specId,
-            parentId: parentId as any,
+            parentId: parentId as string,
             path: pathName,
             value: value
         });
@@ -114,7 +114,7 @@ export function getVisibleSpecsTree(specFields: CategorySpec[], tableSettings: R
     
     const allTargetIds = new Set<string>();
     specFields.forEach(f => {
-        const triggers = f.logicConfig?.triggers || (f as any).logic_config?.triggers;
+        const triggers = f.logicConfig?.triggers || f.logic_config?.triggers;
         triggers?.forEach((t: any) => {
             getMergedTriggerTargets(t).forEach((tar: any) => allTargetIds.add(tar.id));
         });
@@ -143,7 +143,7 @@ export function getVisibleSpecsTree(specFields: CategorySpec[], tableSettings: R
 
             if (!spec || val === undefined || val === null || val === '') return;
 
-            const triggers = spec.logicConfig?.triggers || (spec as any).logic_config?.triggers;
+            const triggers = spec.logicConfig?.triggers || spec.logic_config?.triggers;
             triggers?.forEach((t: any) => {
                 const isMatch = checkSpecTriggerMatch(spec.type, val, t.on_value, t.operator);
                 if (isMatch) {

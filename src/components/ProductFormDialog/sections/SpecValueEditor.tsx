@@ -208,7 +208,7 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
 
     // 6. 表格型規格 (Table/Grid)
     table: ({ spec, value, onChange, variantMode }) => {
-        const columns = (spec as any).configuration?.columns || [];
+        const columns = spec.configuration?.columns || [];
         const rows = Array.isArray(value) ? value : [];
 
         const addRow = () => {

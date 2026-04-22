@@ -13,6 +13,7 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { Category } from "@/types/product";
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
 import { CatalogSidebar } from "@/components/order/CatalogSidebar";
 import { ProductWithPricing } from "@/types/product";
@@ -25,14 +26,14 @@ export default function StoreCatalog() {
   const { products, isLoading } = useStoreProductCache(storeId ?? null);
   
   // Fetch categories for ID <-> Name mapping
-  const { data: categories = [] } = useQuery({
+  const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ['categories'],
     queryFn: async () => {
-        const { data, error } = await (supabase.from('categories' as any) as any)
+        const { data, error } = await supabase.from('categories')
             .select('*')
             .order('sort_order', { ascending: true });
         if (error) return [];
-        return data;
+        return data as Category[];
     },
   });
 
@@ -46,7 +47,7 @@ export default function StoreCatalog() {
 
   const selectedCategory = useMemo(() => {
     if (!categoryNameInUrl || categories.length === 0) return null;
-    return (categories as any[]).find((c: any) => c.name === categoryNameInUrl)?.id || null;
+    return categories.find(c => c.name === categoryNameInUrl)?.id || null;
   }, [categoryNameInUrl, categories]);
 
   // Specs are a bit more complex, stored as JSON in URL for simplicity
@@ -71,7 +72,7 @@ export default function StoreCatalog() {
   const handleSearchChange = (val: string) => updateParams({ search: val });
   
   const setSelectedCategory = (id: string | null) => {
-    const cat = (categories as any[]).find((c: any) => c.id === id);
+    const cat = categories.find(c => c.id === id);
     updateParams({ category: cat ? cat.name : null, specs: null }); // Use name in URL, reset specs
   };
 

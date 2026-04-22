@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { ProductWithPricing } from "@/types/product";
+import { Category } from "@/types/product";
 import { ChevronRight, Filter, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQuery } from '@tanstack/react-query';
@@ -34,14 +35,14 @@ export function CatalogSidebar({
 }: CatalogSidebarProps) {
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
-    const { data: categories = [] } = useQuery({
+    const { data: categories = [] } = useQuery<Category[]>({
         queryKey: ['categories'],
         queryFn: async () => {
-            const { data, error } = await (supabase.from('categories' as any) as any)
+            const { data, error } = await supabase.from('categories')
                 .select('*')
                 .order('sort_order', { ascending: true });
             if (error) return [];
-            return data;
+            return data as Category[];
         },
     });
 
@@ -108,7 +109,7 @@ export function CatalogSidebar({
                 .eq('category_id', selectedCategory);
 
             if (error) return [];
-            return data.map((d: any) => ({
+            return (data || []).map((d: any) => ({
                 id: d.specification_definitions.id,
                 name: d.specification_definitions.name,
                 type: d.specification_definitions.type,
@@ -124,16 +125,16 @@ export function CatalogSidebar({
         // Use the fetched spec IDs as the keys for filtering table_settings
         const definedSpecIds = specFields.map(f => f.id);
         const definedSpecNames = specFields.map(f => f.name);
-        const selectedCatDetails = categories.find((c: any) => c.id === selectedCategory);
+        const selectedCatDetails = categories.find(c => c.id === selectedCategory);
 
         products.forEach((p) => {
             // 檢查產品是否屬於當前選擇的分類
-            const pCategoryIds = (p as any).category_ids || [];
-            const pCategoryId = (p as any).category_id;
+            const pCategoryIds = p.category_ids || [];
+            const pCategoryId = p.category_id;
 
             if (selectedCategory) {
                 const hasMatchInLinks = pCategoryIds.includes(selectedCategory);
-                const hasMatchInLegacy = pCategoryId === selectedCategory || p.category_names?.includes((selectedCatDetails as any)?.name);
+                const hasMatchInLegacy = pCategoryId === selectedCategory || p.category_names?.includes(selectedCatDetails?.name || '');
 
                 if (!hasMatchInLinks && !hasMatchInLegacy) return;
             }

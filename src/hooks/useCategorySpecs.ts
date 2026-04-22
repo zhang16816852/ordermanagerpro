@@ -23,6 +23,13 @@ export interface CategorySpec {
             targets: { id: string; is_quantity_detail?: boolean }[];
         }[];
     };
+    logic_config?: {
+        triggers?: {
+            on_value: string;
+            operator?: 'eq' | 'ne';
+            targets: { id: string; is_quantity_detail?: boolean }[];
+        }[];
+    };
 }
 
 export function useCategorySpecs(categoryIds: string[]) {
