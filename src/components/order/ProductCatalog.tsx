@@ -1,5 +1,6 @@
 // src/components/order/ProductCatalog.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Search, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,8 @@ interface ProductCatalogProps {
   isLoading: boolean;
   storeId: string;
   viewMode?: 'products' | 'variants' | 'gallery';
+  search: string;
+  onSearchChange: (val: string) => void;
   categoryFilter?: string | null;
   specFilters?: Record<string, string[]>;
   brandFilter?: string[];
@@ -38,15 +41,39 @@ export default function ProductCatalog({
   isLoading,
   storeId,
   viewMode = 'products',
+  search,
+  onSearchChange,
   categoryFilter = null,
   specFilters = {},
   brandFilter = [],
 }: ProductCatalogProps) {
-  const [search, setSearch] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
   const [variantDialogProduct, setVariantDialogProduct] = useState<ProductWithPricing | null>(null);
   const [detailProduct, setDetailProduct] = useState<ProductWithPricing | null>(null);
 
   const { addItem, getItemQuantity, getTotalProductQuantity } = useStoreDraft(storeId);
+
+  // Sync detailProduct with URL ?p=...
+  useEffect(() => {
+    const pName = searchParams.get("p");
+    if (pName && products.length > 0) {
+      const found = products.find(p => p.name === pName || p.sku === pName);
+      if (found) {
+        setDetailProduct(found);
+      }
+    } else {
+      setDetailProduct(null);
+    }
+  }, [searchParams, products]);
+
+  const handleOpenDetail = (p: ProductWithPricing | null) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (p) next.set("p", p.name);
+      else next.delete("p");
+      return next;
+    }, { replace: true });
+  };
 
   const { data: categoryHierarchy = [] } = useQuery({
     queryKey: ['category_hierarchy'],
@@ -103,11 +130,11 @@ export default function ProductCatalog({
           if (!settingsRaw) return false;
           // 將原始數據 (Array 或 Object) 轉換為與篩選器一致的鍵值對格式 (parentId:id -> value)
           const flatSettings = deserializeSpecs(settingsRaw);
-          
+
           return specKeys.every((key) => {
             const allowedValues = specFilters[key];
             if (!allowedValues || allowedValues.length === 0) return true;
-            
+
             // 直接從平坦化的設定中讀取 (key 已包含 parentId:id 格式)
             const val = flatSettings[key];
             const actualValue = formatSpecValue(val);
@@ -188,21 +215,15 @@ export default function ProductCatalog({
     }
 
     );
-  console.log("filteredProducts", filteredProducts)
+  //console.log("filteredProducts", filteredProducts)
 
   const handleProductClick = (product: ProductWithPricing) => {
     if (product.has_variants && product.variants && product.variants.length > 1) {
       // 多變體 → 打開選擇對話框
       setVariantDialogProduct(product);
-    } else if (product.has_variants && product.variants && product.variants.length === 1) {
-      // 單變體 → 直接加入，傳入變體
-      const variant = product.variants[0];
-      addItem(product, variant as VariantWithPricing);
-      toast.success(`${product.name} (${variant.name}) 已加入購物車`);
     } else {
-      // 無變體 → 直接加入
-      addItem(product);
-      toast.success(`${product.name} 已加入購物車`);
+      // 單變體或無變體 → 開啟詳情
+      handleOpenDetail(product);
     }
   };
 
@@ -236,7 +257,7 @@ export default function ProductCatalog({
             <Input
               placeholder={viewMode === 'products' ? "搜尋產品名稱或 SKU..." : "搜尋單品名稱、SKU 或規格..."}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => onSearchChange(e.target.value)}
               className="pl-10"
             />
           </div>
@@ -288,7 +309,7 @@ export default function ProductCatalog({
                             className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setDetailProduct(product);
+                              handleOpenDetail(product);
                             }}
                           >
                             <Info className="h-4 w-4 text-muted-foreground" />
@@ -322,7 +343,7 @@ export default function ProductCatalog({
                         className="absolute top-2 right-2 h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setDetailProduct(product);
+                          handleOpenDetail(product);
                         }}
                       >
                         <Info className="h-3 w-3" />
@@ -473,7 +494,7 @@ export default function ProductCatalog({
       <ProductDetailDialog
         product={detailProduct}
         open={!!detailProduct}
-        onOpenChange={(open) => !open && setDetailProduct(null)}
+        onOpenChange={(open) => !open && handleOpenDetail(null)}
         storeId={storeId}
       />
     </>

@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useStoreProductCache } from "@/hooks/useProductCache";
 import ProductCatalog from "@/components/order/ProductCatalog";
@@ -15,39 +16,76 @@ import {
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
 import { CatalogSidebar } from "@/components/order/CatalogSidebar";
 import { ProductWithPricing } from "@/types/product";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function StoreCatalog() {
   const { storeId } = useAuth();
   const { totalItems } = useStoreDraft(storeId || '');
   const { products, isLoading } = useStoreProductCache(storeId ?? null);
+  
+  // Fetch categories for ID <-> Name mapping
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+        const { data, error } = await (supabase.from('categories' as any) as any)
+            .select('*')
+            .order('sort_order', { ascending: true });
+        if (error) return [];
+        return data;
+    },
+  });
+
   const [viewMode, setViewMode] = useState<'products' | 'variants' | 'gallery'>('products');
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Filter states
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedSpecs, setSelectedSpecs] = useState<Record<string, string[]>>({});
-  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
+  // URL States
+  const search = searchParams.get("search") || "";
+  const categoryNameInUrl = searchParams.get("category");
+  const selectedBrands = searchParams.get("brands")?.split(",").filter(Boolean) || [];
 
-  const handleSpecChange = useCallback((key: string, values: string[]) => {
-    setSelectedSpecs(prev => {
-      const next = { ...prev };
-      if (values.length === 0) {
-        delete next[key];
-      } else {
-        next[key] = values;
-      }
+  const selectedCategory = useMemo(() => {
+    if (!categoryNameInUrl || categories.length === 0) return null;
+    return (categories as any[]).find((c: any) => c.name === categoryNameInUrl)?.id || null;
+  }, [categoryNameInUrl, categories]);
+
+  // Specs are a bit more complex, stored as JSON in URL for simplicity
+  const selectedSpecs = useMemo(() => {
+    try {
+      const s = searchParams.get("specs");
+      return s ? JSON.parse(s) : {};
+    } catch { return {}; }
+  }, [searchParams]);
+
+  const updateParams = useCallback((updates: Record<string, string | null>) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value === null || value === "") next.delete(key);
+        else next.set(key, value);
+      });
       return next;
-    });
-  }, []);
+    }, { replace: true });
+  }, [setSearchParams]);
 
-  const handleBrandChange = useCallback((brands: string[]) => {
-    setSelectedBrands(brands);
-  }, []);
+  const handleSearchChange = (val: string) => updateParams({ search: val });
+  
+  const setSelectedCategory = (id: string | null) => {
+    const cat = (categories as any[]).find((c: any) => c.id === id);
+    updateParams({ category: cat ? cat.name : null, specs: null }); // Use name in URL, reset specs
+  };
+
+  const setSelectedBrands = (val: string[]) => updateParams({ brands: val.join(",") });
+  const handleSpecChange = useCallback((key: string, values: string[]) => {
+    const nextSpecs = { ...selectedSpecs };
+    if (values.length === 0) delete nextSpecs[key];
+    else nextSpecs[key] = values;
+    updateParams({ specs: Object.keys(nextSpecs).length > 0 ? JSON.stringify(nextSpecs) : null });
+  }, [selectedSpecs, updateParams]);
 
   const clearFilters = useCallback(() => {
-    setSelectedCategory(null);
-    setSelectedSpecs({});
-    setSelectedBrands([]);
-  }, []);
+    setSearchParams(new URLSearchParams(), { replace: true });
+  }, [setSearchParams]);
 
   if (!storeId) {
     return (
@@ -68,7 +106,7 @@ export default function StoreCatalog() {
           selectedSpecs={selectedSpecs}
           onSpecChange={handleSpecChange}
           selectedBrands={selectedBrands}
-          onBrandChange={handleBrandChange}
+          onBrandChange={setSelectedBrands}
           onClearFilters={clearFilters}
         />
       </aside>
@@ -97,7 +135,7 @@ export default function StoreCatalog() {
                   selectedSpecs={selectedSpecs}
                   onSpecChange={handleSpecChange}
                   selectedBrands={selectedBrands}
-                  onBrandChange={handleBrandChange}
+                  onBrandChange={setSelectedBrands}
                   onClearFilters={clearFilters}
                 />
               </SheetContent>
@@ -161,6 +199,8 @@ export default function StoreCatalog() {
           isLoading={isLoading}
           storeId={storeId}
           viewMode={viewMode}
+          search={search}
+          onSearchChange={handleSearchChange}
           categoryFilter={selectedCategory}
           specFilters={selectedSpecs}
           brandFilter={selectedBrands}

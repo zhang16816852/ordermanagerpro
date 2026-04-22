@@ -8,6 +8,8 @@ import { useProductsList } from './hooks/useProductsList';
 import { ProductsTable } from './components/ProductsTable';
 import { ProductDialogs } from './components/ProductDialogs';
 import { DeviceModelManager } from './components/DeviceModelManager';
+import { CatalogSidebar } from '@/components/order/CatalogSidebar';
+import { ProductWithPricing } from '@/types/product';
 
 export default function AdminProducts() {
     const {
@@ -19,7 +21,11 @@ export default function AdminProducts() {
         isDialogOpen, setIsDialogOpen, isImportOpen, setIsImportOpen,
         editingProduct, setEditingProduct, deleteProduct, setDeleteProduct,
         handleCopy, handleBatchExport, getProductVariants, getProductModels,
-        createMutation, updateMutation, deleteMutation, updateVariantPriceMutation
+        createMutation, updateMutation, deleteMutation, updateVariantPriceMutation,
+        selectedCategory, setSelectedCategory,
+        selectedSpecs, setSelectedSpecs,
+        selectedBrands, setSelectedBrands,
+        clearFilters
     } = useProductsList();
 
     const isMutationLoading = createMutation.isPending || updateMutation.isPending;
@@ -77,36 +83,51 @@ export default function AdminProducts() {
                             型號標籤庫
                         </TabsTrigger>
                     </TabsList>
-
-                    <div className="relative w-full md:w-80">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-50" />
-                        <Input
-                            placeholder="搜尋名稱、SKU、品牌..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="pl-9 bg-background border-none shadow-inner h-9 rounded-lg"
-                        />
-                    </div>
                 </div>
 
                 <TabsContent value="list" className="mt-6 outline-none">
-                    <ProductsTable
-                        products={filteredProducts}
-                        isLoading={isLoading}
-                        brandMap={brandMap}
-                        selectedIds={selectedProductIds}
-                        isAllSelected={isAllSelected || false}
-                        expandedIds={expandedProducts}
-                        onToggleSelectAll={(checked) => toggleSelectAll(checked)}
-                        onToggleSelect={toggleSelect}
-                        onToggleExpand={toggleExpanded}
-                        getVariants={getProductVariants}
-                        getModels={getProductModels}
-                        onEdit={(p) => { setEditingProduct(p); setIsDialogOpen(true); }}
-                        onCopy={handleCopy}
-                        onDelete={setDeleteProduct}
-                        onUpdateVariant={(id, updates) => updateVariantPriceMutation.mutate({ id, ...updates })}
-                    />
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                        <div className="lg:col-span-1">
+                            <CatalogSidebar
+                                products={(products || []) as any}
+                                selectedCategory={selectedCategory}
+                                onCategoryChange={setSelectedCategory}
+                                selectedSpecs={selectedSpecs}
+                                onSpecChange={(key, values) => setSelectedSpecs(prev => ({ ...prev, [key]: values }))}
+                                selectedBrands={selectedBrands}
+                                onBrandChange={setSelectedBrands}
+                                onClearFilters={clearFilters}
+                            />
+                        </div>
+                        <div className="lg:col-span-3 space-y-4">
+                            <div className="relative w-full">
+                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-50" />
+                                <Input
+                                    placeholder="在目前的篩選結果中搜尋..."
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    className="pl-9 bg-background border-none shadow-inner h-10 rounded-lg"
+                                />
+                            </div>
+                            <ProductsTable
+                                products={filteredProducts}
+                                isLoading={isLoading}
+                                brandMap={brandMap}
+                                selectedIds={selectedProductIds}
+                                isAllSelected={isAllSelected || false}
+                                expandedIds={expandedProducts}
+                                onToggleSelectAll={(checked) => toggleSelectAll(checked)}
+                                onToggleSelect={toggleSelect}
+                                onToggleExpand={toggleExpanded}
+                                getVariants={getProductVariants}
+                                getModels={getProductModels}
+                                onEdit={(p) => { setEditingProduct(p); setIsDialogOpen(true); }}
+                                onCopy={handleCopy}
+                                onDelete={setDeleteProduct}
+                                onUpdateVariant={(id, updates) => updateVariantPriceMutation.mutate({ id, ...updates })}
+                            />
+                        </div>
+                    </div>
                 </TabsContent>
 
 

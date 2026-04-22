@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { deserializeSpecs, formatSpecValue } from '@/utils/specLogic';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
@@ -20,6 +21,11 @@ export function useProductsList() {
     const [activeTab, setActiveTab] = useState<'list' | 'variants' | 'models'>('list');
     const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
     const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
+
+    // --- Filter States ---
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+    const [selectedSpecs, setSelectedSpecs] = useState<Record<string, string[]>>({});
+    const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
 
     // --- Dialog States ---
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -53,6 +59,34 @@ export function useProductsList() {
         },
     });
 
+    const { data: categoryHierarchy = [] } = useQuery({
+        queryKey: ['category_hierarchy'],
+        queryFn: async () => {
+            const { data, error } = await (supabase.from('category_hierarchy' as any) as any).select('*');
+            if (error) return [];
+            return data;
+        },
+    });
+
+    // Helper: Get all child category IDs (inclusive)
+    const subCategoryIds = useMemo(() => {
+        if (!selectedCategory) return new Set<string>();
+        const ids = new Set<string>([selectedCategory]);
+        const queue = [selectedCategory];
+        while (queue.length > 0) {
+            const parentId = queue.shift();
+            categoryHierarchy
+                .filter((h: any) => h.parent_id === parentId)
+                .forEach((h: any) => {
+                    if (!ids.has(h.child_id)) {
+                        ids.add(h.child_id);
+                        queue.push(h.child_id);
+                    }
+                });
+        }
+        return ids;
+    }, [selectedCategory, categoryHierarchy]);
+
     // --- Helpers ---
     const toggleExpanded = (productId: string) => {
         setExpandedProducts(prev => {
@@ -74,17 +108,61 @@ export function useProductsList() {
             .filter(Boolean);
     }, [allModelLinks]);
 
-    // v4.9 搜尋邏輯升級：支援 brand_id 對照名稱搜尋
-    const filteredProducts = products?.filter(
-        (p) => {
+    // v4.12 搜尋邏輯升級：支援分類、品牌、規格進階篩選
+    const filteredProducts = useMemo(() => {
+        if (!products) return [];
+        return products.filter((p) => {
+            // 1. Search Filter
             const brandName = (p.brand_id ? brandMap[p.brand_id] : p.brand_id) || '';
             const searchLower = search.toLowerCase();
-            return p.name.toLowerCase().includes(searchLower) ||
+            const matchesSearch = !search || 
+                p.name.toLowerCase().includes(searchLower) ||
                 p.sku.toLowerCase().includes(searchLower) ||
                 brandName.toLowerCase().includes(searchLower) ||
                 (p.model && p.model.toLowerCase().includes(searchLower));
-        }
-    );
+
+            if (!matchesSearch) return false;
+
+            // 2. Category Filter
+            if (selectedCategory) {
+                const pCategoryIds = (p as any).category_ids || [];
+                if (!pCategoryIds.some((id: string) => subCategoryIds.has(id))) {
+                    return false;
+                }
+            }
+
+            // 3. Brand Filter
+            if (selectedBrands.length > 0) {
+                if (!p.brand_id || !selectedBrands.includes(p.brand_id)) {
+                    return false;
+                }
+            }
+
+            // 4. Spec Filters
+            const specKeys = Object.keys(selectedSpecs);
+            if (specKeys.length > 0) {
+                const matchesSpec = (settingsRaw: any) => {
+                    if (!settingsRaw) return false;
+                    const flatSettings = deserializeSpecs(settingsRaw);
+                    return specKeys.every((key) => {
+                        const allowedValues = selectedSpecs[key];
+                        if (!allowedValues || allowedValues.length === 0) return true;
+                        const val = flatSettings[key];
+                        const actualValue = formatSpecValue(val);
+                        return allowedValues.includes(actualValue);
+                    });
+                };
+
+                const productMatches = matchesSpec(p.table_settings);
+                const variants = getProductVariants(p.id);
+                const anyVariantMatches = variants.some((v) => matchesSpec(v.table_settings));
+
+                if (!productMatches && !anyVariantMatches) return false;
+            }
+
+            return true;
+        });
+    }, [products, search, brandMap, selectedCategory, subCategoryIds, selectedBrands, selectedSpecs, getProductVariants]);
 
     // --- Selection Logic ---
     const isAllSelected = filteredProducts && filteredProducts.length > 0 &&
@@ -314,6 +392,13 @@ export function useProductsList() {
         link.click();
     };
 
+    const clearFilters = useCallback(() => {
+        setSelectedCategory(null);
+        setSelectedSpecs({});
+        setSelectedBrands([]);
+        setSearch('');
+    }, []);
+
     return {
         products, isLoading, version, forceRefresh,
         brandMap,
@@ -324,5 +409,9 @@ export function useProductsList() {
         editingProduct, setEditingProduct, deleteProduct, setDeleteProduct,
         handleCopy, handleBatchExport, getProductVariants, getProductModels,
         createMutation, updateMutation, deleteMutation, updateVariantPriceMutation,
+        selectedCategory, setSelectedCategory,
+        selectedSpecs, setSelectedSpecs,
+        selectedBrands, setSelectedBrands,
+        clearFilters
     };
 }

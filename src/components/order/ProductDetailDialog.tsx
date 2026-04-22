@@ -160,13 +160,21 @@ export function ProductDetailDialog({
                 level: level
             };
         }).filter(Boolean) as any[];
-    }, [product, selectedVariant, specDefinitions]);
+    }, [product, specDefinitions]);
+
+    // 獲取目前應顯示的價格
+    const currentPriceDisplay = useMemo(() => {
+        if (!product) return "$0";
+        if (selectedVariant) return `$${selectedVariant.retail_price}`;
+        return calculatePriceRange(product.wholesale_price, product.variants?.map(v => v.effective_wholesale_price) || []).display;
+    }, [product, selectedVariant]);
 
     const qty = (product && selectedVariantId) ? getItemQuantity(selectedVariantId) : (product ? getItemQuantity(product.id) : 0);
 
     if (!product) return null;
 
     const handleAddProduct = () => {
+        if (!product) return;
         if (product.has_variants && !selectedVariantId) {
             toast.error("請先選擇規格");
             return;
@@ -186,12 +194,6 @@ export function ProductDetailDialog({
             toast.success(`${product.name} 已加入購物車`);
         }
     };
-
-    // 獲取目前應顯示的價格
-    const currentPriceDisplay = useMemo(() => {
-        if (selectedVariant) return `$${selectedVariant.retail_price}`;
-        return calculatePriceRange(product.wholesale_price, product.variants?.map(v => v.effective_wholesale_price) || []).display;
-    }, [product, selectedVariant]);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
