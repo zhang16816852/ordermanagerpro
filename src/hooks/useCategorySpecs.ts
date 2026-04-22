@@ -11,6 +11,7 @@ export interface CategorySpec {
     logicConfig?: {
         triggers?: {
             on_value: string;
+            operator?: 'eq' | 'ne';
             targets: { id: string; is_quantity_detail?: boolean }[];
         }[];
     };

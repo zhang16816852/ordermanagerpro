@@ -1,6 +1,10 @@
 import { SpecDefinition } from '../../types';
-import { SpecRelationInfo } from '../../hooks/useSpecRelations';
-import { SpecCard } from './SpecCard';
+export interface SpecRelationInfo {
+    isSource: boolean;
+    isTarget: boolean;
+    parentNames: string[];
+}
+import { SpecCard } from './SpecLibraryCard';
 
 interface GridViewProps {
     specs: SpecDefinition[];

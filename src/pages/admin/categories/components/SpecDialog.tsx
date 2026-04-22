@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -51,9 +51,44 @@ export function SpecDialog({
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
     );
 
+    // v4.10 計算所有規格的層級深度，用於顯示縮排
+    const specLevels = useMemo(() => {
+        const levels: Record<string, number> = {};
+        
+        // 找出所有被連動的 ID
+        const targetIds = new Set<string>();
+        allSpecs.forEach(s => {
+            (s.logic_config?.triggers || []).forEach((t: any) => {
+                (t.targets || []).forEach((tar: any) => targetIds.add(tar.id));
+            });
+        });
+
+        // 遞迴計算深度
+        const getLevel = (id: string, visited = new Set<string>()): number => {
+            if (visited.has(id)) return 0; // 防止循環
+            visited.add(id);
+
+            // 找出誰連動了我
+            const parent = allSpecs.find(s => 
+                (s.logic_config?.triggers || []).some((t: any) => 
+                    (t.targets || []).some((tar: any) => tar.id === id)
+                )
+            );
+
+            if (!parent) return 0;
+            return 1 + getLevel(parent.id, visited);
+        };
+
+        allSpecs.forEach(s => {
+            levels[s.id] = getLevel(s.id);
+        });
+
+        return levels;
+    }, [allSpecs]);
+
     const updateTrigger = (index: number, field: string, value: any, targetId?: string) => {
         const triggers = [...(specForm.logic_config?.triggers || [])];
-        const trigger = { ...triggers[index] };
+        const trigger = { ...triggers[index], operator: triggers[index].operator || 'eq' };
 
         if (field === 'target_toggle') {
             // 切換目標規格的選取狀態
@@ -86,7 +121,7 @@ export function SpecDialog({
             ...prev,
             logic_config: {
                 ...prev.logic_config,
-                triggers: [...(prev.logic_config?.triggers || []), { on_value: '', targets: [] }]
+                triggers: [...(prev.logic_config?.triggers || []), { on_value: '', targets: [], operator: 'eq' }]
             }
         }));
     };
@@ -164,7 +199,17 @@ export function SpecDialog({
 
                                     <div className="space-y-2">
                                         <div className="space-y-1">
-                                            <label className="text-[10px] text-muted-foreground uppercase font-bold">當值為...</label>
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] text-muted-foreground uppercase font-bold">當值為...</label>
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="sm" 
+                                                    className={`h-5 px-1.5 text-[10px] font-bold ${trigger.operator === 'ne' ? 'text-orange-600 bg-orange-50' : 'text-primary'}`}
+                                                    onClick={() => updateTrigger(idx, 'operator', trigger.operator === 'ne' ? 'eq' : 'ne')}
+                                                >
+                                                    {trigger.operator === 'ne' ? '不等於 (≠)' : '等於 (=)'}
+                                                </Button>
+                                            </div>
                                             {specForm.type === 'boolean' ? (
                                                 <Select value={trigger.on_value || ''} onValueChange={(v) => updateTrigger(idx, 'on_value', v)}>
                                                     <SelectTrigger className="h-7 text-xs">
@@ -211,7 +256,17 @@ export function SpecDialog({
                                                                     checked={isChecked}
                                                                     onCheckedChange={() => updateTrigger(idx, 'target_toggle', null, s.id)}
                                                                 />
-                                                                <label htmlFor={`trigger-${idx}-${s.id}`} className="text-[11px] truncate cursor-pointer">{s.name}</label>
+                                                                <label 
+                                                                    htmlFor={`trigger-${idx}-${s.id}`} 
+                                                                    className="text-[11px] truncate cursor-pointer flex items-center"
+                                                                >
+                                                                    {specLevels[s.id] > 0 && (
+                                                                        <span className="text-muted-foreground/30 mr-1">
+                                                                            {'└'.padStart(specLevels[s.id] * 2, '　')}
+                                                                        </span>
+                                                                    )}
+                                                                    {s.name}
+                                                                </label>
                                                             </div>
                                                             {isChecked && (
                                                                 <div className="flex items-center gap-1 shrink-0">

@@ -8,6 +8,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 interface ToolbarProps {
     viewMode: 'grid' | 'tree';
     onViewModeChange: (mode: 'grid' | 'tree') => void;
+    searchQuery: string;
+    onSearchChange: (value: string) => void;
     onAdd: () => void;
     onExportJSON: () => void;
     onImportJSON: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -18,6 +20,8 @@ interface ToolbarProps {
 export function Toolbar({
     viewMode,
     onViewModeChange,
+    searchQuery,
+    onSearchChange,
     onAdd,
     onExportJSON,
     onImportJSON,
@@ -31,7 +35,27 @@ export function Toolbar({
                 <CardDescription>定義全站規格標準，管理深度連動邏輯。</CardDescription>
             </div>
             
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                {/* 搜尋框 */}
+                <div className="relative w-full md:w-64">
+                    <Input
+                        placeholder="搜尋規格名稱..."
+                        value={searchQuery}
+                        onChange={(e) => onSearchChange(e.target.value)}
+                        className="h-9 text-xs pl-3 pr-8 bg-background shadow-sm"
+                    />
+                    {searchQuery && (
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 hover:bg-transparent text-muted-foreground hover:text-foreground"
+                            onClick={() => onSearchChange('')}
+                        >
+                            <Plus className="h-3 w-3 rotate-45" />
+                        </Button>
+                    )}
+                </div>
+
                 {/* 視圖切換 */}
                 <Tabs value={viewMode} onValueChange={(v: any) => onViewModeChange(v)} className="bg-background border rounded-lg p-0.5 shadow-sm">
                     <TabsList className="h-8 p-0 bg-transparent">
@@ -43,38 +67,38 @@ export function Toolbar({
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>
+            </div>
 
-                <div className="flex flex-wrap gap-2">
-                    {/* JSON 工具 */}
-                    <div className="flex items-center gap-1 bg-background rounded-lg p-1 border shadow-sm">
-                        <Button variant="ghost" size="sm" onClick={onExportJSON} className="h-8 text-[11px] font-bold">
-                            <FileJson className="h-3.5 w-3.5 mr-1.5 text-orange-500" /> 匯出 JSON
-                        </Button>
-                        <Label htmlFor="spec-import-json" className="cursor-pointer">
-                            <Input id="spec-import-json" type="file" accept=".json" className="hidden" onChange={onImportJSON} />
-                            <div className="inline-flex items-center px-2 py-1 h-8 text-[11px] font-bold hover:bg-muted rounded-md transition-colors">
-                                <Upload className="h-3.5 w-3.5 mr-1.5 text-orange-500" /> 匯入
-                            </div>
-                        </Label>
-                    </div>
-
-                    {/* CSV 工具 */}
-                    <div className="flex items-center gap-1 bg-background rounded-lg p-1 border shadow-sm">
-                        <Button variant="ghost" size="sm" onClick={onExportCSV} className="h-8 text-[11px]">
-                            <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5 text-green-600" /> 匯出 CSV
-                        </Button>
-                        <Label htmlFor="spec-import-csv" className="cursor-pointer">
-                            <Input id="spec-import-csv" type="file" accept=".csv" className="hidden" onChange={onImportCSV} />
-                            <div className="inline-flex items-center px-2 py-1 h-8 text-[11px] hover:bg-muted rounded-md transition-colors">
-                                <Upload className="h-3.5 w-3.5 mr-1.5 text-green-600" /> 匯入
-                            </div>
-                        </Label>
-                    </div>
-
-                    <Button size="sm" onClick={onAdd} className="shadow-md">
-                        <Plus className="mr-2 h-4 w-4" /> 新增規格
+            <div className="flex flex-wrap gap-2">
+                {/* JSON 工具 */}
+                <div className="flex items-center gap-1 bg-background rounded-lg p-1 border shadow-sm">
+                    <Button variant="ghost" size="sm" onClick={onExportJSON} className="h-8 text-[11px] font-bold">
+                        <FileJson className="h-3.5 w-3.5 mr-1.5 text-orange-500" /> 匯出 JSON
                     </Button>
+                    <Label htmlFor="spec-import-json" className="cursor-pointer">
+                        <Input id="spec-import-json" type="file" accept=".json" className="hidden" onChange={onImportJSON} />
+                        <div className="inline-flex items-center px-2 py-1 h-8 text-[11px] font-bold hover:bg-muted rounded-md transition-colors">
+                            <Upload className="h-3.5 w-3.5 mr-1.5 text-orange-500" /> 匯入
+                        </div>
+                    </Label>
                 </div>
+
+                {/* CSV 工具 */}
+                <div className="flex items-center gap-1 bg-background rounded-lg p-1 border shadow-sm">
+                    <Button variant="ghost" size="sm" onClick={onExportCSV} className="h-8 text-[11px]">
+                        <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5 text-green-600" /> 匯出 CSV
+                    </Button>
+                    <Label htmlFor="spec-import-csv" className="cursor-pointer">
+                        <Input id="spec-import-csv" type="file" accept=".csv" className="hidden" onChange={onImportCSV} />
+                        <div className="inline-flex items-center px-2 py-1 h-8 text-[11px] hover:bg-muted rounded-md transition-colors">
+                            <Upload className="h-3.5 w-3.5 mr-1.5 text-green-600" /> 匯入
+                        </div>
+                    </Label>
+                </div>
+
+                <Button size="sm" onClick={onAdd} className="shadow-md">
+                    <Plus className="mr-2 h-4 w-4" /> 新增規格
+                </Button>
             </div>
         </div>
     );

@@ -1,7 +1,12 @@
 import React from 'react';
 import { SpecDefinition } from '../../types';
-import { SpecTreeNode } from '../../hooks/useSpecRelations';
-import { SpecCard } from './SpecCard';
+export interface SpecTreeNode {
+    id: string;
+    spec: SpecDefinition;
+    onValue?: string;
+    children: SpecTreeNode[];
+}
+import { SpecCard } from './SpecLibraryCard';
 import { CornerDownRight, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 

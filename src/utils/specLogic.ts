@@ -138,7 +138,7 @@ export function getVisibleSpecsTree(specFields: CategorySpec[], tableSettings: R
             if (!spec || val === undefined || val === null || val === '') return;
 
             spec.logicConfig?.triggers?.forEach(t => {
-                const isMatch = checkSpecTriggerMatch(spec.type, val, t.on_value);
+                const isMatch = checkSpecTriggerMatch(spec.type, val, t.on_value, t.operator);
                 if (isMatch) {
                     getMergedTriggerTargets(t).forEach((tar: any) => {
                         const childPathKey = `${spec.id}:${tar.id}`;
@@ -195,7 +195,8 @@ export function getTreeSortedVisiblePaths(
 export const checkSpecTriggerMatch = (
     specType: string,
     value: any,
-    onValue: string | undefined
+    onValue: string | undefined,
+    operator: 'eq' | 'ne' = 'eq'
 ): boolean => {
     if (!onValue) return false;
     const val = value === undefined || value === null ? '' : value;
@@ -209,10 +210,12 @@ export const checkSpecTriggerMatch = (
 
     if (specType === 'boolean') {
         const isTrue = val === 'true' || val === true || val === 'on';
-        return String(isTrue) === onValue;
+        const matched = String(isTrue) === onValue;
+        return operator === 'ne' ? !matched : matched;
     }
 
-    return String(val) === onValue;
+    const matched = String(val) === onValue;
+    return operator === 'ne' ? !matched : matched;
 };
 
 /**
