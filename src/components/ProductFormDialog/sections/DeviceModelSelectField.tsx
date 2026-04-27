@@ -24,7 +24,11 @@ export function DeviceModelSelectField({ form }: DeviceModelSelectFieldProps) {
     const filteredModels = useMemo(() => {
         let base = models;
         if (search) {
-            base = models.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
+            const searchLower = search.toLowerCase();
+            base = models.filter(m => 
+                m.name.toLowerCase().includes(searchLower) ||
+                (m.aliases || []).some((alias: string) => alias.toLowerCase().includes(searchLower))
+            );
         }
         
         // Sort: selected models to top

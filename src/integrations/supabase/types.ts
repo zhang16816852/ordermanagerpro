@@ -371,6 +371,7 @@ export type Database = {
       }
       device_models: {
         Row: {
+          aliases: string[] | null
           brand_id: string | null
           created_at: string | null
           device_remarks: string | null
@@ -385,6 +386,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          aliases?: string[] | null
           brand_id?: string | null
           created_at?: string | null
           device_remarks?: string | null
@@ -399,6 +401,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          aliases?: string[] | null
           brand_id?: string | null
           created_at?: string | null
           device_remarks?: string | null

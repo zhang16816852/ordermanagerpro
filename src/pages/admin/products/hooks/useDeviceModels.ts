@@ -3,9 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Database } from '@/integrations/supabase/types';
 
-export type DeviceModel = Database['public']['Tables']['device_models']['Row'] & { device_type?: string | null, screen_size?: string | null, device_series?: string | null, device_remarks?: string | null, release_date?: string | null };
-export type DeviceModelInsert = Database['public']['Tables']['device_models']['Insert'] & { device_type?: string | null, screen_size?: string | null, device_series?: string | null, device_remarks?: string | null, release_date?: string | null };
-export type DeviceModelUpdate = Database['public']['Tables']['device_models']['Update'] & { device_type?: string | null, screen_size?: string | null, device_series?: string | null, device_remarks?: string | null, release_date?: string | null };
+export type DeviceModel = Database['public']['Tables']['device_models']['Row'] & { device_type?: string | null, screen_size?: string | null, device_series?: string | null, device_remarks?: string | null, release_date?: string | null, aliases?: string[] | null };
+export type DeviceModelInsert = Database['public']['Tables']['device_models']['Insert'] & { device_type?: string | null, screen_size?: string | null, device_series?: string | null, device_remarks?: string | null, release_date?: string | null, aliases?: string[] | null };
+export type DeviceModelUpdate = Database['public']['Tables']['device_models']['Update'] & { device_type?: string | null, screen_size?: string | null, device_series?: string | null, device_remarks?: string | null, release_date?: string | null, aliases?: string[] | null };
 
 export function useDeviceModels() {
   const queryClient = useQueryClient();

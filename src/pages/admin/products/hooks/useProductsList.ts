@@ -41,7 +41,7 @@ export function useProductsList() {
         queryFn: async () => {
             const { data, error } = await supabase
                 .from('product_variants')
-                .select('*, variant_model_links(model_id, device_models(name))')
+                .select('*, variant_model_links(model_id, device_models(name, aliases))')
                 .order('sku');
             if (error) throw error;
             return data || [];
@@ -53,7 +53,7 @@ export function useProductsList() {
         queryFn: async () => {
             const { data, error } = await supabase
                 .from('product_model_links')
-                .select('product_id, model_id, device_models(name)')
+                .select('product_id, model_id, device_models(name, aliases)')
             if (error) throw error;
             return (data as any) || [];
         },
@@ -101,12 +101,19 @@ export function useProductsList() {
         return allVariants.filter(v => v.product_id === productId);
     }, [allVariants]);
 
-    const getProductModels = useCallback((productId: string) => {
+    const getProductModelsInfo = useCallback((productId: string) => {
         return allModelLinks
             .filter((l: any) => l.product_id === productId)
-            .map((l: any) => l.device_models?.name)
-            .filter(Boolean);
+            .map((l: any) => ({
+                name: l.device_models?.name,
+                aliases: l.device_models?.aliases || []
+            }))
+            .filter((m: any) => m.name);
     }, [allModelLinks]);
+
+    const getProductModels = useCallback((productId: string) => {
+        return getProductModelsInfo(productId).map((m: any) => m.name);
+    }, [getProductModelsInfo]);
 
     // v4.12 搜尋邏輯升級：支援分類、品牌、規格進階篩選
     const filteredProducts = useMemo(() => {
@@ -115,11 +122,16 @@ export function useProductsList() {
             // 1. Search Filter
             const brandName = (p.brand_id ? brandMap[p.brand_id] : p.brand_id) || '';
             const searchLower = search.toLowerCase();
+            const productModels = getProductModelsInfo(p.id);
             const matchesSearch = !search || 
                 p.name.toLowerCase().includes(searchLower) ||
                 p.sku.toLowerCase().includes(searchLower) ||
                 brandName.toLowerCase().includes(searchLower) ||
-                (p.model && p.model.toLowerCase().includes(searchLower));
+                (p.model && p.model.toLowerCase().includes(searchLower)) ||
+                productModels.some(m => 
+                    m.name.toLowerCase().includes(searchLower) || 
+                    m.aliases.some((a: string) => a.toLowerCase().includes(searchLower))
+                );
 
             if (!matchesSearch) return false;
 

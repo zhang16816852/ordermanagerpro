@@ -128,6 +128,42 @@ export function DeviceModelDialog({
               />
             </div>
 
+            <div className="space-y-2">
+              <Label>別名設定 (TAG 風格)</Label>
+              <div className="flex flex-wrap gap-2 p-2 border rounded-md bg-muted/5 min-h-[42px]">
+                {(editingData?.aliases || []).map((alias, index) => (
+                  <div key={index} className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded text-sm border border-primary/20">
+                    {alias}
+                    <X 
+                      className="h-3 w-3 cursor-pointer hover:text-destructive" 
+                      onClick={() => {
+                        const next = (editingData?.aliases || []).filter((_, i) => i !== index);
+                        setEditingData(prev => ({ ...prev!, aliases: next }));
+                      }}
+                    />
+                  </div>
+                ))}
+                <input
+                  className="flex-1 bg-transparent border-none outline-none text-sm min-w-[120px]"
+                  placeholder="輸入別名後按 Enter..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const val = (e.target as HTMLInputElement).value.trim();
+                      if (val && !(editingData?.aliases || []).includes(val)) {
+                        setEditingData(prev => ({ 
+                          ...prev!, 
+                          aliases: [...(prev?.aliases || []), val] 
+                        }));
+                        (e.target as HTMLInputElement).value = '';
+                      }
+                    }
+                  }}
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">例如：ZS661, SM-X230 (輸入後按 Enter 即可)</p>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>螢幕 / 規格尺寸</Label>

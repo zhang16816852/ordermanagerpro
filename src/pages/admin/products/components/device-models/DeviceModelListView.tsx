@@ -50,7 +50,16 @@ export function DeviceModelListView({
               <TableRow key={model.id} className={!model.is_active ? 'opacity-60 bg-muted/30' : ''}>
                 <TableCell>
                   <div className="font-medium">{model.name}</div>
-                  {model.device_series && <div className="text-[10px] text-muted-foreground">{model.device_series}</div>}
+                  {model.aliases && model.aliases.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {model.aliases.map((alias, i) => (
+                        <span key={i} className="text-[9px] bg-primary/5 text-primary border border-primary/10 px-1 rounded">
+                          {alias}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {model.device_series && <div className="text-[10px] text-muted-foreground mt-0.5">{model.device_series}</div>}
                   {model.device_remarks && <div className="text-[10px] text-muted-foreground truncate w-max max-w-[150px]" title={model.device_remarks}>{model.device_remarks}</div>}
                 </TableCell>
                 <TableCell className="text-muted-foreground">{model.brand_id ? deviceBrands.find((b: any) => b.id === model.brand_id)?.name || '-' : '-'}</TableCell>

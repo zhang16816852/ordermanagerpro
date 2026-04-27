@@ -6,6 +6,7 @@ export interface DeviceModel {
     name: string;
     brand_id: string | null;
     sort_order: number;
+    aliases: string[] | null;
 }
 
 export function useDeviceModels() {
@@ -18,7 +19,7 @@ export function useDeviceModels() {
                 .eq('is_active', true)
                 .order('sort_order', { ascending: true })
                 .order('name', { ascending: true });
-            
+
             if (error) {
                 console.error('[useDeviceModels] Fetch error:', error);
                 return [];

@@ -61,9 +61,10 @@ export function DeviceModelManager() {
       screen_size: editingData.screen_size || null,
       device_series: editingData.device_series || null,
       device_remarks: editingData.device_remarks || null,
-      release_date: editingData.release_date || null
+      release_date: editingData.release_date || null,
+      aliases: editingData.aliases || null
     };
-
+    console.log("發送", payload)
     if (editingData.id) {
       updateMutation.mutate({ id: editingData.id, values: payload }, {
         onSuccess: () => setIsDialogOpen(false)
@@ -76,6 +77,7 @@ export function DeviceModelManager() {
   };
 
   const openEdit = (model?: DeviceModel) => {
+    console.log("openEdit", model)
     if (model) {
       setEditingData(model);
     } else {
