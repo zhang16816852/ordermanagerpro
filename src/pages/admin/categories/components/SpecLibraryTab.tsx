@@ -9,7 +9,7 @@ import { SpecDefinition } from '../types';
 import { Toolbar } from './spec-library/SpecLibraryToolbar';
 import { GridView } from './spec-library/SpecLibraryGridView';
 import { TreeView } from './spec-library/SpecLibraryTreeView';
-import { SpecTreeNode } from './spec-library/SpecLibraryTreeView'; 
+import { SpecTreeNode } from './spec-library/SpecLibraryTreeView';
 
 // 規格屬性庫面板 (v4.8 JSON 支援與視覺化管理)
 export function SpecLibraryTab() {
@@ -74,8 +74,8 @@ export function SpecLibraryTab() {
     const filteredSpecs = useMemo(() => {
         if (!searchQuery.trim()) return specDefinitions;
         const q = searchQuery.toLowerCase();
-        return specDefinitions.filter(s => 
-            s.name.toLowerCase().includes(q) || 
+        return specDefinitions.filter(s =>
+            s.name.toLowerCase().includes(q) ||
             s.type.toLowerCase().includes(q) ||
             s.options?.some(o => o.toLowerCase().includes(q))
         );
@@ -146,6 +146,7 @@ export function SpecLibraryTab() {
 
     const handleSubmit = () => {
         const cleaned = { ...specForm, options: (specForm.options || []).filter(o => o.trim() !== '') };
+        console.log("規格編輯", cleaned)
         specMutation.mutate({ spec: cleaned, editingSpecId: editingSpec?.id }, {
             onSuccess: () => setIsSpecDialogOpen(false),
         });
@@ -153,7 +154,7 @@ export function SpecLibraryTab() {
 
     const handleDelete = async (spec: SpecDefinition) => {
         if (confirm(`確定要刪除規格「${spec.name}」嗎？這將導致所有關廠分類失去該欄位。`)) {
-            const { error } = await (supabase.from('specification_definitions' as any) as any).delete().eq('id', spec.id);
+            const { error } = await supabase.from('specification_definitions').delete().eq('id', spec.id);
             if (error) toast.error('刪除失敗');
             else queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
         }
@@ -163,7 +164,7 @@ export function SpecLibraryTab() {
         <TooltipProvider>
             <div className="space-y-6 pb-20">
                 {/* 使用組件化 Toolbar */}
-                <Toolbar 
+                <Toolbar
                     viewMode={viewMode}
                     onViewModeChange={setViewMode}
                     searchQuery={searchQuery}
@@ -180,14 +181,14 @@ export function SpecLibraryTab() {
                 ) : (
                     <>
                         {viewMode === 'grid' ? (
-                            <GridView 
+                            <GridView
                                 specs={filteredSpecs}
                                 relations={specRelations as any}
                                 onEdit={openSpecDialog}
                                 onDelete={handleDelete}
                             />
                         ) : (
-                            <TreeView 
+                            <TreeView
                                 treeData={treeData}
                                 onEdit={openSpecDialog}
                                 onDelete={handleDelete}

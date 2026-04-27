@@ -174,6 +174,65 @@ export function SpecDialog({
                         </select>
                     </div>
 
+                    {/* 篩選器設定 */}
+                    <div className="space-y-3 p-3 border rounded-md bg-purple-50/30 border-purple-100">
+                        <h4 className="text-sm font-bold text-purple-800 border-b border-purple-100 pb-1">列表篩選器設定</h4>
+                        <div className="space-y-4">
+                            <div className="flex items-center space-x-2">
+                                <Checkbox
+                                    id="filter-enabled"
+                                    checked={specForm.configuration?.filter_config?.enabled ?? true}
+                                    onCheckedChange={(checked) => {
+                                        setSpecForm(prev => ({
+                                            ...prev,
+                                            configuration: {
+                                                ...prev.configuration,
+                                                filter_config: {
+                                                    ...(prev.configuration?.filter_config || { display_mode: 'auto' }),
+                                                    enabled: !!checked
+                                                }
+                                            }
+                                        }));
+                                    }}
+                                />
+                                <label htmlFor="filter-enabled" className="text-sm font-medium cursor-pointer">
+                                    允許在商品列表作為篩選條件
+                                </label>
+                            </div>
+                            
+                            {(specForm.configuration?.filter_config?.enabled ?? true) && (
+                                <div className="space-y-1 pl-6">
+                                    <label className="text-[10px] text-muted-foreground font-bold">篩選器顯示方式</label>
+                                    <select
+                                        className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                        value={specForm.configuration?.filter_config?.display_mode || 'auto'}
+                                        onChange={(e) => {
+                                            setSpecForm(prev => ({
+                                                ...prev,
+                                                configuration: {
+                                                    ...prev.configuration,
+                                                    filter_config: {
+                                                        ...(prev.configuration?.filter_config || { enabled: true }),
+                                                        display_mode: e.target.value as any
+                                                    }
+                                                }
+                                            }));
+                                        }}
+                                    >
+                                        <option value="auto">自動判斷 (預設)</option>
+                                        <option value="checkbox">勾選清單 (Checkbox)</option>
+                                        <option value="range" disabled={!['number_with_unit', 'text'].includes(specForm.type || '')}>
+                                            數值區間拉桿 (僅支援數值類型)
+                                        </option>
+                                    </select>
+                                    <p className="text-[10px] text-muted-foreground mt-1">
+                                        註：若型態為「純文字」或「表格」，系統會自動忽略勾選清單設定以保持版面整潔。
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     {/* 表格列定義 (僅限 table 型態) */}
                     {specForm.type === 'table' && (
                         <div className="space-y-3 p-3 border rounded-md bg-blue-50/30 border-blue-100">
@@ -195,10 +254,11 @@ export function SpecDialog({
 
                             <div className="space-y-3">
                                 {(specForm.configuration?.columns || []).map((col: any, colIdx: number) => (
-                                    <div key={col.id || colIdx} className="p-2 border rounded bg-background space-y-2 relative group">
+                                    <div key={col.id || colIdx} className="p-2 border rounded bg-background space-y-2 relative group border-blue-200">
                                         <Button
                                             variant="ghost" size="icon"
                                             className="h-5 w-5 absolute -top-1 -right-1 hidden group-hover:flex"
+                                            type="button"
                                             onClick={() => {
                                                 const columns = (specForm.configuration?.columns || []).filter((_: any, i: number) => i !== colIdx);
                                                 setSpecForm(prev => ({ ...prev, configuration: { ...prev.configuration, columns } }));
@@ -228,14 +288,64 @@ export function SpecDialog({
                                                     value={col.type}
                                                     onChange={(e) => {
                                                         const columns = [...(specForm.configuration?.columns || [])];
-                                                        columns[colIdx] = { ...columns[colIdx], type: e.target.value as 'text' | 'select' | 'multiselect' };
+                                                        columns[colIdx] = { ...columns[colIdx], type: e.target.value as any };
                                                         setSpecForm(prev => ({ ...prev, configuration: { ...prev.configuration, columns } }));
                                                     }}
                                                 >
                                                     <option value="text">文字輸入</option>
-                                                    <option value="select">單選下拉</option>
-                                                    <option value="multiselect">多選</option>
+                                                    <option value="link">連結現有規格</option>
+                                                    <option value="select">內部單選</option>
+                                                    <option value="multiselect">內部多選</option>
                                                 </select>
+                                            </div>
+                                        </div>
+
+                                        {col.type === 'link' && (
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] text-muted-foreground font-bold">選擇要連結的規格</label>
+                                                <select
+                                                    className="flex h-7 w-full rounded-md border border-input bg-background px-2 py-1 text-[11px] shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                                    value={col.linkedSpecId || ''}
+                                                    onChange={(e) => {
+                                                        const columns = [...(specForm.configuration?.columns || [])];
+                                                        columns[colIdx] = { ...columns[colIdx], linkedSpecId: e.target.value };
+                                                        setSpecForm(prev => ({ ...prev, configuration: { ...prev.configuration, columns } }));
+                                                    }}
+                                                >
+                                                    <option value="">-- 請選擇 --</option>
+                                                    {allSpecs.filter(s => s.id !== editingSpec?.id).map(s => (
+                                                        <option key={s.id} value={s.id}>{s.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] text-muted-foreground font-bold">欄位前綴</label>
+                                                <Input 
+                                                    className="h-7 text-xs" 
+                                                    placeholder="如：(" 
+                                                    value={col.prefix || ''}
+                                                    onChange={(e) => {
+                                                        const columns = [...(specForm.configuration?.columns || [])];
+                                                        columns[colIdx] = { ...columns[colIdx], prefix: e.target.value };
+                                                        setSpecForm(prev => ({ ...prev, configuration: { ...prev.configuration, columns } }));
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] text-muted-foreground font-bold">欄位後綴</label>
+                                                <Input 
+                                                    className="h-7 text-xs" 
+                                                    placeholder="如：V" 
+                                                    value={col.suffix || ''}
+                                                    onChange={(e) => {
+                                                        const columns = [...(specForm.configuration?.columns || [])];
+                                                        columns[colIdx] = { ...columns[colIdx], suffix: e.target.value };
+                                                        setSpecForm(prev => ({ ...prev, configuration: { ...prev.configuration, columns } }));
+                                                    }}
+                                                />
                                             </div>
                                         </div>
 
@@ -257,8 +367,35 @@ export function SpecDialog({
                                     </div>
                                 ))}
                                 {(specForm.configuration?.columns || []).length === 0 && (
-                                    <p className="text-[10px] text-muted-foreground italic text-center py-2">請先定義表格欄位</p>
+                                    <p className="text-[10px] text-muted-foreground italic text-center py-2">請先定義複合欄位</p>
                                 )}
+
+                                <div className="grid grid-cols-2 gap-3 border-t border-blue-100 pt-2 mt-2">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] text-blue-800 font-bold">欄位間隔符</label>
+                                        <Input 
+                                            className="h-7 text-xs bg-white" 
+                                            placeholder="預設為 /" 
+                                            value={specForm.configuration?.columnSeparator || ''}
+                                            onChange={(e) => setSpecForm(prev => ({ 
+                                                ...prev, 
+                                                configuration: { ...prev.configuration, columnSeparator: e.target.value } 
+                                            }))}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] text-blue-800 font-bold">行間隔符</label>
+                                        <Input 
+                                            className="h-7 text-xs bg-white" 
+                                            placeholder="預設為 , " 
+                                            value={specForm.configuration?.rowSeparator || ''}
+                                            onChange={(e) => setSpecForm(prev => ({ 
+                                                ...prev, 
+                                                configuration: { ...prev.configuration, rowSeparator: e.target.value } 
+                                            }))}
+                                        />
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}

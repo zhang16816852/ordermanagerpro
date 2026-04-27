@@ -15,11 +15,11 @@ export function useSpecData() {
     const { data: specDefinitions = [], isLoading: isLoadingSpecs } = useQuery({
         queryKey: ['spec_definitions'],
         queryFn: async () => {
-            const { data, error } = await (supabase.from('specification_definitions' as any) as any)
+            const { data, error } = await supabase.from('specification_definitions')
                 .select('*')
                 .order('name');
             if (error) return [];
-            return data as SpecDefinition[];
+            return data as unknown as SpecDefinition[];
         },
     });
 
@@ -28,12 +28,19 @@ export function useSpecData() {
         mutationFn: async (data: { spec: Partial<SpecDefinition>; editingSpecId?: string }) => {
             const { spec, editingSpecId } = data;
             if (editingSpecId) {
-                const { error } = await (supabase.from('specification_definitions' as any) as any)
-                    .update(spec)
+                const { error } = await supabase.from('specification_definitions')
+                    .update(spec as any)
                     .eq('id', editingSpecId);
                 if (error) throw error;
             } else {
-                const { error } = await (supabase.from('specification_definitions' as any) as any).insert([spec]);
+                const finalSpec = {
+                    ...spec,
+                    default_value: spec.default_value ?? null,
+                    configuration: spec.configuration ?? null,
+                    logic_config: spec.logic_config ?? { triggers: [] },
+                    options: spec.options ?? []
+                };
+                const { error } = await supabase.from('specification_definitions').insert([finalSpec as any]);
                 if (error) throw error;
             }
         },

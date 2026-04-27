@@ -251,18 +251,37 @@ export const getMergedTriggerTargets = (trigger: any) => {
 /**
  * 將單個規格值格式化為易讀字串
  */
-export function formatSpecValue(val: any): string {
+export function formatSpecValue(val: any, spec?: CategorySpec, allSpecs?: CategorySpec[] | Map<string, CategorySpec>): string {
     if (val === null || val === undefined || val === '') return '';
     
     if (Array.isArray(val)) {
         // v4.11 增加對表格型數據 (Array of Objects) 的易讀化處理
         if (val.length > 0 && typeof val[0] === 'object' && val[0] !== null && !Array.isArray(val[0])) {
+            const config = spec?.configuration;
+            const colSep = config?.columnSeparator || '/';
+            const rowSep = config?.rowSeparator || ', ';
+
             return val.map((row: any) => {
-                return Object.values(row)
-                    .map(v => Array.isArray(v) ? v.join(',') : v)
-                    .filter(v => v !== '' && v !== null && v !== undefined)
-                    .join('/');
-            }).filter(s => s !== '').join('; ');
+                return (config?.columns || []).map((col: any) => {
+                    const colVal = row[col.id || col.name];
+                    if (colVal === undefined || colVal === null || colVal === '') return null;
+                    
+                    let cellSuffix = col.suffix || '';
+                    if (col.type === 'link' && col.linkedSpecId && allSpecs && !cellSuffix) {
+                        const linkedSpec = Array.isArray(allSpecs) 
+                            ? allSpecs.find((s: any) => s.id === col.linkedSpecId)
+                            : allSpecs.get(col.linkedSpecId);
+                            
+                        if (linkedSpec && linkedSpec.type === 'number_with_unit' && linkedSpec.options?.length > 0) {
+                            const unitMatch = linkedSpec.options[0].match(/(.+?)\((.+?)\)/);
+                            cellSuffix = unitMatch ? unitMatch[2] : linkedSpec.options[0];
+                        }
+                    }
+
+                    const formattedColVal = Array.isArray(colVal) ? colVal.join(',') : colVal;
+                    return `${col.prefix || ''}${formattedColVal}${cellSuffix}`;
+                }).filter(Boolean).join(colSep);
+            }).filter((s: string) => s !== '').join(rowSep);
         }
         return val.join('/');
     }
@@ -273,7 +292,6 @@ export function formatSpecValue(val: any): string {
             .map(([label, value]) => {
                 if (!value && value !== 0) return null;
                 
-                // 解析單位：標籤(單位) -> 標籤: 數值單位
                 const unitMatch = label.match(/(.+?)\((.+?)\)/);
                 if (unitMatch) {
                     const displayName = unitMatch[1];
@@ -281,8 +299,6 @@ export function formatSpecValue(val: any): string {
                     return `${displayName}:${value}${unit}`;
                 }
 
-                // 數量分配傳統格式使用 *，一般複合格式使用 :
-                // 啟發式：如果數值是純數字或標題不含特殊標籤，通常是複合規格
                 return `${label}:${value}`;
             })
             .filter(Boolean)

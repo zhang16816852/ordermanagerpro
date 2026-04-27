@@ -19,7 +19,7 @@ export const useSpecStore = create<SpecStore>((set, get) => ({
 
         set({ isLoading: true });
         try {
-            const { data, error } = await (supabase.from('specification_definitions' as any) as any)
+            const { data, error } = await supabase.from('specification_definitions')
                 .select('*')
                 .order('name');
 
@@ -32,7 +32,8 @@ export const useSpecStore = create<SpecStore>((set, get) => ({
                 type: s.type,
                 options: s.options || [],
                 defaultValue: s.default_value || '',
-                logicConfig: s.logic_config as any
+                logicConfig: s.logic_config as any,
+                configuration: s.configuration
             }));
 
             const map = new Map();

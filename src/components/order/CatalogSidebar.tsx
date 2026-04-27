@@ -11,6 +11,65 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { deserializeSpecs, formatSpecValue } from "@/utils/specLogic";
 import { useBrands } from "@/hooks/useBrands";
+import { Slider } from "@/components/ui/slider";
+
+// 解析字串中的所有數字
+const extractNumbers = (str: string) => {
+    const matches = str.match(/\d+(\.\d+)?/g);
+    return matches ? matches.map(Number) : [];
+};
+
+// 內部區間篩選拉桿組件
+function RangeSliderFilter({
+    values,
+    specKey,
+    selectedRange,
+    onChange
+}: {
+    values: string[];
+    specKey: string;
+    selectedRange?: string; // 格式如 'MIN-MAX'
+    onChange: (range: string | null) => void;
+}) {
+    // 找出所有可能數值的極值
+    const allNumbers = values.flatMap(extractNumbers).filter(n => !isNaN(n));
+    const minBound = allNumbers.length > 0 ? Math.floor(Math.min(...allNumbers)) : 0;
+    const maxBound = allNumbers.length > 0 ? Math.ceil(Math.max(...allNumbers)) : 100;
+    
+    // 解析目前設定
+    const currentMin = selectedRange ? Number(selectedRange.split('-')[0]) : minBound;
+    const currentMax = selectedRange ? Number(selectedRange.split('-')[1]) : maxBound;
+
+    // 如果沒有任何數字，不顯示
+    if (allNumbers.length === 0) return <p className="text-xs text-muted-foreground italic">無有效數值可供篩選</p>;
+
+    return (
+        <div className="px-2 pb-2 pt-4 space-y-4">
+            <Slider
+                defaultValue={[minBound, maxBound]}
+                value={[currentMin, currentMax]}
+                min={minBound}
+                max={maxBound}
+                step={maxBound - minBound > 100 ? 10 : 1}
+                onValueChange={(val) => {
+                    onChange(`${val[0]}-${val[1]}`);
+                }}
+            />
+            <div className="flex justify-between items-center text-xs text-muted-foreground font-mono">
+                <span>{currentMin}</span>
+                <span>{currentMax}</span>
+            </div>
+            {selectedRange && (
+                <div className="flex justify-end">
+                    <Button variant="ghost" size="sm" className="h-5 text-[10px] text-muted-foreground" onClick={() => onChange(null)}>
+                        清除區間
+                    </Button>
+                </div>
+            )}
+        </div>
+    );
+}
+
 
 interface CatalogSidebarProps {
     products: ProductWithPricing[];
@@ -103,7 +162,8 @@ export function CatalogSidebar({
                         id,
                         name,
                         type,
-                        options
+                        options,
+                        configuration
                     )
                 `)
                 .eq('category_id', selectedCategory);
@@ -113,7 +173,8 @@ export function CatalogSidebar({
                 id: d.specification_definitions.id,
                 name: d.specification_definitions.name,
                 type: d.specification_definitions.type,
-                options: d.specification_definitions.options
+                options: d.specification_definitions.options,
+                configuration: d.specification_definitions.configuration
             }));
         },
     });
@@ -150,7 +211,20 @@ export function CatalogSidebar({
                 if (!specs[key]) specs[key] = new Set();
 
                 if (value !== null && value !== undefined) {
-                    specs[key].add(formatSpecValue(value));
+                    const specDef = specFields.find(f => f.id === specId || f.name === specId);
+                    
+                    // 1. 讀取 filter_config
+                    const filterConfig = (specDef as any)?.configuration?.filter_config;
+                    
+                    // 2. 如果有明確設定 enabled: false，直接略過
+                    if (filterConfig && filterConfig.enabled === false) return;
+                    
+                    // 3. 如果沒有設定 filter_config，則套用預設的「自動判斷隱藏」邏輯
+                    if (!filterConfig) {
+                        if (specDef?.type === 'text' || specDef?.type === 'table') return;
+                    }
+                    
+                    specs[key].add(formatSpecValue(value, specDef as any, specFields as any));
                 }
             });
 
@@ -164,7 +238,13 @@ export function CatalogSidebar({
                     if (!specs[key]) specs[key] = new Set();
 
                     if (value !== null && value !== undefined) {
-                        specs[key].add(formatSpecValue(value));
+                        const specDef = specFields.find(f => f.id === specId || f.name === specId);
+                        
+                        const filterConfig = (specDef as any)?.configuration?.filter_config;
+                        if (filterConfig && filterConfig.enabled === false) return;
+                        if (!filterConfig && (specDef?.type === 'text' || specDef?.type === 'table')) return;
+
+                        specs[key].add(formatSpecValue(value, specDef as any, specFields as any));
                     }
                 });
             });
@@ -315,45 +395,85 @@ export function CatalogSidebar({
                                     // 將 key（ID 或 Name）解析為顯示名稱
                                     const specId = key.includes(':') ? key.split(':').pop()! : key;
                                     const specDef = specFields.find(f => f.id === specId || f.name === specId);
+                                    
+                                    const filterConfig = (specDef as any)?.configuration?.filter_config;
+                                    let displayMode = filterConfig?.display_mode || 'auto';
+                                    
+                                    // 處理 auto 或 沒設定時的預設行為
+                                    if (displayMode === 'auto') {
+                                        if (specDef?.type === 'text' || specDef?.type === 'table') return null;
+                                        // 如果是數值類型且值很多，預設切換為區間
+                                        if (specDef?.type === 'number_with_unit' && values.length > 5) {
+                                            displayMode = 'range';
+                                        } else {
+                                            displayMode = 'checkbox';
+                                        }
+                                    }
+
                                     const displayName = specDef ? specDef.name : key;
                                     return (
                                         <div key={key} className="space-y-3">
-                                            <h4 className="text-xs font-semibold text-foreground/80">{displayName}</h4>
-                                            <div className="space-y-2">
-                                                {values
-                                                    .filter((val) => {
-                                                        if (specDef?.type === "boolean") {
-                                                            return val === "true";
-                                                        }
-                                                        return true;
-                                                    })
-                                                    .map((val) => {
-                                                        const displayVal = formatSpecValue(val);
-
-                                                        return (
-                                                            <div key={val} className="flex items-center space-x-2">
-                                                                <Checkbox
-                                                                    id={`spec-${key}-${val}`}
-                                                                    checked={(selectedSpecs[key] || []).includes(val)}
-                                                                    onCheckedChange={(checked) => {
-                                                                        const current = selectedSpecs[key] || [];
-                                                                        if (checked) {
-                                                                            onSpecChange(key, [...current, val]);
-                                                                        } else {
-                                                                            onSpecChange(key, current.filter((v) => v !== val));
-                                                                        }
-                                                                    }}
-                                                                />
-                                                                <Label
-                                                                    htmlFor={`spec-${key}-${val}`}
-                                                                    className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground"
-                                                                >
-                                                                    {displayVal}
-                                                                </Label>
-                                                            </div>
-                                                        );
-                                                    })}
+                                            <div className="flex items-center justify-between">
+                                                <h4 className="text-xs font-semibold text-foreground/80">{displayName}</h4>
+                                                {displayMode === 'range' && selectedSpecs[key]?.[0] && (
+                                                    <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono">
+                                                        {selectedSpecs[key][0]}
+                                                    </span>
+                                                )}
                                             </div>
+                                            
+                                            {displayMode === 'range' ? (
+                                                <RangeSliderFilter 
+                                                    values={values} 
+                                                    specKey={key} 
+                                                    selectedRange={selectedSpecs[key]?.[0]} 
+                                                    onChange={(range) => {
+                                                        if (range) {
+                                                            onSpecChange(key, [range]);
+                                                        } else {
+                                                            onSpecChange(key, []);
+                                                        }
+                                                    }}
+                                                />
+                                            ) : (
+                                                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                                                    {values
+                                                        .filter((val) => {
+                                                            if (specDef?.type === "boolean") {
+                                                                return val === "true" || val === "支援";
+                                                            }
+                                                            return true;
+                                                        })
+                                                        .map((val) => {
+                                                            const displayVal = val;
+
+                                                            return (
+                                                                <div key={val} className="flex items-center space-x-2">
+                                                                    <Checkbox
+                                                                        id={`spec-${key}-${val}`}
+                                                                        checked={(selectedSpecs[key] || []).includes(val)}
+                                                                        onCheckedChange={(checked) => {
+                                                                            const current = selectedSpecs[key] || [];
+                                                                            // 清除區間設定的格式以防萬一
+                                                                            const cleanedCurrent = current.filter(c => !c.includes('-'));
+                                                                            if (checked) {
+                                                                                onSpecChange(key, [...cleanedCurrent, val]);
+                                                                            } else {
+                                                                                onSpecChange(key, cleanedCurrent.filter((v) => v !== val));
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                    <Label
+                                                                        htmlFor={`spec-${key}-${val}`}
+                                                                        className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground"
+                                                                    >
+                                                                        {displayVal}
+                                                                    </Label>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                </div>
+                                            )}
                                         </div>
                                     );
                                 })

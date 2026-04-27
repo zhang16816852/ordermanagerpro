@@ -24,9 +24,18 @@ export interface SpecDefinition {
         columns: {
             id: string;
             name: string;
-            type: 'text' | 'select' | 'multiselect';
+            type: 'text' | 'select' | 'multiselect' | 'link';
+            linkedSpecId?: string;
+            prefix?: string;
+            suffix?: string;
             options?: string[];
         }[];
+        columnSeparator?: string;
+        rowSeparator?: string;
+        filter_config?: {
+            enabled: boolean;
+            display_mode: 'auto' | 'checkbox' | 'range';
+        };
     };
     logic_config?: {
         triggers?: {

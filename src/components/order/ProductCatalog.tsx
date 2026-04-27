@@ -138,6 +138,20 @@ export default function ProductCatalog({
             // 直接從平坦化的設定中讀取 (key 已包含 parentId:id 格式)
             const val = flatSettings[key];
             const actualValue = formatSpecValue(val);
+            
+            // 檢查是否為區間篩選 (格式為 "MIN-MAX")
+            const isRangeFilter = allowedValues.length === 1 && allowedValues[0].includes('-');
+            
+            if (isRangeFilter) {
+                const [min, max] = allowedValues[0].split('-').map(Number);
+                // 從產品規格值中提取數字進行比對
+                const productNumbers = actualValue.match(/\d+(\.\d+)?/g)?.map(Number) || [];
+                if (productNumbers.length === 0) return false;
+                
+                // 只要產品規格中的任一數字在區間內即算符合
+                return productNumbers.some(n => n >= min && n <= max);
+            }
+
             return allowedValues.includes(actualValue);
           });
         };

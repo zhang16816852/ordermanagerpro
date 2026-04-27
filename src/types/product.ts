@@ -34,9 +34,14 @@ export interface SpecDefinition {
         columns: {
             id: string;
             name: string;
-            type: 'text' | 'select' | 'multiselect';
+            type: 'text' | 'select' | 'multiselect' | 'link';
+            linkedSpecId?: string; // 連結到其他規格的 ID
+            prefix?: string;       // 欄位前綴
+            suffix?: string;       // 欄位後綴
             options?: string[];
         }[];
+        columnSeparator?: string; // 欄位間連接符 (預設 '/')
+        rowSeparator?: string;    // 行間連接符 (預設 ', ')
     } | null;
 }
 

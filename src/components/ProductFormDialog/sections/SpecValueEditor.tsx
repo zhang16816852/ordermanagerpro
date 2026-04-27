@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Settings2, X } from 'lucide-react';
 import { CategorySpec } from '@/hooks/useCategorySpecs';
 import { formatSpecValue } from '@/utils/specLogic';
+import { useSpecStore } from '@/store/useSpecStore';
 
 interface SpecValueEditorProps {
     spec: CategorySpec;
@@ -18,10 +19,10 @@ interface SpecValueEditorProps {
 
 /**
  * v4.7 物件化編輯器註冊表 (Registry)
- * 每個屬性對應一個處理特定 spec.type 的子組件
+ * 每個屬性對應一個特定 spec.type 的渲染組件
  */
 const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
-    // 1. 布林開關 (Boolean)
+    // 1. 布林值 (Boolean)
     boolean: ({ spec, value, onChange }) => {
         const isTrue = value === 'true' || value === true;
         return (
@@ -32,17 +33,17 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
                     onCheckedChange={(checked) => onChange(checked ? 'true' : 'false')}
                 />
                 <label htmlFor={`spec-editor-${spec.id}`} className="text-sm cursor-pointer select-none flex-1">
-                    支援
+                    是/否
                 </label>
             </div>
         );
     },
 
-    // 2. 帶單位數字 (Number with Unit) - 支援複合型
+    // 2. 帶單位數值 (Number with Unit) - 支援多欄位
     number_with_unit: ({ spec, value, onChange, sourceValue, variantMode }) => {
         const labels = spec.options || [];
         
-        // 單一欄位模式 (相容舊版或只有一個單位)
+        // 單一欄位模式 (傳統或只有一個單位)
         if (labels.length <= 1) {
             return (
                 <div className="flex items-center space-x-2">
@@ -50,7 +51,7 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
                         type="number"
                         value={value || ''}
                         onChange={(e) => onChange(e.target.value)}
-                        placeholder={sourceValue ? `建議值: ${sourceValue}` : "數值"}
+                        placeholder={sourceValue ? `建議值: ${sourceValue}` : "請輸入"}
                         className="h-9"
                     />
                     {labels[0] && (
@@ -60,7 +61,7 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
             );
         }
 
-        // 複合欄位模式
+        // 多欄位模式
         const currentVals = (typeof value === 'object' && value !== null) ? value : {};
         
         const content = (
@@ -92,8 +93,8 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
             return (
                 <Popover>
                     <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-8 px-2 text-[10px] w-full justify-between font-normal">
-                            <span className="truncate">{formatSpecValue(value) || '未設定'}</span>
+                        <Button variant="outline" size="sm" type="button" className="h-8 px-2 text-[10px] w-full justify-between font-normal">
+                            <span className="truncate">{formatSpecValue(value, spec) || '未設定'}</span>
                             <Settings2 className="h-3 w-3 ml-1 opacity-50 shrink-0" />
                         </Button>
                     </PopoverTrigger>
@@ -149,7 +150,7 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
         </Select>
     ),
 
-    // 5. 預設輸入框 (Default/Text) - 支援複合型
+    // 5. 預設輸入框 (Default/Text) - 支援多欄位
     default: ({ spec, value, onChange, sourceValue, variantMode }) => {
         const labels = spec.options || [];
 
@@ -165,7 +166,7 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
             );
         }
 
-        // 複合欄位模式
+        // 多欄位模式
         const currentVals = (typeof value === 'object' && value !== null) ? value : {};
         
         const content = (
@@ -188,8 +189,8 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
             return (
                 <Popover>
                     <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-8 px-2 text-[10px] w-full justify-between font-normal">
-                            <span className="truncate">{formatSpecValue(value) || '未設定'}</span>
+                        <Button variant="outline" size="sm" type="button" className="h-8 px-2 text-[10px] w-full justify-between font-normal">
+                            <span className="truncate">{formatSpecValue(value, spec) || '未設定'}</span>
                             <Settings2 className="h-3 w-3 ml-1 opacity-50 shrink-0" />
                         </Button>
                     </PopoverTrigger>
@@ -208,12 +209,13 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
 
     // 6. 表格型規格 (Table/Grid)
     table: ({ spec, value, onChange, variantMode }) => {
+        const { specMap } = useSpecStore();
         const columns = spec.configuration?.columns || [];
         const rows = Array.isArray(value) ? value : [];
 
         const addRow = () => {
             const newRow = columns.reduce((acc: any, col: any) => {
-                acc[col.id || col.name] = col.type === 'multiselect' ? [] : '';
+                acc[col.id || col.name] = (col.type === 'multiselect' || (col.type === 'link' && specMap.get(col.linkedSpecId)?.type === 'multiselect')) ? [] : '';
                 return acc;
             }, {});
             onChange([...rows, newRow]);
@@ -231,75 +233,112 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
 
         const content = (
             <div className="space-y-3">
-                <div className="overflow-x-auto border rounded-md bg-background">
+                <div className="overflow-x-auto border rounded-md bg-background shadow-sm">
                     <table className="w-full text-[11px] border-collapse">
                         <thead className="bg-muted/50 border-b">
                             <tr>
                                 {columns.map((col: any) => (
-                                    <th key={col.id || col.name} className="px-2 py-1.5 text-left font-bold text-muted-foreground border-r last:border-r-0">{col.name}</th>
+                                    <th key={col.id || col.name} className="px-2 py-2 text-left font-bold text-muted-foreground border-r last:border-r-0">
+                                        {col.name}
+                                        {col.suffix && <span className="ml-1 opacity-50 font-normal">({col.suffix})</span>}
+                                    </th>
                                 ))}
                                 <th className="w-8"></th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
                             {rows.map((row: any, rowIdx: number) => (
-                                <tr key={rowIdx} className="hover:bg-muted/10">
+                                <tr key={rowIdx} className="hover:bg-muted/5 transition-colors">
                                     {columns.map((col: any) => {
                                         const colKey = col.id || col.name;
+                                        
+                                        // 處理連結規格
+                                        let finalType = col.type;
+                                        let finalOptions = col.options || [];
+                                        let cellSuffix = col.suffix;
+                                        
+                                        if (col.type === 'link' && col.linkedSpecId) {
+                                            const linkedSpec = specMap.get(col.linkedSpecId);
+                                            if (linkedSpec) {
+                                                finalOptions = linkedSpec.options || [];
+                                                finalType = linkedSpec.type;
+                                                
+                                                if (finalType === 'number_with_unit' && finalOptions.length > 0 && !cellSuffix) {
+                                                    const unitMatch = finalOptions[0].match(/(.+?)\((.+?)\)/);
+                                                    cellSuffix = unitMatch ? unitMatch[2] : finalOptions[0];
+                                                } else if (finalOptions.length > 0 && !['multiselect', 'number_with_unit', 'boolean', 'text', 'default', 'table'].includes(finalType)) {
+                                                    finalType = 'select';
+                                                }
+                                            }
+                                        }
+
                                         return (
-                                            <td key={colKey} className="p-1 border-r last:border-r-0">
-                                                {col.type === 'select' ? (
-                                                    <select 
-                                                        className="w-full h-7 bg-transparent border-none focus:ring-1 focus:ring-primary rounded px-1 outline-none"
-                                                        value={row[colKey] || ''}
-                                                        onChange={(e) => updateCell(rowIdx, colKey, e.target.value)}
-                                                    >
-                                                        <option value="">-</option>
-                                                        {col.options?.map((o: string) => <option key={o} value={o}>{o}</option>)}
-                                                    </select>
-                                                ) : col.type === 'multiselect' ? (
-                                                    <Popover>
-                                                        <PopoverTrigger asChild>
-                                                            <Button variant="ghost" size="sm" className="h-7 px-1 text-[10px] w-full justify-between hover:bg-muted/50">
-                                                                <span className="truncate">{Array.isArray(row[colKey]) ? row[colKey].join(',') : '-'}</span>
-                                                            </Button>
-                                                        </PopoverTrigger>
-                                                        <PopoverContent className="w-48 p-2" align="start">
-                                                            <div className="space-y-1">
-                                                                <p className="text-[10px] font-bold text-muted-foreground mb-1 uppercase tracking-tight">選擇多項</p>
-                                                                {col.options?.map((opt: string) => {
-                                                                    const current = Array.isArray(row[colKey]) ? row[colKey] : [];
-                                                                    return (
-                                                                        <div key={opt} className="flex items-center gap-2 hover:bg-muted/30 p-1 rounded">
-                                                                            <Checkbox 
-                                                                                id={`cell-${rowIdx}-${colKey}-${opt}`}
-                                                                                checked={current.includes(opt)}
-                                                                                onCheckedChange={(checked) => {
-                                                                                    const next = checked ? [...current, opt] : current.filter((v: any) => v !== opt);
-                                                                                    updateCell(rowIdx, colKey, next);
-                                                                                }}
-                                                                            />
-                                                                            <label htmlFor={`cell-${rowIdx}-${colKey}-${opt}`} className="text-xs cursor-pointer flex-1">{opt}</label>
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        </PopoverContent>
-                                                    </Popover>
-                                                ) : (
-                                                    <Input 
-                                                        className="h-7 px-2 border-none bg-transparent focus-visible:ring-1 focus-visible:ring-primary shadow-none text-xs"
-                                                        value={row[colKey] || ''}
-                                                        onChange={(e) => updateCell(rowIdx, colKey, e.target.value)}
-                                                        placeholder="..."
-                                                    />
-                                                )}
+                                            <td key={colKey} className="p-1 border-r last:border-r-0 relative group/cell">
+                                                <div className="flex items-center gap-1">
+                                                    {col.prefix && <span className="text-[9px] text-muted-foreground shrink-0">{col.prefix}</span>}
+                                                    
+                                                    {finalType === 'select' ? (
+                                                        <select 
+                                                            className="w-full h-7 bg-transparent border-none focus:ring-1 focus:ring-primary rounded px-1 outline-none text-xs"
+                                                            value={row[colKey] || ''}
+                                                            onChange={(e) => updateCell(rowIdx, colKey, e.target.value)}
+                                                        >
+                                                            <option value="">-</option>
+                                                            {finalOptions.map((o: string) => <option key={o} value={o}>{o}</option>)}
+                                                        </select>
+                                                    ) : finalType === 'multiselect' ? (
+                                                        <Popover>
+                                                            <PopoverTrigger asChild>
+                                                                <Button variant="ghost" size="sm" className="h-7 px-1 text-[10px] w-full justify-between hover:bg-muted/50">
+                                                                    <span className="truncate">{Array.isArray(row[colKey]) ? row[colKey].join(',') : '-'}</span>
+                                                                </Button>
+                                                            </PopoverTrigger>
+                                                            <PopoverContent className="w-48 p-2" align="start">
+                                                                <div className="space-y-1">
+                                                                    <p className="text-[10px] font-bold text-muted-foreground mb-1 uppercase tracking-tight">多選項目</p>
+                                                                    {finalOptions.map((opt: string) => {
+                                                                        const current = Array.isArray(row[colKey]) ? row[colKey] : [];
+                                                                        return (
+                                                                            <div key={opt} className="flex items-center gap-2 hover:bg-muted/30 p-1 rounded">
+                                                                                <Checkbox 
+                                                                                    id={`cell-${rowIdx}-${colKey}-${opt}`}
+                                                                                    checked={current.includes(opt)}
+                                                                                    onCheckedChange={(checked) => {
+                                                                                        const next = checked ? [...current, opt] : current.filter((v: any) => v !== opt);
+                                                                                        updateCell(rowIdx, colKey, next);
+                                                                                    }}
+                                                                                />
+                                                                                <label htmlFor={`cell-${rowIdx}-${colKey}-${opt}`} className="text-xs cursor-pointer flex-1">{opt}</label>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </PopoverContent>
+                                                        </Popover>
+                                                    ) : (
+                                                        <Input 
+                                                            className="h-7 px-2 border-none bg-transparent focus-visible:ring-1 focus-visible:ring-primary shadow-none text-xs"
+                                                            type={finalType === 'number_with_unit' ? 'number' : 'text'}
+                                                            value={row[colKey] || ''}
+                                                            onChange={(e) => updateCell(rowIdx, colKey, e.target.value)}
+                                                            placeholder="..."
+                                                        />
+                                                    )}
+
+                                                    {cellSuffix && <span className="text-[9px] text-muted-foreground shrink-0">{cellSuffix}</span>}
+                                                </div>
                                             </td>
                                         );
                                     })}
                                     <td className="p-1 text-center">
-                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => removeRow(rowIdx)}>
-                                            <X className="h-3.3 w-3.3" />
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            type="button"
+                                            className="h-6 w-6 text-muted-foreground hover:text-destructive" 
+                                            onClick={() => removeRow(rowIdx)}
+                                        >
+                                            <X className="h-3.5 w-3.5" />
                                         </Button>
                                     </td>
                                 </tr>
@@ -308,12 +347,12 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
                     </table>
                     {rows.length === 0 && (
                         <div className="py-6 text-center">
-                            <p className="text-[11px] text-muted-foreground italic">尚未新增任何數據行</p>
+                            <p className="text-[11px] text-muted-foreground italic">目前尚未添加任何數據行</p>
                         </div>
                     )}
                 </div>
                 <Button variant="outline" size="sm" className="w-full h-8 border-dashed bg-muted/5 hover:bg-muted/10 text-muted-foreground" onClick={addRow}>
-                    + 新增一行數據
+                    + 添加一列數據
                 </Button>
             </div>
         );
@@ -322,15 +361,15 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
             return (
                 <Popover>
                     <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-8 px-2 text-[10px] w-full justify-between font-normal group-hover:border-primary/30 transition-colors">
-                            <span className="truncate">{rows.length > 0 ? `已設定 ${rows.length} 筆資料` : '未設定'}</span>
+                        <Button variant="outline" size="sm" type="button" className="h-8 px-2 text-[10px] w-full justify-between font-normal group-hover:border-primary/30 transition-colors">
+                            <span className="truncate">{rows.length > 0 ? formatSpecValue(value, spec) : '未設定'}</span>
                             <Settings2 className="h-3 w-3 ml-1 opacity-50 shrink-0" />
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-80 p-3 shadow-xl" align="center">
                         <div className="text-xs font-bold mb-3 border-b pb-1.5 flex items-center gap-2">
                             <Settings2 className="h-3.5 w-3.5 text-primary" />
-                            {spec.name} 詳細數據表
+                            {spec.name} 詳細數據行
                         </div>
                         {content}
                     </PopoverContent>
@@ -343,7 +382,7 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
 };
 
 /**
- * 數量明細分配組件 (單獨抽離以維持整潔)
+ * 數量配比編輯組件 (觸發總量連動與驗證)
  */
 function QuantityAllocationEditor({ spec, value, onChange, sourceValue, variantMode }: SpecValueEditorProps) {
     const targetTotal = parseInt(sourceValue) || 0;
@@ -391,9 +430,9 @@ function QuantityAllocationEditor({ spec, value, onChange, sourceValue, variantM
                 })}
             </div>
             <div className="pt-2 border-t flex justify-between items-center text-[10px]">
-                <span className="text-muted-foreground font-medium">目標: {targetTotal}</span>
+                <span className="text-muted-foreground font-medium">總量需求: {targetTotal}</span>
                 <span className={`font-bold ${isError ? 'text-destructive underline decoration-dotted' : 'text-primary'}`}>
-                    已分: {currentTotal} {isError && '⚠️'}
+                    已分配: {currentTotal} {isError && '⚠️'}
                 </span>
             </div>
         </div>
@@ -406,10 +445,11 @@ function QuantityAllocationEditor({ spec, value, onChange, sourceValue, variantM
                     <Button 
                         variant="outline" 
                         size="sm" 
+                        type="button"
                         className={`h-8 px-2 text-[10px] w-full justify-between font-normal ${isError ? 'border-destructive text-destructive bg-destructive/5' : ''}`}
                     >
                         <span className="truncate">
-                            {Object.entries(currentValues).map(([k, v]) => `${k}*${v}`).join('/') || '未分配'}
+                            {Object.entries(currentValues).map(([k, v]) => `${k}*${v}`).join('/') || '點擊分配'}
                         </span>
                         <Settings2 className="h-3 w-3 ml-1 opacity-50 shrink-0" />
                     </Button>
@@ -436,14 +476,13 @@ export function SpecValueEditor(props: SpecValueEditorProps) {
     const { spec, sourceValue } = props;
 
     // 優先檢查是否為數量明細 (觸發總量連動)
-    // 只有在有選項的情況下才進入分配模式，否則退回一般編輯器
     if (sourceValue && spec.options?.length > 0) {
         return <QuantityAllocationEditor {...props} />;
     }
 
-    // 物件化查找渲染器
+    // 根據型別查找渲染器
     let type = spec.type;
-    // 如果有選項但非 multiselect 且非 text/number/boolean/table，預設導向 select
+    // 如果有選項且非特殊型別，預設導向 select
     if (spec.options?.length > 0 && 
         !['multiselect', 'number_with_unit', 'boolean', 'text', 'default', 'table'].includes(type)) {
         type = 'select';
