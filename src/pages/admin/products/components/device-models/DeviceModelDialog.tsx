@@ -56,7 +56,7 @@ export function DeviceModelDialog({
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>設備廠牌 (與產品廠牌分離)</Label>
+                <Label>設備廠牌</Label>
                 <div className="flex gap-2">
                   <Select
                     value={editingData?.brand_id || 'none'}
@@ -173,19 +173,19 @@ export function DeviceModelDialog({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setNewBrandOpen(false)}>取消</Button>
-            <Button 
-               onClick={() => {
-                   if (newBrandName.trim()) {
-                       createBrandMutation.mutate(newBrandName.trim(), {
-                           onSuccess: (data) => {
-                               setEditingData(prev => ({ ...prev!, brand_id: data.id }));
-                               setNewBrandOpen(false);
-                               setNewBrandName('');
-                           }
-                       })
-                   }
-               }} 
-               disabled={!newBrandName.trim() || createBrandMutation.isPending}
+            <Button
+              onClick={() => {
+                if (newBrandName.trim()) {
+                  createBrandMutation.mutate(newBrandName.trim(), {
+                    onSuccess: (data) => {
+                      setEditingData(prev => ({ ...prev!, brand_id: data.id }));
+                      setNewBrandOpen(false);
+                      setNewBrandName('');
+                    }
+                  })
+                }
+              }}
+              disabled={!newBrandName.trim() || createBrandMutation.isPending}
             >
               {createBrandMutation.isPending ? "新增中..." : "確認新增"}
             </Button>

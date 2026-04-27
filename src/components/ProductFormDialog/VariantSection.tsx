@@ -80,9 +80,10 @@ export function VariantSection({ product }: { product: any }) {
             <TableRow className="bg-muted/50">
               <TableHead className="w-[120px]">SKU</TableHead>
               <TableHead>規格名稱</TableHead>
+              <TableHead>狀態</TableHead>
               <TableHead className="text-right">批發價</TableHead>
               <TableHead className="text-right">零售價</TableHead>
-              <TableHead>狀態</TableHead>
+
               <TableHead className="w-[100px] text-center">操作</TableHead>
             </TableRow>
           </TableHeader>
