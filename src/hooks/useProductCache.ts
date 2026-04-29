@@ -9,6 +9,7 @@ import { Product, ProductVariant, ProductWithPricing, VariantWithPricing } from 
 export type ProductWithCategories = Product & {
   category_ids: string[];
   category_names: string[];
+  device_models?: { name: string, aliases: string[] | null }[];
 };
 
 interface ProductCache {
@@ -67,10 +68,18 @@ function normalizeProduct(p: any, categoryMap?: Map<string, string>): ProductWit
     }).filter(Boolean);
   }
 
+  // Extract device model info
+  const modelLinks = p.product_model_links || [];
+  const device_models = modelLinks.map((l: any) => ({
+    name: l.device_models?.name,
+    aliases: l.device_models?.aliases || []
+  })).filter((m: any) => m.name);
+
   return {
     ...p,
     category_ids,
-    category_names: category_names
+    category_names: category_names,
+    device_models
   };
 }
 
@@ -89,7 +98,7 @@ async function checkVersionAndFetch(): Promise<{ products: ProductWithCategories
     console.error('[ProductCache] Edge function error, falling back to direct fetch');
     // On error, we need both products and categories
     const [{ data: products, error: fetchError }, { data: cats }] = await Promise.all([
-      supabase.from('products').select('*, product_category_links(category_id)').order('name'),
+      supabase.from('products').select('*, product_category_links(category_id), product_model_links(device_models(name, aliases))').order('name'),
       supabase.from('categories').select('id, name')
     ]);
 

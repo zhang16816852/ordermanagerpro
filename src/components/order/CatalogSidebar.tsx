@@ -221,7 +221,8 @@ export function CatalogSidebar({
                     
                     // 3. 如果沒有設定 filter_config，則套用預設的「自動判斷隱藏」邏輯
                     if (!filterConfig) {
-                        if (specDef?.type === 'text' || specDef?.type === 'table') return;
+                        // 如果找不到規格定義，或是型態為文字/表格，則不顯示於篩選器
+                        if (!specDef || specDef.type === 'text' || specDef.type === 'table') return;
                     }
                     
                     specs[key].add(formatSpecValue(value, specDef as any, specFields as any));
@@ -242,7 +243,9 @@ export function CatalogSidebar({
                         
                         const filterConfig = (specDef as any)?.configuration?.filter_config;
                         if (filterConfig && filterConfig.enabled === false) return;
-                        if (!filterConfig && (specDef?.type === 'text' || specDef?.type === 'table')) return;
+                        if (!filterConfig) {
+                            if (!specDef || specDef.type === 'text' || specDef.type === 'table') return;
+                        }
 
                         specs[key].add(formatSpecValue(value, specDef as any, specFields as any));
                     }
@@ -397,13 +400,16 @@ export function CatalogSidebar({
                                     const specDef = specFields.find(f => f.id === specId || f.name === specId);
                                     
                                     const filterConfig = (specDef as any)?.configuration?.filter_config;
+                                    // 如果找不到規格定義，或者明確設定不啟用篩選，則不渲染
+                                    if (!specDef || (filterConfig && filterConfig.enabled === false)) return null;
+
                                     let displayMode = filterConfig?.display_mode || 'auto';
                                     
                                     // 處理 auto 或 沒設定時的預設行為
                                     if (displayMode === 'auto') {
-                                        if (specDef?.type === 'text' || specDef?.type === 'table') return null;
+                                        if (specDef.type === 'text' || specDef.type === 'table') return null;
                                         // 如果是數值類型且值很多，預設切換為區間
-                                        if (specDef?.type === 'number_with_unit' && values.length > 5) {
+                                        if (specDef.type === 'number_with_unit' && values.length > 5) {
                                             displayMode = 'range';
                                         } else {
                                             displayMode = 'checkbox';
