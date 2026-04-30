@@ -33,6 +33,9 @@ import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VariantBatchCreator } from '../ProductFormDialog/VariantBatchCreator';
 import { VariantEditDialog } from './VariantEditDialog';
+import { useProductColors } from '@/hooks/useProductColors';
+import { getContrastColor } from '@/utils/colorUtils';
+import { useBrands } from '@/hooks/useBrands';
 
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;
@@ -52,6 +55,8 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function VariantManager({ products, search }: VariantManagerProps) {
   const queryClient = useQueryClient();
+  const { colors } = useProductColors();
+  const { getBrandName } = useBrands();
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isBatchOpen, setIsBatchOpen] = useState(false);
@@ -153,7 +158,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
               <h3 className="font-semibold text-lg">{selectedProduct.name}</h3>
               <p className="text-sm text-muted-foreground">
                 SKU: {selectedProduct.sku}
-                {selectedProduct.brand && ` | 廠牌: ${selectedProduct.brand}`}
+                {selectedProduct.brand_id && ` | 廠牌: ${getBrandName(selectedProduct.brand_id)}`}
                 {selectedProduct.model && ` | 型號: ${selectedProduct.model}`}
               </p>
             </div>
@@ -201,7 +206,25 @@ export function VariantManager({ products, search }: VariantManagerProps) {
                     <TableCell className="font-medium">{variant.name}</TableCell>
                     <TableCell className="text-muted-foreground">{variant.option_1 || '-'}</TableCell>
                     <TableCell className="text-muted-foreground">{variant.option_2 || '-'}</TableCell>
-                    <TableCell className="text-muted-foreground">{variant.option_3 || '-'}</TableCell>
+                    <TableCell>
+                      {variant.option_3 ? (
+                        (() => {
+                          const color = colors.find(c => c.name === variant.option_3);
+                          if (color) {
+                            return (
+                              <div className="flex items-center gap-1.5">
+                                <div 
+                                  className="w-3 h-3 rounded-full border border-black/10 shadow-sm" 
+                                  style={{ backgroundColor: color.hex_code }} 
+                                />
+                                <span>{variant.option_3}</span>
+                              </div>
+                            );
+                          }
+                          return variant.option_3;
+                        })()
+                      ) : '-'}
+                    </TableCell>
                     <TableCell className="text-right">${variant.wholesale_price}</TableCell>
                     <TableCell className="text-right">${variant.retail_price}</TableCell>
                     <TableCell>

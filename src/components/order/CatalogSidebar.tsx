@@ -229,8 +229,23 @@ export function CatalogSidebar({
                 }
             });
 
-            // Scan variant table_settings
+            // Scan variant table_settings and core options
             p.variants?.forEach((v) => {
+                // 1. Scan core options (option_1, option_2, option_3)
+                if (v.option_1) {
+                    if (!specs['core:option_1']) specs['core:option_1'] = new Set();
+                    specs['core:option_1'].add(v.option_1);
+                }
+                if (v.option_2) {
+                    if (!specs['core:option_2']) specs['core:option_2'] = new Set();
+                    specs['core:option_2'].add(v.option_2);
+                }
+                if (v.option_3) {
+                    if (!specs['core:option_3']) specs['core:option_3'] = new Set();
+                    specs['core:option_3'].add(v.option_3);
+                }
+
+                // 2. Scan table_settings
                 const vSettings = deserializeSpecs(v.table_settings);
                 Object.entries(vSettings).forEach(([key, value]) => {
                     const specId = key.includes(':') ? key.split(':').pop()! : key;
@@ -397,6 +412,46 @@ export function CatalogSidebar({
                                 Object.entries(availableSpecs).map(([key, values]) => {
                                     // 將 key（ID 或 Name）解析為顯示名稱
                                     const specId = key.includes(':') ? key.split(':').pop()! : key;
+                                    
+                                    // 處理核心選項 (Core Options)
+                                    if (key.startsWith('core:')) {
+                                        const coreLabelMap: Record<string, string> = {
+                                            'option_1': '規格選項 1',
+                                            'option_2': '規格選項 2',
+                                            'option_3': '顏色'
+                                        };
+                                        const displayName = coreLabelMap[specId] || specId;
+                                        return (
+                                            <div key={key} className="space-y-3">
+                                                <h4 className="text-xs font-semibold text-foreground/80">{displayName}</h4>
+                                                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                                                    {values.map((val) => (
+                                                        <div key={val} className="flex items-center space-x-2">
+                                                            <Checkbox
+                                                                id={`spec-${key}-${val}`}
+                                                                checked={(selectedSpecs[key] || []).includes(val)}
+                                                                onCheckedChange={(checked) => {
+                                                                    const current = selectedSpecs[key] || [];
+                                                                    if (checked) {
+                                                                        onSpecChange(key, [...current, val]);
+                                                                    } else {
+                                                                        onSpecChange(key, current.filter((v) => v !== val));
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <Label
+                                                                htmlFor={`spec-${key}-${val}`}
+                                                                className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground"
+                                                            >
+                                                                {val}
+                                                            </Label>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+
                                     const specDef = specFields.find(f => f.id === specId || f.name === specId);
                                     
                                     const filterConfig = (specDef as any)?.configuration?.filter_config;

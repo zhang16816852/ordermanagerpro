@@ -10,7 +10,7 @@ export function ValidationSummary({ data }: ValidationSummaryProps) {
     const validRows = data.filter(r => r.isValid);
     const invalidRows = data.filter(r => !r.isValid);
     const productCount = new Set(validRows.map(r => r.product_sku)).size;
-    const variantCount = validRows.filter(r => r.hasVariant).length;
+    const variantCount = validRows.filter(r => r.is_variant).length;
 
     return (
         <div className="space-y-4">

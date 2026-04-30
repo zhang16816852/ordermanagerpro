@@ -8,6 +8,7 @@ import { useProductsList } from './hooks/useProductsList';
 import { ProductsTable } from './components/ProductsTable';
 import { ProductDialogs } from './components/ProductDialogs';
 import { DeviceModelManager } from './components/DeviceModelManager';
+import { ColorManager } from './components/ColorManager';
 import { CatalogSidebar } from '@/components/order/CatalogSidebar';
 import { ProductWithPricing } from '@/types/product';
 
@@ -48,7 +49,7 @@ export default function AdminProducts() {
                             </Button>
                             <Button variant="default" size="sm" onClick={handleBatchExport} className="h-8 shadow-sm">
                                 <Download className="mr-2 h-4 w-4" />
-                                匯出格式匯出
+                                匯出產品
                             </Button>
                         </div>
                     ) : (
@@ -70,7 +71,7 @@ export default function AdminProducts() {
                 </div>
             </div>
 
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'list' | 'variants' | 'models')}>
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'list' | 'variants' | 'models' | 'colors')}>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-muted/20 p-1.5 rounded-xl border border-muted-foreground/10">
                     <TabsList className="bg-transparent h-9 flex-wrap">
                         <TabsTrigger value="list" className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg px-4">
@@ -81,6 +82,9 @@ export default function AdminProducts() {
                         </TabsTrigger>
                         <TabsTrigger value="models" className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg px-4">
                             型號標籤庫
+                        </TabsTrigger>
+                        <TabsTrigger value="colors" className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg px-4">
+                            顏色對照表
                         </TabsTrigger>
                     </TabsList>
                 </div>
@@ -140,6 +144,12 @@ export default function AdminProducts() {
                 <TabsContent value="models" className="mt-6 outline-none">
                     <div className="rounded-xl border bg-card shadow-sm p-4">
                         <DeviceModelManager />
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="colors" className="mt-6 outline-none">
+                    <div className="rounded-xl border bg-card shadow-sm p-4">
+                        <ColorManager />
                     </div>
                 </TabsContent>
             </Tabs>

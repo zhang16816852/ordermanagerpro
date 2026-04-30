@@ -18,7 +18,7 @@ export function useProductsList() {
 
     // --- UI States ---
     const [search, setSearch] = useState('');
-    const [activeTab, setActiveTab] = useState<'list' | 'variants' | 'models'>('list');
+    const [activeTab, setActiveTab] = useState<'list' | 'variants' | 'models' | 'colors'>('list');
     const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
     const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
 
@@ -353,7 +353,8 @@ export function useProductsList() {
                 base_retail_price: p.base_retail_price,
                 product_status: STATUS_LABELS[p.status] || p.status || '上架中',
                 device_models: productModels,
-                規格: productSpecs
+                規格: productSpecs,
+                is_variant: '否'
             };
 
             if (variants.length > 0) {
@@ -368,12 +369,13 @@ export function useProductsList() {
                         variant_name: v.name,
                         option_1: v.option_1 || '',
                         option_2: v.option_2 || '',
-                        option_3: v.option_3 || '',
+                        '顏色': v.option_3 || '',
                         variant_wholesale_price: v.wholesale_price,
                         variant_retail_price: v.retail_price,
                         variant_status: STATUS_LABELS[v.status] || v.status || '上架中',
                         barcode: v.barcode ? `'${v.barcode}` : '',
                         variant_device_models: variantModels,
+                        is_variant: '是'
                     });
                 });
             } else {
@@ -384,12 +386,12 @@ export function useProductsList() {
                     variant_name: '',
                     option_1: '',
                     option_2: '',
-                    option_3: '',
+                    '顏色': '',
                     variant_wholesale_price: '',
                     variant_retail_price: '',
-                    variant_status: '',
                     barcode: (p as any).barcode ? `'${(p as any).barcode}` : '',
                     variant_device_models: '',
+                    is_variant: '否'
                 });
             }
         });

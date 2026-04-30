@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import Papa from 'papaparse';
 import jschardet from 'jschardet';
+import { useBrands } from '@/hooks/useBrands';
 import {
   Dialog,
   DialogContent,
@@ -38,6 +39,7 @@ interface ImportRow {
   name: string;
   description: string;
   category: string;
+  brand: string;
   base_wholesale_price: number;
   base_retail_price: number;
   status: 'active' | 'discontinued';
@@ -51,10 +53,11 @@ interface ProductBatchImportProps {
 }
 
 const REQUIRED_FIELDS = ['sku', 'name'];
-const OPTIONAL_FIELDS = ['description', 'category', 'base_wholesale_price', 'base_retail_price', 'status'];
+const OPTIONAL_FIELDS = ['description', 'category', 'brand', 'base_wholesale_price', 'base_retail_price', 'status'];
 
 export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportProps) {
   const queryClient = useQueryClient();
+  const { brands } = useBrands();
   const [step, setStep] = useState<'upload' | 'preview' | 'confirm'>('upload');
   const [importData, setImportData] = useState<ImportRow[]>([]);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -161,6 +164,7 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
             const name = getField('name');
             const description = getField('description');
             const category = getField('category');
+            const brand = getField('brand');
             const wholesalePrice = parseFloat(getField('base_wholesale_price')) || 0;
             const retailPrice = parseFloat(getField('base_retail_price')) || 0;
             const statusRaw = getField('status')?.toLowerCase();
@@ -175,6 +179,7 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
               name,
               description,
               category,
+              brand,
               base_wholesale_price: wholesalePrice,
               base_retail_price: retailPrice,
               status,
@@ -202,7 +207,7 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
       const updated = [...prev];
       const row = { ...updated[index] };
 
-      if (field === 'sku' || field === 'name' || field === 'description') {
+      if (field === 'sku' || field === 'name' || field === 'description' || field === 'brand' || field === 'category') {
         (row as any)[field] = value;
       } else if (field === 'base_wholesale_price' || field === 'base_retail_price') {
         (row as any)[field] = parseFloat(value as string) || 0;
@@ -231,15 +236,21 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
 
   const importMutation = useMutation({
     mutationFn: async () => {
-      const productsToInsert = validRows.map(row => ({
-        sku: row.sku,
-        name: row.name,
-        description: row.description || null,
-        category: row.category || null,
-        base_wholesale_price: row.base_wholesale_price,
-        base_retail_price: row.base_retail_price,
-        status: row.status,
-      }));
+      const productsToInsert = validRows.map(row => {
+        // Find brand ID by name
+        const brandObj = brands.find(b => b.name.toLowerCase() === row.brand.toLowerCase());
+        
+        return {
+          sku: row.sku,
+          name: row.name,
+          description: row.description || null,
+          category: row.category || null,
+          brand_id: brandObj?.id || null,
+          base_wholesale_price: row.base_wholesale_price,
+          base_retail_price: row.base_retail_price,
+          status: row.status,
+        };
+      });
 
       const { error } = await supabase
         .from('products')
@@ -302,13 +313,13 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
                 <h4 className="font-medium mb-2">CSV 格式說明</h4>
                 <div className="text-sm text-muted-foreground space-y-1">
                   <p><strong>必填欄位：</strong>sku, name</p>
-                  <p><strong>選填欄位：</strong>description, base_wholesale_price, base_retail_price, status</p>
+                  <p><strong>選填欄位：</strong>description, category, brand, base_wholesale_price, base_retail_price, status</p>
                   <p><strong>status 值：</strong>active 或 discontinued（預設為 active）</p>
                 </div>
                 <div className="mt-3 p-2 bg-background rounded font-mono text-xs">
-                  sku,name,description,category,base_wholesale_price,base_retail_price,status<br />
-                  SKU001,產品A,描述內容,類別,100,150,active<br />
-                  SKU002,產品B,,80,120,active
+                  sku,name,description,category,brand,base_wholesale_price,base_retail_price,status<br />
+                  SKU001,產品A,描述內容,類別,品牌A,100,150,active<br />
+                  SKU002,產品B,,,品牌B,80,120,active
                 </div>
               </div>
             </div>
@@ -338,6 +349,7 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
                       <TableHead>名稱</TableHead>
                       <TableHead>描述</TableHead>
                       <TableHead>類別</TableHead>
+                      <TableHead>品牌</TableHead>
                       <TableHead className="text-right">批發價</TableHead>
                       <TableHead className="text-right">零售價</TableHead>
                       <TableHead>狀態</TableHead>
@@ -396,6 +408,17 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
                             />
                           ) : (
                             row.category || '-'
+                          )}
+                        </TableCell>
+                        <TableCell className="max-w-[150px] truncate">
+                          {editingIndex === index ? (
+                            <Input
+                              value={row.brand}
+                              onChange={(e) => updateRow(index, 'brand', e.target.value)}
+                              className="h-8"
+                            />
+                          ) : (
+                            row.brand || '-'
                           )}
                         </TableCell>
                         <TableCell className="text-right">

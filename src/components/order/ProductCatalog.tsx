@@ -130,29 +130,40 @@ export default function ProductCatalog({
       // 2. Spec Filters (AND between keys, OR between values in same key)
       const specKeys = Object.keys(specFilters);
       if (specKeys.length > 0) {
-        const matchesSpec = (settingsRaw: any) => {
-          if (!settingsRaw) return false;
-          // 將原始數據 (Array 或 Object) 轉換為與篩選器一致的鍵值對格式 (parentId:id -> value)
-          const flatSettings = deserializeSpecs(settingsRaw);
+        const matchesSpec = (target: any) => {
+          if (!target) return false;
+          
+          // 如果 target 是變體，它會有 option_1, option_2, option_3
+          // 如果 target 是產品，則主要看 table_settings
+          const isVariant = 'product_id' in target;
+          const flatSettings = deserializeSpecs(target.table_settings);
 
           return specKeys.every((key) => {
             const allowedValues = specFilters[key];
             if (!allowedValues || allowedValues.length === 0) return true;
 
-            // 直接從平坦化的設定中讀取 (key 已包含 parentId:id 格式)
-            const val = flatSettings[key];
-            const actualValue = formatSpecValue(val);
+            let actualValue = "";
             
+            // 處理核心選項 (Core Options)
+            if (key.startsWith('core:')) {
+              if (!isVariant) return false; // 產品層級通常不帶核心選項
+              const optionKey = key.replace('core:', '');
+              actualValue = target[optionKey] || "";
+            } else {
+              // 處理一般規格
+              const val = flatSettings[key];
+              actualValue = formatSpecValue(val);
+            }
+            
+            if (!actualValue) return false;
+
             // 檢查是否為區間篩選 (格式為 "MIN-MAX")
             const isRangeFilter = allowedValues.length === 1 && allowedValues[0].includes('-');
             
             if (isRangeFilter) {
                 const [min, max] = allowedValues[0].split('-').map(Number);
-                // 從產品規格值中提取數字進行比對
                 const productNumbers = actualValue.match(/\d+(\.\d+)?/g)?.map(Number) || [];
                 if (productNumbers.length === 0) return false;
-                
-                // 只要產品規格中的任一數字在區間內即算符合
                 return productNumbers.some(n => n >= min && n <= max);
             }
 
@@ -160,8 +171,8 @@ export default function ProductCatalog({
           });
         };
 
-        const productMatches = matchesSpec(product.table_settings);
-        const anyVariantMatches = product.variants?.some((v) => matchesSpec(v.table_settings));
+        const productMatches = matchesSpec(product);
+        const anyVariantMatches = product.variants?.some((v) => matchesSpec(v));
 
         if (!productMatches && !anyVariantMatches) return false;
       }

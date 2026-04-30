@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
-import { useProductColors, ProductColor } from '@/hooks/useProductColors';
+import { useState, useMemo, useEffect } from 'react';
+import { useColorStore } from '@/store/useColorStore';
+import { ProductColor } from '@/hooks/useProductColors';
 import { Check, ChevronsUpDown, Plus, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,12 +24,17 @@ import { toast } from 'sonner';
 interface ColorSelectFieldProps {
   selectedColorIds: string[];
   onChange: (colorIds: string[]) => void;
+  multiple?: boolean;
 }
 
-export function ColorSelectField({ selectedColorIds, onChange }: ColorSelectFieldProps) {
+export function ColorSelectField({ selectedColorIds, onChange, multiple = true }: ColorSelectFieldProps) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const { colors, addColor, isAdding } = useProductColors();
+  const { colors, addColor, isAdding, fetchColors } = useColorStore();
+
+  useEffect(() => {
+    fetchColors();
+  }, []);
 
   // 取得已選取的顏色物件 (保持傳入的順序)
   const selectedColors = useMemo(() => {
@@ -38,6 +44,12 @@ export function ColorSelectField({ selectedColorIds, onChange }: ColorSelectFiel
   }, [selectedColorIds, colors]);
 
   const toggleColor = (id: string) => {
+    if (!multiple) {
+      onChange([id]);
+      setOpen(false);
+      return;
+    }
+    
     if (selectedColorIds.includes(id)) {
       onChange(selectedColorIds.filter(i => i !== id));
     } else {

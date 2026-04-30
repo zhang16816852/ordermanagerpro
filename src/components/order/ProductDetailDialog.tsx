@@ -18,6 +18,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatSpecValue, deserializeSpecs, getTreeSortedVisiblePaths } from "@/utils/specLogic";
 import { useBrands } from "@/hooks/useBrands";
 import { calculatePriceRange } from "@/utils/priceUtils";
+import { useProductColors } from "@/hooks/useProductColors";
+import { getContrastColor } from "@/utils/colorUtils";
 
 interface ProductDetailDialogProps {
     product: ProductWithPricing | null;
@@ -37,6 +39,7 @@ export function ProductDetailDialog({
 }: ProductDetailDialogProps) {
     const { addItem, getItemQuantity } = useStoreDraft(storeId);
     const { getBrandName } = useBrands();
+    const { colors } = useProductColors();
     const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
 
     // 當彈窗開啟或產品改變時，若產品有變體，預設不選中或由外部決定
@@ -168,7 +171,12 @@ export function ProductDetailDialog({
     // 獲取目前應顯示的價格
     const currentPriceDisplay = useMemo(() => {
         if (!product) return "$0";
-        if (selectedVariant) return `$${selectedVariant.retail_price}`;
+        // 如果有選中變體，顯示該變體的價格
+        if (selectedVariant) {
+            const price = selectedVariant.effective_wholesale_price ?? selectedVariant.wholesale_price;
+            return `$${price}`;
+        }
+        // 否則顯示產品的價格區間
         return calculatePriceRange(product.wholesale_price, product.variants?.map(v => v.effective_wholesale_price) || []).display;
     }, [product, selectedVariant]);
 
@@ -188,8 +196,8 @@ export function ProductDetailDialog({
                 ...product,
                 id: selectedVariant.id,
                 name: `${product.name} (${selectedVariant.name})`,
-                wholesale_price: selectedVariant.wholesale_price,
-                retail_price: selectedVariant.retail_price,
+                wholesale_price: selectedVariant.effective_wholesale_price ?? selectedVariant.wholesale_price,
+                retail_price: selectedVariant.effective_retail_price ?? selectedVariant.retail_price,
             } as any);
             toast.success(`${product.name} (${selectedVariant.name}) 已加入購物車`);
         } else {
@@ -310,9 +318,21 @@ export function ProductDetailDialog({
                                 <Badge 
                                     key={v.id} 
                                     variant={selectedVariantId === v.id ? "default" : "outline"}
-                                    className="px-3 py-1.5 cursor-pointer hover:bg-primary/10 transition-colors text-sm"
+                                    className="px-3 py-1.5 cursor-pointer hover:bg-primary/10 transition-colors text-sm flex items-center gap-2"
                                     onClick={() => setSelectedVariantId(selectedVariantId === v.id ? null : v.id)}
                                 >
+                                    {v.option_3 && (() => {
+                                        const color = colors.find(c => c.name === v.option_3);
+                                        if (color) {
+                                            return (
+                                                <div 
+                                                    className="w-3 h-3 rounded-full border border-black/10" 
+                                                    style={{ backgroundColor: color.hex_code }} 
+                                                />
+                                            );
+                                        }
+                                        return null;
+                                    })()}
                                     {v.name}
                                     {selectedVariantId === v.id && <span className="ml-1.5 opacity-70">✓</span>}
                                 </Badge>

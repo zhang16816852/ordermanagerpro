@@ -32,7 +32,7 @@ export interface ImportRow {
     barcode?: string;
     device_models?: string;
     variant_device_models?: string;
-    hasVariant: boolean;
+    is_variant: boolean;
     errors: string[];
     isValid: boolean;
     action?: 'create' | 'update';
@@ -40,7 +40,7 @@ export interface ImportRow {
 }
 
 const PRODUCT_REQUIRED = ['product_sku', 'product_name'];
-const PRODUCT_OPTIONAL = ['description', 'category', 'category_id', 'brand', 'model', 'series', 'base_wholesale_price', 'base_retail_price', 'product_status', 'table_settings', 'device_models'];
+const PRODUCT_OPTIONAL = ['description', 'category', 'category_id', 'brand', 'model', 'series', 'base_wholesale_price', 'base_retail_price', 'product_status', 'table_settings', 'device_models', 'is_variant'];
 const VARIANT_FIELDS = ['variant_sku', 'variant_name', 'option_1', 'option_2', 'option_3', 'variant_wholesale_price', 'variant_retail_price', 'variant_status', 'variant_table_settings', 'barcode', 'variant_device_models'];
 
 export function useProductImport(onSuccess: () => void) {
@@ -85,16 +85,25 @@ export function useProductImport(onSuccess: () => void) {
         },
     });
 
+    const { data: allColors = [] } = useQuery({
+        queryKey: ['product-colors-for-import'],
+        queryFn: async () => {
+            const { data, error } = await supabase.from('product_colors').select('*').order('sort_order');
+            if (error) return [];
+            return data;
+        },
+    });
+
     const parseCondensedSpecs = (specStr: string) => {
         if (!specStr || specStr.trim() === '') return {};
         const settings: Record<string, any> = {};
         const pairs = specStr.split(',').map(p => p.trim()).filter(Boolean);
-        
+
         pairs.forEach(pair => {
             const [name, ...valParts] = pair.split(':');
             const value = valParts.join(':').trim();
             const specId = specDefs.find(sd => sd.name === name.trim())?.id || name.trim();
-            
+
             if (value.includes('/')) {
                 const items = value.split('/').map(v => v.trim());
                 if (items.some(item => item.includes('*'))) {
@@ -136,22 +145,36 @@ export function useProductImport(onSuccess: () => void) {
         return str.trim();
     };
 
-    const validateRow = (row: Omit<ImportRow, 'errors' | 'isValid' | 'hasVariant'>): { errors: string[]; hasVariant: boolean } => {
+    const validateRow = (row: Omit<ImportRow, 'errors' | 'isValid' | 'is_variant'>): { errors: string[]; is_variant: boolean } => {
         const errors: string[] = [];
         if (!row.product_sku) errors.push('產品 SKU 為必填');
         if (!row.product_name) errors.push('產品名稱為必填');
-        const hasVariant = !!(row.variant_sku || row.variant_name);
-        if (hasVariant) {
+        const isVariantVal = (row as any).is_variant_raw;
+        const is_variant = isVariantVal
+            ? (isVariantVal === '是' || isVariantVal === 'true' || isVariantVal === '1' || isVariantVal === 'TRUE')
+            : !!(row.variant_sku || row.variant_name);
+
+        if (is_variant) {
             if (!row.variant_sku) errors.push('變體 SKU 為必填（當有變體資料時）');
             if (!row.variant_name) errors.push('變體名稱為必填（當有變體資料時）');
         }
-        
+
         // v4.11 品牌校驗
         if (row.brand && !row.brand_id) {
-            errors.push(`找不到品牌 "${row.brand}"，請手動修正`);
+            errors.push(`找不到品牌 "${row.brand}"`);
         }
 
-        return { errors, hasVariant };
+        // 顏色校驗 (針對 option_3)
+        if (row.option_3 && is_variant) {
+            const colorExists = allColors.some(c => c.name === row.option_3 || c.code === row.option_3);
+            if (!colorExists) {
+                console.log("不存在顏色", row.option_3);
+
+                errors.push(`顏色 "${row.option_3}" 不存在於顏色庫`);
+            }
+        }
+
+        return { errors, is_variant };
     };
 
     const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -189,6 +212,13 @@ export function useProductImport(onSuccess: () => void) {
                         );
                         if (header === '規格') matchedField = 'table_settings';
                         if (header === '變體規格') matchedField = 'variant_table_settings';
+                        if (header === 'is_variant' || header === '是否為變體') matchedField = 'is_variant';
+                        if (header === '顏色') matchedField = 'option_3';
+                        if (header === '品牌') matchedField = 'brand';
+                        if (header === '分類') matchedField = 'category';
+                        if (header === '型號') matchedField = 'model';
+                        if (header === '適用型號' || header === '裝置型號') matchedField = 'device_models';
+                        if (header === '變體適用型號') matchedField = 'variant_device_models';
                         if (matchedField) autoMapping[matchedField] = index;
                     });
 
@@ -215,7 +245,7 @@ export function useProductImport(onSuccess: () => void) {
                         const specRaw = getField('table_settings') || getField('規格');
                         const variantSpecRaw = getField('variant_table_settings') || getField('變體規格');
 
-                        const baseRow: Omit<ImportRow, 'errors' | 'isValid' | 'hasVariant'> = {
+                        const baseRow: Omit<ImportRow, 'errors' | 'isValid' | 'is_variant'> = {
                             product_sku: getField('product_sku'),
                             product_name: getField('product_name'),
                             brand: getField('brand'),
@@ -250,8 +280,8 @@ export function useProductImport(onSuccess: () => void) {
                             }
                         }
 
-                        const { errors, hasVariant } = validateRow(baseRow);
-                        return { ...baseRow, hasVariant, errors, isValid: errors.length === 0 };
+                        const { errors, is_variant } = validateRow({ ...baseRow, is_variant_raw: getField('is_variant') } as any);
+                        return { ...baseRow, is_variant, errors, isValid: errors.length === 0 };
                     });
 
                     const allSkus = rawParsed.map(r => r.product_sku).filter(Boolean);
@@ -260,7 +290,7 @@ export function useProductImport(onSuccess: () => void) {
                     const runDiff = async () => {
                         const { data: existingProducts } = await supabase.from('products').select('*').in('sku', allSkus);
                         const { data: existingVariants } = await supabase.from('product_variants').select('*').in('sku', allVariantSkus);
-                        
+
                         const productIds = (existingProducts || []).map(p => p.id);
                         const { data: existingCatLinks } = await (supabase.from('product_category_links' as any) as any).select('product_id, category_id').in('product_id', productIds);
 
@@ -311,8 +341,8 @@ export function useProductImport(onSuccess: () => void) {
         setImportData(prev => {
             const updated = [...prev];
             const row = { ...updated[index], [field]: value };
-            const { errors, hasVariant } = validateRow(row);
-            updated[index] = { ...row, errors, hasVariant, isValid: errors.length === 0 };
+            const { errors, is_variant } = validateRow(row as any);
+            updated[index] = { ...row, errors, is_variant, isValid: errors.length === 0 };
             return updated;
         });
     };
@@ -326,8 +356,8 @@ export function useProductImport(onSuccess: () => void) {
             validRows.forEach(row => { if (!uniqueProductsMap.has(row.product_sku)) uniqueProductsMap.set(row.product_sku, row); });
 
             // 建立規格字典供序列化使用
-            const specMap = new Map(specDefs.map(s => [s.id, { 
-                id: s.id, name: s.name, type: s.type, options: s.options || [], defaultValue: s.default_value || '' 
+            const specMap = new Map(specDefs.map(s => [s.id, {
+                id: s.id, name: s.name, type: s.type, options: s.options || [], defaultValue: s.default_value || ''
             } as any]));
 
             const productsToInsert = Array.from(uniqueProductsMap.values()).map(row => {
@@ -346,7 +376,7 @@ export function useProductImport(onSuccess: () => void) {
                     base_wholesale_price: row.base_wholesale_price,
                     base_retail_price: row.base_retail_price,
                     status: row.product_status,
-                    has_variants: row.hasVariant,
+                    has_variants: row.is_variant,
                     table_settings: serializedSettings as any,
                 };
             });
@@ -385,7 +415,7 @@ export function useProductImport(onSuccess: () => void) {
                 await supabase.from('product_model_links').insert(productModelLinksToInsert as any);
             }
 
-            const variantsToInsert = validRows.filter(r => r.hasVariant).map(row => {
+            const variantsToInsert = validRows.filter(r => r.is_variant).map(row => {
                 const flatSpecsV = row.variant_table_settings ? (row.variant_table_settings.includes(':') ? parseCondensedSpecs(row.variant_table_settings) : JSON.parse(row.variant_table_settings)) : {};
                 const pathMapV = new Map();
                 Object.entries(flatSpecsV).forEach(([id, val]) => pathMapV.set(`root:${id}`, val));
@@ -411,7 +441,7 @@ export function useProductImport(onSuccess: () => void) {
                 if (error) throw error;
                 if (upsertedVariants) {
                     const variantIdMap = new Map(upsertedVariants.map(v => [v.sku, v.id]));
-                    const variantModelLinksToInsert = validRows.filter(r => r.hasVariant).flatMap(row => {
+                    const variantModelLinksToInsert = validRows.filter(r => r.is_variant).flatMap(row => {
                         if (!row.variant_device_models) return [];
                         const names = row.variant_device_models.split(',').map(n => n.trim()).filter(Boolean);
                         const vId = variantIdMap.get(row.variant_sku!);
@@ -455,7 +485,7 @@ export function useProductImport(onSuccess: () => void) {
     const [filterStatus, setFilterStatus] = useState<string>('all');
     const filteredData = importData.filter(r => {
         const matchCat = filterCategory === 'all' || r.category === filterCategory;
-        const matchStatus = filterStatus === 'all' || 
+        const matchStatus = filterStatus === 'all' ||
             (filterStatus === 'changed' && r.action === 'update' && r.diff && r.diff.length > 0) ||
             (filterStatus === 'new' && r.action === 'create') ||
             (filterStatus === 'error' && !r.isValid);
@@ -463,9 +493,9 @@ export function useProductImport(onSuccess: () => void) {
     });
 
     return {
-        step, setStep, importData, filteredData, filterCategory, setFilterCategory, 
+        step, setStep, importData, filteredData, filterCategory, setFilterCategory,
         filterStatus, setFilterStatus, isLoading: importMutation.isPending,
         handleFileUpload, updateRow, removeRow, importMutation, downloadTemplate, resetState, categories,
-        allBrands
+        allBrands, allColors
     };
 }

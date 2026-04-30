@@ -21,6 +21,9 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { StandaloneDeviceModelSelectField } from './StandaloneDeviceModelSelectField';
+import { ColorSelectField } from '../ProductFormDialog/ColorSelectField';
+import { useColorStore } from '@/store/useColorStore';
+import { useMemo } from 'react';
 
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;
@@ -43,14 +46,33 @@ export function VariantEditDialog({
 }: VariantEditDialogProps) {
     const queryClient = useQueryClient();
     const [selectedModels, setSelectedModels] = useState<string[]>([]);
+    const [selectedColorIds, setSelectedColorIds] = useState<string[]>([]);
+    const { colors, fetchColors, getColorByName } = useColorStore();
     
     // 初始化模型的 state
     useEffect(() => {
-        if (open && variant) {
-            setSelectedModels((variant as any).variant_model_links?.map((l: any) => l.model_id) || []);
-        } else if (open && !variant) {
-            setSelectedModels([]);
-        }
+        const init = async () => {
+            if (open) {
+                await fetchColors();
+                
+                if (variant) {
+                    setSelectedModels((variant as any).variant_model_links?.map((l: any) => l.model_id) || []);
+                    
+                    // 根據 option_3 的名稱找回顏色 ID (使用 Store)
+                    if (variant.option_3) {
+                        const color = getColorByName(variant.option_3);
+                        if (color) setSelectedColorIds([color.id]);
+                        else setSelectedColorIds([]);
+                    } else {
+                        setSelectedColorIds([]);
+                    }
+                } else {
+                    setSelectedModels([]);
+                    setSelectedColorIds([]);
+                }
+            }
+        };
+        init();
     }, [open, variant]);
 
     const categoryId = (product as any)?.category_id;
@@ -160,6 +182,8 @@ export function VariantEditDialog({
             table_settings[key] = formData.get(`spec_${key}`);
         });
 
+        const selectedColor = colors.find(c => c.id === selectedColorIds[0]);
+
         const variantData: any = {
             product_id: product.id,
             sku: formData.get('sku') as string,
@@ -168,7 +192,7 @@ export function VariantEditDialog({
             color: (formData.get('color') as string) || null,
             option_1: (formData.get('option_1') as string) || null,
             option_2: (formData.get('option_2') as string) || null,
-            option_3: (formData.get('option_3') as string) || null,
+            option_3: selectedColor?.name || null,
             wholesale_price: parseFloat(formData.get('wholesale_price') as string) || 0,
             retail_price: parseFloat(formData.get('retail_price') as string) || 0,
             status: formData.get('status') as ProductVariant['status'],
@@ -242,12 +266,11 @@ export function VariantEditDialog({
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="option_3">選項3</Label>
-                            <Input
-                                id="option_3"
-                                name="option_3"
-                                placeholder="如：白色"
-                                defaultValue={variant?.option_3 || ''}
+                            <Label>選項3 (顏色)</Label>
+                            <ColorSelectField 
+                                selectedColorIds={selectedColorIds}
+                                onChange={setSelectedColorIds}
+                                multiple={false}
                             />
                         </div>
                     </div>

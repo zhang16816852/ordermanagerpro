@@ -40,6 +40,7 @@ interface ImportRow {
   option_1: string;
   option_2: string;
   option_3: string;
+  brand: string;
   wholesale_price: number;
   retail_price: number;
   barcode: string;
@@ -56,7 +57,7 @@ interface VariantBatchImportProps {
 }
 
 const REQUIRED_FIELDS = ['product_sku', 'sku', 'name'];
-const OPTIONAL_FIELDS = ['option_1', 'option_2', 'option_3', 'wholesale_price', 'retail_price', 'barcode', 'status'];
+const OPTIONAL_FIELDS = ['brand', 'option_1', 'option_2', 'option_3', 'wholesale_price', 'retail_price', 'barcode', 'status'];
 
 export function VariantBatchImport({ open, onOpenChange }: VariantBatchImportProps) {
   const queryClient = useQueryClient();
@@ -148,14 +149,22 @@ export function VariantBatchImport({ open, onOpenChange }: VariantBatchImportPro
           const allFields = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS];
 
           headerRow.forEach((header, index) => {
-            const matchedField = allFields.find(f =>
-              header === f ||
-              header.replace(/_/g, ' ') === f.replace(/_/g, ' ') ||
-              header.includes(f)
-            );
-            if (matchedField) {
-              autoMapping[matchedField] = index;
-            }
+            const h = header.toLowerCase().trim();
+            // 精確對應優先
+            if (h === 'product_sku') autoMapping['product_sku'] = index;
+            else if (h === 'sku') autoMapping['sku'] = index;
+            else if (h === 'name') autoMapping['name'] = index;
+            else if (h === 'option_1' || h === '規格') autoMapping['option_1'] = index;
+            else if (h === 'option_2' || h === '容量') autoMapping['option_2'] = index;
+            else if (h === 'option_3' || h === '顏色') autoMapping['option_3'] = index;
+            else if (h === 'brand' || h === '品牌') autoMapping['brand'] = index;
+            else if (h === 'wholesale_price' || h === 'variant_wholesale_price') autoMapping['wholesale_price'] = index;
+            else if (h === 'retail_price' || h === 'variant_retail_price') autoMapping['retail_price'] = index;
+            else if (h === 'base_wholesale_price') autoMapping['base_wholesale_price'] = index;
+            else if (h === 'base_retail_price') autoMapping['base_retail_price'] = index;
+            else if (h === 'barcode' || h === '條碼') autoMapping['barcode'] = index;
+            else if (h === 'status' || h === '狀態') autoMapping['status'] = index;
+            else if (h === 'is_variant' || h === '是否為變體') autoMapping['is_variant'] = index;
           });
 
           // 解析資料列
@@ -172,12 +181,38 @@ export function VariantBatchImport({ open, onOpenChange }: VariantBatchImportPro
             const option_1 = getField('option_1');
             const option_2 = getField('option_2');
             const option_3 = getField('option_3');
-            const wholesale_price = parseFloat(getField('wholesale_price')) || 0;
-            const retail_price = parseFloat(getField('retail_price')) || 0;
+            const brand = getField('brand');
+
+            const isVariantVal = getField('is_variant');
+            const isVariant = isVariantVal
+              ? (isVariantVal === '是' || isVariantVal === 'true' || isVariantVal === '1' || isVariantVal === 'TRUE')
+              : (sku && product_sku && sku !== product_sku);
+
+            let wholesale_price = 0;
+            let retail_price = 0;
+
+            // 抓取各個可能的價格欄位原始值
+            const vWholesale = getField('variant_wholesale_price'); // 對應到 CSV 的 wholesale_price 或 variant_wholesale_price
+            const vRetail = getField('variant_retail_price');       // 對應到 CSV 的 retail_price 或 variant_retail_price
+            const bWholesale = getField('base_wholesale_price');
+            const bRetail = getField('base_retail_price');
+            console.log('isvariant', isVariant)
+            if (!isVariant) {
+              // --- 情況 A: 主商品列 ---
+              // 優先順序：base_價格 > 一般價格
+              wholesale_price = parseFloat(bWholesale || vWholesale) || 0;
+              retail_price = parseFloat(bRetail || vRetail) || 0;
+            } else {
+              // --- 情況 B: 變體列 ---
+              // 優先順序：一般價格 (variant_價格) > base_價格
+              wholesale_price = parseFloat(vWholesale || bWholesale) || 0;
+              retail_price = parseFloat(vRetail || bRetail) || 0;
+            }
+
             const barcode = getField('barcode');
             const statusRaw = getField('status')?.toLowerCase();
-            const status = (['active', 'discontinued', 'preorder', 'sold_out'].includes(statusRaw) 
-              ? statusRaw 
+            const status = (['active', 'discontinued', 'preorder', 'sold_out'].includes(statusRaw)
+              ? statusRaw
               : 'active') as ImportRow['status'];
 
             const baseRow = {
@@ -187,6 +222,7 @@ export function VariantBatchImport({ open, onOpenChange }: VariantBatchImportPro
               option_1,
               option_2,
               option_3,
+              brand,
               wholesale_price,
               retail_price,
               barcode,
@@ -221,8 +257,8 @@ export function VariantBatchImport({ open, onOpenChange }: VariantBatchImportPro
       const updated = [...prev];
       const row = { ...updated[index] };
 
-      if (field === 'product_sku' || field === 'sku' || field === 'name' || 
-          field === 'option_1' || field === 'option_2' || field === 'option_3' || field === 'barcode') {
+      if (field === 'product_sku' || field === 'sku' || field === 'name' ||
+        field === 'option_1' || field === 'option_2' || field === 'option_3' || field === 'barcode' || field === 'brand') {
         (row as any)[field] = value;
       } else if (field === 'wholesale_price' || field === 'retail_price') {
         (row as any)[field] = parseFloat(value as string) || 0;
@@ -343,10 +379,10 @@ export function VariantBatchImport({ open, onOpenChange }: VariantBatchImportPro
                   <p><strong>注意：</strong>product_sku 必須對應已存在的主產品 SKU</p>
                 </div>
                 <div className="mt-3 p-2 bg-background rounded font-mono text-xs overflow-x-auto">
-                  product_sku,sku,name,option_1,option_2,wholesale_price,retail_price,status<br />
-                  MAIN-001,MAIN-001-RED-S,紅色 S,紅色,S,100,150,active<br />
-                  MAIN-001,MAIN-001-RED-M,紅色 M,紅色,M,100,150,active<br />
-                  MAIN-001,MAIN-001-BLUE-S,藍色 S,藍色,S,100,150,active
+                  product_sku,sku,name,option_1,option_2,option_3,wholesale_price,retail_price,status<br />
+                  MAIN-001,MAIN-001-RED-S,紅色 S,S,128G,紅色,100,150,active<br />
+                  MAIN-001,MAIN-001-RED-M,紅色 M,M,256G,紅色,100,150,active<br />
+                  MAIN-001,MAIN-001-BLUE-S,藍色 S,S,128G,藍色,100,150,active
                 </div>
               </div>
             </div>
@@ -375,8 +411,10 @@ export function VariantBatchImport({ open, onOpenChange }: VariantBatchImportPro
                       <TableHead>主產品 SKU</TableHead>
                       <TableHead>變體 SKU</TableHead>
                       <TableHead>名稱</TableHead>
+                      <TableHead>品牌</TableHead>
                       <TableHead>選項 1</TableHead>
                       <TableHead>選項 2</TableHead>
+                      <TableHead>選項 3 (顏色)</TableHead>
                       <TableHead className="text-right">批發價</TableHead>
                       <TableHead className="text-right">零售價</TableHead>
                       <TableHead>狀態</TableHead>
@@ -434,6 +472,17 @@ export function VariantBatchImport({ open, onOpenChange }: VariantBatchImportPro
                         <TableCell>
                           {editingIndex === index ? (
                             <Input
+                              value={row.brand}
+                              onChange={(e) => updateRow(index, 'brand', e.target.value)}
+                              className="h-8 w-20"
+                            />
+                          ) : (
+                            row.brand || '-'
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {editingIndex === index ? (
+                            <Input
                               value={row.option_1}
                               onChange={(e) => updateRow(index, 'option_1', e.target.value)}
                               className="h-8 w-16"
@@ -451,6 +500,17 @@ export function VariantBatchImport({ open, onOpenChange }: VariantBatchImportPro
                             />
                           ) : (
                             row.option_2 || '-'
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {editingIndex === index ? (
+                            <Input
+                              value={row.option_3}
+                              onChange={(e) => updateRow(index, 'option_3', e.target.value)}
+                              className="h-8 w-16"
+                            />
+                          ) : (
+                            row.option_3 || '-'
                           )}
                         </TableCell>
                         <TableCell className="text-right">
@@ -495,9 +555,9 @@ export function VariantBatchImport({ open, onOpenChange }: VariantBatchImportPro
                             </Select>
                           ) : (
                             <Badge variant={row.status === 'active' ? 'default' : 'secondary'}>
-                              {row.status === 'active' ? '上架中' : 
-                               row.status === 'discontinued' ? '已停售' :
-                               row.status === 'preorder' ? '預購' : '售完'}
+                              {row.status === 'active' ? '上架中' :
+                                row.status === 'discontinued' ? '已停售' :
+                                  row.status === 'preorder' ? '預購' : '售完'}
                             </Badge>
                           )}
                         </TableCell>

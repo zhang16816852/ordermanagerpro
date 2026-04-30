@@ -658,6 +658,36 @@ export type Database = {
           },
         ]
       }
+      product_colors: {
+        Row: {
+          code: string
+          created_at: string | null
+          hex_code: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          sort_order: number | null
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          hex_code?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          sort_order?: number | null
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          hex_code?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
       product_inventory: {
         Row: {
           id: string
