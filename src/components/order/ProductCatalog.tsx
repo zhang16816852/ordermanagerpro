@@ -24,6 +24,9 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from '@/integrations/supabase/client';
 import { useMemo } from "react";
 import { calculatePriceRange } from "@/utils/priceUtils";
+import { useProductColors } from "@/hooks/useProductColors";
+import { getContrastColor } from "@/utils/colorUtils";
+
 interface ProductCatalogProps {
   products: ProductWithPricing[];
   isLoading: boolean;
@@ -48,6 +51,7 @@ export default function ProductCatalog({
   brandFilter = [],
 }: ProductCatalogProps) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { colors } = useProductColors();
   const [variantDialogProduct, setVariantDialogProduct] = useState<ProductWithPricing | null>(null);
   const [detailProduct, setDetailProduct] = useState<ProductWithPricing | null>(null);
 
@@ -165,13 +169,7 @@ export default function ProductCatalog({
       // 3. Brand Filter
       if (brandFilter.length > 0) {
         const pBrandId = (product as any).brand_id;
-        const legacyBrand = (product as any).brand;
-        // 如果這個產品有 brand_id，就看他有在這清單裡嗎
-        // 為了相容防呆，如果沒有 brand_id，也可以先不用擋 (因為品牌是選填)，但既然使用者會「篩選品牌」，表示產品必須有中
-        // 我們也檢查 legacy brand string (不過因為品牌將獨立，這裡主要還是看 brand_id)
         if (!pBrandId || !brandFilter.includes(pBrandId)) {
-          // Fallback legacy (如果前端有傳名字也可以)
-          // 這裡目前 brandFilter 是 UUID list
           return false;
         }
       }
@@ -226,27 +224,22 @@ export default function ProductCatalog({
       if (productMatched) return true;
 
       return (product.variants?.length ?? 0) > 0;
-    }
-
-    );
-  //console.log("filteredProducts", filteredProducts)
+    });
 
   const handleProductClick = (product: ProductWithPricing) => {
     if (product.has_variants && product.variants && product.variants.length > 1) {
-      // 多變體 → 打開選擇對話框
       setVariantDialogProduct(product);
     } else {
-      // 單變體或無變體 → 開啟詳情
       handleOpenDetail(product);
     }
   };
-
 
   const handleVariantSelect = (product: ProductWithPricing, variant: VariantWithPricing) => {
     addItem(product, variant);
     toast.success(`${variant ? `(${variant.name})` : ''} 已加入購物車`);
     setVariantDialogProduct(null);
   };
+
   return (
     <>
       <Card>
@@ -337,7 +330,6 @@ export default function ProductCatalog({
               })}
             </div>
           ) : viewMode === 'gallery' ? (
-            // 圖卡檢視模式
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {filteredProducts.map((product) => {
                 const totalInCart = getTotalProductQuantity(product.id);
@@ -388,7 +380,6 @@ export default function ProductCatalog({
               })}
             </div>
           ) : (
-            // 單品檢視模式 (直接顯示所有變體)
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredProducts.flatMap(product => {
                 if (product.has_variants && product.variants && product.variants.length > 0) {
@@ -396,29 +387,15 @@ export default function ProductCatalog({
                 }
                 return [{ product, variant: null }];
               }).map(({ product, variant }) => {
-                // 如果是變體，使用變體 ID 作為 Key，否則使用產品 ID
-                const key = variant ? `${product.id} -${variant.id} ` : product.id;
-
-                // 計算購物車數量
-                const qty = variant
-                  ? getItemQuantity(product.id, variant.id)
-                  : getItemQuantity(product.id);
-
-                // 計算價格
-                const price = variant
-                  ? ((variant as VariantWithPricing).effective_wholesale_price ?? variant.wholesale_price)
-                  : product.wholesale_price;
-
-                const displayName = variant
-                  ? variant.name
-                  : product.name;
-
-                const displaySku = variant ? variant.sku : product.sku;
+                const key = variant ? `${product.id}-${variant.id}` : product.id;
+                const qty = variant ? getItemQuantity(product.id, variant.id) : getItemQuantity(product.id);
+                const price = variant ? ((variant as VariantWithPricing).effective_wholesale_price ?? variant.wholesale_price) : product.wholesale_price;
+                const displayName = variant ? variant.name : product.name;
 
                 return (
                   <div
                     key={key}
-                    className="p-3 border rounded-lg hover:border-primary cursor-pointer transition-colors"
+                    className="p-3 border rounded-lg hover:border-primary cursor-pointer transition-colors group relative"
                     onClick={() => {
                       if (variant) {
                         handleVariantSelect(product, variant as VariantWithPricing);
@@ -436,8 +413,23 @@ export default function ProductCatalog({
                         <div className="flex flex-wrap gap-1 mt-1">
                           {variant && (
                             <>
-                              {variant.option_1 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_2}</Badge>}
-                              {variant.option_2 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_3}</Badge>}
+                              {variant.option_1 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_1}</Badge>}
+                              {variant.option_2 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_2}</Badge>}
+                              {variant.option_3 && (() => {
+                                const colorData = colors.find(c => c.name === variant.option_3);
+                                return (
+                                  <Badge 
+                                    variant="secondary" 
+                                    className="text-[10px] h-5 px-1 border-none shadow-sm"
+                                    style={colorData?.hex_code ? {
+                                      backgroundColor: colorData.hex_code,
+                                      color: getContrastColor(colorData.hex_code)
+                                    } : {}}
+                                  >
+                                    {variant.option_3}
+                                  </Badge>
+                                );
+                              })()}
                             </>
                           )}
                         </div>
@@ -456,11 +448,9 @@ export default function ProductCatalog({
             </div>
           )}
         </CardContent>
-      </Card >
+      </Card>
 
-      {/* 變體選擇對話框 */}
-      < Dialog open={!!variantDialogProduct
-      } onOpenChange={() => setVariantDialogProduct(null)}>
+      <Dialog open={!!variantDialogProduct} onOpenChange={() => setVariantDialogProduct(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>選擇規格</DialogTitle>
@@ -474,7 +464,6 @@ export default function ProductCatalog({
               <div className="space-y-2 max-h-[400px] overflow-y-auto">
                 {variantDialogProduct.variants?.map((variant) => {
                   const qty = getItemQuantity(variantDialogProduct.id, variant.id);
-                  // 使用品牌價格（effective_wholesale_price），若無則使用變體的基礎批發價
                   const variantWithPricing = variant as VariantWithPricing;
                   const price = variantWithPricing.effective_wholesale_price ?? variant.wholesale_price;
 
@@ -487,9 +476,24 @@ export default function ProductCatalog({
                       <div className="flex justify-between items-center">
                         <div>
                           <div className="font-medium">{variant.name}</div>
-                          <div className="flex gap-1 mt-1">
-                            {variant.option_1 && <Badge variant="secondary" className="text-xs">{variant.option_2}</Badge>}
-                            {variant.option_2 && <Badge variant="secondary" className="text-xs">{variant.option_3}</Badge>}
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {variant.option_1 && <Badge variant="secondary" className="text-xs">{variant.option_1}</Badge>}
+                            {variant.option_2 && <Badge variant="secondary" className="text-xs">{variant.option_2}</Badge>}
+                            {variant.option_3 && (() => {
+                              const colorData = colors.find(c => c.name === variant.option_3);
+                              return (
+                                <Badge 
+                                  variant="secondary" 
+                                  className="text-xs border-none shadow-sm"
+                                  style={colorData?.hex_code ? {
+                                    backgroundColor: colorData.hex_code,
+                                    color: getContrastColor(colorData.hex_code)
+                                  } : {}}
+                                >
+                                  {variant.option_3}
+                                </Badge>
+                              );
+                            })()}
                           </div>
                         </div>
                         <div className="text-right">
@@ -504,7 +508,7 @@ export default function ProductCatalog({
             </div>
           )}
         </DialogContent>
-      </Dialog >
+      </Dialog>
       <ProductDetailDialog
         product={detailProduct}
         open={!!detailProduct}

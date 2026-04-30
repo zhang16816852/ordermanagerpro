@@ -16,7 +16,10 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Layers, Sparkles, AlertCircle } from 'lucide-react';
+import { Layers, Sparkles, AlertCircle, Palette } from 'lucide-react';
+import { ColorSelectField } from './ColorSelectField';
+import { ColorManagementDialog } from './ColorManagementDialog';
+import { useProductColors } from '@/hooks/useProductColors';
 
 type Product = Tables<'products'>;
 
@@ -41,10 +44,13 @@ interface GeneratedVariant {
 export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: VariantBatchCreatorProps) {
   const [option1Values, setOption1Values] = useState('');
   const [option2Values, setOption2Values] = useState('');
-  const [option3Values, setOption3Values] = useState('');
+  const [selectedColorIds, setSelectedColorIds] = useState<string[]>([]);
+  const [isColorManageOpen, setIsColorManageOpen] = useState(false);
   const [wholesalePrice, setWholesalePrice] = useState(product.base_wholesale_price.toString());
   const [retailPrice, setRetailPrice] = useState(product.base_retail_price.toString());
   const [generatedVariants, setGeneratedVariants] = useState<GeneratedVariant[]>([]);
+
+  const { colors } = useProductColors();
 
   const parseOptions = (text: string): string[] => {
     return text
@@ -56,7 +62,11 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
   const generateVariants = () => {
     const opt1 = parseOptions(option1Values);
     const opt2 = parseOptions(option2Values);
-    const opt3 = parseOptions(option3Values);
+    
+    // 取得已選取的顏色對象
+    const selectedColors = selectedColorIds
+      .map(id => colors.find(c => c.id === id))
+      .filter(Boolean);
 
     if (opt1.length === 0) {
       toast.error('請至少輸入選項1的值');
@@ -82,7 +92,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
         });
       } else {
         for (const v2 of opt2) {
-          if (opt3.length === 0) {
+          if (selectedColors.length === 0) {
             variants.push({
               sku: `${product.sku}-${v1}-${v2}`.toUpperCase().replace(/\s+/g, '-'),
               name: `${product.name} - ${v1} / ${v2}`,
@@ -94,14 +104,14 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
               retail_price: retail,
             });
           } else {
-            for (const v3 of opt3) {
+            for (const color of selectedColors as any) {
               variants.push({
-                sku: `${product.sku}-${v1}-${v2}-${v3}`.toUpperCase().replace(/\s+/g, '-'),
-                name: `${product.name} - ${v1} / ${v2} / ${v3}`,
+                sku: `${product.sku}-${v1}-${v2}-${color.code}`.toUpperCase().replace(/\s+/g, '-'),
+                name: `${product.name} - ${v1} / ${v2} / ${color.name}`,
                 barcode: '',
                 option_1: v1,
                 option_2: v2,
-                option_3: v3,
+                option_3: color.name,
                 wholesale_price: price,
                 retail_price: retail,
               });
@@ -148,7 +158,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
   const resetForm = () => {
     setOption1Values('');
     setOption2Values('');
-    setOption3Values('');
+    setSelectedColorIds([]);
     setWholesalePrice(product.base_wholesale_price.toString());
     setRetailPrice(product.base_retail_price.toString());
     setGeneratedVariants([]);
@@ -203,16 +213,28 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="option3">選項3（選填）</Label>
-              <Textarea
-                id="option3"
-                placeholder="輸入選項值，例如：&#10;黑色&#10;白色&#10;銀色"
-                value={option3Values}
-                onChange={(e) => setOption3Values(e.target.value)}
-                className="min-h-[100px]"
+              <div className="flex items-center justify-between">
+                <Label>選項3 (顏色)</Label>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-6 px-2 text-[10px]"
+                  onClick={() => setIsColorManageOpen(true)}
+                >
+                  <Palette className="h-3 w-3 mr-1" /> 管理顏色
+                </Button>
+              </div>
+              <ColorSelectField 
+                selectedColorIds={selectedColorIds}
+                onChange={setSelectedColorIds}
               />
             </div>
           </div>
+
+          <ColorManagementDialog 
+            open={isColorManageOpen}
+            onOpenChange={setIsColorManageOpen}
+          />
 
           {/* 預設價格 */}
           <div className="grid gap-4 sm:grid-cols-2">
