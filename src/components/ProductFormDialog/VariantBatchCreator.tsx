@@ -30,6 +30,7 @@ interface VariantBatchCreatorProps {
 interface GeneratedVariant {
   sku: string;
   name: string;
+  barcode: string;
   option_1: string | null;
   option_2: string | null;
   option_3: string | null;
@@ -72,6 +73,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
         variants.push({
           sku: `${product.sku}-${v1}`.toUpperCase().replace(/\s+/g, '-'),
           name: `${product.name} - ${v1}`,
+          barcode: '',
           option_1: v1,
           option_2: null,
           option_3: null,
@@ -84,6 +86,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
             variants.push({
               sku: `${product.sku}-${v1}-${v2}`.toUpperCase().replace(/\s+/g, '-'),
               name: `${product.name} - ${v1} / ${v2}`,
+              barcode: '',
               option_1: v1,
               option_2: v2,
               option_3: null,
@@ -95,6 +98,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
               variants.push({
                 sku: `${product.sku}-${v1}-${v2}-${v3}`.toUpperCase().replace(/\s+/g, '-'),
                 name: `${product.name} - ${v1} / ${v2} / ${v3}`,
+                barcode: '',
                 option_1: v1,
                 option_2: v2,
                 option_3: v3,
@@ -118,6 +122,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
         product_id: product.id,
         sku: v.sku,
         name: v.name,
+        barcode: v.barcode || null,
         option_1: v.option_1,
         option_2: v.option_2,
         option_3: v.option_3,
@@ -149,10 +154,10 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     setGeneratedVariants([]);
   };
 
-  const updateVariantPrice = (index: number, field: 'wholesale_price' | 'retail_price', value: string) => {
+  const updateVariantField = (index: number, field: keyof GeneratedVariant, value: string) => {
     setGeneratedVariants(prev => 
       prev.map((v, i) => 
-        i === index ? { ...v, [field]: parseFloat(value) || 0 } : v
+        i === index ? { ...v, [field]: (field === 'wholesale_price' || field === 'retail_price') ? parseFloat(value) || 0 : value } : v
       )
     );
   };
@@ -251,7 +256,8 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                   <thead className="bg-muted sticky top-0">
                     <tr>
                       <th className="px-3 py-2 text-left">SKU</th>
-                      <th className="px-3 py-2 text-left">名稱</th>
+                      <th className="px-3 py-2 text-left">變體名稱</th>
+                      <th className="px-3 py-2 text-left">條碼 (Barcode)</th>
                       <th className="px-3 py-2 text-right w-24">批發價</th>
                       <th className="px-3 py-2 text-right w-24">零售價</th>
                       <th className="px-3 py-2 w-12"></th>
@@ -260,14 +266,34 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                   <tbody>
                     {generatedVariants.map((variant, index) => (
                       <tr key={index} className="border-t hover:bg-muted/50">
-                        <td className="px-3 py-2 font-mono text-xs">{variant.sku}</td>
-                        <td className="px-3 py-2">{variant.name}</td>
+                        <td className="px-3 py-2">
+                          <Input
+                            value={variant.sku}
+                            onChange={(e) => updateVariantField(index, 'sku', e.target.value)}
+                            className="h-7 w-32 font-mono text-xs"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <Input
+                            value={variant.name}
+                            onChange={(e) => updateVariantField(index, 'name', e.target.value)}
+                            className="h-7 min-w-[120px]"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <Input
+                            placeholder="掃描或輸入條碼"
+                            value={variant.barcode}
+                            onChange={(e) => updateVariantField(index, 'barcode', e.target.value)}
+                            className="h-7 w-32"
+                          />
+                        </td>
                         <td className="px-3 py-2">
                           <Input
                             type="number"
                             step="0.01"
                             value={variant.wholesale_price}
-                            onChange={(e) => updateVariantPrice(index, 'wholesale_price', e.target.value)}
+                            onChange={(e) => updateVariantField(index, 'wholesale_price', e.target.value)}
                             className="h-7 w-20 text-right"
                           />
                         </td>
@@ -276,7 +302,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                             type="number"
                             step="0.01"
                             value={variant.retail_price}
-                            onChange={(e) => updateVariantPrice(index, 'retail_price', e.target.value)}
+                            onChange={(e) => updateVariantField(index, 'retail_price', e.target.value)}
                             className="h-7 w-20 text-right"
                           />
                         </td>
