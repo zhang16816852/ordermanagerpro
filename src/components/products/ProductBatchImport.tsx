@@ -239,7 +239,7 @@ export function ProductBatchImport({ open, onOpenChange }: ProductBatchImportPro
       const productsToInsert = validRows.map(row => {
         // Find brand ID by name
         const brandObj = brands.find(b => b.name.toLowerCase() === row.brand.toLowerCase());
-        
+
         return {
           sku: row.sku,
           name: row.name,

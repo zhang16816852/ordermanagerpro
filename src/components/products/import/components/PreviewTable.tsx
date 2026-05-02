@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { formatSpecValue } from '@/utils/specLogic';
 import { useColorStore } from '@/store/useColorStore';
+import { useDeviceModelStore } from '@/store/useDeviceModelStore';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 
@@ -39,15 +40,22 @@ export function PreviewTable({
     allBrands = []
 }: PreviewTableProps) {
     const { colors: allColors, addColor, fetchColors, getColorByName } = useColorStore();
+    const { models: allDeviceModels, brands: allDeviceBrands, addModel, fetchData: fetchDeviceData } = useDeviceModelStore();
     const [searchQuery, setSearchQuery] = useState('');
+
+    // 顏色新增表單狀態
     const [addingColorForIndex, setAddingColorForIndex] = useState<number | null>(null);
     const [newColorForm, setNewColorForm] = useState({ name: '', code: '', hex_code: '#808080' });
 
+    // 裝置型號新增表單狀態
+    const [addingModelForIndex, setAddingModelForIndex] = useState<number | null>(null);
+    const [newModelForm, setNewModelForm] = useState({ name: '', brand_id: '', device_series: '', device_type: 'smartphone' });
+    console.log("匯入產品資料", data)
     React.useEffect(() => {
         fetchColors();
+        fetchDeviceData();
     }, []);
-    console.log("allColors", allColors)
-    console.log("data", data)
+
     return (
         <div className="space-y-4">
             {/* 變動篩選與工具列 */}
@@ -94,62 +102,59 @@ export function PreviewTable({
                     <Table>
                         <TableHeader className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10 shadow-sm">
                             <TableRow>
-                                <TableHead className="w-12 text-center">狀態</TableHead>
-                                <TableHead className="w-[120px]">變更內容</TableHead>
-                                <TableHead className="w-[150px]">產品 SKU</TableHead>
-                                <TableHead className="min-w-[180px]">產品名稱</TableHead>
-                                <TableHead className="w-[120px]">型號 (一般)</TableHead>
-                                <TableHead className="w-[140px]">裝置型號 (庫)</TableHead>
-                                <TableHead className="w-[140px]">品牌庫匹配</TableHead>
-                                <TableHead className="w-[110px]">分類</TableHead>
-                                <TableHead className="w-[130px] text-right">批發 / 零售</TableHead>
-                                <TableHead className="min-w-[120px]">規格摘要</TableHead>
-                                <TableHead className="w-[150px]">變體 SKU</TableHead>
-                                <TableHead className="w-[120px]">顏色</TableHead>
-                                <TableHead className="min-w-[150px]">其他選項</TableHead>
-                                <TableHead className="w-12 text-center"></TableHead>
+                                <TableHead className="w-[60px] text-center">狀態</TableHead>
+                                <TableHead className="w-[100px]">變動內容</TableHead>
+                                <TableHead className="w-[120px]">主產品 SKU</TableHead>
+                                <TableHead className="w-[160px]">產品名稱</TableHead>
+                                <TableHead className="w-[100px]">一般型號</TableHead>
+                                <TableHead className="w-[110px]">裝置型號 (庫)</TableHead>
+                                <TableHead className="w-[90px]">品牌</TableHead>
+                                <TableHead className="w-[90px]">分類</TableHead>
+                                <TableHead className="w-[150px] text-right">批發 / 零售</TableHead>
+                                <TableHead className="w-[140px]">產品 / 變體規格</TableHead>
+                                <TableHead className="w-[120px]">變體 SKU</TableHead>
+                                <TableHead className="w-[90px]">顏色</TableHead>
+                                <TableHead className="w-[120px]">其他選項</TableHead>
+                                <TableHead className="w-[60px] text-center">操作</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {data.map((row, index) => (
                                 <TableRow key={index} className={!row.isValid ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}>
-                                    <TableCell className="text-center">
+                                    <TableCell className="text-center px-1">
                                         {row.isValid ? (
-                                            <div className="flex flex-col items-center gap-1">
+                                            <div className="flex flex-col items-center gap-0.5">
                                                 {row.action === 'create' ? (
-                                                    <Badge className="text-[10px] px-1.5 h-4 bg-emerald-500 hover:bg-emerald-600">新增</Badge>
+                                                    <Badge className="text-[9px] px-1 h-3.5 bg-emerald-500 hover:bg-emerald-600 scale-90">新增</Badge>
                                                 ) : (
-                                                    <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-amber-500 text-amber-600 bg-amber-50">
+                                                    <Badge variant="outline" className="text-[9px] px-1 h-3.5 border-amber-500 text-amber-600 bg-amber-50 scale-90">
                                                         更新
                                                     </Badge>
                                                 )}
-                                                {row.is_variant ? (
-                                                    <Badge variant="secondary" className="text-[9px] px-1.5 h-4 bg-indigo-50 text-indigo-700 border-indigo-200">
-                                                        變體
-                                                    </Badge>
-                                                ) : (
-                                                    <Badge variant="outline" className="text-[9px] px-1.5 h-4 bg-slate-50 text-slate-600 border-slate-200">
-                                                        主商品
-                                                    </Badge>
-                                                )}
+                                                <Badge variant="secondary" className={cn(
+                                                    "text-[8px] px-1 h-3.5 scale-90",
+                                                    row.is_variant ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-slate-50 text-slate-600 border-slate-200"
+                                                )}>
+                                                    {row.is_variant ? '變體' : '主商品'}
+                                                </Badge>
                                             </div>
                                         ) : (
-                                            <div className="bg-destructive/10 p-1.5 rounded-full inline-block">
-                                                <AlertCircle className="h-4 w-4 text-destructive" />
+                                            <div className="bg-destructive/10 p-1 rounded-full inline-block">
+                                                <AlertCircle className="h-3 w-3 text-destructive" />
                                             </div>
                                         )}
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell className="px-1">
                                         {row.action === 'update' && row.diff && row.diff.length > 0 ? (
-                                            <div className="flex flex-wrap gap-1">
+                                            <div className="flex flex-wrap gap-0.5 max-w-[90px]">
                                                 {row.diff.map(field => (
-                                                    <Badge key={field} variant="outline" className="text-[9px] px-1 h-3.5 bg-amber-500/10 border-amber-500/20 text-amber-700">
+                                                    <Badge key={field} variant="outline" className="text-[8px] px-1 h-3 bg-amber-500/5 border-amber-500/20 text-amber-700 whitespace-nowrap">
                                                         {field}
                                                     </Badge>
                                                 ))}
                                             </div>
                                         ) : (
-                                            <span className="text-[10px] text-muted-foreground">-</span>
+                                            <span className="text-[9px] text-muted-foreground/30 pl-2">-</span>
                                         )}
                                     </TableCell>
                                     <TableCell>
@@ -182,22 +187,151 @@ export function PreviewTable({
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex flex-col gap-1">
-                                            <Input
-                                                value={row.device_models || ''}
-                                                placeholder="例: iPhone 15"
-                                                onChange={(e) => onUpdate(index, 'device_models', e.target.value)}
-                                                className={cn(
-                                                    "h-8 text-[10px] border-none bg-transparent focus-visible:bg-background",
-                                                    row.device_models && !row.device_models.split(',').every(name => 
-                                                        allDeviceModels.some(dm => dm.name.toLowerCase() === name.trim().toLowerCase())
-                                                    ) && "text-destructive font-bold bg-destructive/5"
-                                                )}
-                                            />
-                                            {row.device_models && !row.device_models.split(',').every(name => 
-                                                allDeviceModels.some(dm => dm.name.toLowerCase() === name.trim().toLowerCase())
-                                            ) && (
-                                                <span className="text-[8px] text-destructive pl-1">部分型號在庫中找不到</span>
-                                            )}
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <div className={cn(
+                                                        "flex flex-wrap items-center gap-1 p-1 rounded-md cursor-pointer hover:bg-muted/50 transition-all border min-h-[32px]",
+                                                        row.device_models && !row.device_models.split(',').every(name =>
+                                                            allDeviceModels.some(dm => dm.name.toLowerCase() === name.trim().toLowerCase())
+                                                        ) ? "bg-destructive/10 border-destructive/20 text-destructive" : "border-transparent bg-muted/30"
+                                                    )}>
+                                                        {row.device_models ? (
+                                                            row.device_models.split(',').map((name, i) => {
+                                                                const exists = allDeviceModels.some(dm => dm.name.toLowerCase() === name.trim().toLowerCase());
+                                                                return (
+                                                                    <Badge
+                                                                        key={i}
+                                                                        variant={exists ? "secondary" : "destructive"}
+                                                                        className="text-[9px] px-1 h-4"
+                                                                    >
+                                                                        {name.trim()}
+                                                                    </Badge>
+                                                                );
+                                                            })
+                                                        ) : (
+                                                            <span className="text-[10px] text-muted-foreground/50 pl-1 italic">點擊設定</span>
+                                                        )}
+                                                    </div>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="p-0 w-[260px]" align="start">
+                                                    {addingModelForIndex === index ? (
+                                                        <div className="p-3 space-y-3 bg-background">
+                                                            <div className="flex items-center justify-between border-b pb-2">
+                                                                <h4 className="text-xs font-bold text-primary">新增裝置型號</h4>
+                                                                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setAddingModelForIndex(null)}>
+                                                                    <X className="h-3 w-3" />
+                                                                </Button>
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                <div className="space-y-1">
+                                                                    <label className="text-[10px] text-muted-foreground">裝置名稱</label>
+                                                                    <Input
+                                                                        value={newModelForm.name}
+                                                                        onChange={e => setNewModelForm({ ...newModelForm, name: e.target.value })}
+                                                                        placeholder="例：iPhone 15 Pro"
+                                                                        className="h-8 text-xs"
+                                                                    />
+                                                                </div>
+                                                                <div className="space-y-1">
+                                                                    <label className="text-[10px] text-muted-foreground">所屬品牌</label>
+                                                                    <Select
+                                                                        value={newModelForm.brand_id}
+                                                                        onValueChange={v => setNewModelForm({ ...newModelForm, brand_id: v })}
+                                                                    >
+                                                                        <SelectTrigger className="h-8 text-xs">
+                                                                            <SelectValue placeholder="選擇品牌" />
+                                                                        </SelectTrigger>
+                                                                        <SelectContent>
+                                                                            {allDeviceBrands.map(b => (
+                                                                                <SelectItem key={b.id} value={b.id} className="text-xs">{b.name}</SelectItem>
+                                                                            ))}
+                                                                        </SelectContent>
+                                                                    </Select>
+                                                                </div>
+                                                                <div className="space-y-1">
+                                                                    <label className="text-[10px] text-muted-foreground">系列 (選填)</label>
+                                                                    <Input
+                                                                        value={newModelForm.device_series}
+                                                                        onChange={e => setNewModelForm({ ...newModelForm, device_series: e.target.value })}
+                                                                        placeholder="例：iPhone 15 系列"
+                                                                        className="h-8 text-xs"
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <Button
+                                                                className="w-full h-8 text-xs"
+                                                                onClick={async () => {
+                                                                    if (!newModelForm.name || !newModelForm.brand_id) {
+                                                                        toast.error('名稱與品牌為必填');
+                                                                        return;
+                                                                    }
+                                                                    const res = await addModel(newModelForm);
+                                                                    if (res) {
+                                                                        const current = row.device_models ? row.device_models.split(',').map(s => s.trim()) : [];
+                                                                        if (!current.includes(res.name)) {
+                                                                            onUpdate(index, 'device_models', [...current, res.name].join(', '));
+                                                                        }
+                                                                        setAddingModelForIndex(null);
+                                                                        toast.success(`已建立並套用：${res.name}`);
+                                                                    }
+                                                                }}
+                                                            >
+                                                                建立並套用
+                                                            </Button>
+                                                        </div>
+                                                    ) : (
+                                                        <Command>
+                                                            <CommandInput placeholder="搜尋型號..." className="h-9 text-xs" />
+                                                            <CommandList className="max-h-[300px]">
+                                                                <CommandGroup heading="快速操作">
+                                                                    <CommandItem
+                                                                        onSelect={() => {
+                                                                            setNewModelForm({ name: searchQuery, brand_id: '', device_series: '', device_type: 'smartphone' });
+                                                                            setAddingModelForIndex(index);
+                                                                        }}
+                                                                        className="flex items-center gap-2 py-2 cursor-pointer text-primary"
+                                                                    >
+                                                                        <Plus className="h-3.5 w-3.5" />
+                                                                        <span className="text-xs">建立新型號 {searchQuery ? `"${searchQuery}"` : ''}</span>
+                                                                    </CommandItem>
+                                                                </CommandGroup>
+                                                                <CommandEmpty className="py-3 text-xs text-center text-muted-foreground">
+                                                                    找不到型號
+                                                                </CommandEmpty>
+                                                                <CommandGroup heading="現有型號庫">
+                                                                    {allDeviceModels.map((m) => {
+                                                                        const isSelected = row.device_models?.split(',').map(s => s.trim().toLowerCase()).includes(m.name.toLowerCase());
+                                                                        return (
+                                                                            <CommandItem
+                                                                                key={m.id}
+                                                                                onSelect={() => {
+                                                                                    const current = row.device_models ? row.device_models.split(',').map(s => s.trim()) : [];
+                                                                                    let next;
+                                                                                    if (isSelected) {
+                                                                                        next = current.filter(s => s.toLowerCase() !== m.name.toLowerCase());
+                                                                                    } else {
+                                                                                        next = [...current, m.name];
+                                                                                    }
+                                                                                    onUpdate(index, 'device_models', next.join(', '));
+                                                                                }}
+                                                                                className="flex items-center gap-2 py-2 cursor-pointer"
+                                                                            >
+                                                                                <div className="flex flex-col flex-1 min-w-0">
+                                                                                    <span className="text-xs font-medium truncate">{m.name}</span>
+                                                                                    <span className="text-[9px] text-muted-foreground truncate">
+                                                                                        {allDeviceBrands.find(b => b.id === m.brand_id)?.name} {m.device_series ? `· ${m.device_series}` : ''}
+                                                                                    </span>
+                                                                                </div>
+                                                                                {isSelected && <Check className="h-3.5 w-3.5 text-primary" />}
+                                                                            </CommandItem>
+                                                                        );
+                                                                    })}
+                                                                </CommandGroup>
+                                                            </CommandList>
+                                                        </Command>
+                                                    )}
+                                                </PopoverContent>
+                                            </Popover>
                                         </div>
                                     </TableCell>
                                     <TableCell>
@@ -255,44 +389,49 @@ export function PreviewTable({
                                             )}
                                         />
                                     </TableCell>
-                                    <TableCell>
-                                        <div className="flex flex-col items-end gap-1">
+                                    <TableCell className="px-1">
+                                        <div className="flex flex-col items-end gap-0.5">
                                             <div className="flex gap-1 items-center justify-end">
-                                                <Input
-                                                    type="number"
-                                                    value={row.is_variant ? (row.variant_wholesale_price ?? row.base_wholesale_price) : row.base_wholesale_price}
-                                                    onChange={(e) => onUpdate(index, row.is_variant ? 'variant_wholesale_price' : 'base_wholesale_price', parseFloat(e.target.value) || 0)}
-                                                    className={cn(
-                                                        "h-7 w-16 text-[10px] text-right p-1 border-dotted border-b border-t-0 border-x-0 rounded-none bg-transparent",
-                                                        (row.diff?.includes('批發價') || row.diff?.includes('變體批發價')) && "bg-amber-500/20 text-amber-900"
-                                                    )}
-                                                />
-                                                <span className="text-muted-foreground">/</span>
-                                                <Input
-                                                    type="number"
-                                                    value={row.is_variant ? (row.variant_retail_price ?? row.base_retail_price) : row.base_retail_price}
-                                                    onChange={(e) => onUpdate(index, row.is_variant ? 'variant_retail_price' : 'base_retail_price', parseFloat(e.target.value) || 0)}
-                                                    className={cn(
-                                                        "h-7 w-16 text-[10px] text-right p-1 border-dotted border-b border-t-0 border-x-0 rounded-none bg-transparent font-bold",
-                                                        (row.diff?.includes('零售價') || row.diff?.includes('變體零售價')) && "bg-amber-500/20 text-amber-900"
-                                                    )}
-                                                />
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-[7px] text-muted-foreground/50 leading-none">批發</span>
+                                                    <Input
+                                                        type="number"
+                                                        value={row.is_variant ? (row.variant_wholesale_price ?? row.base_wholesale_price) : row.base_wholesale_price}
+                                                        onChange={(e) => onUpdate(index, row.is_variant ? 'variant_wholesale_price' : 'base_wholesale_price', parseFloat(e.target.value) || 0)}
+                                                        className={cn(
+                                                            "h-6 w-14 text-[10px] text-right p-1 border-dotted border-b border-t-0 border-x-0 rounded-none bg-transparent",
+                                                            (row.diff?.includes('批發價') || row.diff?.includes('變體批發價')) && "bg-amber-500/20 text-amber-900"
+                                                        )}
+                                                    />
+                                                </div>
+                                                <div className="flex flex-col items-end border-l pl-1 ml-1 border-muted/30">
+                                                    <span className="text-[7px] text-muted-foreground/50 leading-none">零售</span>
+                                                    <Input
+                                                        type="number"
+                                                        value={row.is_variant ? (row.variant_retail_price ?? row.base_retail_price) : row.base_retail_price}
+                                                        onChange={(e) => onUpdate(index, row.is_variant ? 'variant_retail_price' : 'base_retail_price', parseFloat(e.target.value) || 0)}
+                                                        className={cn(
+                                                            "h-6 w-14 text-[10px] text-right p-1 border-dotted border-b border-t-0 border-x-0 rounded-none bg-transparent font-bold",
+                                                            (row.diff?.includes('零售價') || row.diff?.includes('變體零售價')) && "bg-amber-500/20 text-amber-900"
+                                                        )}
+                                                    />
+                                                </div>
                                             </div>
-                                            <span className="text-[8px] text-muted-foreground/60 scale-90 origin-right">
-                                                {row.is_variant ? '變體價格' : '主商品價格'}
+                                            <span className="text-[7px] text-muted-foreground/40 italic">
+                                                {row.is_variant ? '變體定義' : '主商品定價'}
                                             </span>
                                         </div>
                                     </TableCell>
-                                    <TableCell>
-                                        <div className="space-y-1">
+                                    <TableCell className="px-1">
+                                        <div className="flex flex-col gap-0.5 max-w-[130px]">
                                             <div
-                                                className="text-[9px] font-medium text-muted-foreground truncate max-w-[120px]"
+                                                className="text-[9px] font-medium text-muted-foreground truncate"
                                                 title={formatSpecValue(row.table_settings)}
                                             >
                                                 {row.table_settings ? formatSpecValue(row.table_settings) : '-'}
                                             </div>
                                             <div
-                                                className="text-[8px] text-primary/70 opacity-80 truncate max-w-[120px]"
+                                                className="text-[8px] text-primary/70 opacity-80 truncate border-t border-primary/10 pt-0.5"
                                                 title={formatSpecValue(row.variant_table_settings)}
                                             >
                                                 {row.variant_table_settings ? formatSpecValue(row.variant_table_settings) : ''}
