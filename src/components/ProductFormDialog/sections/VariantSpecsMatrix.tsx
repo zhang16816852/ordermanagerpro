@@ -126,7 +126,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
     if (visiblePathRows.length === 0 || variants.length === 0) return null;
 
     return (
-        <div className="space-y-4 border rounded-xl overflow-hidden bg-background shadow-sm">
+        <div className="space-y-4 border rounded-xl bg-background shadow-sm">
             <div className="bg-muted/30 p-4 border-b flex justify-between items-center">
                 <div>
                     <h3 className="text-sm font-bold tracking-tight">變體規格矩陣 (v4.7 Registry)</h3>
@@ -138,24 +138,24 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                 </Button>
             </div>
 
-            <div className="overflow-x-auto">
-                <Table>
+            <div className="max-h-[650px] overflow-auto">
+                <Table className="border-separate border-spacing-0">
                     <TableHeader>
                         <TableRow className="bg-muted/10 hover:bg-muted/10">
-                            <TableHead className="w-[220px] font-bold bg-muted/40 sticky left-0 z-10 border-r text-foreground">規格分層項目</TableHead>
+                            <TableHead className="w-[220px] font-bold bg-slate-50 dark:bg-slate-900 sticky top-0 left-0 z-20 border-r border-b text-foreground shadow-[1px_1px_0_0_rgba(0,0,0,0.1)]">規格分層項目</TableHead>
                             {variants.map(v => (
-                                <TableHead key={v.id} className="min-w-[160px] text-center px-4 font-semibold border-r last:border-r-0 text-foreground/80">
-                                    <div className="truncate max-w-[150px] mx-auto" title={v.name}>{v.name}</div>
+                                <TableHead key={v.id} className="min-w-[160px] text-center px-4 font-semibold border-r border-b last:border-r-0 text-foreground/80 bg-slate-50 dark:bg-slate-900 sticky top-0 z-10 shadow-[0_1px_0_0_rgba(0,0,0,0.1)]">
+                                    <div className="whitespace-normal break-words leading-tight px-1" title={v.name}>{v.name}</div>
                                 </TableHead>
                             ))}
-                            <TableHead className="w-[80px] text-center font-bold text-primary">批次</TableHead>
+                            <TableHead className="w-[80px] text-center font-bold text-primary bg-slate-50 dark:bg-slate-900 sticky top-0 z-10 border-b shadow-[0_1px_0_0_rgba(0,0,0,0.1)]">批次</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {visiblePathRows.map(row => (
                             <TableRow key={row.pathKey} className="group hover:bg-muted/5 transition-colors border-b last:border-0">
                                 <TableCell
-                                    className="font-medium bg-muted/20 sticky left-0 z-10 border-r group-hover:bg-muted/30 transition-colors"
+                                    className="font-medium bg-white dark:bg-[#0f172a] sticky left-0 z-10 border-r group-hover:bg-muted/30 transition-colors"
                                     style={{ paddingLeft: `${row.level * 1.5 + 1}rem` }}
                                 >
                                     <div className="flex items-center gap-2">

@@ -66,7 +66,8 @@ export function VariantSection({ product }: { product: any }) {
         </div>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => setIsBatchOpen(true)}>
-            <Layers className="mr-2 h-4 w-4" /> 批次產生
+            <Layers className="mr-2 h-4 w-4" /> 
+            {variants && variants.length > 0 ? '批次編輯 / 產生' : '批次產生'}
           </Button>
           <Button size="sm" onClick={() => { setEditingVariant(null); setIsDialogOpen(true); }}>
             <Plus className="mr-2 h-4 w-4" /> 新增單一

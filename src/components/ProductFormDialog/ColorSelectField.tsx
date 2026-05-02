@@ -131,7 +131,10 @@ export function ColorSelectField({ selectedColorIds, onChange, multiple = true }
               value={searchQuery}
               onValueChange={setSearchQuery}
             />
-            <CommandList>
+            <CommandList 
+              className="max-h-[300px] overflow-y-auto overscroll-contain"
+              onWheel={(e) => e.stopPropagation()}
+            >
               <CommandEmpty>
                 <div className="p-2">
                   <Button 

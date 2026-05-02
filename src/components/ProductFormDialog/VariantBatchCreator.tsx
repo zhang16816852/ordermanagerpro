@@ -1,5 +1,4 @@
-// src/components/products/VariantBatchCreator.tsx
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
@@ -16,10 +15,10 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Layers, Sparkles, AlertCircle, Palette } from 'lucide-react';
+import { Layers, Sparkles, AlertCircle, Palette, X } from 'lucide-react';
 import { ColorSelectField } from './ColorSelectField';
 import { ColorManagementDialog } from './ColorManagementDialog';
-import { useProductColors } from '@/hooks/useProductColors';
+import { useColorStore } from '@/store/useColorStore';
 
 type Product = Tables<'products'>;
 
@@ -39,6 +38,7 @@ interface GeneratedVariant {
   option_3: string | null;
   wholesale_price: number;
   retail_price: number;
+  table_settings: any;
 }
 
 export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: VariantBatchCreatorProps) {
@@ -50,7 +50,61 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
   const [retailPrice, setRetailPrice] = useState(product.base_retail_price.toString());
   const [generatedVariants, setGeneratedVariants] = useState<GeneratedVariant[]>([]);
 
-  const { colors } = useProductColors();
+  const { colors, fetchColors } = useColorStore();
+
+  useEffect(() => {
+    const init = async () => {
+      if (open) {
+        const latestColors = await fetchColors();
+        await loadExistingVariants(latestColors);
+      }
+    };
+    init();
+  }, [open, fetchColors]);
+
+  const loadExistingVariants = async (currentColors = colors) => {
+    try {
+      const { data: variants, error } = await supabase
+        .from('product_variants')
+        .select('*')
+        .eq('product_id', product.id);
+
+      if (error) throw error;
+      if (!variants || variants.length === 0) return;
+
+      // 提取選項 1 的唯一值
+      const opt1Set = new Set(variants.map(v => v.option_1).filter(Boolean));
+      setOption1Values(Array.from(opt1Set).join('\n'));
+
+      // 提取選項 2 的唯一值
+      const opt2Set = new Set(variants.map(v => v.option_2).filter(Boolean));
+      setOption2Values(Array.from(opt2Set).join('\n'));
+
+      // 提取顏色的唯一 ID (透過名稱匹配)
+      const colorNames = new Set(variants.map(v => v.option_3).filter(Boolean));
+      const colorIds = Array.from(colorNames)
+        .map(name => currentColors.find(c => c.name === name)?.id)
+        .filter(Boolean) as string[];
+      setSelectedColorIds(colorIds);
+
+      // 填入預覽表格
+      setGeneratedVariants(variants.map(v => ({
+        sku: v.sku,
+        name: v.name,
+        barcode: v.barcode || '',
+        option_1: v.option_1,
+        option_2: v.option_2,
+        option_3: v.option_3,
+        wholesale_price: v.wholesale_price,
+        retail_price: v.retail_price,
+        table_settings: v.table_settings,
+      })));
+      
+      toast.success(`已載入 ${variants.length} 個現有變體`);
+    } catch (err) {
+      console.error('載入變體失敗:', err);
+    }
+  };
 
   const parseOptions = (text: string): string[] => {
     return text
@@ -64,12 +118,23 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     const opt2 = parseOptions(option2Values);
     
     // 取得已選取的顏色對象
+    console.log("[Debug] Option 1 Values:", opt1);
+    console.log("[Debug] Option 2 Values:", opt2);
+    console.log("[Debug] Selected Color IDs:", selectedColorIds);
+    console.log("[Debug] Available Colors in Store:", colors.map(c => ({ id: c.id, name: c.name, code: c.code })));
+
     const selectedColors = selectedColorIds
-      .map(id => colors.find(c => c.id === id))
+      .map(id => {
+        const found = colors.find(c => c.id === id);
+        if (!found) console.warn(`[Debug] Could not find color with ID: ${id}`);
+        return found;
+      })
       .filter(Boolean);
 
-    if (opt1.length === 0) {
-      toast.error('請至少輸入選項1的值');
+    console.log("[Debug] Resolved Selected Colors:", selectedColors);
+
+    if (opt1.length === 0 && opt2.length === 0 && selectedColors.length === 0) {
+      toast.error('請至少輸入或選擇一個選項維度 (選項1、選項2 或 顏色)');
       return;
     }
 
@@ -77,51 +142,64 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     const price = parseFloat(wholesalePrice) || product.base_wholesale_price;
     const retail = parseFloat(retailPrice) || product.base_retail_price;
 
-    // 生成所有排列組合
-    for (const v1 of opt1) {
-      if (opt2.length === 0) {
-        variants.push({
-          sku: `${product.sku}-${v1}`.toUpperCase().replace(/\s+/g, '-'),
-          name: `${product.name} - ${v1}`,
-          barcode: '',
-          option_1: v1,
-          option_2: null,
-          option_3: null,
-          wholesale_price: price,
-          retail_price: retail,
-        });
-      } else {
-        for (const v2 of opt2) {
-          if (selectedColors.length === 0) {
-            variants.push({
-              sku: `${product.sku}-${v1}-${v2}`.toUpperCase().replace(/\s+/g, '-'),
-              name: `${product.name} - ${v1} / ${v2}`,
-              barcode: '',
-              option_1: v1,
-              option_2: v2,
-              option_3: null,
-              wholesale_price: price,
-              retail_price: retail,
-            });
-          } else {
-            for (const color of selectedColors as any) {
-              variants.push({
-                sku: `${product.sku}-${v1}-${v2}-${color.code}`.toUpperCase().replace(/\s+/g, '-'),
-                name: `${product.name} - ${v1} / ${v2} / ${color.name}`,
-                barcode: '',
-                option_1: v1,
-                option_2: v2,
-                option_3: color.name,
-                wholesale_price: price,
-                retail_price: retail,
-              });
-            }
-          }
+    // 準備三個維度的資料，如果為空則視為只有一個 null 元素
+    const dim1 = opt1.length > 0 ? opt1 : [null];
+    const dim2 = opt2.length > 0 ? opt2 : [null];
+    const dim3 = selectedColors.length > 0 ? selectedColors : [null];
+
+    // 生成所有維度的組合
+    for (const v1 of dim1) {
+      for (const v2 of dim2) {
+        for (const v3 of dim3) {
+          // 如果三個維度都是 null，跳過 (這不應該發生，因為前面有 check)
+          if (!v1 && !v2 && !v3) continue;
+
+          // 構建 SKU 部分
+          const skuParts = [product.sku];
+          if (v1) skuParts.push(v1);
+          if (v2) skuParts.push(v2);
+          if (v3) skuParts.push((v3 as any).code || (v3 as any).name);
+          const sku = skuParts.join('-').toUpperCase().replace(/\s+/g, '-');
+
+          // 構建名稱部分
+          const nameParts = [];
+          if (v1) nameParts.push(v1);
+          if (v2) nameParts.push(v2);
+          if (v3) nameParts.push((v3 as any).name);
+          const variantName = `${product.name}${nameParts.length > 0 ? ' - ' + nameParts.join(' / ') : ''}`;
+
+          variants.push({
+            sku,
+            name: variantName,
+            barcode: '',
+            option_1: v1,
+            option_2: v2,
+            option_3: v3 ? (v3 as any).name : null,
+            wholesale_price: price,
+            retail_price: retail,
+            table_settings: {}, // 預設空規格
+          });
         }
       }
     }
 
-    setGeneratedVariants(variants);
+    if (variants.length === 0) {
+      toast.error('無法生成變體，請檢查輸入');
+      return;
+    }
+
+    console.log(`[Debug] Calculated ${variants.length} base combinations.`);
+    
+    // 智慧合併：如果生成的 SKU 已經存在於目前的預覽中，保留其現有資料 (例如手動改過的價格)
+    const mergedVariants = variants.map(newV => {
+      const existing = generatedVariants.find(ev => ev.sku === newV.sku);
+      if (existing) {
+        return { ...existing }; // 保留現有資料
+      }
+      return newV; // 使用新生成資料
+    });
+
+    setGeneratedVariants(mergedVariants);
   };
 
   const createMutation = useMutation({
@@ -138,10 +216,13 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
         option_3: v.option_3,
         wholesale_price: v.wholesale_price,
         retail_price: v.retail_price,
+        table_settings: v.table_settings,
         status: 'active' as const,
       }));
 
-      const { error } = await supabase.from('product_variants').insert(variantsToInsert);
+      const { error } = await supabase
+        .from('product_variants')
+        .upsert(variantsToInsert, { onConflict: 'sku' });
       if (error) throw error;
     },
     onSuccess: () => {

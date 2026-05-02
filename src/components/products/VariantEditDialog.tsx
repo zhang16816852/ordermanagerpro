@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables, TablesInsert } from '@/integrations/supabase/types';
 import { Button } from '@/components/ui/button';
@@ -19,11 +20,19 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import {
+    Form,
+    FormControl,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from "@/components/ui/form";
 import { toast } from 'sonner';
 import { StandaloneDeviceModelSelectField } from './StandaloneDeviceModelSelectField';
 import { ColorSelectField } from '../ProductFormDialog/ColorSelectField';
 import { useColorStore } from '@/store/useColorStore';
-import { useMemo } from 'react';
+import { DynamicSpecsFields } from '../ProductFormDialog/sections/DynamicSpecsFields';
 
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;
@@ -45,81 +54,100 @@ export function VariantEditDialog({
     onSuccess,
 }: VariantEditDialogProps) {
     const queryClient = useQueryClient();
-    const [selectedModels, setSelectedModels] = useState<string[]>([]);
-    const [selectedColorIds, setSelectedColorIds] = useState<string[]>([]);
-    const { colors, fetchColors, getColorByName } = useColorStore();
+    const { colors, fetchColors } = useColorStore();
+
+    const form = useForm({
+        defaultValues: {
+            sku: '',
+            name: '',
+            option_1: '',
+            option_2: '',
+            color: '',
+            barcode: '',
+            wholesale_price: 0,
+            retail_price: 0,
+            status: 'active' as any,
+            table_settings: {} as Record<string, any>,
+            selectedColorIds: [] as string[],
+            selectedModelIds: [] as string[],
+            category_ids: [] as string[],
+        }
+    });
     
     // 初始化模型的 state
     useEffect(() => {
         const init = async () => {
             if (open) {
-                await fetchColors();
+                const latestColors = await fetchColors();
                 
                 if (variant) {
-                    setSelectedModels((variant as any).variant_model_links?.map((l: any) => l.model_id) || []);
-                    
-                    // 根據 option_3 的名稱找回顏色 ID (使用 Store)
+                    // 取得設備型號連結
+                    const { data: modelLinks } = await supabase
+                        .from('variant_model_links')
+                        .select('model_id')
+                        .eq('variant_id', variant.id);
+
+                    // 根據 option_3 的名稱找回顏色 ID
+                    let colorIds: string[] = [];
                     if (variant.option_3) {
-                        const color = getColorByName(variant.option_3);
-                        if (color) setSelectedColorIds([color.id]);
-                        else setSelectedColorIds([]);
-                    } else {
-                        setSelectedColorIds([]);
+                        const color = latestColors.find(c => c.name === variant.option_3);
+                        if (color) colorIds = [color.id];
                     }
+
+                    form.reset({
+                        sku: variant.sku,
+                        name: variant.name,
+                        option_1: variant.option_1 || '',
+                        option_2: variant.option_2 || '',
+                        color: variant.color || '',
+                        barcode: variant.barcode || '',
+                        wholesale_price: variant.wholesale_price,
+                        retail_price: variant.retail_price,
+                        status: variant.status as any,
+                        table_settings: (variant.table_settings as any) || {},
+                        selectedColorIds: colorIds,
+                        selectedModelIds: modelLinks?.map(l => l.model_id) || [],
+                        category_ids: (product as any)?.category_id ? [(product as any).category_id] : [],
+                    });
                 } else {
-                    setSelectedModels([]);
-                    setSelectedColorIds([]);
+                    form.reset({
+                        sku: product ? `${product.sku}-` : '',
+                        name: '',
+                        option_1: '',
+                        option_2: '',
+                        color: '',
+                        barcode: '',
+                        wholesale_price: product?.base_wholesale_price || 0,
+                        retail_price: product?.base_retail_price || 0,
+                        status: 'active',
+                        table_settings: {},
+                        selectedColorIds: [],
+                        selectedModelIds: [],
+                        category_ids: (product as any)?.category_id ? [(product as any).category_id] : [],
+                    });
                 }
             }
         };
         init();
-    }, [open, variant]);
-
-    const categoryId = (product as any)?.category_id;
-    // Fetch specs for the selected category
-    const { data: specFields = [] } = useQuery({
-        queryKey: ['category_specs', categoryId],
-        enabled: !!categoryId,
-        queryFn: async () => {
-            const { data, error } = await (supabase
-                .from('category_spec_links' as any) as any)
-                .select(`
-                    spec_id,
-                    sort_order,
-                    specification_definitions (
-                        id,
-                        name,
-                        type,
-                        options,
-                        default_value
-                    )
-                `)
-                .eq('category_id', categoryId)
-                .order('sort_order', { ascending: true });
-
-            if (error) return [];
-            return data.map((d: any) => ({
-                id: d.specification_definitions.id,
-                name: d.specification_definitions.name,
-                key: d.specification_definitions.name,
-                type: d.specification_definitions.type,
-                options: d.specification_definitions.options,
-                defaultValue: d.specification_definitions.default_value
-            }));
-        },
-    });
-
-    // Reset form or state if needed when opening/closing could be handled by key or uncontrolled inputs with defaultValues
-    // using uncontrolled form submission for simplicity as per original implementation
+    }, [open, variant, product, form, fetchColors]);
 
     const createMutation = useMutation({
-        mutationFn: async (variantData: VariantInsert & { device_model_ids?: string[] }) => {
-            const { device_model_ids, ...dataToInsert } = variantData;
-            const { data, error } = await supabase.from('product_variants').insert(dataToInsert as any).select().single();
+        mutationFn: async (values: any) => {
+            const { selectedModelIds, selectedColorIds, category_ids, ...dataToInsert } = values;
+            
+            // 處理顏色名稱
+            const selectedColor = colors.find(c => c.id === selectedColorIds[0]);
+            const finalData = {
+                ...dataToInsert,
+                product_id: product?.id,
+                option_3: selectedColor?.name || null,
+            };
+
+            const { data, error } = await supabase.from('product_variants').insert(finalData).select().single();
             if (error) throw error;
 
-            if (device_model_ids && device_model_ids.length > 0) {
-                 const links = device_model_ids.map((model_id: string) => ({
+            if (selectedModelIds.length > 0) {
+                 const links = selectedModelIds.map((model_id: string) => ({
                      variant_id: data.id,
                      model_id
                  }));
@@ -134,26 +162,33 @@ export function VariantEditDialog({
             onOpenChange(false);
             onSuccess?.();
         },
-        onError: (error) => {
+        onError: (error: any) => {
             toast.error(`新增失敗：${error.message}`);
         },
     });
 
     const updateMutation = useMutation({
-        mutationFn: async ({ id, device_model_ids, ...updates }: Partial<ProductVariant> & { id: string, device_model_ids?: string[] }) => {
-            const { error } = await supabase.from('product_variants').update(updates as any).eq('id', id);
+        mutationFn: async (values: any) => {
+            const { selectedModelIds, selectedColorIds, category_ids, ...updates } = values;
+            
+            // 處理顏色名稱
+            const selectedColor = colors.find(c => c.id === selectedColorIds[0]);
+            const finalUpdates = {
+                ...updates,
+                option_3: selectedColor?.name || null,
+            };
+
+            const { error } = await supabase.from('product_variants').update(finalUpdates).eq('id', variant!.id);
             if (error) throw error;
             
-            // update variant_model_links
-            if (device_model_ids !== undefined) {
-                 await supabase.from('variant_model_links').delete().eq('variant_id', id);
-                 if (device_model_ids.length > 0) {
-                     const links = device_model_ids.map((model_id: string) => ({
-                         variant_id: id,
-                         model_id
-                     }));
-                     await supabase.from('variant_model_links').insert(links);
-                 }
+            // 更新連結
+            await supabase.from('variant_model_links').delete().eq('variant_id', variant!.id);
+            if (selectedModelIds.length > 0) {
+                 const links = selectedModelIds.map((model_id: string) => ({
+                     variant_id: variant!.id,
+                     model_id
+                 }));
+                 await supabase.from('variant_model_links').insert(links);
             }
         },
         onSuccess: () => {
@@ -164,220 +199,215 @@ export function VariantEditDialog({
             onOpenChange(false);
             onSuccess?.();
         },
-        onError: (error) => {
+        onError: (error: any) => {
             toast.error(`更新失敗：${error.message}`);
         },
     });
 
-    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
+    const onSubmit = (values: any) => {
         if (!product) return;
-
-        const formData = new FormData(e.currentTarget);
-
-        // Collect dynamic specs into table_settings
-        const table_settings: Record<string, any> = {};
-        const specKeys = JSON.parse(formData.get('_spec_keys') as string || '[]');
-        specKeys.forEach((key: string) => {
-            table_settings[key] = formData.get(`spec_${key}`);
-        });
-
-        const selectedColor = colors.find(c => c.id === selectedColorIds[0]);
-
-        const variantData: any = {
-            product_id: product.id,
-            sku: formData.get('sku') as string,
-            name: formData.get('name') as string,
-            barcode: (formData.get('barcode') as string) || null,
-            color: (formData.get('color') as string) || null,
-            option_1: (formData.get('option_1') as string) || null,
-            option_2: (formData.get('option_2') as string) || null,
-            option_3: selectedColor?.name || null,
-            wholesale_price: parseFloat(formData.get('wholesale_price') as string) || 0,
-            retail_price: parseFloat(formData.get('retail_price') as string) || 0,
-            status: formData.get('status') as ProductVariant['status'],
-            table_settings,
-        };
-
         if (variant) {
-            updateMutation.mutate({ id: variant.id, device_model_ids: selectedModels, ...variantData });
+            updateMutation.mutate(values);
         } else {
-            createMutation.mutate({ ...variantData, device_model_ids: selectedModels });
+            createMutation.mutate(values);
         }
     };
 
-    // Generate default SKU for new variant
-    const defaultSku = variant ? variant.sku : (product ? `${product.sku}-` : '');
-
-    // If dialog is not open, return null to avoid rendering
-    // But Dialog component handles open state, keeping it mounted allows animation?
-    // However, we need to reset defaultValues when variant changes.
-    // The simplest way to reset uncontrolled inputs is to use a key on the form or dialog content.
-    const dialogKey = open ? (variant ? `edit-${variant.id}` : 'create') : 'closed';
-
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-lg" key={dialogKey}>
+            <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>{variant ? '編輯變體' : '新增變體'}</DialogTitle>
                     <DialogDescription>
-                        請在此設定產品變體的 SKU、名稱及相關規格。變體可用於區分不同的規格組合（如顏色、容量）。
+                        請在此設定產品變體的 SKU、名稱及相關規格。
                     </DialogDescription>
                 </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                            <Label htmlFor="sku">SKU *</Label>
-                            <Input
-                                id="sku"
+                
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <FormField
+                                control={form.control}
                                 name="sku"
-                                defaultValue={defaultSku}
-                                required
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>SKU *</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} required />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
                             />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="name">變體名稱 *</Label>
-                            <Input
-                                id="name"
+                            <FormField
+                                control={form.control}
                                 name="name"
-                                defaultValue={variant?.name}
-                                required
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>變體名稱 *</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} required />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
                             />
                         </div>
-                    </div>
 
-                    <div className="grid gap-4 sm:grid-cols-3">
-                        <div className="space-y-2">
-                            <Label htmlFor="option_1">選項1</Label>
-                            <Input
-                                id="option_1"
+                        <div className="grid gap-4 sm:grid-cols-3">
+                            <FormField
+                                control={form.control}
                                 name="option_1"
-                                placeholder="如：霧面"
-                                defaultValue={variant?.option_1 || ''}
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>選項1</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} placeholder="如：霧面" />
+                                        </FormControl>
+                                    </FormItem>
+                                )}
                             />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="option_2">選項2</Label>
-                            <Input
-                                id="option_2"
+                            <FormField
+                                control={form.control}
                                 name="option_2"
-                                placeholder="如：256GB"
-                                defaultValue={variant?.option_2 || ''}
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>選項2</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} placeholder="如：256GB" />
+                                        </FormControl>
+                                    </FormItem>
+                                )}
                             />
-                        </div>
-                        <div className="space-y-2">
-                            <Label>選項3 (顏色)</Label>
-                            <ColorSelectField 
-                                selectedColorIds={selectedColorIds}
-                                onChange={setSelectedColorIds}
-                                multiple={false}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                            <Label htmlFor="barcode">條碼</Label>
-                            <Input
-                                id="barcode"
-                                name="barcode"
-                                defaultValue={variant?.barcode || ''}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="color">顏色備註</Label>
-                            <Input
-                                id="color"
-                                name="color"
-                                defaultValue={variant?.color || ''}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-3">
-                        <div className="space-y-2">
-                            <Label htmlFor="wholesale_price">批發價</Label>
-                            <Input
-                                id="wholesale_price"
-                                name="wholesale_price"
-                                type="number"
-                                step="0.01"
-                                defaultValue={variant?.wholesale_price ?? product?.base_wholesale_price ?? 0}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="retail_price">零售價</Label>
-                            <Input
-                                id="retail_price"
-                                name="retail_price"
-                                type="number"
-                                step="0.01"
-                                defaultValue={variant?.retail_price ?? product?.base_retail_price ?? 0}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="status">狀態</Label>
-                            <Select name="status" defaultValue={variant?.status || 'active'}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="active">上架中</SelectItem>
-                                    <SelectItem value="preorder">預購中</SelectItem>
-                                    <SelectItem value="sold_out">售完停產</SelectItem>
-                                    <SelectItem value="discontinued">已停售</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-
-                    {specFields.length > 0 && (
-                        <div className="space-y-3 p-4 border rounded-lg bg-muted/20">
-                            <Label className="text-xs font-bold uppercase text-primary">規格參數</Label>
-                            <input type="hidden" name="_spec_keys" value={JSON.stringify(specFields.map((f: any) => f.key))} />
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                {specFields.map((f: any) => (
-                                    <div key={f.key} className="space-y-1.5">
-                                        <Label htmlFor={`spec_${f.key}`} className="text-xs">{f.key}</Label>
-                                        {f.type === 'text' ? (
-                                            <Input
-                                                id={`spec_${f.key}`}
-                                                name={`spec_${f.key}`}
-                                                defaultValue={(variant?.table_settings as any)?.[f.key] || ''}
-                                                className="h-8 text-sm"
+                            <FormField
+                                control={form.control}
+                                name="selectedColorIds"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>選項3 (顏色)</FormLabel>
+                                        <FormControl>
+                                            <ColorSelectField 
+                                                selectedColorIds={field.value}
+                                                onChange={field.onChange}
+                                                multiple={false}
                                             />
-                                        ) : (
-                                            <Select name={`spec_${f.key}`} defaultValue={(variant?.table_settings as any)?.[f.key] || ''}>
-                                                <SelectTrigger className="h-8 text-sm">
-                                                    <SelectValue placeholder="選擇" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {f.options?.map((opt: string) => (
-                                                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
+                                        </FormControl>
+                                    </FormItem>
+                                )}
+                            />
                         </div>
-                    )}
-                    
-                    <StandaloneDeviceModelSelectField 
-                        value={selectedModels} 
-                        onChange={setSelectedModels} 
-                    />
 
-                    <div className="flex justify-end gap-2 pt-4">
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                            取消
-                        </Button>
-                        <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
-                            {variant ? '儲存' : '新增'}
-                        </Button>
-                    </div>
-                </form>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <FormField
+                                control={form.control}
+                                name="barcode"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>條碼</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} />
+                                        </FormControl>
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="color"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>顏色備註</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} />
+                                        </FormControl>
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-3">
+                            <FormField
+                                control={form.control}
+                                name="wholesale_price"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>批發價</FormLabel>
+                                        <FormControl>
+                                            <Input 
+                                                type="number" 
+                                                step="0.01" 
+                                                {...field} 
+                                                onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
+                                            />
+                                        </FormControl>
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="retail_price"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>零售價</FormLabel>
+                                        <FormControl>
+                                            <Input 
+                                                type="number" 
+                                                step="0.01" 
+                                                {...field} 
+                                                onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
+                                            />
+                                        </FormControl>
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="status"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>狀態</FormLabel>
+                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="active">上架中</SelectItem>
+                                                <SelectItem value="preorder">預購中</SelectItem>
+                                                <SelectItem value="sold_out">售完停產</SelectItem>
+                                                <SelectItem value="discontinued">已停售</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+
+                        <DynamicSpecsFields form={form} />
+                        
+                        <FormField
+                            control={form.control}
+                            name="selectedModelIds"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <StandaloneDeviceModelSelectField 
+                                        value={field.value} 
+                                        onChange={field.onChange} 
+                                    />
+                                </FormItem>
+                            )}
+                        />
+
+                        <div className="flex justify-end gap-2 pt-4 border-t">
+                            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                                取消
+                            </Button>
+                            <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
+                                {variant ? '儲存' : '新增'}
+                            </Button>
+                        </div>
+                    </form>
+                </Form>
             </DialogContent>
         </Dialog>
     );
