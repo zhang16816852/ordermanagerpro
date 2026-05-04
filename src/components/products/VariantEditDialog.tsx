@@ -141,6 +141,11 @@ export function VariantEditDialog({
                 ...dataToInsert,
                 product_id: product?.id,
                 option_3: selectedColor?.name || null,
+                // 確保空字串轉為 null
+                barcode: dataToInsert.barcode || null,
+                color: dataToInsert.color || null,
+                option_1: dataToInsert.option_1 || null,
+                option_2: dataToInsert.option_2 || null,
             };
 
             const { data, error } = await supabase.from('product_variants').insert(finalData).select().single();
@@ -176,6 +181,11 @@ export function VariantEditDialog({
             const finalUpdates = {
                 ...updates,
                 option_3: selectedColor?.name || null,
+                // 確保空字串轉為 null
+                barcode: updates.barcode || null,
+                color: updates.color || null,
+                option_1: updates.option_1 || null,
+                option_2: updates.option_2 || null,
             };
 
             const { error } = await supabase.from('product_variants').update(finalUpdates).eq('id', variant!.id);

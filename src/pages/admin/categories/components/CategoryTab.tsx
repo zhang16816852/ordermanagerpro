@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Plus, FolderTree, Download, Upload } from 'lucide-react';
 import { CategoryTreeNode } from './CategoryTreeNode';
-import { CategoryDialog } from './CategoryDialog';
+import CategoryDialog from './CategoryDialog';
 import { useCategoryData } from '../hooks/useCategoryData';
 import { useSpecData } from '../hooks/useSpecData';
+import { useSpecEngine } from '../hooks/useSpecEngine';
 import { Category, CategoryHierarchy } from '../types';
 
 // 工具：將平坦分類清單建構成樹狀結構
@@ -50,6 +51,9 @@ export function CategoryTab() {
     } = useCategoryData();
 
     const { specDefinitions } = useSpecData();
+    
+    // 門面模式：一切規格邏輯交由此 Hook
+    const { engine, activeConfiguration } = useSpecEngine(specDefinitions);
 
     // Dialog 狀態
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -59,7 +63,6 @@ export function CategoryTab() {
     // 表單狀態
     const [name, setName] = useState('');
     const [parentIds, setParentIds] = useState<string[]>([]);
-    const [selectedSpecIds, setSelectedSpecIds] = useState<string[]>([]);
 
     // 開啟 Dialog（新增或編輯）
     const openDialog = (cat: Category | null = null, defaultParentId: string | null = null) => {
@@ -70,16 +73,24 @@ export function CategoryTab() {
                 .filter(h => h.child_id === cat.id)
                 .map(h => h.parent_id);
             setParentIds(currentParents);
-            const currentLinks = categorySpecLinks
+            
+            // 原子化恢復狀態
+            const snapshot: any = { selected: {} };
+            categorySpecLinks
                 .filter((l: any) => l.category_id === cat.id)
-                .sort((a: any, b: any) => a.sort_order - b.sort_order)
-                .map((l: any) => l.spec_id);
-            setSelectedSpecIds(currentLinks);
+                .forEach((l: any) => {
+                    snapshot.selected[l.spec_id] = {
+                        manual: l.is_manual ?? true,
+                        sources: [],
+                        sortOrder: l.sort_order || 0
+                    };
+                });
+            engine.restore(snapshot);
         } else {
             setEditingCategory(null);
             setName('');
             setParentIds(defaultParentId ? [defaultParentId] : []);
-            setSelectedSpecIds([]);
+            engine.restore({ selected: {} });
         }
         setIsDialogOpen(true);
     };
@@ -89,38 +100,24 @@ export function CategoryTab() {
         setEditingCategory(null);
     };
 
-    // 切換規格選取
-    const toggleSpecSelection = (id: string) => {
-        setSelectedSpecIds(prev => {
-            const isSelecting = !prev.includes(id);
-            if (isSelecting) {
-                // 自動勾選連動目標
-                const spec = specDefinitions.find(s => s.id === id);
-                const targets = spec?.logic_config?.triggers?.flatMap(t => {
-                    const tgs = t.targets || (t as any).target_ids?.map((tid: string) => ({ id: tid })) || [];
-                    return tgs.map((tar: any) => tar.id);
-                }) || [];
-                
-                const combined = [...prev, id, ...targets];
-                return Array.from(new Set(combined));
-            } else {
-                // 取消勾選時採「只減不增」，且不連動刪除（保險起見）
-                return prev.filter(i => i !== id);
-            }
-        });
-    };
-
     // 提交表單
-    const handleSubmit = () => {
-        if (!name.trim()) return;
-        categoryMutation.mutate({
-            name,
-            parentIds,
-            specIds: selectedSpecIds,
-            editingCategoryId: editingCategory?.id,
-        }, {
-            onSuccess: closeDialog,
-        });
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await categoryMutation.mutateAsync({
+                name,
+                parentIds,
+                specs: activeConfiguration.map(s => ({
+                    id: s.id,
+                    sortOrder: s.sortOrder,
+                    isManual: s.isManual
+                })),
+                editingCategoryId: editingCategory?.id
+            });
+            closeDialog();
+        } catch (error) {
+            console.error('Submit category error:', error);
+        }
     };
 
     const tree = buildTree(categories, categoryHierarchy);
@@ -191,17 +188,15 @@ export function CategoryTab() {
             <CategoryDialog
                 open={isDialogOpen}
                 onOpenChange={setIsDialogOpen}
-                editingCategory={editingCategory}
                 name={name}
                 setName={setName}
                 parentIds={parentIds}
                 setParentIds={setParentIds}
-                selectedSpecIds={selectedSpecIds}
-                toggleSpecSelection={toggleSpecSelection}
+                activeConfiguration={activeConfiguration}
+                engine={engine}
                 categories={categories}
                 specDefinitions={specDefinitions}
                 onSubmit={handleSubmit}
-                isPending={categoryMutation.isPending}
             />
         </>
     );

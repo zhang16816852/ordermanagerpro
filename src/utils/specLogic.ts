@@ -340,3 +340,54 @@ export function formatSpecsToCondensedString(
         .filter(Boolean)
         .join(delimiter);
 }
+
+/**
+ * v4.12 靜態規格樹建構演算法 (用於後台分類設定)
+ * 根據規格定義中的 triggers 關係建構 DFS 排序後的樹狀清單
+ */
+export function getStaticSpecTree(specDefinitions: any[]): { spec: any; level: number }[] {
+    const childToParent = new Map<string, string>();
+    
+    // 1. 建立子對父的對照表
+    specDefinitions.forEach(spec => {
+        const triggers = spec.logic_config?.triggers || spec.logicConfig?.triggers;
+        triggers?.forEach((t: any) => {
+            const targets = t.targets || (t as any).target_ids?.map((tid: string) => ({ id: tid })) || [];
+            targets.forEach((tar: any) => {
+                if (!childToParent.has(tar.id)) {
+                    childToParent.set(tar.id, spec.id);
+                }
+            });
+        });
+    });
+
+    // 2. 找出根節點 (沒有被任何人觸發的規格)
+    const roots = specDefinitions.filter(s => !childToParent.has(s.id));
+    
+    const getChildren = (parentId: string): any[] => {
+        return specDefinitions.filter(s => childToParent.get(s.id) === parentId);
+    };
+
+    const sorted: { spec: any; level: number }[] = [];
+    const visited = new Set<string>();
+
+    const traverse = (nodes: any[], level: number = 0) => {
+        // 同層按名稱排序
+        const sortedNodes = [...nodes].sort((a, b) => a.name.localeCompare(b.name));
+        
+        sortedNodes.forEach(node => {
+            if (visited.has(node.id)) return;
+            visited.add(node.id);
+            
+            sorted.push({ spec: node, level });
+            
+            const children = getChildren(node.id);
+            if (children.length > 0) {
+                traverse(children, level + 1);
+            }
+        });
+    };
+
+    traverse(roots, 0);
+    return sorted;
+}

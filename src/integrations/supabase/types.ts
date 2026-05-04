@@ -300,16 +300,19 @@ export type Database = {
       category_spec_links: {
         Row: {
           category_id: string
+          is_manual: boolean | null
           sort_order: number | null
           spec_id: string
         }
         Insert: {
           category_id: string
+          is_manual?: boolean | null
           sort_order?: number | null
           spec_id: string
         }
         Update: {
           category_id?: string
+          is_manual?: boolean | null
           sort_order?: number | null
           spec_id?: string
         }

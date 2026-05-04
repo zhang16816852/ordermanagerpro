@@ -107,7 +107,8 @@ export function PreviewTable({
                                 <TableHead className="w-[120px]">主產品 SKU</TableHead>
                                 <TableHead className="w-[160px]">產品名稱</TableHead>
                                 <TableHead className="w-[100px]">一般型號</TableHead>
-                                <TableHead className="w-[110px]">裝置型號 (庫)</TableHead>
+                                <TableHead className="w-[110px]">適用型號 (主產品)</TableHead>
+                                <TableHead className="w-[110px]">適用型號 (變體)</TableHead>
                                 <TableHead className="w-[90px]">品牌</TableHead>
                                 <TableHead className="w-[90px]">分類</TableHead>
                                 <TableHead className="w-[150px] text-right">批發 / 零售</TableHead>
@@ -195,25 +196,36 @@ export function PreviewTable({
                                                             allDeviceModels.some(dm => dm.name.toLowerCase() === name.trim().toLowerCase())
                                                         ) ? "bg-destructive/10 border-destructive/20 text-destructive" : "border-transparent bg-muted/30"
                                                     )}>
-                                                        {row.device_models ? (
-                                                            row.device_models.split(',').map((name, i) => {
-                                                                const exists = allDeviceModels.some(dm => dm.name.toLowerCase() === name.trim().toLowerCase());
-                                                                return (
-                                                                    <Badge
-                                                                        key={i}
-                                                                        variant={exists ? "secondary" : "destructive"}
-                                                                        className="text-[9px] px-1 h-4"
-                                                                    >
-                                                                        {name.trim()}
-                                                                    </Badge>
-                                                                );
-                                                            })
-                                                        ) : (
-                                                            <span className="text-[10px] text-muted-foreground/50 pl-1 italic">點擊設定</span>
+                                                        {row.device_models ? (() => {
+                                                            const models = row.device_models.split(',').map(s => s.trim()).filter(Boolean);
+                                                            const displayLimit = 2;
+                                                            return (
+                                                                <>
+                                                                    {models.slice(0, displayLimit).map((name, i) => {
+                                                                        const exists = allDeviceModels.some(dm => dm.name.toLowerCase() === name.toLowerCase());
+                                                                        return (
+                                                                            <Badge
+                                                                                key={i}
+                                                                                variant={exists ? "secondary" : "destructive"}
+                                                                                className="text-[9px] px-1 h-4 whitespace-nowrap"
+                                                                            >
+                                                                                {name}
+                                                                            </Badge>
+                                                                        );
+                                                                    })}
+                                                                    {models.length > displayLimit && (
+                                                                        <Badge variant="outline" className="text-[9px] px-1 h-4 bg-background/50 border-dashed">
+                                                                            +{models.length - displayLimit}
+                                                                        </Badge>
+                                                                    )}
+                                                                </>
+                                                            );
+                                                        })() : (
+                                                            <span className="text-[10px] text-muted-foreground/50 pl-1 italic">設定產品型號</span>
                                                         )}
                                                     </div>
                                                 </PopoverTrigger>
-                                                <PopoverContent className="p-0 w-[260px]" align="start">
+                                                <PopoverContent className="p-0 w-[260px]" align="start" onWheel={(e) => e.stopPropagation()}>
                                                     {addingModelForIndex === index ? (
                                                         <div className="p-3 space-y-3 bg-background">
                                                             <div className="flex items-center justify-between border-b pb-2">
@@ -248,15 +260,6 @@ export function PreviewTable({
                                                                         </SelectContent>
                                                                     </Select>
                                                                 </div>
-                                                                <div className="space-y-1">
-                                                                    <label className="text-[10px] text-muted-foreground">系列 (選填)</label>
-                                                                    <Input
-                                                                        value={newModelForm.device_series}
-                                                                        onChange={e => setNewModelForm({ ...newModelForm, device_series: e.target.value })}
-                                                                        placeholder="例：iPhone 15 系列"
-                                                                        className="h-8 text-xs"
-                                                                    />
-                                                                </div>
                                                             </div>
                                                             <Button
                                                                 className="w-full h-8 text-xs"
@@ -282,7 +285,7 @@ export function PreviewTable({
                                                     ) : (
                                                         <Command>
                                                             <CommandInput placeholder="搜尋型號..." className="h-9 text-xs" />
-                                                            <CommandList className="max-h-[300px]">
+                                                            <CommandList className="max-h-[300px] overflow-y-auto">
                                                                 <CommandGroup heading="快速操作">
                                                                     <CommandItem
                                                                         onSelect={() => {
@@ -298,8 +301,14 @@ export function PreviewTable({
                                                                 <CommandEmpty className="py-3 text-xs text-center text-muted-foreground">
                                                                     找不到型號
                                                                 </CommandEmpty>
-                                                                <CommandGroup heading="現有型號庫">
-                                                                    {allDeviceModels.map((m) => {
+                                                                 <CommandGroup heading="現有型號庫">
+                                                                    {[...allDeviceModels].sort((a, b) => {
+                                                                        const aSel = row.device_models?.split(',').map(s => s.trim().toLowerCase()).includes(a.name.toLowerCase());
+                                                                        const bSel = row.device_models?.split(',').map(s => s.trim().toLowerCase()).includes(b.name.toLowerCase());
+                                                                        if (aSel && !bSel) return -1;
+                                                                        if (!aSel && bSel) return 1;
+                                                                        return a.name.localeCompare(b.name);
+                                                                    }).map((m) => {
                                                                         const isSelected = row.device_models?.split(',').map(s => s.trim().toLowerCase()).includes(m.name.toLowerCase());
                                                                         return (
                                                                             <CommandItem
@@ -314,7 +323,10 @@ export function PreviewTable({
                                                                                     }
                                                                                     onUpdate(index, 'device_models', next.join(', '));
                                                                                 }}
-                                                                                className="flex items-center gap-2 py-2 cursor-pointer"
+                                                                                className={cn(
+                                                                                    "flex items-center gap-2 py-2 cursor-pointer",
+                                                                                    isSelected && "bg-primary/5 text-primary font-medium"
+                                                                                )}
                                                                             >
                                                                                 <div className="flex flex-col flex-1 min-w-0">
                                                                                     <span className="text-xs font-medium truncate">{m.name}</span>
@@ -332,6 +344,99 @@ export function PreviewTable({
                                                     )}
                                                 </PopoverContent>
                                             </Popover>
+                                        </div>
+                                    </TableCell>
+
+                                    {/* 變體型號 */}
+                                    <TableCell>
+                                        <div className="flex flex-col gap-1">
+                                            {row.is_variant ? (
+                                                <Popover>
+                                                    <PopoverTrigger asChild>
+                                                        <div className={cn(
+                                                            "flex flex-wrap items-center gap-1 p-1 rounded-md cursor-pointer hover:bg-muted/50 transition-all border min-h-[32px]",
+                                                            row.variant_device_models && !row.variant_device_models.split(',').every(name =>
+                                                                allDeviceModels.some(dm => dm.name.toLowerCase() === name.trim().toLowerCase())
+                                                            ) ? "bg-destructive/10 border-destructive/20 text-destructive" : "border-transparent bg-indigo-50/30"
+                                                        )}>
+                                                            {row.variant_device_models ? (() => {
+                                                                const models = row.variant_device_models.split(',').map(s => s.trim()).filter(Boolean);
+                                                                const displayLimit = 2;
+                                                                return (
+                                                                    <>
+                                                                        {models.slice(0, displayLimit).map((name, i) => {
+                                                                            const exists = allDeviceModels.some(dm => dm.name.toLowerCase() === name.toLowerCase());
+                                                                            return (
+                                                                                <Badge
+                                                                                    key={i}
+                                                                                    variant={exists ? "secondary" : "destructive"}
+                                                                                    className="text-[9px] px-1 h-4 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border-indigo-200 whitespace-nowrap"
+                                                                                >
+                                                                                    {name}
+                                                                                </Badge>
+                                                                            );
+                                                                        })}
+                                                                        {models.length > displayLimit && (
+                                                                            <Badge variant="outline" className="text-[9px] px-1 h-4 bg-indigo-50/50 border-dashed border-indigo-200 text-indigo-600">
+                                                                                +{models.length - displayLimit}
+                                                                            </Badge>
+                                                                        )}
+                                                                    </>
+                                                                );
+                                                            })() : (
+                                                                <span className="text-[10px] text-muted-foreground/50 pl-1 italic">設定變體型號</span>
+                                                            )}
+                                                        </div>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="p-0 w-[260px]" align="start" onWheel={(e) => e.stopPropagation()}>
+                                                        <Command>
+                                                            <CommandInput placeholder="搜尋型號..." className="h-9 text-xs" />
+                                                            <CommandList className="max-h-[300px] overflow-y-auto">
+                                                                <CommandEmpty className="py-3 text-xs text-center text-muted-foreground">
+                                                                    找不到型號
+                                                                </CommandEmpty>
+                                                                <CommandGroup heading="現有型號庫">
+                                                                    {[...allDeviceModels].sort((a, b) => {
+                                                                        const aSel = row.variant_device_models?.split(',').map(s => s.trim().toLowerCase()).includes(a.name.toLowerCase());
+                                                                        const bSel = row.variant_device_models?.split(',').map(s => s.trim().toLowerCase()).includes(b.name.toLowerCase());
+                                                                        if (aSel && !bSel) return -1;
+                                                                        if (!aSel && bSel) return 1;
+                                                                        return a.name.localeCompare(b.name);
+                                                                    }).map((m) => {
+                                                                        const isSelected = row.variant_device_models?.split(',').map(s => s.trim().toLowerCase()).includes(m.name.toLowerCase());
+                                                                        return (
+                                                                            <CommandItem
+                                                                                key={m.id}
+                                                                                onSelect={() => {
+                                                                                    const current = row.variant_device_models ? row.variant_device_models.split(',').map(s => s.trim()) : [];
+                                                                                    let next;
+                                                                                    if (isSelected) {
+                                                                                        next = current.filter(s => s.toLowerCase() !== m.name.toLowerCase());
+                                                                                    } else {
+                                                                                        next = [...current, m.name];
+                                                                                    }
+                                                                                    onUpdate(index, 'variant_device_models', next.join(', '));
+                                                                                }}
+                                                                                className={cn(
+                                                                                    "flex items-center gap-2 py-2 cursor-pointer",
+                                                                                    isSelected && "bg-indigo-50 text-indigo-700 font-medium"
+                                                                                )}
+                                                                            >
+                                                                                <div className="flex flex-col flex-1 min-w-0">
+                                                                                    <span className="text-xs font-medium truncate">{m.name}</span>
+                                                                                </div>
+                                                                                {isSelected && <Check className="h-3.5 w-3.5 text-indigo-600" />}
+                                                                            </CommandItem>
+                                                                        );
+                                                                    })}
+                                                                </CommandGroup>
+                                                            </CommandList>
+                                                        </Command>
+                                                    </PopoverContent>
+                                                </Popover>
+                                            ) : (
+                                                <span className="text-[9px] text-muted-foreground/20 italic pl-2">-</span>
+                                            )}
                                         </div>
                                     </TableCell>
                                     <TableCell>
@@ -353,7 +458,7 @@ export function PreviewTable({
                                                         {row.brand || '未設定品牌'} ⚠️
                                                     </Button>
                                                 </PopoverTrigger>
-                                                <PopoverContent className="p-0 w-[200px]" align="start">
+                                                <PopoverContent className="p-0 w-[200px]" align="start" onWheel={(e) => e.stopPropagation()}>
                                                     <Command>
                                                         <CommandInput placeholder="搜尋品牌..." />
                                                         <CommandList>
@@ -477,7 +582,7 @@ export function PreviewTable({
                                                             </span>
                                                         </div>
                                                     </PopoverTrigger>
-                                                    <PopoverContent className="p-0 w-[240px]" align="start">
+                                                    <PopoverContent className="p-0 w-[240px]" align="start" onWheel={(e) => e.stopPropagation()}>
                                                         {addingColorForIndex === index ? (
                                                             <div className="p-3 space-y-3 bg-background">
                                                                 <div className="flex items-center justify-between border-b pb-2 mb-2">
@@ -564,7 +669,7 @@ export function PreviewTable({
                                                                     value={searchQuery}
                                                                     onValueChange={setSearchQuery}
                                                                 />
-                                                                <CommandList className="max-h-[300px]">
+                                                                <CommandList className="max-h-[300px] overflow-y-auto">
                                                                     <CommandGroup heading="快速操作">
                                                                         <CommandItem
                                                                             onSelect={() => {

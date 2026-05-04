@@ -296,13 +296,19 @@ export function useProductImport(onSuccess: () => void) {
                         const { data: existingVariants } = await supabase.from('product_variants').select('*').in('sku', allVariantSkus);
 
                         const productIds = (existingProducts || []).map(p => p.id);
+                        const variantIds = (existingVariants || []).map(v => v.id);
                         const { data: existingCatLinks } = await (supabase.from('product_category_links' as any) as any).select('product_id, category_id').in('product_id', productIds);
 
-                        // 批量抓取現有的裝置型號關聯，避免在 map 裡重複查詢
+                        // 批量抓取現有的裝置型號關聯
                         const { data: existingModelLinks } = await supabase
                             .from('product_model_links')
                             .select('product_id, device_models(name)')
                             .in('product_id', productIds);
+
+                        const { data: existingVariantModelLinks } = await supabase
+                            .from('variant_model_links')
+                            .select('variant_id, device_models(name)')
+                            .in('variant_id', variantIds);
 
                         const enrichedData = rawParsed.map(row => {
                             const product = (existingProducts || []).find(p => p.sku === row.product_sku);
@@ -344,6 +350,17 @@ export function useProductImport(onSuccess: () => void) {
                                 if (variant.name !== row.variant_name) diff.push('變體名稱');
                                 if (variant.wholesale_price !== (row.variant_wholesale_price ?? row.base_wholesale_price)) diff.push('變體批發價');
                                 if (variant.retail_price !== (row.variant_retail_price ?? row.base_retail_price)) diff.push('變體零售價');
+                                
+                                if (row.variant_device_models) {
+                                    const variantLinks = (existingVariantModelLinks || []).filter(l => l.variant_id === variant.id);
+                                    const currentNames = variantLinks.map((l: any) => l.device_models?.name).filter(Boolean);
+                                    const incomingNames = row.variant_device_models.split(',').map(s => s.trim()).filter(Boolean);
+
+                                    const isSame = currentNames.length === incomingNames.length &&
+                                        currentNames.every(n => incomingNames.some(inN => inN.toLowerCase() === n.toLowerCase()));
+                                    if (!isSame) diff.push('變體型號');
+                                }
+
                                 const parsedIncomingV = row.variant_table_settings?.includes(':') ? parseCondensedSpecs(row.variant_table_settings) : (row.variant_table_settings ? JSON.parse(row.variant_table_settings) : {});
                                 if (JSON.stringify(variant.table_settings) !== JSON.stringify(parsedIncomingV)) diff.push('變體規格');
                             }

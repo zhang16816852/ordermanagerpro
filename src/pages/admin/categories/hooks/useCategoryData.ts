@@ -52,10 +52,10 @@ export function useCategoryData() {
         mutationFn: async (data: {
             name: string;
             parentIds: string[];
-            specIds: string[];
+            specs: { id: string, sortOrder: number }[];
             editingCategoryId?: string;
         }) => {
-            const { specIds, parentIds, editingCategoryId, ...catData } = data;
+            const { specs, parentIds, editingCategoryId, ...catData } = data;
             let catId = editingCategoryId;
 
             if (editingCategoryId) {
@@ -81,11 +81,12 @@ export function useCategoryData() {
 
             // 更新規格關聯
             await (supabase.from('category_spec_links' as any) as any).delete().eq('category_id', catId);
-            if (specIds.length > 0) {
-                const links = specIds.map((sid: string, idx: number) => ({
+            if (specs && specs.length > 0) {
+                const links = specs.map((s: { id: string, sortOrder: number, isManual?: boolean }) => ({
                     category_id: catId,
-                    spec_id: sid,
-                    sort_order: idx
+                    spec_id: s.id,
+                    sort_order: s.sortOrder,
+                    is_manual: s.isManual ?? true
                 }));
                 await (supabase.from('category_spec_links' as any) as any).insert(links);
             }
