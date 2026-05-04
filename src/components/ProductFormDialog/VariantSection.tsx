@@ -81,6 +81,9 @@ export function VariantSection({ product }: { product: any }) {
             <TableRow className="bg-muted/50">
               <TableHead className="w-[120px]">SKU</TableHead>
               <TableHead>規格名稱</TableHead>
+              <TableHead>選項1</TableHead>
+              <TableHead>選項2</TableHead>
+              <TableHead>選項3 (顏色)</TableHead>
               <TableHead>狀態</TableHead>
               <TableHead className="text-right">批發價</TableHead>
               <TableHead className="text-right">零售價</TableHead>
@@ -95,6 +98,7 @@ export function VariantSection({ product }: { product: any }) {
                 <TableRow key={i}>
                   <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell colSpan={3}><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
                   <TableCell><Skeleton className="h-8 w-16 mx-auto" /></TableCell>
@@ -102,7 +106,7 @@ export function VariantSection({ product }: { product: any }) {
               ))
             ) : variants?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Layers className="h-8 w-8 opacity-20" />
                     <p>尚未建立任何變體，請點擊「批次產生」快速建立。</p>
@@ -116,6 +120,9 @@ export function VariantSection({ product }: { product: any }) {
                     {v.sku}
                   </TableCell>
                   <TableCell className="font-medium">{v.name}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{v.option_1 || '-'}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{v.option_2 || '-'}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{v.option_3 || '-'}</TableCell>
                   <TableCell>
                     <Badge variant={v.status === 'active' ? 'default' : 'secondary'}>
                       {STATUS_LABELS[v.status]}

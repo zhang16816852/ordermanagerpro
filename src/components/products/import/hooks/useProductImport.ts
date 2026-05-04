@@ -166,10 +166,12 @@ export function useProductImport(onSuccess: () => void) {
 
         // 顏色校驗 (針對 option_3)
         if (row.option_3 && is_variant) {
-            const colorExists = allColors.some(c => c.name === row.option_3 || c.code === row.option_3);
+            const searchColor = row.option_3.trim().toLowerCase();
+            const colorExists = allColors.some(c =>
+                c.name.trim().toLowerCase() === searchColor ||
+                c.code.trim().toLowerCase() === searchColor
+            );
             if (!colorExists) {
-                console.log("不存在顏色", row.option_3);
-
                 errors.push(`顏色 "${row.option_3}" 不存在於顏色庫`);
             }
         }
@@ -459,7 +461,6 @@ export function useProductImport(onSuccess: () => void) {
                 await (supabase.from('product_category_links' as any) as any).delete().in('product_id', productIds);
                 await (supabase.from('product_category_links' as any) as any).insert(catLinks);
             }
-
             const productModelLinksToInsert = Array.from(uniqueProductsMap.values()).flatMap(row => {
                 if (!row.device_models) return [];
                 const names = row.device_models.split(',').map(n => n.trim()).filter(Boolean);
@@ -471,9 +472,18 @@ export function useProductImport(onSuccess: () => void) {
                 }).filter(Boolean);
             });
 
-            if (productModelLinksToInsert.length > 0) {
+            // 型號連結去重 (避免主鍵衝突)
+            const uniqueProductModelLinks = Array.from(
+                productModelLinksToInsert.reduce((map, item) => {
+                    const key = `${item!.product_id}-${item!.model_id}`;
+                    map.set(key, item);
+                    return map;
+                }, new Map<string, any>()).values()
+            );
+
+            if (uniqueProductModelLinks.length > 0) {
                 await supabase.from('product_model_links').delete().in('product_id', Array.from(productIdMap.values()));
-                await supabase.from('product_model_links').insert(productModelLinksToInsert as any);
+                await supabase.from('product_model_links').insert(uniqueProductModelLinks as any);
             }
 
             const variantsToInsert = validRows.filter(r => r.is_variant).map(row => {
@@ -498,7 +508,15 @@ export function useProductImport(onSuccess: () => void) {
             });
 
             if (variantsToInsert.length > 0) {
-                const { data: upsertedVariants, error } = await supabase.from('product_variants').upsert(variantsToInsert, { onConflict: 'sku' }).select('id, sku');
+                // 去重：確保同一個 SKU 不會出現在同一次 upsert 中，避免 "on conflict do update command cannot affect row a second time"
+                const uniqueVariants = Array.from(
+                    variantsToInsert.reduce((map, item) => {
+                        map.set(item.sku, item);
+                        return map;
+                    }, new Map<string, any>()).values()
+                );
+
+                const { data: upsertedVariants, error } = await supabase.from('product_variants').upsert(uniqueVariants, { onConflict: 'sku' }).select('id, sku');
                 if (error) throw error;
                 if (upsertedVariants) {
                     const variantIdMap = new Map(upsertedVariants.map(v => [v.sku, v.id]));
@@ -512,9 +530,19 @@ export function useProductImport(onSuccess: () => void) {
                             return mId ? { variant_id: vId, model_id: mId } : null;
                         }).filter(Boolean);
                     });
-                    if (variantModelLinksToInsert.length > 0) {
+
+                    // 變體型號連結去重
+                    const uniqueVariantModelLinks = Array.from(
+                        variantModelLinksToInsert.reduce((map, item) => {
+                            const key = `${item!.variant_id}-${item!.model_id}`;
+                            map.set(key, item);
+                            return map;
+                        }, new Map<string, any>()).values()
+                    );
+
+                    if (uniqueVariantModelLinks.length > 0) {
                         await supabase.from('variant_model_links').delete().in('variant_id', Array.from(variantIdMap.values()));
-                        await supabase.from('variant_model_links').insert(variantModelLinksToInsert as any);
+                        await supabase.from('variant_model_links').insert(uniqueVariantModelLinks as any);
                     }
                 }
             }
@@ -523,6 +551,7 @@ export function useProductImport(onSuccess: () => void) {
             toast.success('匯入成功');
             queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
             queryClient.invalidateQueries({ queryKey: ['all-active-variants'] });
+            queryClient.invalidateQueries({ queryKey: ['product-variants'] });
             onSuccess();
         },
         onError: (error: Error) => toast.error(`匯入失敗：${error.message}`),
