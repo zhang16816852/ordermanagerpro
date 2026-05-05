@@ -10,6 +10,7 @@ interface DeviceModelStore {
     models: DeviceModel[];
     brands: DeviceBrand[];
     groups: DeviceModelGroup[];
+    groupItems: { group_id: string, model_id: string }[];
     isLoading: boolean;
     isAdding: boolean;
     isInitialized: boolean;
@@ -22,6 +23,7 @@ export const useDeviceModelStore = create<DeviceModelStore>((set, get) => ({
     models: [],
     brands: [],
     groups: [],
+    groupItems: [],
     isLoading: false,
     isAdding: false,
     isInitialized: false,
@@ -31,20 +33,25 @@ export const useDeviceModelStore = create<DeviceModelStore>((set, get) => ({
 
         set({ isLoading: true });
         try {
-            const [modelsRes, brandsRes, groupsRes] = await Promise.all([
+            const results = await Promise.all([
                 supabase.from('device_models').select('*').order('name'),
                 supabase.from('device_brands').select('*').order('name'),
-                supabase.from('device_model_groups').select('*').is('deleted_at', null).order('name')
+                supabase.from('device_model_groups').select('*').is('deleted_at', null).order('name'),
+                supabase.from('device_model_group_items').select('group_id, model_id').order('position')
             ]);
+
+            const [modelsRes, brandsRes, groupsRes, groupItemsRes] = results;
 
             if (modelsRes.error) throw modelsRes.error;
             if (brandsRes.error) throw brandsRes.error;
             if (groupsRes.error) throw groupsRes.error;
+            if (groupItemsRes.error) throw groupItemsRes.error;
 
             set({ 
                 models: modelsRes.data || [], 
                 brands: brandsRes.data || [], 
                 groups: groupsRes.data || [],
+                groupItems: groupItemsRes.data || [],
                 isLoading: false, 
                 isInitialized: true 
             });

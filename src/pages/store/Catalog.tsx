@@ -18,12 +18,18 @@ import { useStoreDraft } from "@/stores/useOrderDraftStore";
 import { CatalogSidebar } from "@/components/order/CatalogSidebar";
 import { ProductWithPricing } from "@/types/product";
 import { useQuery } from "@tanstack/react-query";
+import { useDeviceModelStore } from "@/store/useDeviceModelStore";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function StoreCatalog() {
   const { storeId } = useAuth();
   const { totalItems } = useStoreDraft(storeId || '');
   const { products, isLoading } = useStoreProductCache(storeId ?? null);
+  const { fetchData: fetchDeviceData } = useDeviceModelStore();
+
+  useEffect(() => {
+    fetchDeviceData();
+  }, [fetchDeviceData]);
   
   // Fetch categories for ID <-> Name mapping
   const { data: categories = [] } = useQuery<Category[]>({

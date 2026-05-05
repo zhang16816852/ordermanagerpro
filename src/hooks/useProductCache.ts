@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useDeviceModelStore } from '@/store/useDeviceModelStore';
 import type { Tables } from '@/integrations/supabase/types';
 
 import { Product, ProductVariant, ProductWithPricing, VariantWithPricing } from '@/types/product';
@@ -12,6 +13,7 @@ export type ProductWithCategories = Product & {
   device_models?: { name: string, aliases: string[] | null }[];
   device_model_groups?: { id: string, name: string }[];
   device_model_exclusions?: { name: string }[];
+  effective_model_names?: string[];
 };
 
 interface ProductCache {
@@ -37,7 +39,7 @@ function setLocalCache(products: ProductWithCategories[], version: number) {
   localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
 }
 
-function normalizeProduct(p: any, categoryMap?: Map<string, string>): ProductWithCategories {
+function normalizeProduct(p: any, categoryMap?: Map<string, string>, groupItemsMap?: Map<string, string[]>, modelIdToName?: Map<string, string>): ProductWithCategories {
   // Check if we are receiving the junction table data
   const hasLinksProperty = Object.prototype.hasOwnProperty.call(p, 'product_category_links');
   const links = p.product_category_links || [];
@@ -86,6 +88,28 @@ function normalizeProduct(p: any, categoryMap?: Map<string, string>): ProductWit
 
   // Extract exclusions
   const exclusions = p.product_model_exclusions || [];
+  const exclusionNames = new Set(exclusions.map((l: any) => l.device_models?.name?.toLowerCase()).filter(Boolean));
+
+  // Resolve Effective Models
+  const effectiveModelNames = new Set<string>();
+  
+  // 1. Add direct models
+  device_models.forEach(m => effectiveModelNames.add(m.name));
+  
+  // 2. Add group models
+  if (groupItemsMap && modelIdToName) {
+    device_model_groups.forEach(g => {
+      const modelIds = groupItemsMap.get(g.id) || [];
+      modelIds.forEach(mid => {
+        const name = modelIdToName.get(mid);
+        if (name) effectiveModelNames.add(name);
+      });
+    });
+  }
+  
+  // 3. Remove exclusions
+  const finalModelNames = Array.from(effectiveModelNames).filter(name => !exclusionNames.has(name.toLowerCase()));
+
   const device_model_exclusions = exclusions.map((l: any) => ({
     name: l.device_models?.name
   })).filter((m: any) => m.name);
@@ -96,7 +120,8 @@ function normalizeProduct(p: any, categoryMap?: Map<string, string>): ProductWit
     category_names: category_names,
     device_models,
     device_model_groups,
-    device_model_exclusions
+    device_model_exclusions,
+    effective_model_names: finalModelNames
   };
 }
 
@@ -127,7 +152,21 @@ async function checkVersionAndFetch(): Promise<{ products: ProductWithCategories
 
     if (fetchError) throw fetchError;
     const catMap = new Map(cats?.map(c => [c.id, c.name]) || []);
-    const mappedProducts = (products || []).map(p => normalizeProduct(p, catMap));
+    
+    // Fetch group items and models for resolution
+    const [{ data: groupItems }, { data: allModels }] = await Promise.all([
+      supabase.from('device_model_group_items').select('group_id, model_id'),
+      supabase.from('device_models').select('id, name')
+    ]);
+    
+    const groupItemsMap = new Map<string, string[]>();
+    groupItems?.forEach(item => {
+      const current = groupItemsMap.get(item.group_id) || [];
+      groupItemsMap.set(item.group_id, [...current, item.model_id]);
+    });
+    const modelIdToName = new Map(allModels?.map(m => [m.id, m.name]) || []);
+
+    const mappedProducts = (products || []).map(p => normalizeProduct(p, catMap, groupItemsMap, modelIdToName));
     return { products: mappedProducts, version: clientVersion || 0 };
   }
 
@@ -154,8 +193,21 @@ async function checkVersionAndFetch(): Promise<{ products: ProductWithCategories
   const { data: cats } = await supabase.from('categories').select('id, name');
   const catMap = new Map(cats?.map(c => [c.id, c.name]) || []);
 
+  // Fetch group items and models for resolution
+  const [{ data: groupItems }, { data: allModels }] = await Promise.all([
+    supabase.from('device_model_group_items').select('group_id, model_id'),
+    supabase.from('device_models').select('id, name')
+  ]);
+  
+  const groupItemsMap = new Map<string, string[]>();
+  groupItems?.forEach(item => {
+    const current = groupItemsMap.get(item.group_id) || [];
+    groupItemsMap.set(item.group_id, [...current, item.model_id]);
+  });
+  const modelIdToName = new Map(allModels?.map(m => [m.id, m.name]) || []);
+
   // Map received data with names
-  const products = (rawData || []).map(p => normalizeProduct(p, catMap));
+  const products = (rawData || []).map(p => normalizeProduct(p, catMap, groupItemsMap, modelIdToName));
   setLocalCache(products, version);
   return { products, version };
 }
@@ -250,14 +302,43 @@ export function useStoreProductCache(storeId: string | null) {
     enabled: !!brand,
     staleTime: 1000 * 60 * 5, // 5 分鐘
   });
+  
+  const { models: storeModels, groups: storeGroups, groupItems: storeGroupItems } = useDeviceModelStore();
+  
+  // Helper to resolve effective models from links locally
+  const resolveEffectiveModels = (target: any, isVariant = false) => {
+    const directLinksKey = isVariant ? 'variant_model_links' : 'product_model_links';
+    const groupLinksKey = isVariant ? 'variant_model_group_links' : 'product_model_group_links';
+    const exclusionsKey = isVariant ? 'variant_model_exclusions' : 'product_model_exclusions';
 
-  // 取得所有變體
+    const directModels = (target[directLinksKey] || []).map((l: any) => l.device_models?.name).filter(Boolean);
+    const groupLinks = target[groupLinksKey] || [];
+    const exclusions = new Set((target[exclusionsKey] || []).map((l: any) => l.device_models?.name?.toLowerCase()).filter(Boolean));
+    
+    const resolvedNames = new Set<string>(directModels);
+    
+    groupLinks.forEach((gl: any) => {
+        const itemIds = storeGroupItems.filter(i => i.group_id === gl.group_id).map(i => i.model_id);
+        itemIds.forEach(mid => {
+            const m = storeModels.find(sm => sm.id === mid);
+            if (m) resolvedNames.add(m.name);
+        });
+    });
+    
+    return Array.from(resolvedNames).filter(name => !exclusions.has(name.toLowerCase()));
+  };
+
   const { data: allVariants = [], isLoading: variantsLoading } = useQuery({
     queryKey: ['all-product-variants-for-store'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('product_variants')
-        .select('*')
+        .select(`
+          *,
+          variant_model_links(device_models(name, aliases)),
+          variant_model_group_links(group_id, device_model_groups(name)),
+          variant_model_exclusions(device_models(name))
+        `)
         .order('sku');
       if (error) throw error;
       return data || [];
@@ -277,12 +358,19 @@ export function useStoreProductCache(storeId: string | null) {
         const variantBrandPrice = brandPrices.find(
           bp => bp.product_id === product.id && bp.variant_id === variant.id
         );
+        
+        // Resolve variant-specific effective models
+        const variantModels = resolveEffectiveModels(variant, true);
+        // If variant has no specific models, it inherits from product
+        const effective_model_names = variantModels.length > 0 ? variantModels : product.effective_model_names;
+
         return {
           ...variant,
           effective_wholesale_price: variantBrandPrice?.wholesale_price ?? variant.wholesale_price,
           effective_retail_price: variantBrandPrice?.retail_price ?? variant.retail_price,
           has_brand_price: !!variantBrandPrice,
           status: variant.status,
+          effective_model_names
         };
       });
 

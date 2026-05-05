@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import {
     Dialog,
@@ -41,11 +41,25 @@ export function ProductDetailDialog({
     const { getBrandName } = useBrands();
     const { colors } = useProductColors();
     const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+    const [selectedOptions, setSelectedOptions] = useState<{ [key: string]: string | null }>({
+        option_1: null,
+        option_2: null,
+        option_3: null,
+        modelDisplay: null
+    });
 
     // 當彈窗開啟或產品改變時，若產品有變體，預設不選中或由外部決定
     useEffect(() => {
-        if (!open) setSelectedVariantId(null);
-    }, [open]);
+        if (open) {
+            setSelectedVariantId(null);
+            setSelectedOptions({
+                option_1: null,
+                option_2: null,
+                option_3: null,
+                modelDisplay: null
+            });
+        }
+    }, [open, product?.id]);
 
     // 獲取目前選中的變體物件
     const selectedVariant = useMemo(() => {
@@ -62,40 +76,107 @@ export function ProductDetailDialog({
         },
     });
 
-    // 獲取有效型號 (動態計算)
-    const { data: effectiveModels = [], isLoading: isLoadingModels } = useQuery({
-        queryKey: ['effective-models', selectedVariantId || product?.id],
-        queryFn: async () => {
-            if (!product?.id) return [];
-            
-            // 如果有選中變體，獲取該變體的有效型號
-            if (selectedVariantId) {
-                const { data, error } = await supabase.rpc('get_variant_effective_models', {
-                    p_variant_id: selectedVariantId
-                });
-                if (error) {
-                    console.error('Error fetching variant effective models:', error);
-                    return [];
-                }
-                return data;
+    // Resolve effective models from cache
+    const effectiveModels = useMemo(() => {
+        const target = selectedVariant || product;
+        if (!target) return [];
+        return (target as any).effective_model_names || [];
+    }, [product, selectedVariant]);
+
+    // --- Variant Matrix Logic ---
+    // Pre-process variants to have a clean model display name
+    const processedVariants = useMemo(() => {
+        if (!product?.variants) return [];
+        return product.variants.map(v => {
+            const groupNames = (v as any).variant_model_group_links?.map((l: any) => l.device_model_groups?.name).filter(Boolean) || [];
+            const modelNames = (v as any).variant_model_links?.map((l: any) => l.device_models?.name).filter(Boolean) || [];
+
+            let modelDisplay = '';
+            if (groupNames.length > 0) modelDisplay = groupNames.join(', ');
+            else if (modelNames.length > 0) modelDisplay = modelNames.join(', ');
+            else {
+                // If no structured model links, only use name as a dimension if there are NO other options
+                // This prevents redundant long names when option_1/2/3 are already present
+                const hasOptions = !!(v.option_1 || v.option_2 || v.option_3);
+                modelDisplay = hasOptions ? '' : v.name;
             }
+
+            return { ...v, modelDisplay };
+        });
+    }, [product?.variants]);
+
+    const variants = processedVariants;
+
+    // Extract unique options for each category
+    const optionDimensions = useMemo(() => {
+        const dims: { [key: string]: string[] } = {
+            option_1: [],
+            option_2: [],
+            option_3: []
+        };
+
+        variants.forEach(v => {
+            if (v.option_1) if (!dims.option_1.includes(v.option_1)) dims.option_1.push(v.option_1);
+            if (v.option_2) if (!dims.option_2.includes(v.option_2)) dims.option_2.push(v.option_2);
+            if (v.option_3) if (!dims.option_3.includes(v.option_3)) dims.option_3.push(v.option_3);
+        });
+
+        const filteredDims = Object.entries(dims).filter(([_, values]) => values.length > 0);
+
+        // Always include 'modelDisplay' as the primary dimension (Model) if it contains non-empty values
+        const modelNames = Array.from(new Set(variants.map(v => v.modelDisplay))).filter(Boolean);
+        if (modelNames.length > 0) {
+            return [['modelDisplay', modelNames], ...filteredDims] as [string, string[]][];
+        }
+
+        return filteredDims as [string, string[]][];
+    }, [variants, product?.name]);
+
+    // Helper to check if an option combination is available
+    const isOptionAvailable = useCallback((dimKey: string, value: string) => {
+        const testOptions = { ...selectedOptions, [dimKey]: value };
+        return variants.some(v => {
+            const matchModel = !testOptions.modelDisplay || v.modelDisplay === testOptions.modelDisplay;
+            const matchO1 = !testOptions.option_1 || v.option_1 === testOptions.option_1;
+            const matchO2 = !testOptions.option_2 || v.option_2 === testOptions.option_2;
+            const matchO3 = !testOptions.option_3 || v.option_3 === testOptions.option_3;
+            return matchModel && matchO1 && matchO2 && matchO3;
+        });
+    }, [variants, selectedOptions]);
+
+    // Effect to auto-select variant when options match exactly
+    useEffect(() => {
+        if (!product?.has_variants) return;
+
+        const match = variants.find(v => {
+            // Normalize '' and null to be equivalent for comparison
+            const vModel = v.modelDisplay || null;
+            const sModel = selectedOptions.modelDisplay || null;
             
-            // 如果沒選中變體，獲取產品層級的有效型號
-            // 這裡我們暫時用一個類似的邏輯或顯示產品直接連結的型號
-            const { data, error } = await supabase
-                .from('product_model_links')
-                .select('model_id, device_models(name)')
-                .eq('product_id', product.id);
-            
-            if (error) return [];
-            return data.map((d: any) => ({ 
-                model_id: d.model_id, 
-                model_name: d.device_models?.name,
-                source: 'direct'
-            }));
-        },
-        enabled: !!product?.id && open
-    });
+            return vModel === sModel &&
+                v.option_1 === selectedOptions.option_1 &&
+                v.option_2 === selectedOptions.option_2 &&
+                v.option_3 === selectedOptions.option_3;
+        });
+
+        if (match) {
+            setSelectedVariantId(match.id);
+        } else {
+            // If no exact match, maybe clear the ID but keep options
+            // Actually, if they haven't selected all dimensions that exist, we shouldn't clear it yet
+            // But if there ARE no variants matching this combination, we might need to reset.
+            // However, our UI prevents selecting unavailable options.
+            setSelectedVariantId(null);
+        }
+    }, [selectedOptions, variants, product?.has_variants]);
+
+    // Handle Option Selection
+    const handleOptionClick = (dimKey: string, value: string) => {
+        setSelectedOptions(prev => ({
+            ...prev,
+            [dimKey]: prev[dimKey] === value ? null : value
+        }));
+    };
 
     // --- 核心邏輯：深度彙整與樹狀排序 ---
     const combinedSpecs = useMemo(() => {
@@ -104,14 +185,14 @@ export function ProductDetailDialog({
         // 1. 建立一個 Map 來存放每一個 pathKey 對應到的所有唯一數值
         // 使用 JSON.stringify(val) 作為 Set 的判斷依據
         const specsAggregation = new Map<string, { rawValues: any[], stringifiedSet: Set<string> }>();
-        
+
         const addValueToAgg = (key: string, val: any) => {
             if (val === null || val === undefined || val === '') return;
             if (!specsAggregation.has(key)) {
                 specsAggregation.set(key, { rawValues: [], stringifiedSet: new Set() });
             }
             const agg = specsAggregation.get(key)!;
-            
+
             // 處理物件 Key 排序，確保 {"a":1, "b":2} 等於 {"b":2, "a":1}
             let sVal;
             if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
@@ -169,7 +250,7 @@ export function ProductDetailDialog({
 
             const specId = pathKey.includes(':') ? pathKey.split(':').pop()! : pathKey;
             const def = specDefinitions.find((s: any) => s.id === specId || s.name === specId);
-            
+
             // 如果找不到定義，嘗試從產品的原始 table_settings 中找 path (僅限新格式)
             let displayName = def?.name;
             if (!displayName && product.variants) {
@@ -302,19 +383,16 @@ export function ProductDetailDialog({
                                     適用型號 {selectedVariantId && <Badge variant="outline" className="ml-2 text-[10px] font-normal py-0">規格專屬</Badge>}
                                 </h3>
                                 <div className="flex flex-wrap gap-1.5 mt-1">
-                                        {effectiveModels.map((m: any) => (
-                                            <Badge 
-                                                key={m.model_id} 
-                                                variant="secondary" 
-                                                className={cn(
-                                                    "text-[11px] font-normal px-2 py-0.5",
-                                                    m.source === 'direct' ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-blue-50 text-blue-700 border-blue-100"
-                                                )}
-                                            >
-                                                {m.model_name}
-                                            </Badge>
-                                        ))}
-                                    </div>
+                                    {effectiveModels.map((name: string) => (
+                                        <Badge
+                                            key={name}
+                                            variant="secondary"
+                                            className="text-[11px] font-normal px-2 py-0.5 bg-blue-50 text-blue-700 border-blue-100"
+                                        >
+                                            {name}
+                                        </Badge>
+                                    ))}
+                                </div>
                             </div>
                         )}
 
@@ -329,7 +407,7 @@ export function ProductDetailDialog({
                                         return (
                                             <div key={spec.id} className="flex flex-col text-sm py-2 border-b last:border-0 border-muted">
                                                 <div className="flex justify-between items-start w-full gap-4">
-                                                    <span 
+                                                    <span
                                                         className={cn(
                                                             "text-muted-foreground transition-all duration-200 shrink-0",
                                                             spec.level > 0 && "pl-4 text-xs flex items-center gap-1"
@@ -353,48 +431,82 @@ export function ProductDetailDialog({
                         )}
 
                         <div className="pt-6">
+                            {selectedVariant && (
+                                <div className="mb-4 p-3 bg-primary/5 border border-primary/20 rounded-lg animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">已選定規格</p>
+                                    </div>
+                                    <p className="text-sm font-semibold text-foreground leading-snug">
+                                        {selectedVariant.name}
+                                    </p>
+                                </div>
+                            )}
                             <Button
                                 onClick={handleAddProduct}
                                 className="w-full"
                                 disabled={product.has_variants && !selectedVariantId}
                             >
                                 <ShoppingCart className="mr-2 h-4 w-4" />
-                                {product.has_variants && !selectedVariantId 
-                                    ? "請先選擇規格選項" 
+                                {product.has_variants && !selectedVariantId
+                                    ? "請先選擇規格選項"
                                     : `加入購物車 ${qty > 0 ? `(已選 ${qty})` : ''}`}
                             </Button>
                         </div>
                     </div>
                 </div>
 
-                {product.has_variants && product.variants && product.variants.length > 0 && (
-                    <div className="mt-6 border-t pt-4">
-                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">選擇規格選項</h3>
-                        <div className="flex flex-wrap gap-2">
-                            {product.variants.map((v) => (
-                                <Badge 
-                                    key={v.id} 
-                                    variant={selectedVariantId === v.id ? "default" : "outline"}
-                                    className="px-3 py-1.5 cursor-pointer hover:bg-primary/10 transition-colors text-sm flex items-center gap-2"
-                                    onClick={() => setSelectedVariantId(selectedVariantId === v.id ? null : v.id)}
-                                >
-                                    {v.option_3 && (() => {
-                                        const color = colors.find(c => c.name === v.option_3);
-                                        if (color) {
-                                            return (
-                                                <div 
-                                                    className="w-3 h-3 rounded-full border border-black/10" 
-                                                    style={{ backgroundColor: color.hex_code }} 
-                                                />
-                                            );
-                                        }
-                                        return null;
-                                    })()}
-                                    {v.name}
-                                    {selectedVariantId === v.id && <span className="ml-1.5 opacity-70">✓</span>}
-                                </Badge>
-                            ))}
-                        </div>
+                {product.has_variants && variants.length > 0 && (
+                    <div className="mt-6 border-t pt-4 space-y-6">
+                        {optionDimensions.map(([dimKey, values], idx) => (
+                            <div key={dimKey as string} className="space-y-3">
+                                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                                    {/* Try to guess label or use generic */}
+                                    {dimKey === 'modelDisplay' ? '型號 / 名稱' :
+                                        dimKey === 'option_1' ? '規格 / 屬性' :
+                                            dimKey === 'option_2' ? '類型 / 附加規格' :
+                                                dimKey === 'option_3' ? '顏色 / 樣式' : '規格選項'}
+                                    {selectedOptions[dimKey as string] && (
+                                        <Badge variant="outline" className="text-[10px] py-0 font-normal border-primary/30 text-primary">
+                                            已選: {selectedOptions[dimKey as string]}
+                                        </Badge>
+                                    )}
+                                </h3>
+                                <div className="flex flex-wrap gap-2">
+                                    {(values as string[]).map((val: string) => {
+                                        const isSelected = selectedOptions[dimKey as string] === val;
+                                        const isAvailable = isOptionAvailable(dimKey as string, val);
+
+                                        return (
+                                            <Badge
+                                                key={val}
+                                                variant={isSelected ? "default" : "outline"}
+                                                className={cn(
+                                                    "px-3 py-1.5 cursor-pointer transition-all text-sm flex items-center gap-2",
+                                                    !isSelected && !isAvailable && "opacity-30 grayscale cursor-not-allowed pointer-events-none",
+                                                    !isSelected && isAvailable && "hover:bg-primary/10 border-primary/20",
+                                                    isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                                                )}
+                                                onClick={() => isAvailable && handleOptionClick(dimKey as string, val)}
+                                            >
+                                                {dimKey === 'option_3' && (() => {
+                                                    const color = colors.find(c => c.name === val);
+                                                    if (color) {
+                                                        return (
+                                                            <div
+                                                                className="w-3.5 h-3.5 rounded-full border border-black/10 shadow-sm"
+                                                                style={{ backgroundColor: color.hex_code }}
+                                                            />
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
+                                                {val}
+                                            </Badge>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
             </DialogContent>

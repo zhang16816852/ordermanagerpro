@@ -8,9 +8,11 @@ import { Trash2, Pencil, Plus, Save, X, Palette, Search } from 'lucide-react';
 import { getContrastColor } from '@/utils/colorUtils';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import * as XLSX from 'xlsx';
+import { Download, Upload } from 'lucide-react';
 
 export function ColorManager() {
-  const { colors, addColor, updateColor, deleteColor, isLoading, isAdding: storeIsAdding, fetchColors } = useColorStore();
+  const { colors, addColor, updateColor, deleteColor, isLoading, isAdding: storeIsAdding, fetchColors, importColors } = useColorStore();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<ProductColor>>({});
   const [isAdding, setIsAdding] = useState(false);
@@ -65,6 +67,64 @@ export function ColorManager() {
     }
   };
 
+  const handleExport = () => {
+    try {
+      const data = colors.map(c => ({
+        '顏色名稱': c.name,
+        'SKU代碼': c.code,
+        'HEX色碼': c.hex_code,
+        '排序': c.sort_order
+      }));
+      
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "顏色對照表");
+      XLSX.writeFile(wb, `顏色對照表_${new Date().toLocaleDateString()}.xlsx`);
+      toast.success('匯出成功');
+    } catch (error) {
+      toast.error('匯出失敗');
+    }
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws) as any[];
+
+        const formattedColors = data.map(row => ({
+          name: row['顏色名稱'] || row['name'],
+          code: (row['SKU代碼'] || row['code'] || '').toString().toUpperCase(),
+          hex_code: row['HEX色碼'] || row['hex_code'] || '#808080',
+          sort_order: parseInt(row['排序'] || row['sort_order']) || 0
+        })).filter(c => c.name && c.code);
+
+        if (formattedColors.length === 0) {
+          toast.error('找不到有效的顏色資料');
+          return;
+        }
+
+        const success = await importColors(formattedColors);
+        if (success) {
+          toast.success(`成功匯入 ${formattedColors.length} 筆顏色`);
+        } else {
+          toast.error('匯入失敗');
+        }
+      } catch (error) {
+        toast.error('檔案解析失敗');
+      }
+      e.target.value = ''; // Reset input
+    };
+    reader.readAsBinaryString(file);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -77,13 +137,31 @@ export function ColorManager() {
             className="pl-9"
           />
         </div>
-        <Button onClick={() => {
-          setEditForm({ hex_code: '#808080', sort_order: colors.length });
-          setIsAdding(true);
-        }} disabled={isAdding || !!editingId}>
-          <Plus className="mr-2 h-4 w-4" />
-          新增顏色
-        </Button>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Button variant="outline" onClick={handleExport} disabled={colors.length === 0}>
+            <Download className="mr-2 h-4 w-4" />
+            匯出
+          </Button>
+          <div className="relative">
+            <input
+              type="file"
+              accept=".xlsx, .xls, .csv"
+              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+              onChange={handleImport}
+            />
+            <Button variant="outline">
+              <Upload className="mr-2 h-4 w-4" />
+              匯入
+            </Button>
+          </div>
+          <Button onClick={() => {
+            setEditForm({ hex_code: '#808080', sort_order: colors.length });
+            setIsAdding(true);
+          }} disabled={isAdding || !!editingId}>
+            <Plus className="mr-2 h-4 w-4" />
+            新增顏色
+          </Button>
+        </div>
       </div>
 
       <div className="border rounded-xl overflow-hidden bg-background">

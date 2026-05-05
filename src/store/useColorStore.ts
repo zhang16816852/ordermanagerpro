@@ -11,6 +11,7 @@ interface ColorStore {
     getColorByName: (name: string) => ProductColor | undefined;
     getColorByCode: (code: string) => ProductColor | undefined;
     addColor: (newColor: Partial<ProductColor>) => Promise<ProductColor | null>;
+    importColors: (newColors: Partial<ProductColor>[]) => Promise<boolean>;
     updateColor: (color: ProductColor) => Promise<boolean>;
     deleteColor: (id: string) => Promise<boolean>;
 }
@@ -73,9 +74,30 @@ export const useColorStore = create<ColorStore>((set, get) => ({
             }));
             return created;
         } catch (err) {
-            console.error('[ColorStore] Add failed:', err);
-            set({ isAdding: false });
             return null;
+        }
+    },
+
+    importColors: async (newColors) => {
+        set({ isAdding: true });
+        try {
+            // Upsert based on name
+            const { error } = await supabase
+                .from('product_colors' as any)
+                .upsert(newColors, { 
+                    onConflict: 'name',
+                    ignoreDuplicates: false 
+                });
+                
+            if (error) throw error;
+            
+            await get().fetchColors(true);
+            set({ isAdding: false });
+            return true;
+        } catch (err) {
+            console.error('[ColorStore] Import failed:', err);
+            set({ isAdding: false });
+            return false;
         }
     },
 

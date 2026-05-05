@@ -5,6 +5,9 @@ import Papa from 'papaparse';
 import jschardet from 'jschardet';
 import { toast } from 'sonner';
 import { serializeSpecs } from '@/utils/specLogic';
+import { useColorStore } from '@/store/useColorStore';
+import { useDeviceModelStore } from '@/store/useDeviceModelStore';
+import { useEffect } from 'react';
 
 export interface ImportRow {
     product_sku: string;
@@ -67,14 +70,26 @@ export function useProductImport(onSuccess: () => void) {
         },
     });
 
-    const { data: allDeviceModels = [] } = useQuery({
-        queryKey: ['device_models_for_import'],
-        queryFn: async () => {
-            const { data, error } = await supabase.from('device_models').select('*');
-            if (error) return [];
-            return data;
-        },
-    });
+    const { colors: allColors, fetchColors } = useColorStore();
+    const { 
+        models: allDeviceModels, 
+        groups: allGroups, 
+        fetchData: fetchDeviceData 
+    } = useDeviceModelStore();
+
+    useEffect(() => {
+        fetchColors();
+        fetchDeviceData();
+    }, []);
+
+    // 當顏色或型號庫更新時，自動重新校驗所有資料
+    useEffect(() => {
+        if (importData.length === 0) return;
+        setImportData(prev => prev.map(row => {
+            const { errors, is_variant } = validateRow(row as any);
+            return { ...row, errors, is_variant, isValid: errors.length === 0 };
+        }));
+    }, [allColors, allDeviceModels, allGroups]);
 
     const { data: allBrands = [] } = useQuery({
         queryKey: ['brands-all-for-import'],
@@ -82,24 +97,6 @@ export function useProductImport(onSuccess: () => void) {
             const { data, error } = await supabase.from('brands').select('*');
             if (error) return [];
             return (data as any[]) || [];
-        },
-    });
-
-    const { data: allGroups = [] } = useQuery({
-        queryKey: ['device_model_groups_for_import'],
-        queryFn: async () => {
-            const { data, error } = await supabase.from('device_model_groups').select('*').is('deleted_at', null);
-            if (error) return [];
-            return data;
-        },
-    });
-
-    const { data: allColors = [] } = useQuery({
-        queryKey: ['product-colors-for-import'],
-        queryFn: async () => {
-            const { data, error } = await supabase.from('product_colors').select('*').order('sort_order');
-            if (error) return [];
-            return data;
         },
     });
 
