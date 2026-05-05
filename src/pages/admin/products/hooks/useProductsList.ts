@@ -41,7 +41,12 @@ export function useProductsList() {
         queryFn: async () => {
             const { data, error } = await supabase
                 .from('product_variants')
-                .select('*, variant_model_links(model_id, device_models(name, aliases))')
+                .select(`
+                    *, 
+                    variant_model_links(model_id, device_models(name)),
+                    variant_model_group_links(group_id, device_model_groups(name)),
+                    variant_model_exclusions(model_id, device_models(name))
+                `)
                 .order('sku');
             if (error) throw error;
             return data || [];
@@ -54,6 +59,28 @@ export function useProductsList() {
             const { data, error } = await supabase
                 .from('product_model_links')
                 .select('product_id, model_id, device_models(name, aliases)')
+            if (error) throw error;
+            return (data as any) || [];
+        },
+    });
+
+    const { data: allModelGroupLinks = [] } = useQuery({
+        queryKey: ['all-product-model-group-links'],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('product_model_group_links')
+                .select('product_id, group_id, device_model_groups(name)')
+            if (error) throw error;
+            return (data as any) || [];
+        },
+    });
+
+    const { data: allModelExclusionLinks = [] } = useQuery({
+        queryKey: ['all-product-model-exclusion-links'],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from('product_model_exclusions')
+                .select('product_id, model_id, device_models(name)')
             if (error) throw error;
             return (data as any) || [];
         },
@@ -102,18 +129,37 @@ export function useProductsList() {
     }, [allVariants]);
 
     const getProductModelsInfo = useCallback((productId: string) => {
-        return allModelLinks
-            .filter((l: any) => l.product_id === productId)
-            .map((l: any) => ({
-                name: l.device_models?.name,
-                aliases: l.device_models?.aliases || []
-            }))
-            .filter((m: any) => m.name);
-    }, [allModelLinks]);
+        const product = products?.find(p => p.id === productId);
+        if (!product) return [];
+
+        const models: { name: string, aliases: string[] }[] = [];
+        
+        // 1. 直連
+        product.device_models?.forEach(m => models.push({ name: m.name, aliases: m.aliases || [] }));
+        
+        // 2. 群組名稱也納入搜尋
+        product.device_model_groups?.forEach(g => models.push({ name: g.name, aliases: [] }));
+        
+        return models;
+    }, [products]);
 
     const getProductModels = useCallback((productId: string) => {
-        return getProductModelsInfo(productId).map((m: any) => m.name);
-    }, [getProductModelsInfo]);
+        const product = products?.find(p => p.id === productId);
+        if (!product) return [];
+
+        const parts: string[] = [];
+        
+        // 1. 直連型號 (model:NAME)
+        product.device_models?.forEach(m => parts.push(`model:${m.name}`));
+        
+        // 2. 群組 (group:NAME)
+        product.device_model_groups?.forEach(g => parts.push(`group:${g.name}`));
+        
+        // 3. 排除 (exclude:NAME)
+        product.device_model_exclusions?.forEach(e => parts.push(`exclude:${e.name}`));
+        
+        return parts;
+    }, [products]);
 
     // v4.12 搜尋邏輯升級：支援分類、品牌、規格進階篩選
     const filteredProducts = useMemo(() => {
@@ -409,7 +455,11 @@ export function useProductsList() {
 
             if (variants.length > 0) {
                 variants.forEach(v => {
-                    const variantModels = v.variant_model_links?.map((l: any) => l.device_models?.name).filter(Boolean).join(',') || '';
+                    const vParts: string[] = [];
+                    v.variant_model_links?.forEach((l: any) => { if (l.device_models?.name) vParts.push(`model:${l.device_models.name}`); });
+                    v.variant_model_group_links?.forEach((l: any) => { if (l.device_model_groups?.name) vParts.push(`group:${l.device_model_groups.name}`); });
+                    v.variant_model_exclusions?.forEach((l: any) => { if (l.device_models?.name) vParts.push(`exclude:${l.device_models.name}`); });
+                    const variantModels = vParts.join(',');
                     const variantSpecs = formatSpecsToCondensedString(v.table_settings, specNameMap);
 
                     exportData.push({

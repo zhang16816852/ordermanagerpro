@@ -35,7 +35,7 @@ function RangeSliderFilter({
     const allNumbers = values.flatMap(extractNumbers).filter(n => !isNaN(n));
     const minBound = allNumbers.length > 0 ? Math.floor(Math.min(...allNumbers)) : 0;
     const maxBound = allNumbers.length > 0 ? Math.ceil(Math.max(...allNumbers)) : 100;
-    
+
     // 解析目前設定
     const currentMin = selectedRange ? Number(selectedRange.split('-')[0]) : minBound;
     const currentMax = selectedRange ? Number(selectedRange.split('-')[1]) : maxBound;
@@ -116,6 +116,7 @@ export function CatalogSidebar({
 
     const { brands } = useBrands();
 
+    console.log(products)
     const categoryTree = useMemo(() => {
         // Deduplicate hierarchy links
         const seen = new Set<string>();
@@ -212,19 +213,19 @@ export function CatalogSidebar({
 
                 if (value !== null && value !== undefined) {
                     const specDef = specFields.find(f => f.id === specId || f.name === specId);
-                    
+
                     // 1. 讀取 filter_config
                     const filterConfig = (specDef as any)?.configuration?.filter_config;
-                    
+
                     // 2. 如果有明確設定 enabled: false，直接略過
                     if (filterConfig && filterConfig.enabled === false) return;
-                    
+
                     // 3. 如果沒有設定 filter_config，則套用預設的「自動判斷隱藏」邏輯
                     if (!filterConfig) {
                         // 如果找不到規格定義，或是型態為文字/表格，則不顯示於篩選器
                         if (!specDef || specDef.type === 'text' || specDef.type === 'table') return;
                     }
-                    
+
                     specs[key].add(formatSpecValue(value, specDef as any, specFields as any));
                 }
             });
@@ -255,7 +256,7 @@ export function CatalogSidebar({
 
                     if (value !== null && value !== undefined) {
                         const specDef = specFields.find(f => f.id === specId || f.name === specId);
-                        
+
                         const filterConfig = (specDef as any)?.configuration?.filter_config;
                         if (filterConfig && filterConfig.enabled === false) return;
                         if (!filterConfig) {
@@ -412,7 +413,7 @@ export function CatalogSidebar({
                                 Object.entries(availableSpecs).map(([key, values]) => {
                                     // 將 key（ID 或 Name）解析為顯示名稱
                                     const specId = key.includes(':') ? key.split(':').pop()! : key;
-                                    
+
                                     // 處理核心選項 (Core Options)
                                     if (key.startsWith('core:')) {
                                         const coreLabelMap: Record<string, string> = {
@@ -453,13 +454,13 @@ export function CatalogSidebar({
                                     }
 
                                     const specDef = specFields.find(f => f.id === specId || f.name === specId);
-                                    
+
                                     const filterConfig = (specDef as any)?.configuration?.filter_config;
                                     // 如果找不到規格定義，或者明確設定不啟用篩選，則不渲染
                                     if (!specDef || (filterConfig && filterConfig.enabled === false)) return null;
 
                                     let displayMode = filterConfig?.display_mode || 'auto';
-                                    
+
                                     // 處理 auto 或 沒設定時的預設行為
                                     if (displayMode === 'auto') {
                                         if (specDef.type === 'text' || specDef.type === 'table') return null;
@@ -482,12 +483,12 @@ export function CatalogSidebar({
                                                     </span>
                                                 )}
                                             </div>
-                                            
+
                                             {displayMode === 'range' ? (
-                                                <RangeSliderFilter 
-                                                    values={values} 
-                                                    specKey={key} 
-                                                    selectedRange={selectedSpecs[key]?.[0]} 
+                                                <RangeSliderFilter
+                                                    values={values}
+                                                    specKey={key}
+                                                    selectedRange={selectedSpecs[key]?.[0]}
                                                     onChange={(range) => {
                                                         if (range) {
                                                             onSpecChange(key, [range]);

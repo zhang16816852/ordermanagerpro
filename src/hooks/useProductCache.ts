@@ -10,6 +10,8 @@ export type ProductWithCategories = Product & {
   category_ids: string[];
   category_names: string[];
   device_models?: { name: string, aliases: string[] | null }[];
+  device_model_groups?: { id: string, name: string }[];
+  device_model_exclusions?: { name: string }[];
 };
 
 interface ProductCache {
@@ -75,11 +77,26 @@ function normalizeProduct(p: any, categoryMap?: Map<string, string>): ProductWit
     aliases: l.device_models?.aliases || []
   })).filter((m: any) => m.name);
 
+  // Extract group info
+  const groupLinks = p.product_model_group_links || [];
+  const device_model_groups = groupLinks.map((l: any) => ({
+    id: l.group_id,
+    name: l.device_model_groups?.name
+  })).filter((g: any) => g.name);
+
+  // Extract exclusions
+  const exclusions = p.product_model_exclusions || [];
+  const device_model_exclusions = exclusions.map((l: any) => ({
+    name: l.device_models?.name
+  })).filter((m: any) => m.name);
+
   return {
     ...p,
     category_ids,
     category_names: category_names,
-    device_models
+    device_models,
+    device_model_groups,
+    device_model_exclusions
   };
 }
 
@@ -98,7 +115,13 @@ async function checkVersionAndFetch(): Promise<{ products: ProductWithCategories
     console.error('[ProductCache] Edge function error, falling back to direct fetch');
     // On error, we need both products and categories
     const [{ data: products, error: fetchError }, { data: cats }] = await Promise.all([
-      supabase.from('products').select('*, product_category_links(category_id), product_model_links(device_models(name, aliases))').order('name'),
+      supabase.from('products').select(`
+        *, 
+        product_category_links(category_id), 
+        product_model_links(device_models(name, aliases)),
+        product_model_group_links(group_id, device_model_groups(name)),
+        product_model_exclusions(device_models(name))
+      `).order('name'),
       supabase.from('categories').select('id, name')
     ]);
 

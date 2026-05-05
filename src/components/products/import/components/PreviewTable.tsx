@@ -40,7 +40,13 @@ export function PreviewTable({
     allBrands = []
 }: PreviewTableProps) {
     const { colors: allColors, addColor, fetchColors, getColorByName } = useColorStore();
-    const { models: allDeviceModels, brands: allDeviceBrands, addModel, fetchData: fetchDeviceData } = useDeviceModelStore();
+    const { 
+        models: allDeviceModels, 
+        brands: allDeviceBrands, 
+        groups: allDeviceGroups,
+        addModel, 
+        fetchData: fetchDeviceData 
+    } = useDeviceModelStore();
     const [searchQuery, setSearchQuery] = useState('');
 
     // 顏色新增表單狀態
@@ -55,6 +61,61 @@ export function PreviewTable({
         fetchColors();
         fetchDeviceData();
     }, []);
+
+    const renderDeviceModels = (value: string | undefined, isVariant: boolean = false) => {
+        if (!value) return <span className="text-[10px] text-muted-foreground/50 pl-1 italic">設定型號</span>;
+        
+        const models = value.split(',').map(s => s.trim()).filter(Boolean);
+        const displayLimit = 2;
+        
+        return (
+            <div className="flex flex-wrap gap-1">
+                {models.slice(0, displayLimit).map((part, i) => {
+                    let type: 'group' | 'model' | 'exclude' = 'model';
+                    let name = part;
+                    let exists = false;
+
+                    if (part.startsWith('group:')) {
+                        type = 'group';
+                        name = part.replace('group:', '');
+                        exists = allDeviceGroups.some(g => g.name.toLowerCase() === name.toLowerCase());
+                    } else if (part.startsWith('exclude:')) {
+                        type = 'exclude';
+                        name = part.replace('exclude:', '');
+                        exists = allDeviceModels.some(m => m.name.toLowerCase() === name.toLowerCase());
+                    } else if (part.startsWith('model:')) {
+                        type = 'model';
+                        name = part.replace('model:', '');
+                        exists = allDeviceModels.some(m => m.name.toLowerCase() === name.toLowerCase());
+                    } else {
+                        exists = allDeviceModels.some(m => m.name.toLowerCase() === name.toLowerCase());
+                    }
+
+                    return (
+                        <Badge
+                            key={i}
+                            variant={exists ? "secondary" : "destructive"}
+                            className={cn(
+                                "text-[9px] px-1 h-4 whitespace-nowrap",
+                                type === 'group' && "bg-blue-100 text-blue-700 border-blue-200",
+                                type === 'exclude' && "bg-rose-50 text-rose-600 border-rose-200 line-through opacity-70",
+                                isVariant && type === 'model' && "bg-indigo-100 text-indigo-700 border-indigo-200"
+                            )}
+                        >
+                            {type === 'group' && <Plus className="h-2 w-2 mr-0.5 inline" />}
+                            {type === 'exclude' && <X className="h-2 w-2 mr-0.5 inline" />}
+                            {name}
+                        </Badge>
+                    );
+                })}
+                {models.length > displayLimit && (
+                    <Badge variant="outline" className="text-[9px] px-1 h-4 bg-background/50 border-dashed">
+                        +{models.length - displayLimit}
+                    </Badge>
+                )}
+            </div>
+        );
+    };
 
     return (
         <div className="space-y-4">
@@ -192,37 +253,9 @@ export function PreviewTable({
                                                 <PopoverTrigger asChild>
                                                     <div className={cn(
                                                         "flex flex-wrap items-center gap-1 p-1 rounded-md cursor-pointer hover:bg-muted/50 transition-all border min-h-[32px]",
-                                                        row.device_models && !row.device_models.split(',').every(name =>
-                                                            allDeviceModels.some(dm => dm.name.toLowerCase() === name.trim().toLowerCase())
-                                                        ) ? "bg-destructive/10 border-destructive/20 text-destructive" : "border-transparent bg-muted/30"
+                                                        "border-transparent bg-muted/30"
                                                     )}>
-                                                        {row.device_models ? (() => {
-                                                            const models = row.device_models.split(',').map(s => s.trim()).filter(Boolean);
-                                                            const displayLimit = 2;
-                                                            return (
-                                                                <>
-                                                                    {models.slice(0, displayLimit).map((name, i) => {
-                                                                        const exists = allDeviceModels.some(dm => dm.name.toLowerCase() === name.toLowerCase());
-                                                                        return (
-                                                                            <Badge
-                                                                                key={i}
-                                                                                variant={exists ? "secondary" : "destructive"}
-                                                                                className="text-[9px] px-1 h-4 whitespace-nowrap"
-                                                                            >
-                                                                                {name}
-                                                                            </Badge>
-                                                                        );
-                                                                    })}
-                                                                    {models.length > displayLimit && (
-                                                                        <Badge variant="outline" className="text-[9px] px-1 h-4 bg-background/50 border-dashed">
-                                                                            +{models.length - displayLimit}
-                                                                        </Badge>
-                                                                    )}
-                                                                </>
-                                                            );
-                                                        })() : (
-                                                            <span className="text-[10px] text-muted-foreground/50 pl-1 italic">設定產品型號</span>
-                                                        )}
+                                                        {renderDeviceModels(row.device_models)}
                                                     </div>
                                                 </PopoverTrigger>
                                                 <PopoverContent className="p-0 w-[260px]" align="start" onWheel={(e) => e.stopPropagation()}>
@@ -301,6 +334,37 @@ export function PreviewTable({
                                                                 <CommandEmpty className="py-3 text-xs text-center text-muted-foreground">
                                                                     找不到型號
                                                                 </CommandEmpty>
+                                                                 <CommandGroup heading="型號群組">
+                                                                    {allDeviceGroups.map((g) => {
+                                                                        const isSelected = row.device_models?.split(',').map(s => s.trim().toLowerCase()).includes(`group:${g.name.toLowerCase()}`);
+                                                                        return (
+                                                                            <CommandItem
+                                                                                key={`group-${g.id}`}
+                                                                                onSelect={() => {
+                                                                                    const current = row.device_models ? row.device_models.split(',').map(s => s.trim()) : [];
+                                                                                    const groupValue = `group:${g.name}`;
+                                                                                    let next;
+                                                                                    if (isSelected) {
+                                                                                        next = current.filter(s => s.toLowerCase() !== groupValue.toLowerCase());
+                                                                                    } else {
+                                                                                        next = [...current, groupValue];
+                                                                                    }
+                                                                                    onUpdate(index, 'device_models', next.join(', '));
+                                                                                }}
+                                                                                className={cn(
+                                                                                    "flex items-center gap-2 py-2 cursor-pointer",
+                                                                                    isSelected && "bg-blue-50 text-blue-700 font-medium"
+                                                                                )}
+                                                                            >
+                                                                                <div className="flex flex-col flex-1 min-w-0">
+                                                                                    <span className="text-xs font-medium truncate">{g.name}</span>
+                                                                                    <span className="text-[9px] text-muted-foreground">群組</span>
+                                                                                </div>
+                                                                                {isSelected && <Check className="h-3.5 w-3.5 text-blue-600" />}
+                                                                            </CommandItem>
+                                                                        );
+                                                                    })}
+                                                                </CommandGroup>
                                                                  <CommandGroup heading="現有型號庫">
                                                                     {[...allDeviceModels].sort((a, b) => {
                                                                         const aSel = row.device_models?.split(',').map(s => s.trim().toLowerCase()).includes(a.name.toLowerCase());
@@ -355,47 +419,50 @@ export function PreviewTable({
                                                     <PopoverTrigger asChild>
                                                         <div className={cn(
                                                             "flex flex-wrap items-center gap-1 p-1 rounded-md cursor-pointer hover:bg-muted/50 transition-all border min-h-[32px]",
-                                                            row.variant_device_models && !row.variant_device_models.split(',').every(name =>
-                                                                allDeviceModels.some(dm => dm.name.toLowerCase() === name.trim().toLowerCase())
-                                                            ) ? "bg-destructive/10 border-destructive/20 text-destructive" : "border-transparent bg-indigo-50/30"
+                                                            "border-transparent bg-indigo-50/30"
                                                         )}>
-                                                            {row.variant_device_models ? (() => {
-                                                                const models = row.variant_device_models.split(',').map(s => s.trim()).filter(Boolean);
-                                                                const displayLimit = 2;
-                                                                return (
-                                                                    <>
-                                                                        {models.slice(0, displayLimit).map((name, i) => {
-                                                                            const exists = allDeviceModels.some(dm => dm.name.toLowerCase() === name.toLowerCase());
-                                                                            return (
-                                                                                <Badge
-                                                                                    key={i}
-                                                                                    variant={exists ? "secondary" : "destructive"}
-                                                                                    className="text-[9px] px-1 h-4 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border-indigo-200 whitespace-nowrap"
-                                                                                >
-                                                                                    {name}
-                                                                                </Badge>
-                                                                            );
-                                                                        })}
-                                                                        {models.length > displayLimit && (
-                                                                            <Badge variant="outline" className="text-[9px] px-1 h-4 bg-indigo-50/50 border-dashed border-indigo-200 text-indigo-600">
-                                                                                +{models.length - displayLimit}
-                                                                            </Badge>
-                                                                        )}
-                                                                    </>
-                                                                );
-                                                            })() : (
-                                                                <span className="text-[10px] text-muted-foreground/50 pl-1 italic">設定變體型號</span>
-                                                            )}
+                                                            {renderDeviceModels(row.variant_device_models, true)}
                                                         </div>
                                                     </PopoverTrigger>
-                                                    <PopoverContent className="p-0 w-[260px]" align="start" onWheel={(e) => e.stopPropagation()}>
-                                                        <Command>
-                                                            <CommandInput placeholder="搜尋型號..." className="h-9 text-xs" />
-                                                            <CommandList className="max-h-[300px] overflow-y-auto">
-                                                                <CommandEmpty className="py-3 text-xs text-center text-muted-foreground">
-                                                                    找不到型號
-                                                                </CommandEmpty>
-                                                                <CommandGroup heading="現有型號庫">
+                                                            <PopoverContent className="p-0 w-[260px]" align="start" onWheel={(e) => e.stopPropagation()}>
+                                                                <Command>
+                                                                    <CommandInput placeholder="搜尋型號..." className="h-9 text-xs" />
+                                                                    <CommandList className="max-h-[300px] overflow-y-auto">
+                                                                        <CommandEmpty className="py-3 text-xs text-center text-muted-foreground">
+                                                                            找不到型號
+                                                                        </CommandEmpty>
+                                                                        <CommandGroup heading="型號群組">
+                                                                            {allDeviceGroups.map((g) => {
+                                                                                const isSelected = row.variant_device_models?.split(',').map(s => s.trim().toLowerCase()).includes(`group:${g.name.toLowerCase()}`);
+                                                                                return (
+                                                                                    <CommandItem
+                                                                                        key={`vgroup-${g.id}`}
+                                                                                        onSelect={() => {
+                                                                                            const current = row.variant_device_models ? row.variant_device_models.split(',').map(s => s.trim()) : [];
+                                                                                            const groupValue = `group:${g.name}`;
+                                                                                            let next;
+                                                                                            if (isSelected) {
+                                                                                                next = current.filter(s => s.toLowerCase() !== groupValue.toLowerCase());
+                                                                                            } else {
+                                                                                                next = [...current, groupValue];
+                                                                                            }
+                                                                                            onUpdate(index, 'variant_device_models', next.join(', '));
+                                                                                        }}
+                                                                                        className={cn(
+                                                                                            "flex items-center gap-2 py-2 cursor-pointer",
+                                                                                            isSelected && "bg-blue-50 text-blue-700 font-medium"
+                                                                                        )}
+                                                                                    >
+                                                                                        <div className="flex flex-col flex-1 min-w-0">
+                                                                                            <span className="text-xs font-medium truncate">{g.name}</span>
+                                                                                            <span className="text-[9px] text-muted-foreground">群組</span>
+                                                                                        </div>
+                                                                                        {isSelected && <Check className="h-3.5 w-3.5 text-blue-600" />}
+                                                                                    </CommandItem>
+                                                                                );
+                                                                            })}
+                                                                        </CommandGroup>
+                                                                        <CommandGroup heading="現有型號庫">
                                                                     {[...allDeviceModels].sort((a, b) => {
                                                                         const aSel = row.variant_device_models?.split(',').map(s => s.trim().toLowerCase()).includes(a.name.toLowerCase());
                                                                         const bSel = row.variant_device_models?.split(',').map(s => s.trim().toLowerCase()).includes(b.name.toLowerCase());

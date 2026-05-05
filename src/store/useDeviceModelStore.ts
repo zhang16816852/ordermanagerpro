@@ -4,10 +4,12 @@ import { Database } from '@/integrations/supabase/types';
 
 export type DeviceModel = Database['public']['Tables']['device_models']['Row'];
 export type DeviceBrand = Database['public']['Tables']['device_brands']['Row'];
+export type DeviceModelGroup = Database['public']['Tables']['device_model_groups']['Row'];
 
 interface DeviceModelStore {
     models: DeviceModel[];
     brands: DeviceBrand[];
+    groups: DeviceModelGroup[];
     isLoading: boolean;
     isAdding: boolean;
     isInitialized: boolean;
@@ -19,6 +21,7 @@ interface DeviceModelStore {
 export const useDeviceModelStore = create<DeviceModelStore>((set, get) => ({
     models: [],
     brands: [],
+    groups: [],
     isLoading: false,
     isAdding: false,
     isInitialized: false,
@@ -28,17 +31,20 @@ export const useDeviceModelStore = create<DeviceModelStore>((set, get) => ({
 
         set({ isLoading: true });
         try {
-            const [modelsRes, brandsRes] = await Promise.all([
+            const [modelsRes, brandsRes, groupsRes] = await Promise.all([
                 supabase.from('device_models').select('*').order('name'),
-                supabase.from('device_brands').select('*').order('name')
+                supabase.from('device_brands').select('*').order('name'),
+                supabase.from('device_model_groups').select('*').is('deleted_at', null).order('name')
             ]);
 
             if (modelsRes.error) throw modelsRes.error;
             if (brandsRes.error) throw brandsRes.error;
+            if (groupsRes.error) throw groupsRes.error;
 
             set({ 
                 models: modelsRes.data || [], 
                 brands: brandsRes.data || [], 
+                groups: groupsRes.data || [],
                 isLoading: false, 
                 isInitialized: true 
             });

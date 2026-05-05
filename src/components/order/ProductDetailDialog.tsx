@@ -62,6 +62,41 @@ export function ProductDetailDialog({
         },
     });
 
+    // 獲取有效型號 (動態計算)
+    const { data: effectiveModels = [], isLoading: isLoadingModels } = useQuery({
+        queryKey: ['effective-models', selectedVariantId || product?.id],
+        queryFn: async () => {
+            if (!product?.id) return [];
+            
+            // 如果有選中變體，獲取該變體的有效型號
+            if (selectedVariantId) {
+                const { data, error } = await supabase.rpc('get_variant_effective_models', {
+                    p_variant_id: selectedVariantId
+                });
+                if (error) {
+                    console.error('Error fetching variant effective models:', error);
+                    return [];
+                }
+                return data;
+            }
+            
+            // 如果沒選中變體，獲取產品層級的有效型號
+            // 這裡我們暫時用一個類似的邏輯或顯示產品直接連結的型號
+            const { data, error } = await supabase
+                .from('product_model_links')
+                .select('model_id, device_models(name)')
+                .eq('product_id', product.id);
+            
+            if (error) return [];
+            return data.map((d: any) => ({ 
+                model_id: d.model_id, 
+                model_name: d.device_models?.name,
+                source: 'direct'
+            }));
+        },
+        enabled: !!product?.id && open
+    });
+
     // --- 核心邏輯：深度彙整與樹狀排序 ---
     const combinedSpecs = useMemo(() => {
         if (!product || specDefinitions.length === 0) return [];
@@ -260,6 +295,28 @@ export function ProductDetailDialog({
                                 {product.description || "尚無詳細描述。"}
                             </div>
                         </div>
+
+                        {effectiveModels.length > 0 && (
+                            <div className="pt-4 border-t">
+                                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                                    適用型號 {selectedVariantId && <Badge variant="outline" className="ml-2 text-[10px] font-normal py-0">規格專屬</Badge>}
+                                </h3>
+                                <div className="flex flex-wrap gap-1.5 mt-1">
+                                        {effectiveModels.map((m: any) => (
+                                            <Badge 
+                                                key={m.model_id} 
+                                                variant="secondary" 
+                                                className={cn(
+                                                    "text-[11px] font-normal px-2 py-0.5",
+                                                    m.source === 'direct' ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-blue-50 text-blue-700 border-blue-100"
+                                                )}
+                                            >
+                                                {m.model_name}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                            </div>
+                        )}
 
                         {combinedSpecs.length > 0 && (
                             <div className="pt-4 border-t">

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useDeviceModelGroups, DeviceModelGroup } from '../../hooks/useDeviceModelGroups';
 import { useDeviceModels } from '../../hooks/useDeviceModels';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +19,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
+import Papa from 'papaparse';
+import { Download, Upload, FileUp } from 'lucide-react';
+import { useRef } from 'react';
 
 export function DeviceModelGroupManager() {
   const { groups, isLoading, createGroupMutation, updateGroupMutation, deleteGroupMutation, addItemsMutation, removeItemsMutation, useGroupItems, useGroupUsage } = useDeviceModelGroups();
@@ -29,6 +33,7 @@ export function DeviceModelGroupManager() {
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [modelSearch, setModelSearch] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 當前選中群組的成員與統計
   const { data: currentItems = [], isLoading: isLoadingItems } = useGroupItems(selectedGroupId || '');
@@ -62,6 +67,117 @@ export function DeviceModelGroupManager() {
     }
   };
 
+  const handleExport = async () => {
+    try {
+      toast.loading('正在準備匯出資料...');
+      const { data: allItems, error } = await supabase
+        .from('device_model_group_items')
+        .select(`
+          group_id,
+          device_model_groups(name, description),
+          device_models(name)
+        `);
+      
+      if (error) throw error;
+
+      // 按群組彙整
+      const groupMap = new Map<string, { name: string, description: string, models: string[] }>();
+      
+      // 先把所有現有群組加入 Map (確保沒型號的群組也被匯出)
+      groups.forEach(g => {
+        groupMap.set(g.id, { name: g.name, description: g.description || '', models: [] });
+      });
+
+      // 填入型號
+      allItems?.forEach((item: any) => {
+        const entry = groupMap.get(item.group_id);
+        if (entry && item.device_models?.name) {
+          entry.models.push(item.device_models.name);
+        }
+      });
+
+      const exportData = Array.from(groupMap.values()).map(g => ({
+        '群組名稱': g.name,
+        '群組描述': g.description,
+        '適用型號': g.models.join(', ')
+      }));
+
+      const csv = Papa.unparse(exportData);
+      const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `型號群組匯出_${new Date().toLocaleDateString()}.csv`;
+      link.click();
+      toast.dismiss();
+      toast.success('匯出完成');
+    } catch (err: any) {
+      toast.dismiss();
+      toast.error(`匯出失敗: ${err.message}`);
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        try {
+          const rows = results.data as any[];
+          if (rows.length === 0) return;
+
+          toast.loading(`正在處理 ${rows.length} 筆群組資料...`);
+          
+          // 1. 建立名稱到 ID 的映射 (用於型號解析)
+          const modelMap = new Map(models.map(m => [m.name.toLowerCase(), m.id]));
+
+          for (const row of rows) {
+            const groupName = row['群組名稱'];
+            const description = row['群組描述'] || '';
+            const modelsStr = row['適用型號'] || '';
+
+            if (!groupName) continue;
+
+            // 2. 建立或更新群組
+            let groupId;
+            const existingGroup = groups.find(g => g.name === groupName);
+            
+            if (existingGroup) {
+              groupId = existingGroup.id;
+              await updateGroupMutation.mutateAsync({ id: groupId, values: { description } });
+            } else {
+              const newGroup = await createGroupMutation.mutateAsync({ name: groupName, description });
+              groupId = newGroup.id;
+            }
+
+            // 3. 處理型號關聯 (同步模式)
+            const modelNames = modelsStr.split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
+            const modelIdsToLink = modelNames.map((name: string) => modelMap.get(name)).filter(Boolean) as string[];
+
+            if (modelIdsToLink.length > 0) {
+              // 刪除該群組現有的所有連結，達成完整同步
+              const { data: existingItems } = await supabase.from('device_model_group_items').select('model_id').eq('group_id', groupId);
+              const existingIds = existingItems?.map(i => i.model_id) || [];
+              if (existingIds.length > 0) {
+                await removeItemsMutation.mutateAsync({ groupId, modelIds: existingIds });
+              }
+              await addItemsMutation.mutateAsync({ groupId, modelIds: modelIdsToLink });
+            }
+          }
+
+          toast.dismiss();
+          toast.success('匯入完成');
+          e.target.value = ''; // 清除 input
+        } catch (err: any) {
+          toast.dismiss();
+          toast.error(`匯入失敗: ${err.message}`);
+        }
+      }
+    });
+  };
+
   const filteredModels = useMemo(() => {
     const base = models.filter(m => 
       m.name.toLowerCase().includes(modelSearch.toLowerCase()) ||
@@ -85,9 +201,24 @@ export function DeviceModelGroupManager() {
           <h2 className="text-2xl font-bold tracking-tight">型號群組管理</h2>
           <p className="text-muted-foreground text-sm">建立共用型號集，一次更新，全站同步。</p>
         </div>
-        <Button onClick={() => { setEditingGroup({ name: '', description: '' }); setIsEditModalOpen(true); }} className="shadow-sm">
-          <Plus className="mr-2 h-4 w-4" /> 建立新群組
-        </Button>
+        <div className="flex gap-2">
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleImport} 
+            accept=".csv" 
+            className="hidden" 
+          />
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="shadow-sm">
+            <Upload className="mr-2 h-4 w-4" /> 匯入 CSV
+          </Button>
+          <Button variant="outline" onClick={handleExport} className="shadow-sm">
+            <Download className="mr-2 h-4 w-4" /> 匯出 CSV
+          </Button>
+          <Button onClick={() => { setEditingGroup({ name: '', description: '' }); setIsEditModalOpen(true); }} className="shadow-sm">
+            <Plus className="mr-2 h-4 w-4" /> 建立新群組
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

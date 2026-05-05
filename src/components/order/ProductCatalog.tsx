@@ -190,12 +190,12 @@ export default function ProductCatalog({
     .map((product) => {
       if (keywords.length === 0) return product;
 
-      const productTexts = [product.name, product.sku]
+      const productTexts = [product.name, product.sku, ...(product.category_names || [])]
         .filter(Boolean)
         .map((v) => v!.toLowerCase());
 
       const productMatched = keywords.every((keyword) =>
-        productTexts.every((text) => text.includes(keyword))
+        productTexts.some((text) => text.includes(keyword))
       );
 
       const matchedVariants =
@@ -224,12 +224,12 @@ export default function ProductCatalog({
     .filter((product) => {
       if (keywords.length === 0) return true;
 
-      const productTexts = [product.name, product.sku]
+      const productTexts = [product.name, product.sku, ...(product.category_names || [])]
         .filter(Boolean)
         .map((v) => v!.toLowerCase());
 
       const productMatched = keywords.every((keyword) =>
-        productTexts.every((text) => text.includes(keyword))
+        productTexts.some((text) => text.includes(keyword))
       );
 
       if (productMatched) return true;
