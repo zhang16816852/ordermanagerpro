@@ -70,22 +70,25 @@ export function VariantEditDialog({
             table_settings: {} as Record<string, any>,
             selectedColorIds: [] as string[],
             selectedModelIds: [] as string[],
+            selectedGroupIds: [] as string[],
+            selectedExclusionIds: [] as string[],
             category_ids: [] as string[],
         }
     });
-    
+
     // 初始化模型的 state
     useEffect(() => {
         const init = async () => {
             if (open) {
                 const latestColors = await fetchColors();
-                
+
                 if (variant) {
-                    // 取得設備型號連結
-                    const { data: modelLinks } = await supabase
-                        .from('variant_model_links')
-                        .select('model_id')
-                        .eq('variant_id', variant.id);
+                    // 取得設備型號連結與群組連結與排除
+                    const [links, groupLinks, exclusions] = await Promise.all([
+                        supabase.from('variant_model_links').select('model_id').eq('variant_id', variant.id),
+                        supabase.from('variant_model_group_links').select('group_id').eq('variant_id', variant.id),
+                        supabase.from('variant_model_exclusions').select('model_id').eq('variant_id', variant.id)
+                    ]);
 
                     // 根據 option_3 的名稱找回顏色 ID
                     let colorIds: string[] = [];
@@ -106,7 +109,9 @@ export function VariantEditDialog({
                         status: variant.status as any,
                         table_settings: (variant.table_settings as any) || {},
                         selectedColorIds: colorIds,
-                        selectedModelIds: modelLinks?.map(l => l.model_id) || [],
+                        selectedModelIds: links.data?.map(l => l.model_id) || [],
+                        selectedGroupIds: groupLinks.data?.map(l => l.group_id) || [],
+                        selectedExclusionIds: exclusions.data?.map(l => l.model_id) || [],
                         category_ids: (product as any)?.category_id ? [(product as any).category_id] : [],
                     });
                 } else {
@@ -123,6 +128,8 @@ export function VariantEditDialog({
                         table_settings: {},
                         selectedColorIds: [],
                         selectedModelIds: [],
+                        selectedGroupIds: [],
+                        selectedExclusionIds: [],
                         category_ids: (product as any)?.category_id ? [(product as any).category_id] : [],
                     });
                 }
@@ -133,8 +140,15 @@ export function VariantEditDialog({
 
     const createMutation = useMutation({
         mutationFn: async (values: any) => {
-            const { selectedModelIds, selectedColorIds, category_ids, ...dataToInsert } = values;
-            
+            const { 
+                selectedModelIds, 
+                selectedGroupIds, 
+                selectedExclusionIds, 
+                selectedColorIds, 
+                category_ids, 
+                ...dataToInsert 
+            } = values;
+
             // 處理顏色名稱
             const selectedColor = colors.find(c => c.id === selectedColorIds[0]);
             const finalData = {
@@ -151,13 +165,24 @@ export function VariantEditDialog({
             const { data, error } = await supabase.from('product_variants').insert(finalData).select().single();
             if (error) throw error;
 
-            if (selectedModelIds.length > 0) {
-                 const links = selectedModelIds.map((model_id: string) => ({
-                     variant_id: data.id,
-                     model_id
-                 }));
-                 await supabase.from('variant_model_links').insert(links);
+            // 處理型號連結、群組連結與排除
+            const promises = [];
+            if (values.selectedModelIds.length > 0) {
+                promises.push(supabase.from('variant_model_links').insert(
+                    values.selectedModelIds.map((mId: string) => ({ variant_id: data.id, model_id: mId }))
+                ));
             }
+            if (values.selectedGroupIds.length > 0) {
+                promises.push(supabase.from('variant_model_group_links').insert(
+                    values.selectedGroupIds.map((gId: string) => ({ variant_id: data.id, group_id: gId }))
+                ));
+            }
+            if (values.selectedExclusionIds.length > 0) {
+                promises.push(supabase.from('variant_model_exclusions').insert(
+                    values.selectedExclusionIds.map((mId: string) => ({ variant_id: data.id, model_id: mId }))
+                ));
+            }
+            if (promises.length > 0) await Promise.all(promises);
         },
         onSuccess: () => {
             if (product) {
@@ -174,8 +199,15 @@ export function VariantEditDialog({
 
     const updateMutation = useMutation({
         mutationFn: async (values: any) => {
-            const { selectedModelIds, selectedColorIds, category_ids, ...updates } = values;
-            
+            const { 
+                selectedModelIds, 
+                selectedGroupIds, 
+                selectedExclusionIds, 
+                selectedColorIds, 
+                category_ids, 
+                ...updates 
+            } = values;
+
             // 處理顏色名稱
             const selectedColor = colors.find(c => c.id === selectedColorIds[0]);
             const finalUpdates = {
@@ -190,16 +222,31 @@ export function VariantEditDialog({
 
             const { error } = await supabase.from('product_variants').update(finalUpdates).eq('id', variant!.id);
             if (error) throw error;
-            
-            // 更新連結
-            await supabase.from('variant_model_links').delete().eq('variant_id', variant!.id);
-            if (selectedModelIds.length > 0) {
-                 const links = selectedModelIds.map((model_id: string) => ({
-                     variant_id: variant!.id,
-                     model_id
-                 }));
-                 await supabase.from('variant_model_links').insert(links);
+
+            // 更新連結與排除 (先刪後增)
+            await Promise.all([
+                supabase.from('variant_model_links').delete().eq('variant_id', variant!.id),
+                supabase.from('variant_model_group_links').delete().eq('variant_id', variant!.id),
+                supabase.from('variant_model_exclusions').delete().eq('variant_id', variant!.id),
+            ]);
+
+            const promises = [];
+            if (values.selectedModelIds.length > 0) {
+                promises.push(supabase.from('variant_model_links').insert(
+                    values.selectedModelIds.map((mId: string) => ({ variant_id: variant!.id, model_id: mId }))
+                ));
             }
+            if (values.selectedGroupIds.length > 0) {
+                promises.push(supabase.from('variant_model_group_links').insert(
+                    values.selectedGroupIds.map((gId: string) => ({ variant_id: variant!.id, group_id: gId }))
+                ));
+            }
+            if (values.selectedExclusionIds.length > 0) {
+                promises.push(supabase.from('variant_model_exclusions').insert(
+                    values.selectedExclusionIds.map((mId: string) => ({ variant_id: variant!.id, model_id: mId }))
+                ));
+            }
+            if (promises.length > 0) await Promise.all(promises);
         },
         onSuccess: () => {
             if (product) {
@@ -232,7 +279,7 @@ export function VariantEditDialog({
                         請在此設定產品變體的 SKU、名稱及相關規格。
                     </DialogDescription>
                 </DialogHeader>
-                
+
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                         <div className="grid gap-4 sm:grid-cols-2">
@@ -296,7 +343,7 @@ export function VariantEditDialog({
                                     <FormItem>
                                         <FormLabel>選項3 (顏色)</FormLabel>
                                         <FormControl>
-                                            <ColorSelectField 
+                                            <ColorSelectField
                                                 selectedColorIds={field.value}
                                                 onChange={field.onChange}
                                                 multiple={false}
@@ -342,11 +389,11 @@ export function VariantEditDialog({
                                     <FormItem>
                                         <FormLabel>批發價</FormLabel>
                                         <FormControl>
-                                            <Input 
-                                                type="number" 
-                                                step="0.01" 
-                                                {...field} 
-                                                onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                {...field}
+                                                onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                                             />
                                         </FormControl>
                                     </FormItem>
@@ -359,11 +406,11 @@ export function VariantEditDialog({
                                     <FormItem>
                                         <FormLabel>零售價</FormLabel>
                                         <FormControl>
-                                            <Input 
-                                                type="number" 
-                                                step="0.01" 
-                                                {...field} 
-                                                onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                {...field}
+                                                onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                                             />
                                         </FormControl>
                                     </FormItem>
@@ -394,15 +441,21 @@ export function VariantEditDialog({
                         </div>
 
                         <DynamicSpecsFields form={form} />
-                        
+
                         <FormField
                             control={form.control}
                             name="selectedModelIds"
                             render={({ field }) => (
                                 <FormItem>
-                                    <StandaloneDeviceModelSelectField 
-                                        value={field.value} 
-                                        onChange={field.onChange} 
+                                    <StandaloneDeviceModelSelectField
+                                        modelIds={field.value}
+                                        groupIds={form.watch('selectedGroupIds')}
+                                        exclusionIds={form.watch('selectedExclusionIds')}
+                                        onChange={(data) => {
+                                            form.setValue('selectedModelIds', data.modelIds);
+                                            form.setValue('selectedGroupIds', data.groupIds);
+                                            form.setValue('selectedExclusionIds', data.exclusionIds);
+                                        }}
                                     />
                                 </FormItem>
                             )}

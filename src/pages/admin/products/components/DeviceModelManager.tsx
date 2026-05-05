@@ -11,6 +11,7 @@ import { DeviceModelActions } from './device-models/DeviceModelActions';
 import { DeviceModelListView } from './device-models/DeviceModelListView';
 import { DeviceModelGroupView } from './device-models/DeviceModelGroupView';
 import { DeviceModelDialog } from './device-models/DeviceModelDialog';
+import { DeviceModelGroupManager } from './device-models/DeviceModelGroupManager';
 
 export function DeviceModelManager() {
   const queryClient = useQueryClient();
@@ -216,9 +217,10 @@ export function DeviceModelManager() {
       />
 
       <Tabs defaultValue="list" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
+        <TabsList className="grid w-full grid-cols-3 max-w-[500px]">
           <TabsTrigger value="list">詳細清單</TabsTrigger>
           <TabsTrigger value="group">依品牌檢視</TabsTrigger>
+          <TabsTrigger value="model-group">型號群組 (快捷鍵)</TabsTrigger>
         </TabsList>
 
         <TabsContent value="list" className="mt-4">
@@ -241,6 +243,10 @@ export function DeviceModelManager() {
             updateMutation={updateMutation}
             deleteMutation={deleteMutation}
           />
+        </TabsContent>
+
+        <TabsContent value="model-group" className="mt-4">
+          <DeviceModelGroupManager />
         </TabsContent>
       </Tabs>
 

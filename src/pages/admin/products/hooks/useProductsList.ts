@@ -209,17 +209,40 @@ export function useProductsList() {
     // --- Mutations ---
     const createMutation = useMutation({
         mutationFn: async (values: any) => {
-            const { category_ids, device_model_ids, category, category_id, device_models, ...productData } = values;
+            const { 
+                category_ids, 
+                device_model_ids, 
+                device_model_group_ids = [], 
+                device_model_exclusion_ids = [],
+                category, category_id, device_models, ...productData 
+            } = values;
+            
             const { data: product, error: productError } = await supabase.from('products').insert(productData).select().single();
             if (productError) throw productError;
+
+            const promises = [];
             if (category_ids?.length > 0) {
-                const links = category_ids.map((catId: string) => ({ product_id: product.id, category_id: catId }));
-                await (supabase.from('product_category_links' as any) as any).insert(links);
+                promises.push(supabase.from('product_category_links').insert(
+                    category_ids.map((catId: string) => ({ product_id: product.id, category_id: catId }))
+                ));
             }
             if (device_model_ids?.length > 0) {
-                const links = device_model_ids.map((modelId: string) => ({ product_id: product.id, model_id: modelId }));
-                await (supabase.from('product_model_links' as any) as any).insert(links);
+                promises.push(supabase.from('product_model_links').insert(
+                    device_model_ids.map((mId: string) => ({ product_id: product.id, model_id: mId }))
+                ));
             }
+            if (device_model_group_ids.length > 0) {
+                promises.push(supabase.from('product_model_group_links').insert(
+                    device_model_group_ids.map((gId: string) => ({ product_id: product.id, group_id: gId }))
+                ));
+            }
+            if (device_model_exclusion_ids.length > 0) {
+                promises.push(supabase.from('product_model_exclusions').insert(
+                    device_model_exclusion_ids.map((mId: string) => ({ product_id: product.id, model_id: mId }))
+                ));
+            }
+
+            if (promises.length > 0) await Promise.all(promises);
             return product;
         },
         onSuccess: (product) => {
@@ -235,18 +258,45 @@ export function useProductsList() {
 
     const updateMutation = useMutation({
         mutationFn: async ({ id, values }: { id: string, values: any }) => {
-            const { category_ids, device_model_ids, category, category_id, device_models, ...productData } = values;
-            await (supabase.from('product_category_links' as any) as any).delete().eq('product_id', id);
+            const { 
+                category_ids, 
+                device_model_ids, 
+                device_model_group_ids = [],
+                device_model_exclusion_ids = [],
+                category, category_id, device_models, ...productData 
+            } = values;
+
+            // 先刪除所有舊關聯
+            await Promise.all([
+                supabase.from('product_category_links').delete().eq('product_id', id),
+                supabase.from('product_model_links').delete().eq('product_id', id),
+                supabase.from('product_model_group_links').delete().eq('product_id', id),
+                supabase.from('product_model_exclusions').delete().eq('product_id', id),
+            ]);
+
+            const promises = [];
             if (category_ids?.length > 0) {
-                const links = category_ids.map((catId: string) => ({ product_id: id, category_id: catId }));
-                await (supabase.from('product_category_links' as any) as any).insert(links);
+                promises.push(supabase.from('product_category_links').insert(
+                    category_ids.map((catId: string) => ({ product_id: id, category_id: catId }))
+                ));
+            }
+            if (device_model_ids?.length > 0) {
+                promises.push(supabase.from('product_model_links').insert(
+                    device_model_ids.map((mId: string) => ({ product_id: id, model_id: mId }))
+                ));
+            }
+            if (device_model_group_ids.length > 0) {
+                promises.push(supabase.from('product_model_group_links').insert(
+                    device_model_group_ids.map((gId: string) => ({ product_id: id, group_id: gId }))
+                ));
+            }
+            if (device_model_exclusion_ids.length > 0) {
+                promises.push(supabase.from('product_model_exclusions').insert(
+                    device_model_exclusion_ids.map((mId: string) => ({ product_id: id, model_id: mId }))
+                ));
             }
 
-            await (supabase.from('product_model_links' as any) as any).delete().eq('product_id', id);
-            if (device_model_ids?.length > 0) {
-                const links = device_model_ids.map((modelId: string) => ({ product_id: id, model_id: modelId }));
-                await (supabase.from('product_model_links' as any) as any).insert(links);
-            }
+            if (promises.length > 0) await Promise.all(promises);
 
             const { error: productError } = await supabase.from('products').update({ ...productData, updated_at: new Date().toISOString() }).eq('id', id);
             if (productError) throw productError;

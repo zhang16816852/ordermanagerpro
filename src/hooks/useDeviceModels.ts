@@ -7,6 +7,7 @@ export interface DeviceModel {
     brand_id: string | null;
     sort_order: number;
     aliases: string[] | null;
+    device_series: string | null;
 }
 
 export function useDeviceModels() {

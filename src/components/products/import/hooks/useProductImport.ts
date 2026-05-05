@@ -85,6 +85,15 @@ export function useProductImport(onSuccess: () => void) {
         },
     });
 
+    const { data: allGroups = [] } = useQuery({
+        queryKey: ['device_model_groups_for_import'],
+        queryFn: async () => {
+            const { data, error } = await supabase.from('device_model_groups').select('*').is('deleted_at', null);
+            if (error) return [];
+            return data;
+        },
+    });
+
     const { data: allColors = [] } = useQuery({
         queryKey: ['product-colors-for-import'],
         queryFn: async () => {
@@ -461,29 +470,77 @@ export function useProductImport(onSuccess: () => void) {
                 await (supabase.from('product_category_links' as any) as any).delete().in('product_id', productIds);
                 await (supabase.from('product_category_links' as any) as any).insert(catLinks);
             }
-            const productModelLinksToInsert = Array.from(uniqueProductsMap.values()).flatMap(row => {
-                if (!row.device_models) return [];
-                const names = row.device_models.split(',').map(n => n.trim()).filter(Boolean);
+            const productModelLinksToInsert: any[] = [];
+            const productGroupLinksToInsert: any[] = [];
+
+            Array.from(uniqueProductsMap.values()).forEach(row => {
+                if (!row.device_models) return;
+                const parts = row.device_models.split(',').map(n => n.trim()).filter(Boolean);
                 const pId = productIdMap.get(row.product_sku);
-                if (!pId) return [];
-                return names.map(name => {
-                    const mId = allDeviceModels.find(dm => dm.name.toLowerCase() === name.toLowerCase())?.id;
-                    return mId ? { product_id: pId, model_id: mId } : null;
-                }).filter(Boolean);
+                if (!pId) return;
+
+                parts.forEach(part => {
+                    let type: 'group' | 'model' | 'auto' = 'auto';
+                    let searchStr = part;
+
+                    if (part.startsWith('group:')) {
+                        type = 'group';
+                        searchStr = part.replace('group:', '');
+                    } else if (part.startsWith('model:')) {
+                        type = 'model';
+                        searchStr = part.replace('model:', '');
+                    }
+
+                    if (type === 'group' || type === 'auto') {
+                        const gMatched = allGroups.find(g => g.name.toLowerCase() === searchStr.toLowerCase());
+                        if (gMatched) {
+                            productGroupLinksToInsert.push({ product_id: pId, group_id: gMatched.id });
+                            if (type === 'group') return; // 如果指定是 group，就不用再找 model
+                        }
+                    }
+
+                    if (type === 'model' || type === 'auto') {
+                        // 三層匹配：1. Name, 2. Alias (TODO: aliases is JSON array)
+                        const mMatched = allDeviceModels.find(dm => 
+                            dm.name.toLowerCase() === searchStr.toLowerCase() ||
+                            (Array.isArray(dm.aliases) && dm.aliases.some((a: string) => a.toLowerCase() === searchStr.toLowerCase()))
+                        );
+                        if (mMatched) {
+                            productModelLinksToInsert.push({ product_id: pId, model_id: mMatched.id });
+                        }
+                    }
+                });
             });
 
-            // 型號連結去重 (避免主鍵衝突)
+            // 型號連結去重
             const uniqueProductModelLinks = Array.from(
                 productModelLinksToInsert.reduce((map, item) => {
-                    const key = `${item!.product_id}-${item!.model_id}`;
+                    const key = `${item.product_id}-${item.model_id}`;
                     map.set(key, item);
                     return map;
                 }, new Map<string, any>()).values()
             );
 
+            const uniqueProductGroupLinks = Array.from(
+                productGroupLinksToInsert.reduce((map, item) => {
+                    const key = `${item.product_id}-${item.group_id}`;
+                    map.set(key, item);
+                    return map;
+                }, new Map<string, any>()).values()
+            );
+
+            const pIds = Array.from(productIdMap.values());
+            // 先清理舊關聯
+            if (pIds.length > 0) {
+                await supabase.from('product_model_links').delete().in('product_id', pIds);
+                await supabase.from('product_model_group_links').delete().in('product_id', pIds);
+            }
+            
             if (uniqueProductModelLinks.length > 0) {
-                await supabase.from('product_model_links').delete().in('product_id', Array.from(productIdMap.values()));
                 await supabase.from('product_model_links').insert(uniqueProductModelLinks as any);
+            }
+            if (uniqueProductGroupLinks.length > 0) {
+                await supabase.from('product_model_group_links').insert(uniqueProductGroupLinks as any);
             }
 
             const variantsToInsert = validRows.filter(r => r.is_variant).map(row => {
@@ -520,29 +577,66 @@ export function useProductImport(onSuccess: () => void) {
                 if (error) throw error;
                 if (upsertedVariants) {
                     const variantIdMap = new Map(upsertedVariants.map(v => [v.sku, v.id]));
-                    const variantModelLinksToInsert = validRows.filter(r => r.is_variant).flatMap(row => {
-                        if (!row.variant_device_models) return [];
-                        const names = row.variant_device_models.split(',').map(n => n.trim()).filter(Boolean);
+                    const variantModelLinksToInsert: any[] = [];
+                    const variantGroupLinksToInsert: any[] = [];
+
+                    validRows.filter(r => r.is_variant).forEach(row => {
+                        if (!row.variant_device_models) return;
+                        const parts = row.variant_device_models.split(',').map(n => n.trim()).filter(Boolean);
                         const vId = variantIdMap.get(row.variant_sku!);
-                        if (!vId) return [];
-                        return names.map(name => {
-                            const mId = allDeviceModels.find(dm => dm.name.toLowerCase() === name.toLowerCase())?.id;
-                            return mId ? { variant_id: vId, model_id: mId } : null;
-                        }).filter(Boolean);
+                        if (!vId) return;
+
+                        parts.forEach(part => {
+                            let type: 'group' | 'model' | 'auto' = 'auto';
+                            let searchStr = part;
+
+                            if (part.startsWith('group:')) {
+                                type = 'group';
+                                searchStr = part.replace('group:', '');
+                            } else if (part.startsWith('model:')) {
+                                type = 'model';
+                                searchStr = part.replace('model:', '');
+                            }
+
+                            if (type === 'group' || type === 'auto') {
+                                const gMatched = allGroups.find(g => g.name.toLowerCase() === searchStr.toLowerCase());
+                                if (gMatched) {
+                                    variantGroupLinksToInsert.push({ variant_id: vId, group_id: gMatched.id });
+                                    if (type === 'group') return;
+                                }
+                            }
+
+                            if (type === 'model' || type === 'auto') {
+                                const mMatched = allDeviceModels.find(dm => 
+                                    dm.name.toLowerCase() === searchStr.toLowerCase() ||
+                                    (Array.isArray(dm.aliases) && dm.aliases.some((a: string) => a.toLowerCase() === searchStr.toLowerCase()))
+                                );
+                                if (mMatched) {
+                                    variantModelLinksToInsert.push({ variant_id: vId, model_id: mMatched.id });
+                                }
+                            }
+                        });
                     });
 
-                    // 變體型號連結去重
-                    const uniqueVariantModelLinks = Array.from(
-                        variantModelLinksToInsert.reduce((map, item) => {
-                            const key = `${item!.variant_id}-${item!.model_id}`;
-                            map.set(key, item);
-                            return map;
-                        }, new Map<string, any>()).values()
-                    );
+                    const vIds = Array.from(variantIdMap.values()) as string[];
+                    if (vIds.length > 0) {
+                        await supabase.from('variant_model_links').delete().in('variant_id', vIds);
+                        await supabase.from('variant_model_group_links').delete().in('variant_id', vIds);
+                    }
 
-                    if (uniqueVariantModelLinks.length > 0) {
-                        await supabase.from('variant_model_links').delete().in('variant_id', Array.from(variantIdMap.values()));
-                        await supabase.from('variant_model_links').insert(uniqueVariantModelLinks as any);
+                    if (variantModelLinksToInsert.length > 0) {
+                        const uniqueVML = Array.from(variantModelLinksToInsert.reduce((map, item) => {
+                            const key = `${item.variant_id}-${item.model_id}`;
+                            map.set(key, item); return map;
+                        }, new Map<string, any>()).values());
+                        await supabase.from('variant_model_links').insert(uniqueVML as any);
+                    }
+                    if (variantGroupLinksToInsert.length > 0) {
+                        const uniqueVGL = Array.from(variantGroupLinksToInsert.reduce((map, item) => {
+                            const key = `${item.variant_id}-${item.group_id}`;
+                            map.set(key, item); return map;
+                        }, new Map<string, any>()).values());
+                        await supabase.from('variant_model_group_links').insert(uniqueVGL as any);
                     }
                 }
             }

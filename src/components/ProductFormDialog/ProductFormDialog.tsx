@@ -17,6 +17,8 @@ const productSchema = z.object({
   sku: z.string().min(1, 'SKU 為必填'),
   category_ids: z.array(z.string().uuid()).default([]),
   device_model_ids: z.array(z.string().uuid()).default([]),
+  device_model_group_ids: z.array(z.string().uuid()).default([]),
+  device_model_exclusion_ids: z.array(z.string().uuid()).default([]),
   brand_id: z.string().nullable().optional(),
   model: z.string().nullable().optional(),
   base_wholesale_price: z.coerce.number().min(0),
@@ -47,7 +49,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
   const form = useForm<z.infer<typeof productSchema>>({
     resolver: zodResolver(productSchema),
     defaultValues: {
-      name: '', sku: '', category_ids: [], device_model_ids: [], brand_id: null, model: '',
+      name: '', sku: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_id: null, model: '',
       base_wholesale_price: 0, base_retail_price: 0,
       status: 'active', has_variants: false,
       table_settings: {},
@@ -66,22 +68,27 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
         form.reset({
           ...initialData,
           category_ids: (initialData as any).category_ids || [],
-          device_model_ids: [], // 先預設空陣列，等 fetch 完覆蓋
+          device_model_ids: [],
+          device_model_group_ids: [],
+          device_model_exclusion_ids: [],
           table_settings: deserializeSpecs(initialData.table_settings),
         });
 
-        // 讀取型號標籤的多對多關聯
+        // 讀取型號標籤、群組標籤與排除的關聯
         if (initialData.id) {
-          supabase.from('product_model_links').select('model_id').eq('product_id', initialData.id)
-            .then(({ data }) => {
-              if (data) {
-                form.setValue('device_model_ids', data.map(d => d.model_id));
-              }
-            });
+          Promise.all([
+            supabase.from('product_model_links').select('model_id').eq('product_id', initialData.id),
+            supabase.from('product_model_group_links').select('group_id').eq('product_id', initialData.id),
+            supabase.from('product_model_exclusions').select('model_id').eq('product_id', initialData.id)
+          ]).then(([models, groups, exclusions]) => {
+            if (models.data) form.setValue('device_model_ids', models.data.map(d => d.model_id));
+            if (groups.data) form.setValue('device_model_group_ids', groups.data.map(d => d.group_id));
+            if (exclusions.data) form.setValue('device_model_exclusion_ids', exclusions.data.map(d => d.model_id));
+          });
         }
       } else {
         form.reset({
-          name: '', sku: '', category_ids: [], device_model_ids: [], brand_id: null, model: '',
+          name: '', sku: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_id: null, model: '',
           base_wholesale_price: 0, base_retail_price: 0,
           status: 'active', has_variants: false,
           table_settings: {},

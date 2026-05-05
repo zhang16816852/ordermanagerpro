@@ -372,6 +372,105 @@ export type Database = {
         }
         Relationships: []
       }
+      device_model_group_history: {
+        Row: {
+          action: string
+          created_at: string | null
+          group_id: string
+          id: string
+          new_data: Json | null
+          old_data: Json | null
+          performed_by: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          group_id: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          performed_by?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          group_id?: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          performed_by?: string | null
+        }
+        Relationships: []
+      }
+      device_model_group_items: {
+        Row: {
+          created_at: string | null
+          group_id: string
+          id: string
+          model_id: string
+          position: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          group_id: string
+          id?: string
+          model_id: string
+          position?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          group_id?: string
+          id?: string
+          model_id?: string
+          position?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_model_group_items_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "device_model_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "device_model_group_items_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "device_models"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      device_model_groups: {
+        Row: {
+          created_at: string | null
+          deleted_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       device_models: {
         Row: {
           aliases: string[] | null
@@ -726,6 +825,81 @@ export type Database = {
             columns: ["variant_id"]
             isOneToOne: false
             referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_model_exclusions: {
+        Row: {
+          created_at: string | null
+          id: string
+          model_id: string
+          product_id: string
+          reason: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          model_id: string
+          product_id: string
+          reason?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          model_id?: string
+          product_id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_model_exclusions_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "device_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_model_exclusions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_model_group_links: {
+        Row: {
+          created_at: string | null
+          group_id: string
+          id: string
+          product_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          group_id: string
+          id?: string
+          product_id: string
+        }
+        Update: {
+          created_at?: string | null
+          group_id?: string
+          id?: string
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_model_group_links_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "device_model_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_model_group_links_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
         ]
@@ -1476,6 +1650,81 @@ export type Database = {
         }
         Relationships: []
       }
+      variant_model_exclusions: {
+        Row: {
+          created_at: string | null
+          id: string
+          model_id: string
+          reason: string | null
+          variant_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          model_id: string
+          reason?: string | null
+          variant_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          model_id?: string
+          reason?: string | null
+          variant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "variant_model_exclusions_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "device_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "variant_model_exclusions_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      variant_model_group_links: {
+        Row: {
+          created_at: string | null
+          group_id: string
+          id: string
+          variant_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          group_id: string
+          id?: string
+          variant_id: string
+        }
+        Update: {
+          created_at?: string | null
+          group_id?: string
+          id?: string
+          variant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "variant_model_group_links_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "device_model_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "variant_model_group_links_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       variant_model_links: {
         Row: {
           created_at: string | null
@@ -1514,7 +1763,15 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      product_effective_models_base: {
+        Row: {
+          group_id: string | null
+          model_id: string | null
+          product_id: string | null
+          source: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       delete_sales_note: {
@@ -1536,6 +1793,16 @@ export type Database = {
       get_store_role: {
         Args: { _store_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["store_role"]
+      }
+      get_variant_effective_models: {
+        Args: { p_variant_id: string }
+        Returns: {
+          from_group_name: string
+          is_inherited: boolean
+          model_id: string
+          model_name: string
+          source: string
+        }[]
       }
       has_role: {
         Args: {
