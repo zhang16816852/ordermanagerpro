@@ -17,7 +17,7 @@ export interface CategoryHierarchy {
 export interface SpecDefinition {
     id: string;
     name: string;
-    type: 'select' | 'multiselect' | 'text' | 'boolean' | 'number_with_unit' | 'table';
+    type: 'select' | 'multiselect' | 'text' | 'boolean' | 'number_with_unit' | 'table' | 'heading';
     options: string[];
     default_value?: string;
     configuration?: {
@@ -37,6 +37,7 @@ export interface SpecDefinition {
             display_mode: 'auto' | 'checkbox' | 'range';
         };
     };
+    sort_order?: number;
     logic_config?: {
         triggers?: {
             on_value: string;

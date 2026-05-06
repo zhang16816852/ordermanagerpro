@@ -70,9 +70,25 @@ export function ProductDetailDialog({
     const { data: specDefinitions = [] } = useQuery({
         queryKey: ['spec_definitions'],
         queryFn: async () => {
-            const { data, error } = await (supabase.from('specification_definitions' as any) as any).select('*');
+            const { data, error } = await supabase.from('specification_definitions')
+                .select('*')
+                .order('sort_order', { ascending: true })
+                .order('name');
             if (error) return [];
-            return data;
+            
+            // Map to CategorySpec format expected by specLogic utils
+            return data.map((s: any) => ({
+                id: s.id,
+                name: s.name,
+                key: s.id,
+                type: s.type,
+                options: s.options || [],
+                defaultValue: s.default_value || '',
+                logicConfig: s.logic_config as any,
+                logic_config: s.logic_config as any,
+                configuration: s.configuration as any,
+                sort_order: s.sort_order || 0
+            }));
         },
     });
 
@@ -403,6 +419,17 @@ export function ProductDetailDialog({
                                     {combinedSpecs.map((spec) => {
                                         const specId = spec.id.split(':').pop();
                                         const def = specDefinitions.find((s: any) => s.id === specId);
+
+                                        if (def?.type === 'heading') {
+                                            return (
+                                                <div key={spec.id} className="pt-4 pb-1 border-b border-primary/10">
+                                                    <h4 className="text-xs font-bold text-primary uppercase tracking-widest flex items-center gap-2">
+                                                        <span className="w-1 h-3 bg-primary rounded-full" />
+                                                        {spec.name}
+                                                    </h4>
+                                                </div>
+                                            );
+                                        }
 
                                         return (
                                             <div key={spec.id} className="flex flex-col text-sm py-2 border-b last:border-0 border-muted">

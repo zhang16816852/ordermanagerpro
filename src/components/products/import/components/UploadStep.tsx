@@ -15,15 +15,15 @@ export function UploadStep({ onFileUpload, onDownloadTemplate, onCancel }: Uploa
         <div className="space-y-6 py-4">
             <div className="border-2 border-dashed rounded-xl p-12 text-center bg-muted/20 hover:bg-muted/30 transition-colors border-muted-foreground/20">
                 <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4 opacity-50" />
-                <p className="text-lg font-bold mb-2">上傳 CSV 檔案</p>
+                <p className="text-lg font-bold mb-2">上傳 Excel 或 CSV 檔案</p>
                 <p className="text-sm text-muted-foreground mb-6">
-                    支援同時匯入產品與變體，第一列需為標題列
+                    支援 .xlsx 與 .csv 格式。依照分類分頁編輯規格更直觀。
                 </p>
                 <Label htmlFor="unified-csv-upload" className="cursor-pointer">
                     <Input
                         id="unified-csv-upload"
                         type="file"
-                        accept=".csv"
+                        accept=".csv,.xlsx"
                         className="hidden"
                         onChange={onFileUpload}
                     />
@@ -49,7 +49,7 @@ export function UploadStep({ onFileUpload, onDownloadTemplate, onCancel }: Uploa
                         className="w-full bg-background"
                     >
                         <Download className="h-4 w-4 mr-2" />
-                        下載產品匯入範本.csv
+                        下載產品匯入範本.xlsx
                     </Button>
                 </div>
 
@@ -67,21 +67,16 @@ export function UploadStep({ onFileUpload, onDownloadTemplate, onCancel }: Uploa
             </div>
 
             <div className="bg-muted/50 rounded-xl p-5 space-y-4">
-                <h4 className="font-bold text-sm">CSV 標題規範及範例</h4>
+                <h4 className="font-bold text-sm">Excel 工作表規範</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-muted-foreground">
                     <div>
-                        <p className="font-medium text-foreground mb-1">產品欄位 (Product)</p>
-                        <code className="block p-2 bg-background rounded border mb-2">product_sku*, product_name*, brand, category, base_wholesale_price, base_retail_price</code>
-                        <p className="font-medium text-foreground mb-1">變體欄位 (Variant)</p>
-                        <code className="block p-2 bg-background rounded border">variant_sku*, variant_name*, option_1, option_2, barcode</code>
+                        <p className="font-medium text-foreground mb-1">分頁與規格 (Sheets & Specs)</p>
+                        <p>系統會根據工作表名稱自動識別分類。每個分類分頁會包含該分類專屬的規格欄位。</p>
+                        <code className="block p-2 bg-background rounded border mt-2">規格名稱 [ID]</code>
                     </div>
                     <div>
-                        <p className="font-medium text-foreground mb-1">匯入範例 (CSV 内容)</p>
-                        <div className="p-2 bg-background rounded border font-mono whitespace-pre overflow-x-auto text-[10px]">
-                            product_sku,product_name,variant_sku,variant_name,option_1<br />
-                            T-SHIRT-01,純棉T,T-SHIRT-01-RED,紅色 S,紅色<br />
-                            T-SHIRT-01,純棉T,T-SHIRT-01-BLUE,藍色 S,藍色
-                        </div>
+                        <p className="font-medium text-foreground mb-1">提示</p>
+                        <p>建議先「匯出產品」取得目前所有資料的 Excel，再以此檔案進行修改後匯入，這是最快速更新資料的方法。</p>
                     </div>
                 </div>
             </div>

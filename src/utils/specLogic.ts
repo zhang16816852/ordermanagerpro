@@ -141,11 +141,14 @@ export function getVisibleSpecsTree(specFields: CategorySpec[], tableSettings: R
                 ? settings[pathKey]
                 : (settings[`root:${specId}`] || '');
 
-            if (!spec || val === undefined || val === null || val === '') return;
+            // 修正：如果是 heading，即使沒有值也要繼續處理觸發器
+            const isHeading = spec?.type === 'heading';
+            if (!spec || (!isHeading && (val === undefined || val === null || val === ''))) return;
 
             const triggers = spec.logicConfig?.triggers || spec.logic_config?.triggers;
             triggers?.forEach((t: any) => {
-                const isMatch = checkSpecTriggerMatch(spec.type, val, t.on_value, t.operator);
+                // 修正：標題類型只要存在就視為匹配成功 (無視 on_value)
+                const isMatch = isHeading ? true : checkSpecTriggerMatch(spec.type, val, t.on_value, t.operator);
                 if (isMatch) {
                     getMergedTriggerTargets(t).forEach((tar: any) => {
                         const childPathKey = `${spec.id}:${tar.id}`;
@@ -183,7 +186,20 @@ export function getTreeSortedVisiblePaths(
         // 找出所有父規格為 parentId 且可見的路徑
         const children = Array.from(visibleInfo.keys())
             .filter(k => k.startsWith(`${parentId}:`))
-            .sort((a, b) => a.localeCompare(b)); // 同層按 ID 排序
+            .sort((a, b) => {
+                const specIdA = a.split(':').pop();
+                const specIdB = b.split(':').pop();
+                const specA = specFields.find(s => s.id === specIdA);
+                const specB = specFields.find(s => s.id === specIdB);
+                
+                if (specA && specB) {
+                    if (specA.sort_order !== specB.sort_order) {
+                        return (specA.sort_order || 0) - (specB.sort_order || 0);
+                    }
+                    return specA.name.localeCompare(specB.name);
+                }
+                return a.localeCompare(b);
+            });
 
         children.forEach(pathKey => {
             if (visited.has(pathKey)) return;
@@ -373,7 +389,13 @@ export function getStaticSpecTree(specDefinitions: any[]): { spec: any; level: n
 
     const traverse = (nodes: any[], level: number = 0) => {
         // 同層按名稱排序
-        const sortedNodes = [...nodes].sort((a, b) => a.name.localeCompare(b.name));
+        // 同層按排序與名稱排序
+        const sortedNodes = [...nodes].sort((a, b) => {
+            if (a.sort_order !== b.sort_order) {
+                return (a.sort_order || 0) - (b.sort_order || 0);
+            }
+            return a.name.localeCompare(b.name);
+        });
         
         sortedNodes.forEach(node => {
             if (visited.has(node.id)) return;

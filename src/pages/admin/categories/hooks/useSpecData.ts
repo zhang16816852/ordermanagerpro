@@ -17,6 +17,7 @@ export function useSpecData() {
         queryFn: async () => {
             const { data, error } = await supabase.from('specification_definitions')
                 .select('*')
+                .order('sort_order', { ascending: true })
                 .order('name');
             if (error) return [];
             return data as unknown as SpecDefinition[];
@@ -38,7 +39,8 @@ export function useSpecData() {
                     default_value: spec.default_value ?? null,
                     configuration: spec.configuration ?? null,
                     logic_config: spec.logic_config ?? { triggers: [] },
-                    options: spec.options ?? []
+                    options: spec.options ?? [],
+                    sort_order: spec.sort_order ?? 0
                 };
                 const { error } = await supabase.from('specification_definitions').insert([finalSpec as any]);
                 if (error) throw error;
@@ -98,6 +100,7 @@ export function useSpecData() {
             options: s.options.join(','),
             default_value: s.default_value || '',
             id: s.id,
+            sort_order: s.sort_order || 0,
             // v4.8 額外包含 logic_config 字串
             logic_config: JSON.stringify(s.logic_config || {})
         }));
@@ -149,6 +152,7 @@ export function useSpecData() {
                             type: row.type || 'text',
                             options: row.options ? row.options.split(',').map((s: any) => s.trim()) : [],
                             default_value: row.default_value || null,
+                            sort_order: parseInt(row.sort_order) || 0,
                             logic_config
                         };
                     }).filter(Boolean);

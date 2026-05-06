@@ -5,7 +5,7 @@ export interface CategorySpec {
     id: string;
     name: string;
     key: string;
-    type: 'text' | 'select' | 'boolean' | 'multiselect' | 'number_with_unit' | 'table';
+    type: 'heading' | 'text' | 'select' | 'boolean' | 'multiselect' | 'number_with_unit' | 'table';
     options: string[];
     defaultValue: string;
     configuration?: {
@@ -35,6 +35,7 @@ export interface CategorySpec {
             targets: { id: string; is_quantity_detail?: boolean }[];
         }[];
     };
+    sort_order: number;
 }
 
 export function useCategorySpecs(categoryIds: string[]) {
@@ -55,7 +56,8 @@ export function useCategorySpecs(categoryIds: string[]) {
                         options,
                         default_value,
                         logic_config,
-                        configuration
+                        configuration,
+                        sort_order
                     )
                 `)
                 .in('category_id', categoryIds)
@@ -81,7 +83,9 @@ export function useCategorySpecs(categoryIds: string[]) {
                     options: spec.options || [],
                     defaultValue: spec.default_value || '',
                     logicConfig: spec.logic_config as any,
-                    configuration: spec.configuration
+                    configuration: spec.configuration,
+                    // 優先使用分類連結中的排序，若無則使用全域排序
+                    sort_order: d.sort_order ?? spec.sort_order ?? 0
                 });
             });
 

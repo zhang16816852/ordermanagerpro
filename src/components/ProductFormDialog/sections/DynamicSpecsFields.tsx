@@ -58,30 +58,39 @@ export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
                             style={{ marginLeft: `${level * 16}px` }}
                             className="space-y-2 animate-in fade-in slide-in-from-left-2 duration-300"
                         >
-                            <div className="flex flex-col space-y-1.5">
-                                <label className="text-xs font-semibold text-muted-foreground flex justify-between items-center group">
-                                    <div className="flex items-center gap-2">
-                                        {level > 0 && <span className="text-primary/40">↳</span>}
-                                        <span>{spec.name}</span>
-                                    </div>
-                                    {info?.sourceName && (
-                                        <span className="text-[10px] font-normal opacity-0 group-hover:opacity-60 transition-opacity">
-                                            依賴於: {info.sourceName} 
-                                            {info.operator === 'ne' ? ' ≠ ' : ' = '} 
-                                            {info.triggerValue}
-                                        </span>
-                                    )}
-                                </label>
                                 <div className={`p-0.5 rounded-md transition-all ${level > 0 ? 'border-l-2 border-primary/20 pl-3' : ''}`}>
-                                    <SpecValueEditor 
-                                        spec={spec}
-                                        value={value}
-                                        onChange={(val) => form.setValue(`table_settings.${pathKey}`, val, { shouldDirty: true })}
-                                        sourceValue={info?.sourceValue}
-                                        variantMode={false}
-                                    />
+                                    {spec.type === 'heading' ? (
+                                        <div className="py-1 border-b border-primary/10 mb-1">
+                                            <div className="text-[10px] font-bold text-primary uppercase tracking-widest flex items-center gap-2">
+                                                <span className="w-1 h-3 bg-primary rounded-full" />
+                                                {spec.name}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <label className="text-xs font-semibold text-muted-foreground flex justify-between items-center group mb-1.5">
+                                                <div className="flex items-center gap-2">
+                                                    {level > 0 && <span className="text-primary/40">↳</span>}
+                                                    <span>{spec.name}</span>
+                                                </div>
+                                                {info?.sourceName && (
+                                                    <span className="text-[10px] font-normal opacity-0 group-hover:opacity-60 transition-opacity">
+                                                        依賴於: {info.sourceName} 
+                                                        {info.operator === 'ne' ? ' ≠ ' : ' = '} 
+                                                        {info.triggerValue}
+                                                    </span>
+                                                )}
+                                            </label>
+                                            <SpecValueEditor 
+                                                spec={spec}
+                                                value={value}
+                                                onChange={(val) => form.setValue(`table_settings.${pathKey}`, val, { shouldDirty: true })}
+                                                sourceValue={info?.sourceValue}
+                                                variantMode={false}
+                                            />
+                                        </>
+                                    )}
                                 </div>
-                            </div>
                         </div>
                     );
                 })}

@@ -1339,6 +1339,7 @@ export type Database = {
           logic_config: Json | null
           name: string
           options: Json | null
+          sort_order: number | null
           type: string
           updated_at: string | null
         }
@@ -1350,6 +1351,7 @@ export type Database = {
           logic_config?: Json | null
           name: string
           options?: Json | null
+          sort_order?: number | null
           type: string
           updated_at?: string | null
         }
@@ -1361,6 +1363,7 @@ export type Database = {
           logic_config?: Json | null
           name?: string
           options?: Json | null
+          sort_order?: number | null
           type?: string
           updated_at?: string | null
         }

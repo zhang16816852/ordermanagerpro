@@ -9,9 +9,8 @@ import { SpecDefinition } from '../types';
 import { Toolbar } from './spec-library/SpecLibraryToolbar';
 import { GridView } from './spec-library/SpecLibraryGridView';
 import { TreeView } from './spec-library/SpecLibraryTreeView';
-import { SpecTreeNode } from './spec-library/SpecLibraryTreeView';
 
-// 規格屬性庫面板 (v4.8 JSON 支援與視覺化管理)
+// 規格屬性庫面板 (v4.12 支援自訂排序與智慧連動移除)
 export function SpecLibraryTab() {
     const queryClient = useQueryClient();
     const {
@@ -32,10 +31,12 @@ export function SpecLibraryTab() {
         name: '',
         type: 'select',
         options: [''],
+        sort_order: 0,
+        logic_config: { triggers: [] }
     });
 
     /**
-     * v4.10 計算規格間的關係圖
+     * v4.10 計算規格間的關係圖 (用於 Grid 模式顯示)
      */
     const specRelations = useMemo(() => {
         const relations = new Map<string, { isSource: boolean; isTarget: boolean; parentNames: string[] }>();
@@ -51,7 +52,7 @@ export function SpecLibraryTab() {
                 if (info) info.isSource = true;
 
                 triggers.forEach((t: any) => {
-                    const targets = t.targets || t.target_ids?.map((id: string) => ({ id })) || [];
+                    const targets = t.targets || [];
                     targets.forEach((tar: any) => {
                         const targetInfo = relations.get(tar.id);
                         if (targetInfo) {
@@ -69,7 +70,7 @@ export function SpecLibraryTab() {
     }, [specDefinitions]);
 
     /**
-     * 搜尋過濾
+     * 搜尋過濾 (用於 Grid 模式)
      */
     const filteredSpecs = useMemo(() => {
         if (!searchQuery.trim()) return specDefinitions;
@@ -82,54 +83,93 @@ export function SpecLibraryTab() {
     }, [specDefinitions, searchQuery]);
 
     /**
-     * 建構樹狀結構
+     * v4.12 建構樹狀結構 (支援搜尋篩選與排序)
      */
     const treeData = useMemo(() => {
         if (viewMode !== 'tree') return [];
 
-        // 1. 找出所有作為「連動目標」的規格 ID
+        // 1. 找出所有作為「連動目標」的規格 ID (用於決定誰是根節點)
         const targetIds = new Set<string>();
         specDefinitions.forEach(s => {
-            const triggers = s.logic_config?.triggers || (s as any).logicConfig?.triggers;
-            (triggers || []).forEach((t: any) => {
+            const triggers = s.logic_config?.triggers || [];
+            triggers.forEach((t: any) => {
                 (t.targets || []).forEach((tar: any) => targetIds.add(tar.id));
             });
         });
 
-        // 2. 只有不是別人目標的，才是根節點
-        const roots = specDefinitions.filter(s => !targetIds.has(s.id));
+        const query = searchQuery.toLowerCase().trim();
 
-        const buildTree = (spec: SpecDefinition, onValue?: string): any => {
+        const buildTree = (spec: SpecDefinition, onValue?: string, parentId?: string): any => {
             const node: any = {
                 id: spec.id,
                 spec: spec,
                 onValue,
+                parentId,
                 children: []
             };
 
-            const triggers = spec.logic_config?.triggers || (spec as any).logicConfig?.triggers || [];
+            const triggers = spec.logic_config?.triggers || [];
             triggers.forEach((t: any) => {
                 const prefix = t.operator === 'ne' ? '不等於 ' : '';
                 (t.targets || []).forEach((tar: any) => {
                     const childSpec = specDefinitions.find(s => s.id === tar.id);
                     if (childSpec) {
-                        node.children.push(buildTree(childSpec, prefix + t.on_value));
+                        node.children.push(buildTree(childSpec, prefix + t.on_value, spec.id));
                     }
                 });
+            });
+
+            // 子節點排序
+            node.children.sort((a: any, b: any) => {
+                if (a.spec.sort_order !== b.spec.sort_order) {
+                    return (a.spec.sort_order || 0) - (b.spec.sort_order || 0);
+                }
+                return a.spec.name.localeCompare(b.spec.name);
             });
 
             return node;
         };
 
-        return roots.map(root => buildTree(root));
-    }, [specDefinitions, viewMode]);
-    console.log("規格定義", specDefinitions)
+        const filterTree = (node: any): any | null => {
+            const isMatch = node.spec.name.toLowerCase().includes(query) || 
+                          node.spec.type.toLowerCase().includes(query) ||
+                          node.spec.options?.some((o: string) => o.toLowerCase().includes(query));
+            
+            const filteredChildren = node.children
+                .map((child: any) => filterTree(child))
+                .filter(Boolean);
+            
+            if (isMatch || filteredChildren.length > 0) {
+                return { ...node, children: filteredChildren };
+            }
+            return null;
+        };
+
+        let roots = specDefinitions
+            .filter(s => !targetIds.has(s.id))
+            .map(root => buildTree(root));
+
+        // 根節點排序
+        roots.sort((a: any, b: any) => {
+            if (a.spec.sort_order !== b.spec.sort_order) {
+                return (a.spec.sort_order || 0) - (b.spec.sort_order || 0);
+            }
+            return a.spec.name.localeCompare(b.spec.name);
+        });
+
+        if (query) {
+            return roots.map(root => filterTree(root)).filter(Boolean);
+        }
+
+        return roots;
+    }, [specDefinitions, viewMode, searchQuery]);
+
     const openSpecDialog = (spec: SpecDefinition | null = null) => {
         if (spec) {
             setEditingSpec(spec);
             const migratedTriggers = (spec.logic_config?.triggers || []).map(t => ({
                 ...t,
-                targets: t.targets || (t as any).target_ids?.map((id: string) => ({ id, is_quantity_detail: false })) || []
+                targets: t.targets || []
             }));
 
             setSpecForm({
@@ -139,31 +179,58 @@ export function SpecLibraryTab() {
             });
         } else {
             setEditingSpec(null);
-            setSpecForm({ name: '', type: 'select', options: [''], logic_config: { triggers: [] } });
+            setSpecForm({ name: '', type: 'select', options: [''], sort_order: 0, logic_config: { triggers: [] } });
         }
         setIsSpecDialogOpen(true);
     };
 
     const handleSubmit = () => {
         const cleaned = { ...specForm, options: (specForm.options || []).filter(o => o.trim() !== '') };
-        console.log("規格編輯", cleaned)
         specMutation.mutate({ spec: cleaned, editingSpecId: editingSpec?.id }, {
             onSuccess: () => setIsSpecDialogOpen(false),
         });
     };
 
     const handleDelete = async (spec: SpecDefinition) => {
-        if (confirm(`確定要刪除規格「${spec.name}」嗎？這將導致所有關廠分類失去該欄位。`)) {
+        if (confirm(`確定要【全域刪除】規格「${spec.name}」嗎？這將導致所有產品與分類失去該欄位資料。`)) {
             const { error } = await supabase.from('specification_definitions').delete().eq('id', spec.id);
             if (error) toast.error('刪除失敗');
             else queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
         }
     };
 
+    const handleRemoveLink = async (spec: SpecDefinition, parentId?: string) => {
+        if (!parentId) {
+            return handleDelete(spec);
+        }
+
+        const parent = specDefinitions.find(s => s.id === parentId);
+        if (!parent) return;
+
+        if (!confirm(`確定要取消從「${parent.name}」到「${spec.name}」的連動關係嗎？\n(規格定義將保留，僅從此樹狀路徑移除)`)) return;
+
+        const newLogicConfig = JSON.parse(JSON.stringify(parent.logic_config || { triggers: [] }));
+        newLogicConfig.triggers.forEach((t: any) => {
+            t.targets = (t.targets || []).filter((tar: any) => tar.id !== spec.id);
+        });
+        newLogicConfig.triggers = newLogicConfig.triggers.filter((t: any) => (t.targets || []).length > 0);
+
+        const { error } = await supabase
+            .from('specification_definitions')
+            .update({ logic_config: newLogicConfig })
+            .eq('id', parent.id);
+
+        if (error) {
+            toast.error('移除連動失敗');
+        } else {
+            toast.success('已移除連動關係');
+            queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
+        }
+    };
+
     return (
         <TooltipProvider>
             <div className="space-y-6 pb-20">
-                {/* 使用組件化 Toolbar */}
                 <Toolbar
                     viewMode={viewMode}
                     onViewModeChange={setViewMode}
@@ -191,13 +258,12 @@ export function SpecLibraryTab() {
                             <TreeView
                                 treeData={treeData}
                                 onEdit={openSpecDialog}
-                                onDelete={handleDelete}
+                                onDelete={handleRemoveLink}
                             />
                         )}
                     </>
                 )}
 
-                {/* 新增/編輯 Dialog */}
                 <SpecDialog
                     open={isSpecDialogOpen}
                     onOpenChange={setIsSpecDialogOpen}

@@ -152,77 +152,95 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {visiblePathRows.map(row => (
-                            <TableRow key={row.pathKey} className="group hover:bg-muted/5 transition-colors border-b last:border-0">
-                                <TableCell
-                                    className="font-medium bg-white dark:bg-[#0f172a] sticky left-0 z-10 border-r group-hover:bg-muted/30 transition-colors"
-                                    style={{ paddingLeft: `${row.level * 1.5 + 1}rem` }}
-                                >
-                                    <div className="flex items-center gap-2">
-                                        {row.level > 0 && <ChevronsRight className="h-3 w-3 text-primary/40 shrink-0" />}
-                                        <div className="flex flex-col min-w-0">
-                                            <span className="text-xs font-bold text-primary truncate">{row.name}</span>
-                                            {row.level > 0 && (
-                                                <span className="text-[9px] text-muted-foreground/60 truncate">
-                                                    來自: {specMap.get(row.parentId)?.name || '父規格'} 
-                                                    {row.triggerInfo?.operator === 'ne' ? ' ≠ ' : ' = '}
-                                                    {row.triggerInfo?.triggerValue}
-                                                </span>
+                        {visiblePathRows.map(row => {
+                            const isHeading = row.spec?.type === 'heading';
+                            
+                            return (
+                                <TableRow key={row.pathKey} className={`group hover:bg-muted/5 transition-colors border-b last:border-0 ${isHeading ? 'bg-primary/5' : ''}`}>
+                                    <TableCell
+                                        className={`font-medium sticky left-0 z-10 border-r group-hover:bg-muted/30 transition-colors ${isHeading ? 'bg-primary/5' : 'bg-white dark:bg-[#0f172a]'}`}
+                                        style={{ paddingLeft: `${row.level * 1.5 + 1}rem` }}
+                                        colSpan={isHeading ? variants.length + 2 : 1}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            {isHeading ? (
+                                                <div className="flex items-center gap-2 text-primary font-bold uppercase tracking-wider text-[10px]">
+                                                    <span className="w-1.5 h-4 bg-primary rounded-full" />
+                                                    {row.name}
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    {row.level > 0 && <ChevronsRight className="h-3 w-3 text-primary/40 shrink-0" />}
+                                                    <div className="flex flex-col min-w-0">
+                                                        <span className="text-xs font-bold text-primary truncate">{row.name}</span>
+                                                        {row.level > 0 && (
+                                                            <span className="text-[9px] text-muted-foreground/60 truncate">
+                                                                來自: {specMap.get(row.parentId)?.name || '父規格'} 
+                                                                {row.triggerInfo?.operator === 'ne' ? ' ≠ ' : ' = '}
+                                                                {row.triggerInfo?.triggerValue}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </>
                                             )}
                                         </div>
-                                    </div>
-                                </TableCell>
-                                {variants.map(v => {
-                                    const vSettings = localData[v.id] || {};
-                                    const vVisiblePaths = getVisibleSpecsTree(specFields, vSettings);
-                                    const isVis = vVisiblePaths.has(row.pathKey);
+                                    </TableCell>
+                                    {!isHeading && (
+                                        <>
+                                            {variants.map(v => {
+                                                const vSettings = localData[v.id] || {};
+                                                const vVisiblePaths = getVisibleSpecsTree(specFields, vSettings);
+                                                const isVis = vVisiblePaths.has(row.pathKey);
 
-                                    const [_, specId] = row.pathKey.split(':');
-                                    const value = vSettings[row.pathKey] !== undefined && vSettings[row.pathKey] !== ''
-                                        ? vSettings[row.pathKey]
-                                        : (vSettings[`root:${specId}`] || '');
+                                                const [_, specId] = row.pathKey.split(':');
+                                                const value = vSettings[row.pathKey] !== undefined && vSettings[row.pathKey] !== ''
+                                                    ? vSettings[row.pathKey]
+                                                    : (vSettings[`root:${specId}`] || '');
 
-                                    return (
-                                        <TableCell key={v.id} className={`p-2 border-r last:border-r-0 transition-all ${!isVis ? 'bg-muted/5' : ''}`}>
-                                            <div className="flex justify-center w-full">
-                                                {isVis && row.spec ? (
-                                                    <div className="w-full max-w-[140px] opacity-100 scale-100 transition-all duration-200">
-                                                        <SpecValueEditor
-                                                            spec={row.spec}
-                                                            value={value}
-                                                            onChange={(val) => handleValueChange(v.id, row.pathKey, val)}
-                                                            sourceValue={vVisiblePaths.get(row.pathKey)?.sourceValue}
-                                                            variantMode={true}
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <div className="h-9 flex items-center justify-center opacity-20 italic text-[10px]">
-                                                        未觸發
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                    );
-                                })}
-                                <TableCell className="text-center bg-primary/5 group-hover:bg-primary/10 transition-colors">
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
-                                        onClick={() => {
-                                            const [_, specId] = row.pathKey.split(':');
-                                            const firstVData = localData[variants[0].id] || {};
-                                            const firstValue = firstVData[row.pathKey] !== undefined && firstVData[row.pathKey] !== ''
-                                                ? firstVData[row.pathKey]
-                                                : (firstVData[`root:${specId}`] || '');
-                                            applyToAll(row.pathKey, firstValue);
-                                        }}
-                                    >
-                                        <Copy className="h-4 w-4" />
-                                    </Button>
-                                </TableCell>
-                            </TableRow>
-                        ))}
+                                                return (
+                                                    <TableCell key={v.id} className={`p-2 border-r last:border-r-0 transition-all ${!isVis ? 'bg-muted/5' : ''}`}>
+                                                        <div className="flex justify-center w-full">
+                                                            {isVis && row.spec ? (
+                                                                <div className="w-full max-w-[140px] opacity-100 scale-100 transition-all duration-200">
+                                                                    <SpecValueEditor
+                                                                        spec={row.spec}
+                                                                        value={value}
+                                                                        onChange={(val) => handleValueChange(v.id, row.pathKey, val)}
+                                                                        sourceValue={vVisiblePaths.get(row.pathKey)?.sourceValue}
+                                                                        variantMode={true}
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <div className="h-9 flex items-center justify-center opacity-20 italic text-[10px]">
+                                                                    未觸發
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+                                                );
+                                            })}
+                                            <TableCell className="text-center bg-primary/5 group-hover:bg-primary/10 transition-colors">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
+                                                    onClick={() => {
+                                                        const [_, specId] = row.pathKey.split(':');
+                                                        const firstVData = localData[variants[0].id] || {};
+                                                        const firstValue = firstVData[row.pathKey] !== undefined && firstVData[row.pathKey] !== ''
+                                                            ? firstVData[row.pathKey]
+                                                            : (firstVData[`root:${specId}`] || '');
+                                                        applyToAll(row.pathKey, firstValue);
+                                                    }}
+                                                >
+                                                    <Copy className="h-4 w-4" />
+                                                </Button>
+                                            </TableCell>
+                                        </>
+                                    )}
+                                </TableRow>
+                            );
+                        })}
                     </TableBody>
                 </Table>
             </div>

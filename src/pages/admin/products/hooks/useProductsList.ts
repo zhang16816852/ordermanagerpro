@@ -8,6 +8,8 @@ import { toast } from 'sonner';
 import { formatSpecsToCondensedString } from '@/utils/specLogic';
 import { useBrands } from '@/hooks/useBrands';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
+import { generateProductExcel } from '@/utils/excelUtils';
 
 type Product = Tables<'products'>;
 
@@ -133,13 +135,13 @@ export function useProductsList() {
         if (!product) return [];
 
         const models: { name: string, aliases: string[] }[] = [];
-        
+
         // 1. 直連
         product.device_models?.forEach(m => models.push({ name: m.name, aliases: m.aliases || [] }));
-        
+
         // 2. 群組名稱也納入搜尋
         product.device_model_groups?.forEach(g => models.push({ name: g.name, aliases: [] }));
-        
+
         return models;
     }, [products]);
 
@@ -148,16 +150,16 @@ export function useProductsList() {
         if (!product) return [];
 
         const parts: string[] = [];
-        
+
         // 1. 直連型號 (model:NAME)
         product.device_models?.forEach(m => parts.push(`model:${m.name}`));
-        
+
         // 2. 群組 (group:NAME)
         product.device_model_groups?.forEach(g => parts.push(`group:${g.name}`));
-        
+
         // 3. 排除 (exclude:NAME)
         product.device_model_exclusions?.forEach(e => parts.push(`exclude:${e.name}`));
-        
+
         return parts;
     }, [products]);
 
@@ -169,13 +171,13 @@ export function useProductsList() {
             const brandName = (p.brand_id ? brandMap[p.brand_id] : p.brand_id) || '';
             const searchLower = search.toLowerCase();
             const productModels = getProductModelsInfo(p.id);
-            const matchesSearch = !search || 
+            const matchesSearch = !search ||
                 p.name.toLowerCase().includes(searchLower) ||
                 p.sku.toLowerCase().includes(searchLower) ||
                 brandName.toLowerCase().includes(searchLower) ||
                 (p.model && p.model.toLowerCase().includes(searchLower)) ||
-                productModels.some(m => 
-                    m.name.toLowerCase().includes(searchLower) || 
+                productModels.some(m =>
+                    m.name.toLowerCase().includes(searchLower) ||
                     m.aliases.some((a: string) => a.toLowerCase().includes(searchLower))
                 );
 
@@ -255,14 +257,14 @@ export function useProductsList() {
     // --- Mutations ---
     const createMutation = useMutation({
         mutationFn: async (values: any) => {
-            const { 
-                category_ids, 
-                device_model_ids, 
-                device_model_group_ids = [], 
+            const {
+                category_ids,
+                device_model_ids,
+                device_model_group_ids = [],
                 device_model_exclusion_ids = [],
-                category, category_id, device_models, ...productData 
+                category, category_id, device_models, ...productData
             } = values;
-            
+
             const { data: product, error: productError } = await supabase.from('products').insert(productData).select().single();
             if (productError) throw productError;
 
@@ -304,12 +306,12 @@ export function useProductsList() {
 
     const updateMutation = useMutation({
         mutationFn: async ({ id, values }: { id: string, values: any }) => {
-            const { 
-                category_ids, 
-                device_model_ids, 
+            const {
+                category_ids,
+                device_model_ids,
                 device_model_group_ids = [],
                 device_model_exclusion_ids = [],
-                category, category_id, device_models, ...productData 
+                category, category_id, device_models, ...productData
             } = values;
 
             // 先刪除所有舊關聯
@@ -401,109 +403,36 @@ export function useProductsList() {
     };
 
     const handleBatchExport = async () => {
-        const STATUS_LABELS: Record<string, string> = {
-            active: '上架中',
-            discontinued: '已停售',
-            preorder: '預購中',
-            sold_out: '售完停產',
-        };
+        const { data: specDefs } = await supabase.from('specification_definitions').select('*');
+        const { data: categoriesData } = await supabase.from('categories').select('*');
+        const { data: specLinks } = await supabase.from('category_spec_links').select('*');
 
-        // 1. Get all specification definitions to map IDs to names
-        const { data: specDefs } = await supabase.from('specification_definitions').select('id, name');
-        const specNameMap: Record<string, string> = {};
-        specDefs?.forEach(d => { specNameMap[d.id] = d.name; });
+        const selected = (products || []).filter(p => selectedProductIds.has(p.id)).map(p => ({
+            ...p,
+            variants: getProductVariants(p.id)
+        }));
+        console.log(selected);
+        if (selected.length === 0) {
+            toast.error('請先選取要匯出的產品');
+            return;
+        }
 
-        const selected = products?.filter(p => selectedProductIds.has(p.id)) || [];
-        const exportData: any[] = [];
+        try {
+            const workbook = generateProductExcel(selected, categoriesData || [], specDefs || [], specLinks || [], brandMap);
+            const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
-        // 2. Identify all spec keys present in selected products/variants to create columns
-        const allSpecKeys = new Set<string>();
-        selected.forEach(p => {
-            if (p.table_settings) Object.keys(p.table_settings).forEach(k => allSpecKeys.add(k));
-            const variants = getProductVariants(p.id);
-            variants.forEach(v => {
-                if (v.table_settings) Object.keys(v.table_settings).forEach(k => allSpecKeys.add(k));
-            });
-        });
-
-        selected.forEach(p => {
-            const variants = getProductVariants(p.id);
-            const productModels = getProductModels(p.id).join(',');
-            const categoryStr = p.category_names?.join(',') || '';
-
-            // v4.9 品牌處理 - 使用全域 brandMap
-            const displayBrand = (p.brand_id ? brandMap[p.brand_id] : p.brand_id) || '';
-
-            // 3. 使用統一工具函式構建規格字串
-            const productSpecs = formatSpecsToCondensedString(p.table_settings, specNameMap);
-
-            const productBase = {
-                product_sku: p.sku,
-                product_name: p.name,
-                description: p.description || '',
-                brand: displayBrand,
-                model: p.model || '',
-                series: p.series || '',
-                category: categoryStr,
-                base_wholesale_price: p.base_wholesale_price,
-                base_retail_price: p.base_retail_price,
-                product_status: STATUS_LABELS[p.status] || p.status || '上架中',
-                device_models: productModels,
-                規格: productSpecs,
-                is_variant: '否'
-            };
-
-            if (variants.length > 0) {
-                variants.forEach(v => {
-                    const vParts: string[] = [];
-                    v.variant_model_links?.forEach((l: any) => { if (l.device_models?.name) vParts.push(`model:${l.device_models.name}`); });
-                    v.variant_model_group_links?.forEach((l: any) => { if (l.device_model_groups?.name) vParts.push(`group:${l.device_model_groups.name}`); });
-                    v.variant_model_exclusions?.forEach((l: any) => { if (l.device_models?.name) vParts.push(`exclude:${l.device_models.name}`); });
-                    const variantModels = vParts.join(',');
-                    const variantSpecs = formatSpecsToCondensedString(v.table_settings, specNameMap);
-
-                    exportData.push({
-                        ...productBase,
-                        變體規格: variantSpecs,
-                        variant_sku: v.sku,
-                        variant_name: v.name,
-                        option_1: v.option_1 || '',
-                        option_2: v.option_2 || '',
-                        '顏色': v.option_3 || '',
-                        variant_wholesale_price: v.wholesale_price,
-                        variant_retail_price: v.retail_price,
-                        variant_status: STATUS_LABELS[v.status] || v.status || '上架中',
-                        barcode: v.barcode ? `'${v.barcode}` : '',
-                        variant_device_models: variantModels,
-                        is_variant: '是'
-                    });
-                });
-            } else {
-                exportData.push({
-                    ...productBase,
-                    變體規格: '',
-                    variant_sku: '',
-                    variant_name: '',
-                    option_1: '',
-                    option_2: '',
-                    '顏色': '',
-                    variant_wholesale_price: '',
-                    variant_retail_price: '',
-                    barcode: (p as any).barcode ? `'${(p as any).barcode}` : '',
-                    variant_device_models: '',
-                    is_variant: '否'
-                });
-            }
-        });
-        const csv = Papa.unparse(exportData);
-        console.log("匯出資料", exportData);
-        const BOM = '\uFEFF';
-        const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `products_export_${new Date().toISOString().slice(0, 10)}.csv`;
-        link.click();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `產品匯出_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            link.click();
+            URL.revokeObjectURL(url);
+            toast.success('匯出成功');
+        } catch (error: any) {
+            console.error('Export error:', error);
+            toast.error(`匯出失敗: ${error.message}`);
+        }
     };
 
     const clearFilters = useCallback(() => {

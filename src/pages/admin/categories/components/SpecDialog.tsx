@@ -148,13 +148,24 @@ export function SpecDialog({
 
                 <div className="flex-1 overflow-y-auto p-6 pt-2 space-y-4">
                     {/* 屬性名稱 */}
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium">屬性名稱</label>
-                        <Input
-                            value={specForm.name}
-                            onChange={(e) => setSpecForm(prev => ({ ...prev, name: e.target.value }))}
-                            placeholder="如：長度、容量、顏色"
-                        />
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">屬性名稱</label>
+                            <Input
+                                value={specForm.name}
+                                onChange={(e) => setSpecForm(prev => ({ ...prev, name: e.target.value }))}
+                                placeholder="如：長度、容量、顏色"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">顯示排序</label>
+                            <Input
+                                type="number"
+                                value={specForm.sort_order ?? 0}
+                                onChange={(e) => setSpecForm(prev => ({ ...prev, sort_order: parseInt(e.target.value) || 0 }))}
+                                placeholder="0"
+                            />
+                        </div>
                     </div>
 
                     {/* 輸入型態 */}
@@ -165,6 +176,7 @@ export function SpecDialog({
                             value={specForm.type}
                             onChange={(e) => setSpecForm(prev => ({ ...prev, type: e.target.value as SpecDefinition['type'] }))}
                         >
+                            <option value="heading">區段標題 (Heading - 僅顯示文字)</option>
                             <option value="select">單選下拉 (Select)</option>
                             <option value="multiselect">多選 (Multi-select)</option>
                             <option value="text">文字輸入 (Text)</option>

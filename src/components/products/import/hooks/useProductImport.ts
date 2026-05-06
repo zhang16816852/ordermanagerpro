@@ -4,10 +4,12 @@ import { supabase } from '@/integrations/supabase/client';
 import Papa from 'papaparse';
 import jschardet from 'jschardet';
 import { toast } from 'sonner';
-import { serializeSpecs } from '@/utils/specLogic';
+import { serializeSpecs, deserializeSpecs, formatSpecValue } from '@/utils/specLogic';
 import { useColorStore } from '@/store/useColorStore';
 import { useDeviceModelStore } from '@/store/useDeviceModelStore';
 import { useEffect } from 'react';
+import { parseProductExcel, generateProductExcel } from '@/utils/excelUtils';
+import * as XLSX from 'xlsx';
 
 export interface ImportRow {
     product_sku: string;
@@ -22,7 +24,7 @@ export interface ImportRow {
     base_wholesale_price: number;
     base_retail_price: number;
     product_status: 'active' | 'discontinued' | 'preorder' | 'sold_out';
-    table_settings?: string;
+    table_settings?: any;
     variant_sku?: string;
     variant_name?: string;
     option_1?: string;
@@ -31,11 +33,12 @@ export interface ImportRow {
     variant_wholesale_price?: number;
     variant_retail_price?: number;
     variant_status?: 'active' | 'discontinued' | 'preorder' | 'sold_out';
-    variant_table_settings?: string;
+    variant_table_settings?: any;
     barcode?: string;
     device_models?: string;
     variant_device_models?: string;
     is_variant: boolean;
+    _specs?: Record<string, any>;
     errors: string[];
     isValid: boolean;
     action?: 'create' | 'update';
@@ -190,201 +193,151 @@ export function useProductImport(onSuccess: () => void) {
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (event) => {
+        reader.onload = async (event) => {
             const result = event.target?.result;
             if (!(result instanceof ArrayBuffer)) return;
 
-            const uint8Array = new Uint8Array(result);
-            const binaryString = Array.from(uint8Array.slice(0, 1000)).map(b => String.fromCharCode(b)).join('');
-            const detection = jschardet.detect(binaryString);
-            const encoding = detection.encoding || 'UTF-8';
+            try {
+                let parsedRows: any[] = [];
+                
+                if (file.name.endsWith('.csv')) {
+                    // 暫時保留 CSV 支援，但簡單處理
+                    const uint8Array = new Uint8Array(result);
+                    const binaryString = Array.from(uint8Array.slice(0, 1000)).map(b => String.fromCharCode(b)).join('');
+                    const detection = jschardet.detect(binaryString);
+                    const encoding = detection.encoding || 'UTF-8';
+                    
+                    const text = new TextDecoder(encoding).decode(result);
+                    const csvResult = Papa.parse(text, { header: true, skipEmptyLines: true });
+                    parsedRows = csvResult.data.map((r: any) => ({
+                        ...r,
+                        is_variant: r.is_variant === '是' || r.is_variant === 'true',
+                        _specs: r.規格 ? parseCondensedSpecs(r.規格) : (r.變體規格 ? parseCondensedSpecs(r.變體規格) : {})
+                    }));
+                } else {
+                    // Excel 處理
+                    parsedRows = parseProductExcel(result);
+                }
 
-            Papa.parse(file, {
-                encoding,
-                header: false,
-                skipEmptyLines: true,
-                complete: (results) => {
-                    const rows = results.data as string[][];
-                    if (rows.length < 2) {
-                        toast.error('CSV 檔案至少需要標題列和一筆資料');
-                        return;
+                if (parsedRows.length === 0) {
+                    toast.error('檔案中沒有有效的產品資料');
+                    return;
+                }
+
+                const REVERSE_STATUS_MAP: Record<string, string> = {
+                    '上架中': 'active', '上架': 'active',
+                    '已停售': 'discontinued', '停產': 'discontinued', '停售': 'discontinued',
+                    '預購中': 'preorder', '預購': 'preorder',
+                    '售完停產': 'sold_out', '缺貨': 'sold_out', '售完': 'sold_out',
+                };
+
+                const parseStatus = (val: any): any => {
+                    const v = String(val || '').trim();
+                    if (!v) return 'active';
+                    if (REVERSE_STATUS_MAP[v]) return REVERSE_STATUS_MAP[v];
+                    return v.toLowerCase();
+                };
+
+                const rawParsed = parsedRows.map(row => {
+                    const baseRow: ImportRow = {
+                        product_sku: String(row.sku || row.product_sku || '').trim(),
+                        product_name: String(row.name || row.product_name || '').trim(),
+                        brand: String(row.brand || '').trim(),
+                        model: String(row.model || '').trim(),
+                        series: String(row.series || '').trim(),
+                        description: String(row.description || '').trim(),
+                        category: String(row._categoryName || row.category || '').trim(),
+                        base_wholesale_price: parseFloat(row.wholesale_price || row.base_wholesale_price) || 0,
+                        base_retail_price: parseFloat(row.retail_price || row.base_retail_price) || 0,
+                        product_status: parseStatus(row.status || row.product_status),
+                        variant_sku: String(row.variant_sku || (row.is_variant ? row.sku : '') || '').trim(),
+                        variant_name: String(row.variant_name || (row.is_variant ? row.name : '') || '').trim(),
+                        option_1: String(row.option_1 || '').trim(),
+                        option_2: String(row.option_2 || '').trim(),
+                        option_3: String(row.option_3 || '').trim(),
+                        variant_wholesale_price: parseFloat(row.variant_wholesale_price || row.wholesale_price) || undefined,
+                        variant_retail_price: parseFloat(row.variant_retail_price || row.retail_price) || undefined,
+                        variant_status: parseStatus(row.variant_status || row.status),
+                        barcode: normalizeBarcode(row.barcode),
+                        device_models: String(row.device_models || '').trim(),
+                        variant_device_models: String(row.variant_device_models || '').trim(),
+                        is_variant: !!row.is_variant,
+                        _specs: row._specs || {},
+                        errors: [],
+                        isValid: true
+                    };
+
+                    // 自動匹配品牌 ID
+                    if (baseRow.brand) {
+                        const matched = allBrands.find(b => b.name.toLowerCase() === baseRow.brand.toLowerCase());
+                        if (matched) (baseRow as any).brand_id = matched.id;
                     }
 
-                    const headerRow = rows[0].map(h => h.toLowerCase().trim());
-                    const autoMapping: Record<string, number> = {};
-                    const allFields = [...PRODUCT_REQUIRED, ...PRODUCT_OPTIONAL, ...VARIANT_FIELDS];
-                    console.log("headerRow", headerRow)
-                    headerRow.forEach((header, index) => {
-                        let matchedField = allFields.find(f =>
-                            header === f || header.replace(/_/g, ' ') === f.replace(/_/g, ' ')
-                        );
-                        if (header === '規格') matchedField = 'table_settings';
-                        if (header === '變體規格') matchedField = 'variant_table_settings';
-                        if (header === 'is_variant' || header === '是否為變體') matchedField = 'is_variant';
-                        if (header === '顏色') matchedField = 'option_3';
-                        if (header === '品牌') matchedField = 'brand';
-                        if (header === '分類') matchedField = 'category';
-                        if (header === '型號') matchedField = 'model';
-                        if (header === '批發價' || header === '產品批發價') matchedField = 'base_wholesale_price';
-                        if (header === '零售價' || header === '產品零售價') matchedField = 'base_retail_price';
-                        if (header === '變體批發價') matchedField = 'variant_wholesale_price';
-                        if (header === '變體零售價') matchedField = 'variant_retail_price';
-                        if (header === '適用型號' || header === '裝置型號') matchedField = 'device_models';
-                        if (header === '變體適用型號') matchedField = 'variant_device_models';
-                        if (matchedField) autoMapping[matchedField] = index;
-                    });
-                    console.log("autoMapping", autoMapping)
-                    const REVERSE_STATUS_MAP: Record<string, string> = {
-                        '上架中': 'active', '上架': 'active',
-                        '已停售': 'discontinued', '停產': 'discontinued', '停售': 'discontinued',
-                        '預購中': 'preorder', '預購': 'preorder',
-                        '售完停產': 'sold_out', '缺貨': 'sold_out', '售完': 'sold_out',
-                    };
+                    const { errors, is_variant } = validateRow(baseRow as any);
+                    return { ...baseRow, is_variant, errors, isValid: errors.length === 0 };
+                });
 
-                    const parseStatus = (val: string, defaultVal: string): any => {
-                        const v = val.trim();
-                        if (!v) return defaultVal;
-                        if (REVERSE_STATUS_MAP[v]) return REVERSE_STATUS_MAP[v];
-                        return v.toLowerCase() || defaultVal;
-                    };
+                const allSkus = rawParsed.map(r => r.product_sku).filter(Boolean);
+                const allVariantSkus = rawParsed.map(r => r.variant_sku).filter(Boolean);
 
-                    const rawParsed = rows.slice(1).map(row => {
-                        const getField = (field: string): string => {
-                            const index = autoMapping[field] ?? -1;
-                            return index >= 0 && index < row.length ? row[index].trim() : '';
-                        };
+                const { data: existingProducts } = await supabase.from('products').select('*').in('sku', allSkus);
+                const { data: existingVariants } = await supabase.from('product_variants').select('*').in('sku', allVariantSkus);
 
-                        const specRaw = getField('table_settings') || getField('規格');
-                        const variantSpecRaw = getField('variant_table_settings') || getField('變體規格');
+                const productIds = (existingProducts || []).map(p => p.id);
+                const { data: existingCatLinks } = await (supabase.from('product_category_links' as any) as any).select('product_id, category_id').in('product_id', productIds);
 
-                        const baseRow: Omit<ImportRow, 'errors' | 'isValid' | 'is_variant'> = {
-                            product_sku: getField('product_sku'),
-                            product_name: getField('product_name'),
-                            brand: getField('brand'),
-                            model: getField('model'),
-                            series: getField('series'),
-                            description: getField('description'),
-                            category: getField('category'),
-                            category_id: getField('category_id'),
-                            base_wholesale_price: parseFloat(getField('base_wholesale_price')) || 0,
-                            base_retail_price: parseFloat(getField('base_retail_price')) || 0,
-                            product_status: parseStatus(getField('product_status'), 'active'),
-                            table_settings: specRaw,
-                            variant_sku: getField('variant_sku'),
-                            variant_name: getField('variant_name'),
-                            option_1: getField('option_1'),
-                            option_2: getField('option_2'),
-                            option_3: getField('option_3'),
-                            variant_wholesale_price: parseFloat(getField('variant_wholesale_price')) || undefined,
-                            variant_retail_price: parseFloat(getField('variant_retail_price')) || undefined,
-                            variant_status: parseStatus(getField('variant_status'), 'active'),
-                            variant_table_settings: variantSpecRaw,
-                            barcode: getField('barcode'),
-                            device_models: getField('device_models'),
-                            variant_device_models: getField('variant_device_models'),
-                        };
+                const enrichedData = rawParsed.map(row => {
+                    const product = (existingProducts || []).find(p => p.sku === row.product_sku);
+                    const variant = (existingVariants || []).find(v => v.sku === row.variant_sku);
 
-                        // v4.11 自動匹配品牌 ID
-                        if (baseRow.brand) {
-                            const matched = allBrands.find(b => b.name.toLowerCase() === baseRow.brand.toLowerCase());
-                            if (matched) {
-                                (baseRow as any).brand_id = matched.id;
-                            }
-                        }
+                    const diff: string[] = [];
+                    let action: 'create' | 'update' = 'create';
 
-                        const { errors, is_variant } = validateRow({ ...baseRow, is_variant_raw: getField('is_variant') } as any);
-                        return { ...baseRow, is_variant, errors, isValid: errors.length === 0 };
-                    });
-
-                    const allSkus = rawParsed.map(r => r.product_sku).filter(Boolean);
-                    const allVariantSkus = rawParsed.map(r => r.variant_sku).filter(Boolean);
-
-                    const runDiff = async () => {
-                        const { data: existingProducts } = await supabase.from('products').select('*').in('sku', allSkus);
-                        const { data: existingVariants } = await supabase.from('product_variants').select('*').in('sku', allVariantSkus);
-
-                        const productIds = (existingProducts || []).map(p => p.id);
-                        const variantIds = (existingVariants || []).map(v => v.id);
-                        const { data: existingCatLinks } = await (supabase.from('product_category_links' as any) as any).select('product_id, category_id').in('product_id', productIds);
-
-                        // 批量抓取現有的裝置型號關聯
-                        const { data: existingModelLinks } = await supabase
-                            .from('product_model_links')
-                            .select('product_id, device_models(name)')
-                            .in('product_id', productIds);
-
-                        const { data: existingVariantModelLinks } = await supabase
-                            .from('variant_model_links')
-                            .select('variant_id, device_models(name)')
-                            .in('variant_id', variantIds);
-
-                        const enrichedData = rawParsed.map(row => {
-                            const product = (existingProducts || []).find(p => p.sku === row.product_sku);
-                            const variant = (existingVariants || []).find(v => v.sku === row.variant_sku);
-
-                            const diff: string[] = [];
-                            let action: 'create' | 'update' = 'create';
-
-                            if (product) {
-                                action = 'update';
-                                if (product.name !== row.product_name) diff.push('產品名稱');
-                                if (product.model !== row.model) diff.push('型號');
-                                if (product.series !== row.series) diff.push('系列');
-                                if (product.base_wholesale_price !== row.base_wholesale_price) diff.push('批發價');
-                                if (product.base_retail_price !== row.base_retail_price) diff.push('零售價');
-
-                                if (row.category) {
-                                    const links = (existingCatLinks || []).filter((l: any) => l.product_id === product.id);
-                                    const currentCatNames = links.map((l: any) => (categories as any[]).find(c => c.id === l.category_id)?.name).filter(Boolean);
-                                    if (!currentCatNames.includes(row.category)) diff.push('分類');
-                                }
-
-                                if (row.device_models) {
-                                    const productModelLinks = (existingModelLinks || []).filter(l => l.product_id === product.id);
-                                    const currentNames = productModelLinks.map((l: any) => l.device_models?.name).filter(Boolean);
-                                    const incomingNames = row.device_models.split(',').map(s => s.trim()).filter(Boolean);
-
-                                    const isSame = currentNames.length === incomingNames.length &&
-                                        currentNames.every(n => incomingNames.some(inN => inN.toLowerCase() === n.toLowerCase()));
-                                    if (!isSame) diff.push('適用型號');
-                                }
-
-                                const parsedIncoming = row.table_settings?.includes(':') ? parseCondensedSpecs(row.table_settings) : (row.table_settings ? JSON.parse(row.table_settings) : {});
-                                if (JSON.stringify(product.table_settings) !== JSON.stringify(parsedIncoming)) diff.push('產品規格');
-                            }
-
-                            if (row.variant_sku && variant) {
-                                action = 'update';
-                                if (variant.name !== row.variant_name) diff.push('變體名稱');
-                                if (variant.wholesale_price !== (row.variant_wholesale_price ?? row.base_wholesale_price)) diff.push('變體批發價');
-                                if (variant.retail_price !== (row.variant_retail_price ?? row.base_retail_price)) diff.push('變體零售價');
-                                
-                                if (row.variant_device_models) {
-                                    const variantLinks = (existingVariantModelLinks || []).filter(l => l.variant_id === variant.id);
-                                    const currentNames = variantLinks.map((l: any) => l.device_models?.name).filter(Boolean);
-                                    const incomingNames = row.variant_device_models.split(',').map(s => s.trim()).filter(Boolean);
-
-                                    const isSame = currentNames.length === incomingNames.length &&
-                                        currentNames.every(n => incomingNames.some(inN => inN.toLowerCase() === n.toLowerCase()));
-                                    if (!isSame) diff.push('變體型號');
-                                }
-
-                                const parsedIncomingV = row.variant_table_settings?.includes(':') ? parseCondensedSpecs(row.variant_table_settings) : (row.variant_table_settings ? JSON.parse(row.variant_table_settings) : {});
-                                if (JSON.stringify(variant.table_settings) !== JSON.stringify(parsedIncomingV)) diff.push('變體規格');
-                            }
-                            return { ...row, action, diff };
+                    if (product) {
+                        action = 'update';
+                        row.table_settings = product.table_settings; // 保存現有規格供增量更新使用
+                        
+                        if (product.name !== row.product_name) diff.push('產品名稱');
+                        if (product.base_wholesale_price !== row.base_wholesale_price) diff.push('批發價');
+                        if (product.base_retail_price !== row.base_retail_price) diff.push('零售價');
+                        
+                        // 規格比較
+                        const incomingSpecs = row._specs || {};
+                        const currentSpecs = deserializeSpecs(product.table_settings);
+                        const hasSpecDiff = Object.entries(incomingSpecs).some(([id, val]) => {
+                            const currentVal = currentSpecs[`root:${id}`] || currentSpecs[id];
+                            return formatSpecValue(currentVal) !== String(val);
                         });
+                        if (hasSpecDiff) diff.push('產品規格');
+                    }
 
-                        setImportData(enrichedData);
-                        setStep('preview');
-                    };
-                    runDiff();
-                },
-                error: (error) => toast.error(`解析失敗：${error.message}`)
-            });
+                    if (row.variant_sku && variant) {
+                        action = 'update';
+                        row.variant_table_settings = variant.table_settings; // 保存現有規格
+                        
+                        if (variant.name !== row.variant_name) diff.push('變體名稱');
+                        
+                        const incomingSpecsV = row._specs || {};
+                        const currentSpecsV = deserializeSpecs(variant.table_settings);
+                        const hasSpecDiffV = Object.entries(incomingSpecsV).some(([id, val]) => {
+                            const currentVal = currentSpecsV[`root:${id}`] || currentSpecsV[id];
+                            return formatSpecValue(currentVal) !== String(val);
+                        });
+                        if (hasSpecDiffV) diff.push('變體規格');
+                    }
+
+                    return { ...row, action, diff };
+                });
+
+                setImportData(enrichedData);
+                setStep('preview');
+            } catch (err: any) {
+                console.error('File parsing error:', err);
+                toast.error(`檔案解析失敗: ${err.message}`);
+            }
         };
         reader.readAsArrayBuffer(file);
-    }, [specDefs]);
+    }, [specDefs, allBrands, allColors]);
 
     const updateRow = (index: number, field: keyof ImportRow, value: any) => {
         setImportData(prev => {
@@ -422,18 +375,65 @@ export function useProductImport(onSuccess: () => void) {
         mutationFn: async () => {
             const validRows = importData.filter(r => r.isValid);
             const uniqueProductsMap = new Map<string, ImportRow>();
-            validRows.forEach(row => { if (!uniqueProductsMap.has(row.product_sku)) uniqueProductsMap.set(row.product_sku, row); });
+            validRows.forEach(row => { 
+                const existing = uniqueProductsMap.get(row.product_sku);
+                if (existing) {
+                    existing._specs = { ...(existing._specs || {}), ...(row._specs || {}) };
+                    Object.assign(existing, { ...row, _specs: existing._specs });
+                } else {
+                    uniqueProductsMap.set(row.product_sku, row);
+                }
+            });
 
             // 建立規格字典供序列化使用
             const specMap = new Map(specDefs.map(s => [s.id, {
                 id: s.id, name: s.name, type: s.type, options: s.options || [], defaultValue: s.default_value || ''
             } as any]));
 
+            // [新增] 建立最新的父子關係地圖 (ChildID -> ParentID)
+            const currentParentMap = new Map<string, string>();
+            specDefs.forEach(s => {
+                const triggers = s.logic_config?.triggers || s.logicConfig?.triggers || [];
+                triggers.forEach((t: any) => {
+                    const targets = t.targets || (t as any).target_ids?.map((tid: string) => ({ id: tid })) || [];
+                    targets.forEach((tar: any) => currentParentMap.set(tar.id, s.id));
+                });
+            });
+
             const productsToInsert = Array.from(uniqueProductsMap.values()).map(row => {
-                const flatSpecs = row.table_settings ? (row.table_settings.includes(':') ? parseCondensedSpecs(row.table_settings) : JSON.parse(row.table_settings)) : {};
-                const pathMap = new Map();
-                Object.entries(flatSpecs).forEach(([id, val]) => pathMap.set(`root:${id}`, val));
-                const serializedSettings = serializeSpecs(pathMap, specMap);
+                const incomingSpecs = row._specs || {};
+                
+                // [增量更新邏輯]
+                // 1. 如果是更新動作且已有舊規格，則先載入舊規格
+                let pathMap = new Map();
+                if (row.action === 'update' && row.table_settings) {
+                    const existingSpecs = deserializeSpecs(row.table_settings);
+                    Object.entries(existingSpecs).forEach(([path, val]) => pathMap.set(path, val));
+                }
+                
+                // 2. 將 Excel 中的新規格覆蓋上去
+                Object.entries(incomingSpecs).forEach(([key, val]) => {
+                    const pathKey = key.includes(':') ? key : `root:${key}`;
+                    pathMap.set(pathKey, val);
+                });
+
+                // [新增] 規格層級自動遷移機制 (Schema Migration)
+                // 根據目前的規格定義，自動將規格值移轉到正確的 parentId 之下
+                const migratedPathMap = new Map<string, any>();
+                
+                pathMap.forEach((val, pathKey) => {
+                    const [oldParentId, specId] = pathKey.split(':');
+                    if (!specId) return;
+
+                    const currentParentId = currentParentMap.get(specId) || 'root';
+                    const newKey = `${currentParentId}:${specId}`;
+                    
+                    // 如果路徑發生變更 (例如被包進了另一個規格)，則進行遷移
+                    // 注意：如果有重複，則以較新的 (來自 Excel) 為準
+                    migratedPathMap.set(newKey, val);
+                });
+                
+                const serializedSettings = serializeSpecs(migratedPathMap, specMap);
 
                 return {
                     sku: row.product_sku,
@@ -441,7 +441,7 @@ export function useProductImport(onSuccess: () => void) {
                     description: row.description || null,
                     model: row.model || null,
                     series: row.series || null,
-                    brand_id: row.brand_id || null, // v4.11 優先使用 UUID
+                    brand_id: row.brand_id || null,
                     base_wholesale_price: row.base_wholesale_price,
                     base_retail_price: row.base_retail_price,
                     status: row.product_status,
@@ -540,11 +540,44 @@ export function useProductImport(onSuccess: () => void) {
                 await supabase.from('product_model_group_links').insert(uniqueProductGroupLinks as any);
             }
 
-            const variantsToInsert = validRows.filter(r => r.is_variant).map(row => {
-                const flatSpecsV = row.variant_table_settings ? (row.variant_table_settings.includes(':') ? parseCondensedSpecs(row.variant_table_settings) : JSON.parse(row.variant_table_settings)) : {};
-                const pathMapV = new Map();
-                Object.entries(flatSpecsV).forEach(([id, val]) => pathMapV.set(`root:${id}`, val));
-                const serializedSettingsV = serializeSpecs(pathMapV, specMap);
+            // 合併變體資料
+            const uniqueVariantsMap = new Map<string, ImportRow>();
+            validRows.filter(r => r.is_variant).forEach(row => {
+                const sku = row.variant_sku!;
+                const existing = uniqueVariantsMap.get(sku);
+                if (existing) {
+                    existing._specs = { ...(existing._specs || {}), ...(row._specs || {}) };
+                    Object.assign(existing, { ...row, _specs: existing._specs });
+                } else {
+                    uniqueVariantsMap.set(sku, row);
+                }
+            });
+
+            const variantsToInsert = Array.from(uniqueVariantsMap.values()).map(row => {
+                const incomingSpecsV = row._specs || {};
+                
+                // [增量更新邏輯]
+                let pathMapV = new Map();
+                if (row.action === 'update' && row.variant_table_settings) {
+                    const existingSpecsV = deserializeSpecs(row.variant_table_settings);
+                    Object.entries(existingSpecsV).forEach(([path, val]) => pathMapV.set(path, val));
+                }
+
+                Object.entries(incomingSpecsV).forEach(([key, val]) => {
+                    const pathKey = key.includes(':') ? key : `root:${key}`;
+                    pathMapV.set(pathKey, val);
+                });
+
+                // [遷移] 自動修正層級
+                const migratedPathMapV = new Map<string, any>();
+                pathMapV.forEach((val, pathKey) => {
+                    const [oldParentId, specId] = pathKey.split(':');
+                    if (!specId) return;
+                    const currentParentId = currentParentMap.get(specId) || 'root';
+                    migratedPathMapV.set(`${currentParentId}:${specId}`, val);
+                });
+
+                const serializedSettingsV = serializeSpecs(migratedPathMapV, specMap);
 
                 return {
                     product_id: productIdMap.get(row.product_sku) as any,
@@ -648,19 +681,45 @@ export function useProductImport(onSuccess: () => void) {
         onError: (error: Error) => toast.error(`匯入失敗：${error.message}`),
     });
 
-    const downloadTemplate = () => {
-        const csvContent = [
-            'product_sku,product_name,description,category,brand,model,series,device_models,base_wholesale_price,base_retail_price,product_status,規格,variant_sku,variant_name,option_1,option_2,option_3,variant_device_models,variant_wholesale_price,variant_retail_price,variant_status,變體規格,barcode',
-            'PROD-001,基本款T恤,純棉舒適T恤,服飾,品牌A,T系列,日常款,iPhone 15,100,150,active,"材質:純棉, 領型:圓領",,,,,,,,,,',
-            'SHIRT-001,彩色襯衫,渲染襯衫,服飾,品牌A,系列2,派對款,,100,150,active,"材質:麻",SHIRT-001-RED-S,紅色 S,紅色,S,,iPhone 14,,,,"顏色:紅色",',
-        ].join('\n');
-        const BOM = '\uFEFF';
-        const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = '產品匯入範本.csv';
-        link.click();
+    const downloadTemplate = async () => {
+        const { data: specDefs } = await supabase.from('specification_definitions').select('*');
+        const { data: categoriesData } = await supabase.from('categories').select('*');
+        const { data: specLinks } = await supabase.from('category_spec_links').select('*');
+        
+        // 為每個分類產生一個範例列
+        const sampleProducts = (categoriesData || []).map(cat => ({
+            sku: `NEW-${cat.name}-001`,
+            name: `${cat.name}產品範例`,
+            description: '產品描述',
+            brand_id: allBrands[0]?.id || null,
+            model: '型號',
+            series: '系列',
+            category_ids: [cat.id],
+            category_names: [cat.name],
+            base_wholesale_price: 0,
+            base_retail_price: 0,
+            status: 'active',
+            table_settings: {},
+            variants: []
+        }));
+
+        const brandMap = Object.fromEntries(allBrands.map(b => [b.id, b.name]));
+
+        try {
+            const workbook = generateProductExcel(sampleProducts, categoriesData || [], specDefs || [], specLinks || [], brandMap);
+            const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = '產品匯出入範本.xlsx';
+            link.click();
+            URL.revokeObjectURL(url);
+            toast.success('範本已生成');
+        } catch (error: any) {
+            toast.error(`生成範本失敗: ${error.message}`);
+        }
     };
 
     const [filterStatus, setFilterStatus] = useState<string>('all');

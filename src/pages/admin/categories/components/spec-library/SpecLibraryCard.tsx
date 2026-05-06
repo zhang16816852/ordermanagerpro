@@ -1,10 +1,11 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Pencil, Trash2, Zap, Target } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { SpecDefinition } from '../../types';
-import { SpecRelationInfo } from '../../hooks/useSpecRelations';
+import { SpecRelationInfo } from './SpecLibraryGridView';
 
 interface SpecCardProps {
     spec: SpecDefinition;
@@ -16,19 +17,35 @@ interface SpecCardProps {
 
 export function SpecCard({ spec, relation, onEdit, onDelete, showRelations = true }: SpecCardProps) {
     return (
-        <Card className="relative group overflow-hidden border-primary/10 hover:border-primary/40 hover:shadow-md transition-all duration-200">
+        <Card className={cn(
+            "relative group overflow-hidden transition-all duration-200",
+            spec.type === 'heading' 
+                ? "bg-slate-900 border-slate-700 shadow-sm" 
+                : "border-primary/10 hover:border-primary/40 hover:shadow-md"
+        )}>
             <CardHeader className="pb-2 space-y-1">
                 <div className="flex justify-between items-start gap-2">
-                    <CardTitle className="text-sm font-bold truncate leading-tight grow" title={spec.name}>
+                    <CardTitle 
+                        className={cn(
+                            "text-sm font-bold truncate leading-tight grow",
+                            spec.type === 'heading' && "text-white"
+                        )} 
+                        title={spec.name}
+                    >
                         {spec.name}
                     </CardTitle>
-                    <Badge variant="outline" className="text-[9px] px-1.5 h-4 shrink-0 font-mono uppercase bg-muted/50">
-                        {spec.type}
-                    </Badge>
+                    <div className="flex gap-1 shrink-0">
+                        <Badge variant="outline" className="text-[9px] px-1.5 h-4 font-mono bg-blue-50 text-blue-700 border-blue-200">
+                            #{spec.sort_order || 0}
+                        </Badge>
+                        <Badge variant="outline" className="text-[9px] px-1.5 h-4 font-mono uppercase bg-muted/50">
+                            {spec.type}
+                        </Badge>
+                    </div>
                 </div>
                 
                 {/* 關係標籤列 */}
-                {showRelations && (
+                {showRelations && spec.type !== 'heading' && (
                     <div className="flex flex-wrap gap-1 mt-1 empty:hidden">
                         {relation?.isSource && (
                             <Badge className="bg-orange-500/10 text-orange-600 border-orange-200 text-[9px] hover:bg-orange-500/20 px-1">
@@ -52,12 +69,19 @@ export function SpecCard({ spec, relation, onEdit, onDelete, showRelations = tru
                     </div>
                 )}
 
-                <CardDescription className="text-[11px] line-clamp-2 min-h-[32px] pt-1 leading-normal">
-                    {spec.type === 'text' ? '自由文字輸入' :
-                        spec.type === 'boolean' ? '支援/不支援 (開關)' :
-                            spec.type === 'number_with_unit' ? `數值輸入 (單位: ${spec.options?.[0] || '無'})` :
-                                spec.options?.join(' / ')}
-                </CardDescription>
+                {spec.type !== 'heading' && (
+                    <CardDescription className="text-[11px] line-clamp-2 min-h-[32px] pt-1 leading-normal">
+                        {spec.type === 'text' ? (
+                            '自由文字輸入'
+                        ) : spec.type === 'boolean' ? (
+                            '支援/不支援 (開關)'
+                        ) : spec.type === 'number_with_unit' ? (
+                            `數值輸入 (單位: ${spec.options?.[0] || '無'})`
+                        ) : (
+                            spec.options?.join(' / ')
+                        )}
+                    </CardDescription>
+                )}
             </CardHeader>
             <CardContent className="flex justify-end gap-1.5 py-2 px-3 bg-muted/20 border-t mt-auto">
                 <Button

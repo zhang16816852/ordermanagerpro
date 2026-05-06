@@ -13,9 +13,9 @@ export const useSpecStore = create<SpecStore>((set, get) => ({
     specDefinitions: [],
     specMap: new Map(),
     isLoading: false,
-    fetchSpecs: async () => {
-        // 如果已經有資料就不重抓，除非強制重抓
-        if (get().specDefinitions.length > 0) return;
+    fetchSpecs: async (force = false) => {
+        // 如果已經有資料且不是強制重抓，就不重抓
+        if (!force && get().specDefinitions.length > 0) return;
 
         set({ isLoading: true });
         try {
@@ -33,7 +33,8 @@ export const useSpecStore = create<SpecStore>((set, get) => ({
                 options: s.options || [],
                 defaultValue: s.default_value || '',
                 logicConfig: s.logic_config as any,
-                configuration: s.configuration
+                configuration: s.configuration,
+                sort_order: s.sort_order || 0
             }));
 
             const map = new Map();
