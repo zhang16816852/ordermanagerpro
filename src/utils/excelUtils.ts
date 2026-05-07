@@ -9,6 +9,8 @@ export const BASE_COLUMNS = {
     '產品類型': 'is_variant',
     'SKU': 'sku',
     '產品名稱': 'name',
+    '變體 SKU': 'variant_sku',
+    '變體名稱': 'variant_name',
     '描述': 'description',
     '品牌': 'brand',
     '型號': 'model',
@@ -18,6 +20,10 @@ export const BASE_COLUMNS = {
     '零售價': 'retail_price',
     '狀態': 'status',
     '條碼': 'barcode',
+    '分類': 'category',
+    '規格 1': 'option_1',
+    '規格 2': 'option_2',
+    '顏色 (規格 3)': 'option_3',
 } as const;
 
 export type BaseColumnKey = keyof typeof BASE_COLUMNS;
@@ -35,8 +41,8 @@ export function generateProductExcel(
     const workbook = XLSX.utils.book_new();
     
     // 1. 建立規格對應字典
-    const specMap: Record<string, any> = {};
-    specDefs.forEach(d => { specMap[d.id] = d; });
+    const specMap = new Map<string, CategorySpec>();
+    specDefs.forEach(d => { specMap.set(d.id, d); });
 
     // 2. 將產品依「所有分類」群組（一品多位）
     const categoryGroups: Record<string, any[]> = {};
@@ -86,7 +92,7 @@ export function generateProductExcel(
         // 遞迴獲取所有規格（包含子規格）
         const processedKeys = new Set<string>();
         const collectSpecs = (specId: string, parentId: string, parentPath: string = '') => {
-            const spec = specMap[specId];
+            const spec = specMap.get(specId);
             if (!spec) return;
             
             const key = `${parentId}:${specId}`;
@@ -113,40 +119,39 @@ export function generateProductExcel(
             
             const linkedSpecIds = new Set(links.map(l => l.spec_id));
             
-            // 找出哪些連結其實是別人的子規格
+            // 找出哪些連結其實是別人的子規格 (全局判定)
             const allChildIds = new Set<string>();
-            linkedSpecIds.forEach(id => {
-                const children = childrenMap.get(id) || [];
+            specDefs.forEach(s => {
+                const children = childrenMap.get(s.id) || [];
                 children.forEach(cid => allChildIds.add(cid));
             });
-
-            // 只從「不是別人子規格」的連結開始遞迴
+            
+            // 只從「不是別人子規格」且「有關聯到此分類」的連結開始遞迴
             links.forEach(link => {
                 if (!allChildIds.has(link.spec_id)) {
                     collectSpecs(link.spec_id, 'root');
                 }
             });
-        }
-
-        // 如果沒有定義，從現有產品中提取 (相容舊邏輯)
-        if (definedSpecKeys.length === 0) {
+        } else {
+            // 未分類則顯示所有未被分類關聯的規格，且作為根規格出現
+            const linkedSpecIds = new Set(specLinks.map(l => l.spec_id));
             const activeKeys = new Set<string>();
             groupProducts.forEach(p => {
                 const settings = p.table_settings;
                 if (Array.isArray(settings)) {
-                    settings.forEach((s: any) => activeKeys.add(`${s.parentId || 'root'}:${s.id}`));
+                    settings.forEach((s: any) => {
+                        if (!linkedSpecIds.has(s.id)) {
+                            activeKeys.add(`root:${s.id}`);
+                        }
+                    });
                 }
             });
             
             Array.from(activeKeys).forEach(key => {
-                const [parentId, specId] = key.split(':');
-                const spec = specMap[specId];
+                const [_, specId] = key.split(':');
+                const spec = specMap.get(specId);
                 if (spec) {
-                    definedSpecKeys.push({
-                        key: key,
-                        name: spec.name,
-                        path: spec.name
-                    });
+                    definedSpecKeys.push({ key, name: spec.name, path: spec.name });
                 }
             });
         }
@@ -168,10 +173,10 @@ export function generateProductExcel(
         const rows: any[] = [row1Names, row2Paths, row3Ids];
         
         groupProducts.forEach(p => {
-            rows.push(buildRowV3(p, false, row3Ids, brandMap));
+            rows.push(buildRowV3(p, false, row3Ids, brandMap, specMap));
             if (p.variants && p.variants.length > 0) {
                 p.variants.forEach((v: any) => {
-                    rows.push(buildRowV3(v, true, row3Ids, brandMap, p));
+                    rows.push(buildRowV3(v, true, row3Ids, brandMap, specMap, p));
                 });
             }
         });
@@ -198,13 +203,15 @@ export function generateProductExcel(
 /**
  * 構建單一資料列 V3
  */
-function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap: Record<string, string>, parent?: any) {
+function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap: Record<string, string>, specMap: Map<string, CategorySpec>, parent?: any) {
     const row: any[] = [];
     
     const baseValues: Record<string, any> = {
         is_variant: isVariant ? '變體' : '主商品',
-        sku: item.sku || '',
-        name: item.name || '',
+        sku: isVariant ? (parent?.sku || '') : (item.sku || ''),
+        name: isVariant ? (parent?.name || '') : (item.name || ''),
+        variant_sku: isVariant ? (item.sku || '') : '',
+        variant_name: isVariant ? (item.name || '') : '',
         description: item.description || parent?.description || '',
         brand: (item.brand_id || parent?.brand_id) ? (brandMap[item.brand_id || parent?.brand_id] || '') : '',
         model: item.model || parent?.model || '',
@@ -213,18 +220,31 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
         retail_price: item.retail_price || item.base_retail_price || 0,
         status: item.status || 'active',
         barcode: item.barcode || '',
+        option_1: item.option_1 || '',
+        option_2: item.option_2 || '',
+        option_3: item.option_3 || '',
     };
 
-    const rawModels = item.device_models || [];
+    const rawModels = item.device_models || item.variant_model_links || [];
+    const rawGroups = item.device_model_groups || item.variant_model_group_links || [];
     let modelsStr = '';
-    if (typeof rawModels === 'string') {
-        modelsStr = rawModels;
-    } else if (Array.isArray(rawModels)) {
-        modelsStr = rawModels.map((m: any) => {
-            if (typeof m === 'string') return m;
-            return m.name || m.device_models?.name || '';
-        }).filter(Boolean).join(',');
+    
+    const modelParts: string[] = [];
+    if (Array.isArray(rawModels)) {
+        rawModels.forEach((m: any) => {
+            // 處理主商品層級 (device_models) 或 變體層級 (variant_model_links)
+            const name = typeof m === 'string' ? m : (m.name || m.device_models?.name);
+            if (name) modelParts.push(`model:${name}`);
+        });
     }
+    if (Array.isArray(rawGroups)) {
+        rawGroups.forEach((g: any) => {
+            // 處理主商品層級 (device_model_groups) 或 變體層級 (variant_model_group_links)
+            const name = typeof g === 'string' ? g : (g.name || g.device_model_groups?.name);
+            if (name) modelParts.push(`group:${name}`);
+        });
+    }
+    modelsStr = modelParts.join(', ');
     baseValues.device_models = modelsStr;
 
     const settings = item.table_settings || [];
@@ -235,6 +255,7 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
         } else {
             // key 格式為 parentId:specId
             const [parentId, specId] = key.split(':');
+            const spec = specMap.get(specId); // 獲取規格定義
             let val = undefined;
             
             if (Array.isArray(settings)) {
@@ -251,7 +272,8 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
                 val = settings[specId];
             }
             
-            row.push(formatSpecValue(val) || '');
+            // 傳入 spec 定義，確保 Table 等複雜類型能正確格式化
+            row.push(formatSpecValue(val, spec, specMap) || '');
         }
     });
 

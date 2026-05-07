@@ -148,19 +148,28 @@ export function useProductImport(onSuccess: () => void) {
 
     const normalizeBarcode = (value: any): string => {
         if (!value) return '';
-        if (typeof value === 'number') return value.toLocaleString('fullwide', { useGrouping: false });
-        const str = String(value);
+        let str = '';
+        if (typeof value === 'number') {
+            str = value.toLocaleString('fullwide', { useGrouping: false });
+        } else {
+            str = String(value).trim();
+        }
+        
+        // 移除 Excel 可能添加的字首單引號
+        if (str.startsWith("'")) {
+            str = str.substring(1);
+        }
+
         if (/e\+/i.test(str)) return Number(str).toLocaleString('fullwide', { useGrouping: false });
-        return str.trim();
+        return str;
     };
 
     const validateRow = (row: Omit<ImportRow, 'errors' | 'isValid' | 'is_variant'>): { errors: string[]; is_variant: boolean } => {
         const errors: string[] = [];
         if (!row.product_sku) errors.push('產品 SKU 為必填');
         if (!row.product_name) errors.push('產品名稱為必填');
-        const isVariantVal = (row as any).is_variant_raw;
-        const is_variant = isVariantVal
-            ? (isVariantVal === '是' || isVariantVal === 'true' || isVariantVal === '1' || isVariantVal === 'TRUE')
+        const is_variant = typeof (row as any).is_variant === 'boolean' 
+            ? (row as any).is_variant 
             : !!(row.variant_sku || row.variant_name);
 
         if (is_variant) {
@@ -246,21 +255,21 @@ export function useProductImport(onSuccess: () => void) {
                         model: String(row.model || '').trim(),
                         series: String(row.series || '').trim(),
                         description: String(row.description || '').trim(),
-                        category: String(row._categoryName || row.category || '').trim(),
+                        category: String(row.category || row._categoryName || '').trim(),
                         base_wholesale_price: parseFloat(row.wholesale_price || row.base_wholesale_price) || 0,
                         base_retail_price: parseFloat(row.retail_price || row.base_retail_price) || 0,
                         product_status: parseStatus(row.status || row.product_status),
-                        variant_sku: String(row.variant_sku || (row.is_variant ? row.sku : '') || '').trim(),
-                        variant_name: String(row.variant_name || (row.is_variant ? row.name : '') || '').trim(),
-                        option_1: String(row.option_1 || '').trim(),
-                        option_2: String(row.option_2 || '').trim(),
-                        option_3: String(row.option_3 || '').trim(),
+                        variant_sku: String(row['變體 SKU'] || row.variant_sku || (row.is_variant ? row.sku : '') || '').trim(),
+                        variant_name: String(row['變體名稱'] || row.variant_name || (row.is_variant ? row.name : '') || '').trim(),
+                        option_1: String(row['規格 1'] || row.option_1 || '').trim(),
+                        option_2: String(row['規格 2'] || row.option_2 || '').trim(),
+                        option_3: String(row['顏色 (規格 3)'] || row.option_3 || '').trim(),
                         variant_wholesale_price: parseFloat(row.variant_wholesale_price || row.wholesale_price) || undefined,
                         variant_retail_price: parseFloat(row.variant_retail_price || row.retail_price) || undefined,
                         variant_status: parseStatus(row.variant_status || row.status),
                         barcode: normalizeBarcode(row.barcode),
-                        device_models: String(row.device_models || '').trim(),
-                        variant_device_models: String(row.variant_device_models || '').trim(),
+                        device_models: String(row['適用型號'] || row.device_models || '').trim(),
+                        variant_device_models: String(row['適用型號'] || row.variant_device_models || '').trim(),
                         is_variant: !!row.is_variant,
                         _specs: row._specs || {},
                         errors: [],
@@ -378,21 +387,62 @@ export function useProductImport(onSuccess: () => void) {
             validRows.forEach(row => { 
                 const existing = uniqueProductsMap.get(row.product_sku);
                 if (existing) {
-                    existing._specs = { ...(existing._specs || {}), ...(row._specs || {}) };
-                    Object.assign(existing, { ...row, _specs: existing._specs });
+                    // 智慧合併規格：僅在數值非空時覆蓋
+                    const incomingSpecs = row._specs || {};
+                    const currentSpecs = existing._specs || {};
+                    Object.entries(incomingSpecs).forEach(([key, val]) => {
+                        if (val !== undefined && val !== null && val !== '') {
+                            currentSpecs[key] = val;
+                        }
+                    });
+                    existing._specs = currentSpecs;
+                    
+                    // 合併分類 (用逗號分隔，並去重)
+                    if (row.category && existing.category !== row.category) {
+                        const allCats = new Set([
+                            ...existing.category.split(',').map(c => c.trim()),
+                            ...row.category.split(',').map(c => c.trim())
+                        ].filter(Boolean));
+                        row.category = Array.from(allCats).join(', ');
+                    }
+
+                    // 合併適用型號 (用逗號分隔，並去重)
+                    if (row.device_models && existing.device_models !== row.device_models) {
+                        const allModels = new Set([
+                            ...existing.device_models.split(',').map(m => m.trim()),
+                            ...row.device_models.split(',').map(m => m.trim())
+                        ].filter(Boolean));
+                        row.device_models = Array.from(allModels).join(', ');
+                    }
+
+                    // 修正：確保變體狀態不會被覆蓋，只要有一列是變體，整個產品就是變體
+                    const is_variant = existing.is_variant || row.is_variant;
+                    Object.assign(existing, { ...row, _specs: existing._specs, is_variant });
                 } else {
                     uniqueProductsMap.set(row.product_sku, row);
                 }
             });
 
+            // 確保規格定義已載入
+            let currentSpecDefs = specDefs;
+            if (!currentSpecDefs || currentSpecDefs.length === 0) {
+                const { data: fetchedSpecs } = await (supabase.from('specification_definitions' as any) as any).select('*');
+                if (fetchedSpecs) currentSpecDefs = fetchedSpecs;
+            }
+
             // 建立規格字典供序列化使用
-            const specMap = new Map(specDefs.map(s => [s.id, {
-                id: s.id, name: s.name, type: s.type, options: s.options || [], defaultValue: s.default_value || ''
+            const specMap = new Map(currentSpecDefs.map(s => [s.id, {
+                id: s.id, 
+                name: s.name, 
+                type: s.type, 
+                options: s.options || [], 
+                defaultValue: s.default_value || '',
+                logic_config: s.logic_config
             } as any]));
 
             // [新增] 建立最新的父子關係地圖 (ChildID -> ParentID)
             const currentParentMap = new Map<string, string>();
-            specDefs.forEach(s => {
+            currentSpecDefs.forEach(s => {
                 const triggers = s.logic_config?.triggers || s.logicConfig?.triggers || [];
                 triggers.forEach((t: any) => {
                     const targets = t.targets || (t as any).target_ids?.map((tid: string) => ({ id: tid })) || [];
@@ -433,7 +483,7 @@ export function useProductImport(onSuccess: () => void) {
                     migratedPathMap.set(newKey, val);
                 });
                 
-                const serializedSettings = serializeSpecs(migratedPathMap, specMap);
+                const serializedSettings = serializeSpecs(Object.fromEntries(migratedPathMap), specMap);
 
                 return {
                     sku: row.product_sku,
@@ -457,10 +507,21 @@ export function useProductImport(onSuccess: () => void) {
             if (fetchError) throw fetchError;
             const productIdMap = new Map(products?.map(p => [p.sku, p.id]) || []);
 
-            const catLinks = Array.from(uniqueProductsMap.values()).map(row => {
-                let catId = row.category_id || categories.find(c => c.name === row.category)?.id;
-                return catId ? { product_id: productIdMap.get(row.product_sku), category_id: catId } : null;
-            }).filter(Boolean);
+            const catLinks: any[] = [];
+            Array.from(uniqueProductsMap.values()).forEach(row => {
+                const pId = productIdMap.get(row.product_sku);
+                if (!pId) return;
+
+                if (row.category) {
+                    const catNames = row.category.split(',').map(c => c.trim()).filter(Boolean);
+                    catNames.forEach(name => {
+                        const matchedCat = categories.find(c => c.name === name);
+                        if (matchedCat) {
+                            catLinks.push({ product_id: pId, category_id: matchedCat.id });
+                        }
+                    });
+                }
+            });
 
             if (catLinks.length > 0) {
                 const productIds = Array.from(productIdMap.values());
@@ -546,7 +607,22 @@ export function useProductImport(onSuccess: () => void) {
                 const sku = row.variant_sku!;
                 const existing = uniqueVariantsMap.get(sku);
                 if (existing) {
-                    existing._specs = { ...(existing._specs || {}), ...(row._specs || {}) };
+                    // 智慧合併規格：僅在數值非空時覆蓋
+                    const incomingSpecsV = row._specs || {};
+                    const currentSpecsV = existing._specs || {};
+                    Object.entries(incomingSpecsV).forEach(([key, val]) => {
+                        if (val !== undefined && val !== null && val !== '') {
+                            currentSpecsV[key] = val;
+                        }
+                    });
+                    existing._specs = currentSpecsV;
+                    
+                    // 智慧合併其他欄位 (避免空欄位覆蓋已有資料)
+                    const fieldsToMerge = ['barcode', 'option_1', 'option_2', 'option_3', 'variant_device_models'] as const;
+                    fieldsToMerge.forEach(f => {
+                        if (row[f] && !existing[f]) (existing as any)[f] = row[f];
+                    });
+
                     Object.assign(existing, { ...row, _specs: existing._specs });
                 } else {
                     uniqueVariantsMap.set(sku, row);
@@ -577,7 +653,7 @@ export function useProductImport(onSuccess: () => void) {
                     migratedPathMapV.set(`${currentParentId}:${specId}`, val);
                 });
 
-                const serializedSettingsV = serializeSpecs(migratedPathMapV, specMap);
+                const serializedSettingsV = serializeSpecs(Object.fromEntries(migratedPathMapV), specMap);
 
                 return {
                     product_id: productIdMap.get(row.product_sku) as any,
