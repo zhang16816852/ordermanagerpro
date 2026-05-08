@@ -5,11 +5,75 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, Pencil, Copy, Trash2, ChevronRight, ChevronDown, Layers } from 'lucide-react';
+import { MoreHorizontal, Pencil, Copy, Trash2, ChevronRight, ChevronDown, Layers, Database, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { calculatePriceRange } from '@/utils/priceUtils';
 import { Tables } from '@/integrations/supabase/types';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 
 type Product = Tables<'products'>;
+
+// 判斷規格資料格式 (用於管理員辨識)
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function getSpecFormatInfo(tableSettings: any, hasSyncedToNewTable?: boolean): {
+    label: string;
+    color: string;
+    icon: 'new' | 'legacy' | 'empty';
+    tip: string;
+} {
+    // 已同步至新表 product_spec_values
+    if (hasSyncedToNewTable) {
+        return { label: '新格式', color: 'text-emerald-600 bg-emerald-50 border-emerald-200', icon: 'new', tip: '規格已同步至新版關聯資料表' };
+    }
+    if (!tableSettings) {
+        return { label: '無規格', color: 'text-slate-400 bg-slate-50 border-slate-200', icon: 'empty', tip: '此產品/變體尚未設定規格' };
+    }
+    // 新版陣列格式 [{spec_id: UUID, ...}]
+    if (Array.isArray(tableSettings)) {
+        const hasUuidKeys = tableSettings.length > 0 && tableSettings.every(
+            (item: any) => item?.spec_id && UUID_REGEX.test(item.spec_id)
+        );
+        if (hasUuidKeys) {
+            return { label: '新格式', color: 'text-emerald-600 bg-emerald-50 border-emerald-200', icon: 'new', tip: '規格已使用新版陣列格式儲存' };
+        }
+        if (tableSettings.length === 0) {
+            return { label: '無規格', color: 'text-slate-400 bg-slate-50 border-slate-200', icon: 'empty', tip: '規格為空' };
+        }
+    }
+    // 舊版物件格式
+    if (typeof tableSettings === 'object' && !Array.isArray(tableSettings)) {
+        const keys = Object.keys(tableSettings).filter(k => k !== '_metadata');
+        if (keys.length === 0) {
+            return { label: '無規格', color: 'text-slate-400 bg-slate-50 border-slate-200', icon: 'empty', tip: '規格為空' };
+        }
+        const allUuid = keys.every(k => UUID_REGEX.test(k));
+        if (allUuid) {
+            return { label: '待遷移', color: 'text-amber-600 bg-amber-50 border-amber-200', icon: 'legacy', tip: '規格使用舊版物件格式但 Key 為 UUID，重新儲存即可自動升級' };
+        }
+        return { label: '舊格式', color: 'text-red-500 bg-red-50 border-red-200', icon: 'legacy', tip: '規格使用舊版非 UUID Key，需手動重新輸入並儲存' };
+    }
+    return { label: '未知', color: 'text-slate-400 bg-slate-50 border-slate-200', icon: 'empty', tip: '格式不明' };
+}
+
+function SpecFormatBadge({ tableSettings, hasSynced }: { tableSettings: any; hasSynced?: boolean }) {
+    const info = getSpecFormatInfo(tableSettings, hasSynced);
+    if (info.icon === 'empty') return null;
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1 h-4 rounded border cursor-help ${info.color}`}>
+                    {info.icon === 'new'
+                        ? <CheckCircle2 className="h-2.5 w-2.5" />
+                        : <AlertCircle className="h-2.5 w-2.5" />}
+                    {info.label}
+                </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs max-w-[200px]">
+                {info.tip}
+            </TooltipContent>
+        </Tooltip>
+    );
+}
 
 interface ProductRowItemProps {
     product: Product;
@@ -81,13 +145,19 @@ export function ProductRowItem({
                         )}
                     </TableCell>
                     <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                             {product.name}
                             {hasVariants && (
                                 <Badge variant="outline" className="ml-2 text-[10px] h-5">
                                     <Layers className="h-3 w-3 mr-1" />
                                     {variants.length} 變體
                                 </Badge>
+                            )}
+                            {/* 規格格式標記 (管理員用) */}
+                            {!hasVariants && (
+                                <TooltipProvider>
+                                    <SpecFormatBadge tableSettings={(product as any).table_settings} />
+                                </TooltipProvider>
                             )}
                         </div>
                     </TableCell>
@@ -180,7 +250,13 @@ export function ProductRowItem({
                                                 <TableRow key={v.id} className="hover:bg-background border-none">
                                                     <TableCell className="py-1 text-xs font-medium">{v.name}</TableCell>
                                                     <TableCell className="py-1 text-[10px] text-muted-foreground">
-                                                        <div>{[v.option_1, v.option_2, v.option_3].filter(Boolean).join(' / ')}</div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span>{[v.option_1, v.option_2, v.option_3].filter(Boolean).join(' / ')}</span>
+                                                            {/* 變體規格格式標記 */}
+                                                            <TooltipProvider>
+                                                                <SpecFormatBadge tableSettings={v.table_settings} />
+                                                            </TooltipProvider>
+                                                        </div>
                                                         {v.variant_model_links && v.variant_model_links.length > 0 && (
                                                             <div className="flex flex-wrap gap-1 mt-1">
                                                                 {v.variant_model_links.map((link: any) => (
