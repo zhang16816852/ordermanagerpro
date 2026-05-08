@@ -287,6 +287,10 @@ export function getVisibleSpecsTree(
  * v4.7 樹狀排序演算法 (DFS)
  * 根據層級關係重新排列 Key 的順序，確保父子連隨
  */
+/**
+ * v6 樹狀排序演算法 (森林 DFS)
+ * 根據層級關係重新排列 Key 的順序，支援多根節點情況
+ */
 export function getTreeSortedVisiblePaths(
     specFields: CategorySpec[],
     visibleInfo: Map<string, any>
@@ -294,45 +298,73 @@ export function getTreeSortedVisiblePaths(
     const sorted: { pathKey: string; level: number }[] = [];
     const visited = new Set<string>();
 
-    // 建立 父節點 -> 子路徑 的映射表，方便 DFS
-    const parentToChildren = new Map<string, string[]>();
+    // 1. 建立 父路徑節點 -> 子路徑 的映射表
+    // 這裡我們需要知道每個 pathKey 的「主體 ID」(specId) 是什麼，因為子項目的 parentId 會指向它
+    const specIdToPaths = new Map<string, string[]>();
     visibleInfo.forEach((_, pathKey) => {
-        const parts = pathKey.split(':');
-        const parentId = parts[0];
-        if (!parentToChildren.has(parentId)) parentToChildren.set(parentId, []);
-        parentToChildren.get(parentId)!.push(pathKey);
+        const specId = pathKey.split(':')[1];
+        if (!specIdToPaths.has(specId)) specIdToPaths.set(specId, []);
+        specIdToPaths.get(specId)!.push(pathKey);
     });
 
-    const traverse = (parentId: string, level: number) => {
-        const children = parentToChildren.get(parentId) || [];
+    const parentIdToChildren = new Map<string, string[]>();
+    visibleInfo.forEach((_, pathKey) => {
+        const parentId = pathKey.split(':')[0];
+        if (!parentIdToChildren.has(parentId)) parentIdToChildren.set(parentId, []);
+        parentIdToChildren.get(parentId)!.push(pathKey);
+    });
 
-        // 排序
+    // 2. 識別所有「頂層路徑」
+    // 頂層路徑定義：其 parentId 為 'root'，或者其 parentId 不在當前可見的 specId 列表中
+    const allVisibleSpecIds = new Set(Array.from(visibleInfo.keys()).map(k => k.split(':')[1]));
+    const topLevelPaths: string[] = [];
+    
+    visibleInfo.forEach((_, pathKey) => {
+        const parentId = pathKey.split(':')[0];
+        if (parentId === 'root' || !allVisibleSpecIds.has(parentId)) {
+            topLevelPaths.push(pathKey);
+        }
+    });
+
+    // 3. DFS 遍歷函數
+    const traverse = (pathKey: string, level: number) => {
+        if (visited.has(pathKey)) return;
+        visited.add(pathKey);
+
+        sorted.push({ pathKey, level });
+
+        const currentSpecId = pathKey.split(':')[1];
+        const children = parentIdToChildren.get(currentSpecId) || [];
+
+        // 排序：按定義的 sort_order
         children.sort((a, b) => {
-            const specIdA = a.split(':')[1];
-            const specIdB = b.split(':')[1];
-            const sortA = specFields.find(s => s.id === specIdA)?.sort_order || 0;
-            const sortB = specFields.find(s => s.id === specIdB)?.sort_order || 0;
+            const idA = a.split(':')[1];
+            const idB = b.split(':')[1];
+            const sortA = specFields.find(s => s.id === idA)?.sort_order || 0;
+            const sortB = specFields.find(s => s.id === idB)?.sort_order || 0;
             return sortA - sortB;
         });
 
-        children.forEach(pathKey => {
-            if (visited.has(pathKey)) return;
-            visited.add(pathKey);
-
-            sorted.push({ pathKey, level });
-
-            // 進入下一層
-            const currentSpecId = pathKey.split(':')[1];
-            traverse(currentSpecId, level + 1);
-        });
+        children.forEach(childKey => traverse(childKey, level + 1));
     };
 
-    traverse('root', 0);
+    // 4. 從所有頂層路徑開始執行 DFS
+    // 先按 sort_order 排序頂層路徑
+    topLevelPaths.sort((a, b) => {
+        const idA = a.split(':')[1];
+        const idB = b.split(':')[1];
+        const sortA = specFields.find(s => s.id === idA)?.sort_order || 0;
+        const sortB = specFields.find(s => s.id === idB)?.sort_order || 0;
+        return sortA - sortB;
+    });
 
-    // 補齊
+    topLevelPaths.forEach(path => traverse(path, 0));
+
+    // 5. 保底補齊（理論上不應該執行到這，除非有循環引用）
     visibleInfo.forEach((_, pathKey) => {
         if (!visited.has(pathKey)) {
             sorted.push({ pathKey, level: 0 });
+            visited.add(pathKey);
         }
     });
 

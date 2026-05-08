@@ -42,62 +42,69 @@ function setLocalCache(products: ProductWithCategories[], version: number) {
 }
 
 function normalizeProduct(p: any, categoryMap?: Map<string, string>, groupItemsMap?: Map<string, string[]>, modelIdToName?: Map<string, string>): ProductWithCategories {
-  // --- 1. 預處理所有規格 (v6) ---
-  const allSpecRows = p.product_spec_values || [];
-  
-  // 分離產品規格與變體規格
-  const productSpecs = allSpecRows.filter((r: any) => r.entity_type === 'product');
-  const variantSpecsMap = new Map<string, any[]>();
-  
-  allSpecRows.filter((r: any) => r.entity_type === 'variant').forEach((r: any) => {
-    const list = variantSpecsMap.get(r.entity_id) || [];
-    variantSpecsMap.set(r.entity_id, [...list, r]);
-  });
-
+  // --- 1. 規格轉換工具 (v6: 三段式 PathKey) ---
   const transformToDict = (rows: any[]) => {
-    return (rows || []).reduce((acc: any, cur: any) => {
-      // 統一使用三段式 Key: ParentID:SpecID:InstanceID
+    const dict: Record<string, any> = {};
+    (rows || []).forEach((cur: any) => {
       const parentId = cur.parent_id || 'root';
       const specId = cur.spec_id;
       const instanceId = cur.instance_uuid || specId;
       const pathKey = `${parentId}:${specId}:${instanceId}`;
-      acc[pathKey] = cur.value;
-      return acc;
-    }, {});
+      dict[pathKey] = cur.value;
+    });
+    return dict;
   };
 
-  const spec_values = transformToDict(productSpecs);
+  // --- 2. 處理主產品規格 ---
+  const spec_values = transformToDict(p.product_spec_values);
 
-  // --- 2. 處理變體並注入對應規格 ---
-  const variants = (p.product_variants || []).map((v: any) => ({
-    ...v,
-    spec_values: transformToDict(variantSpecsMap.get(v.id) || [])
-  }));
+  // --- 3. 處理變體規格與型號連動 ---
+  const variants = (p.product_variants || []).map((v: any) => {
+    const v_spec_values = transformToDict(v.product_spec_values || []);
+    
+    // 變體型號連動邏輯
+    const vModelLinks = v.variant_model_links || [];
+    const vGroupLinks = v.variant_model_group_links || [];
+    const vExclusions = v.variant_model_exclusions || [];
+    
+    const vExclusionNames = new Set(vExclusions.map((l: any) => l.device_models?.name?.toLowerCase()).filter(Boolean));
+    const vResolvedNames = new Set<string>(vModelLinks.map((l: any) => l.device_models?.name).filter(Boolean));
+    
+    if (groupItemsMap && modelIdToName) {
+      vGroupLinks.forEach((gl: any) => {
+        const itemIds = groupItemsMap.get(gl.group_id) || [];
+        itemIds.forEach(mid => {
+          const name = modelIdToName.get(mid);
+          if (name) vResolvedNames.add(name);
+        });
+      });
+    }
+    
+    const vFinalModels = Array.from(vResolvedNames).filter(name => !vExclusionNames.has(name.toLowerCase()));
 
-  // --- 3. 分類資訊扁平化 ---
-  const hasLinksProperty = Object.prototype.hasOwnProperty.call(p, 'product_category_links');
+    return {
+      ...v,
+      spec_values: v_spec_values,
+      effective_model_names: vFinalModels.length > 0 ? vFinalModels : [],
+      product_spec_values: undefined,
+      variant_model_links: undefined,
+      variant_model_group_links: undefined,
+      variant_model_exclusions: undefined
+    };
+  });
+
+  // --- 4. 分類資訊扁平化 ---
   const links = p.product_category_links || [];
-  let category_ids: string[] = [];
-
-  if (hasLinksProperty) {
-    category_ids = links.map((l: any) => l.category_id);
-  } else if (Array.isArray(p.category_ids) && p.category_ids.length > 0) {
-    category_ids = p.category_ids;
-  } else if (p.category_id) {
-    category_ids = [p.category_id];
-  }
-
+  const category_ids = links.map((l: any) => l.category_id);
+  
   let category_names: string[] = [];
   if (categoryMap && category_ids.length > 0) {
     category_names = category_ids.map(id => categoryMap.get(id)).filter(Boolean) as string[];
-  } else if (links.length > 0) {
-    category_names = links.map((l: any) => {
-      const cat = l.categories || l.category;
-      return Array.isArray(cat) ? cat[0]?.name : cat?.name;
-    }).filter(Boolean);
+  } else {
+    category_names = links.map((l: any) => (l.categories || l.category)?.name).filter(Boolean);
   }
 
-  // --- 4. 型號與連動邏輯 ---
+  // --- 5. 主產品型號與連動邏輯 ---
   const modelLinks = p.product_model_links || [];
   const device_models = modelLinks.map((l: any) => ({
     name: l.device_models?.name,
@@ -110,8 +117,8 @@ function normalizeProduct(p: any, categoryMap?: Map<string, string>, groupItemsM
     name: l.device_model_groups?.name
   })).filter((g: any) => g.name);
 
-  const exclusions = p.product_model_exclusions || [];
-  const exclusionNames = new Set(exclusions.map((l: any) => l.device_models?.name?.toLowerCase()).filter(Boolean));
+  const exclusionLinks = p.product_model_exclusions || [];
+  const exclusionNames = new Set(exclusionLinks.map((l: any) => l.device_models?.name?.toLowerCase()).filter(Boolean));
 
   const effectiveModelNames = new Set<string>();
   device_models.forEach(m => effectiveModelNames.add(m.name));
@@ -126,68 +133,48 @@ function normalizeProduct(p: any, categoryMap?: Map<string, string>, groupItemsM
   }
   const finalModelNames = Array.from(effectiveModelNames).filter(name => !exclusionNames.has(name.toLowerCase()));
 
-  return {
+  // --- 6. 組裝最終物件並移除原始屬性 ---
+  const cleanProduct = {
     ...p,
-    variants,           // 注入變體
-    spec_values,        // 注入規格字典
+    variants,           
+    spec_values,        
     category_ids,
     category_names,
     device_models,
     device_model_groups,
-    device_model_exclusions: exclusions.map((l: any) => ({ name: l.device_models?.name })),
+    device_model_exclusions: exclusionLinks.map((l: any) => ({ name: l.device_models?.name })),
     effective_model_names: finalModelNames
   };
+
+  delete (cleanProduct as any).product_variants;
+  delete (cleanProduct as any).product_spec_values;
+  delete (cleanProduct as any).product_category_links;
+  delete (cleanProduct as any).product_model_links;
+  delete (cleanProduct as any).product_model_group_links;
+  delete (cleanProduct as any).product_model_exclusions;
+
+  return cleanProduct;
 }
 
 async function checkVersionAndFetch(): Promise<{ products: ProductWithCategories[]; version: number }> {
   const cache = getLocalCache();
   const clientVersion = cache?.version ?? null;
-
-  console.log('[ProductCache] 透過 Edge Function 校驗版本...');
-
-  // 1. 呼叫 Edge Function 校驗版本（僅傳版本號，版本一致時不傳資料）
   const { data, error } = await supabase.functions.invoke('check-data-version', {
     body: { tableName: 'products', clientVersion },
   });
-
-  /*if (error) {
-    // Edge Function 失敗時直接查詢資料庫作為備援
-    console.warn('[ProductCache] Edge Function 失敗，改用直接查詢');
-    return await fetchProductsDirectly(clientVersion || 0);
-  }*/
-
   const { needsUpdate, version, updatedAt, lastTriggeredBy } = data;
-
-  // 2. 版本一致，使用本地快取
   if (!needsUpdate && cache) {
-    console.log(
-      `%c[ProductCache] ✅ 版本一致 (v${version})`,
-      'color: #3498db; font-weight: bold',
-      `更新於: ${updatedAt}`
-    );
-
-    // 若快取中分類名稱遺失，補抓
     const needsNameRefresh = cache.products.some(p => p.category_ids.length > 0 && p.category_names.length === 0);
     if (needsNameRefresh) {
       const { data: cats } = await supabase.from('categories').select('id, name');
       const catMap = new Map(cats?.map(c => [c.id, c.name]) || []);
       return { products: cache.products.map(p => normalizeProduct(p, catMap)), version };
     }
-
     return { products: cache.products, version };
   }
-
-  // 3. 版本不同
-  console.log(
-    `%c[ProductCache] 🔄 版本不符 (v${version})`,
-    'color: #9b59b6; font-weight: bold',
-    `觸發來源: ${lastTriggeredBy}, 更新時間: ${updatedAt}`
-  );
-  console.log('[ProductCache] 重新抓取完整資料...');
   return await fetchProductsDirectly(version);
 }
 
-// 完整抓取產品資料（含所有關聯）並更新快取
 async function fetchProductsDirectly(version: number): Promise<{ products: ProductWithCategories[]; version: number }> {
   const [
     { data: products, error: fetchError },
@@ -202,7 +189,12 @@ async function fetchProductsDirectly(version: number): Promise<{ products: Produ
       product_model_links(device_models(name, aliases)),
       product_model_group_links(group_id, device_model_groups(name)),
       product_model_exclusions(device_models(name)),
-      product_variants(*)
+      product_variants(
+        *,
+        variant_model_links(device_models(name, aliases)),
+        variant_model_group_links(group_id, device_model_groups(name)),
+        variant_model_exclusions(device_models(name))
+      )
     `).order('name'),
     supabase.from('product_spec_values').select('*').is('deleted_at', null),
     supabase.from('categories').select('id, name'),
@@ -212,7 +204,6 @@ async function fetchProductsDirectly(version: number): Promise<{ products: Produ
 
   if (fetchError) throw fetchError;
 
-  // 將所有規格按 entity_id 分類
   const specMapByEntity = new Map<string, any[]>();
   allSpecValues?.forEach(row => {
     const list = specMapByEntity.get(row.entity_id) || [];
@@ -228,7 +219,6 @@ async function fetchProductsDirectly(version: number): Promise<{ products: Produ
   const modelIdToName = new Map(allModels?.map(m => [m.id, m.name]) || []);
 
   const mappedProducts = (products || []).map(p => {
-    // 為產品和它的變體注入對應的規格行，供 normalizeProduct 使用
     const productWithInjectedSpecs = {
       ...p,
       product_spec_values: specMapByEntity.get(p.id) || [],
@@ -240,8 +230,6 @@ async function fetchProductsDirectly(version: number): Promise<{ products: Produ
     return normalizeProduct(productWithInjectedSpecs, catMap, groupItemsMap, modelIdToName);
   });
   setLocalCache(mappedProducts, version);
-  console.log(`[ProductCache] 快取已更新 (v${version})，共 ${mappedProducts.length} 筆`);
-
   return { products: mappedProducts, version };
 }
 
@@ -301,7 +289,6 @@ export function useProductCache() {
 export function useStoreProductCache(storeId: string | null) {
   const { products: allProducts, activeProducts: globalActiveProducts, isLoading: productsLoading } = useProductCache();
 
-  // 先取得店鋪的品牌資訊
   const { data: storeInfo } = useQuery({
     queryKey: ['store-brand', storeId],
     queryFn: async () => {
@@ -315,97 +302,41 @@ export function useStoreProductCache(storeId: string | null) {
       return data;
     },
     enabled: !!storeId,
-    staleTime: 1000 * 60 * 10, // 10 分鐘
+    staleTime: 1000 * 60 * 10,
   });
 
   const brand = storeInfo?.brand;
 
-  // 使用品牌來取得價格（包括變體價格）
   const { data: brandPrices = [], isLoading: brandPricesLoading } = useQuery({
     queryKey: ['brand-products-prices', brand],
     queryFn: async () => {
       if (!brand) return [];
-
       const { data, error } = await supabase
         .from('store_products')
         .select('product_id, variant_id, wholesale_price, retail_price')
         .eq('brand', brand);
-
       if (error) throw error;
       return data || [];
     },
     enabled: !!brand,
-    staleTime: 1000 * 60 * 5, // 5 分鐘
-  });
-
-  const { models: storeModels, groups: storeGroups, groupItems: storeGroupItems } = useDeviceModelStore();
-
-  // Helper to resolve effective models from links locally
-  const resolveEffectiveModels = (target: any, isVariant = false) => {
-    const directLinksKey = isVariant ? 'variant_model_links' : 'product_model_links';
-    const groupLinksKey = isVariant ? 'variant_model_group_links' : 'product_model_group_links';
-    const exclusionsKey = isVariant ? 'variant_model_exclusions' : 'product_model_exclusions';
-
-    const directModels = (target[directLinksKey] || []).map((l: any) => l.device_models?.name).filter(Boolean);
-    const groupLinks = target[groupLinksKey] || [];
-    const exclusions = new Set((target[exclusionsKey] || []).map((l: any) => l.device_models?.name?.toLowerCase()).filter(Boolean));
-
-    const resolvedNames = new Set<string>(directModels);
-
-    groupLinks.forEach((gl: any) => {
-      const itemIds = storeGroupItems.filter(i => i.group_id === gl.group_id).map(i => i.model_id);
-      itemIds.forEach(mid => {
-        const m = storeModels.find(sm => sm.id === mid);
-        if (m) resolvedNames.add(m.name);
-      });
-    });
-
-    return Array.from(resolvedNames).filter(name => !exclusions.has(name.toLowerCase()));
-  };
-
-  const { data: allVariants = [], isLoading: variantsLoading } = useQuery({
-    queryKey: ['all-product-variants-for-store'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('product_variants')
-        .select(`
-          *,
-          variant_model_links(device_models(name, aliases)),
-          variant_model_group_links(group_id, device_model_groups(name)),
-          variant_model_exclusions(device_models(name))
-        `)
-        .order('sku');
-      if (error) throw error;
-      return data || [];
-    },
     staleTime: 1000 * 60 * 5,
   });
 
-  // 合併產品與品牌價格
   const mergedProducts: ProductWithPricing[] = (storeId ? allProducts : globalActiveProducts).map(product => {
     const brandPrice = brandPrices.find(bp => bp.product_id === product.id && !bp.variant_id);
 
-    // 取得此產品的變體並套用品牌價格
-    const productVariants: VariantWithPricing[] = allVariants
-      .filter(v => v.product_id === product.id)
+    const productVariants: VariantWithPricing[] = (product.variants || [])
       .filter(v => v.status !== 'discontinued')
       .map(variant => {
         const variantBrandPrice = brandPrices.find(
           bp => bp.product_id === product.id && bp.variant_id === variant.id
         );
 
-        // Resolve variant-specific effective models
-        const variantModels = resolveEffectiveModels(variant, true);
-        // If variant has no specific models, it inherits from product
-        const effective_model_names = variantModels.length > 0 ? variantModels : product.effective_model_names;
-
         return {
           ...variant,
           effective_wholesale_price: variantBrandPrice?.wholesale_price ?? variant.wholesale_price,
           effective_retail_price: variantBrandPrice?.retail_price ?? variant.retail_price,
           has_brand_price: !!variantBrandPrice,
-          status: variant.status,
-          effective_model_names
         };
       });
 
@@ -417,15 +348,13 @@ export function useStoreProductCache(storeId: string | null) {
       variants: productVariants.length > 0 ? productVariants : undefined,
     };
   });
-  // 如果沒有指定 storeId，我們不顯示已停售的產品
+
   const finalProducts = mergedProducts.filter(p => p.status !== 'discontinued');
   return {
     products: finalProducts,
-    isLoading: productsLoading || (storeId ? brandPricesLoading || variantsLoading : false),
+    isLoading: productsLoading || (storeId ? brandPricesLoading : false),
     brand,
   };
-
-
 }
 
 // Hook for getting variants with brand pricing for a specific product
@@ -463,11 +392,27 @@ export function useProductVariants(productId: string | null, brand: string | nul
 
   const variantsWithPricing: VariantWithPricing[] = variants.map(variant => {
     const brandPrice = brandPrices.find(bp => bp.variant_id === variant.id);
+    
+    // 補回 transformToDict 邏輯
+    const transformToDict = (rows: any[]) => {
+      const dict: Record<string, any> = {};
+      (rows || []).forEach((cur: any) => {
+        const parentId = cur.parent_id || 'root';
+        const specId = cur.spec_id;
+        const instanceId = cur.instance_uuid || specId;
+        const pathKey = `${parentId}:${specId}:${instanceId}`;
+        dict[pathKey] = cur.value;
+      });
+      return dict;
+    };
+
     return {
       ...variant,
       effective_wholesale_price: brandPrice?.wholesale_price ?? variant.wholesale_price,
       effective_retail_price: brandPrice?.retail_price ?? variant.retail_price,
       has_brand_price: !!brandPrice,
+      spec_values: transformToDict((variant as any).product_spec_values || []),
+      product_spec_values: undefined
     };
   });
 
