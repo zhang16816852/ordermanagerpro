@@ -8,6 +8,7 @@ export interface CategorySpec {
     type: 'heading' | 'text' | 'select' | 'boolean' | 'multiselect' | 'number_with_unit' | 'table';
     options: string[];
     defaultValue: string;
+    expectedType?: 'string' | 'number' | 'boolean' | 'array' | 'object';
     configuration?: {
         columns: {
             id: string;

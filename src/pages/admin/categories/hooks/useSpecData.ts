@@ -28,6 +28,8 @@ export function useSpecData() {
     const specMutation = useMutation({
         mutationFn: async (data: { spec: Partial<SpecDefinition>; editingSpecId?: string }) => {
             const { spec, editingSpecId } = data;
+            let targetId = editingSpecId;
+
             if (editingSpecId) {
                 const { error } = await supabase.from('specification_definitions')
                     .update(spec as any)
@@ -42,8 +44,37 @@ export function useSpecData() {
                     options: spec.options ?? [],
                     sort_order: spec.sort_order ?? 0
                 };
-                const { error } = await supabase.from('specification_definitions').insert([finalSpec as any]);
+                const { data: newSpec, error } = await supabase.from('specification_definitions')
+                    .insert([finalSpec as any])
+                    .select('id')
+                    .single();
                 if (error) throw error;
+                targetId = newSpec.id;
+            }
+
+            // v6 同步規格連動規則 (Triggers)
+            if (targetId && spec.logic_config?.triggers) {
+                // 先刪除舊規則
+                await supabase.from('specification_triggers').delete().eq('source_spec_id', targetId);
+
+                // 插入新規則
+                const triggers = spec.logic_config.triggers.flatMap((t: any) => {
+                    const operator = t.operator || 'eq';
+                    const onValue = t.on_value;
+                    
+                    return (t.targets || []).map((tar: any) => ({
+                        source_spec_id: targetId,
+                        target_spec_id: tar.id,
+                        condition_operator: operator,
+                        condition_value: onValue,
+                        is_quantity_detail: !!tar.is_quantity_detail
+                    }));
+                });
+
+                if (triggers.length > 0) {
+                    const { error: triggerError } = await supabase.from('specification_triggers').insert(triggers);
+                    if (triggerError) console.error('觸發規則同步失敗:', triggerError);
+                }
             }
         },
         onSuccess: () => {

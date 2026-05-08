@@ -10,9 +10,8 @@ import { useCategoryData } from '../hooks/useCategoryData';
 import { useSpecData } from '../hooks/useSpecData';
 import { useSpecEngine } from '../hooks/useSpecEngine';
 import { Category, CategoryHierarchy } from '../types';
-
 // 工具：將平坦分類清單建構成樹狀結構
-function buildTree(cats: Category[], h: CategoryHierarchy[]): any[] {
+function buildTree(cats: Category[], h: CategoryHierarchy[], links: any[]): any[] {
     const seen = new Set<string>();
     const uniqueH = h.filter(link => {
         const key = `${link.parent_id}-${link.child_id}`;
@@ -30,12 +29,25 @@ function buildTree(cats: Category[], h: CategoryHierarchy[]): any[] {
             .map(link => {
                 const child = cats.find(c => c.id === link.child_id);
                 if (!child) return null;
-                return { ...child, children: getChildren(child.id) };
+                // 找出該分類關聯的規格
+                const specs = links.filter(l => l.category_id === child.id);
+                return { 
+                    ...child, 
+                    spec_schema: specs,
+                    children: getChildren(child.id) 
+                };
             })
             .filter(Boolean);
     };
 
-    return roots.map(root => ({ ...root, children: getChildren(root.id) }));
+    return roots.map(root => {
+        const specs = links.filter(l => l.category_id === root.id);
+        return { 
+            ...root, 
+            spec_schema: specs,
+            children: getChildren(root.id) 
+        };
+    });
 }
 
 // 分類管理 Tab（樹狀列表 + 新增/匯出/匯入）
@@ -51,7 +63,6 @@ export function CategoryTab() {
     } = useCategoryData();
 
     const { specDefinitions } = useSpecData();
-    
     // 門面模式：一切規格邏輯交由此 Hook
     const { engine, activeConfiguration } = useSpecEngine(specDefinitions);
 
@@ -73,7 +84,7 @@ export function CategoryTab() {
                 .filter(h => h.child_id === cat.id)
                 .map(h => h.parent_id);
             setParentIds(currentParents);
-            
+
             // 原子化恢復狀態
             const snapshot: any = { selected: {} };
             categorySpecLinks
@@ -120,8 +131,10 @@ export function CategoryTab() {
         }
     };
 
-    const tree = buildTree(categories, categoryHierarchy);
-
+    const tree = buildTree(categories, categoryHierarchy, categorySpecLinks);
+    console.log(tree)
+    console.log('--- 所有分類與規格的連結原始資料 ---');
+    console.log(categorySpecLinks);
     return (
         <>
             {/* 工具列 */}

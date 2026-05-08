@@ -25,7 +25,8 @@ export function useProductColors() {
         .order('name', { ascending: true });
       
       if (error) throw error;
-      return data as ProductColor[];
+      // 透過 unknown 中間轉型，避免 Supabase 型別推斷衝突
+      return (data as unknown) as ProductColor[];
     },
   });
 

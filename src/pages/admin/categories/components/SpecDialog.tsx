@@ -437,15 +437,23 @@ export function SpecDialog({
                                     <div className="space-y-2">
                                         <div className="space-y-1">
                                             <div className="flex items-center justify-between">
-                                                <label className="text-[10px] text-muted-foreground uppercase font-bold">當值為...</label>
-                                                <Button 
-                                                    variant="ghost" 
-                                                    size="sm" 
-                                                    className={`h-5 px-1.5 text-[10px] font-bold ${trigger.operator === 'ne' ? 'text-orange-600 bg-orange-50' : 'text-primary'}`}
-                                                    onClick={() => updateTrigger(idx, 'operator', trigger.operator === 'ne' ? 'eq' : 'ne')}
+                                                <label className="text-[10px] text-muted-foreground uppercase font-bold">當值...</label>
+                                                <Select 
+                                                    value={trigger.operator || 'eq'} 
+                                                    onValueChange={(v) => updateTrigger(idx, 'operator', v)}
                                                 >
-                                                    {trigger.operator === 'ne' ? '不等於 (≠)' : '等於 (=)'}
-                                                </Button>
+                                                    <SelectTrigger className="h-5 w-fit border-none bg-primary/5 text-primary text-[10px] font-bold px-1.5">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="eq">等於 (=)</SelectItem>
+                                                        <SelectItem value="ne">不等於 (≠)</SelectItem>
+                                                        <SelectItem value="gt">大於 (&gt;)</SelectItem>
+                                                        <SelectItem value="lt">小於 (&lt;)</SelectItem>
+                                                        <SelectItem value="contains">包含 (Contains)</SelectItem>
+                                                        <SelectItem value="overlap">重疊 (Overlap)</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
                                             </div>
                                             {specForm.type === 'boolean' ? (
                                                 <Select value={trigger.on_value || ''} onValueChange={(v) => updateTrigger(idx, 'on_value', v)}>

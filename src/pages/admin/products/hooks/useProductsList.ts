@@ -291,6 +291,18 @@ export function useProductsList() {
             }
 
             if (promises.length > 0) await Promise.all(promises);
+
+            // v6 同步產品規格 (單一產品層級)
+            if (values.table_settings && !values.has_variants) {
+                const { error: specError } = await supabase.rpc('sync_product_specs_v6', {
+                    p_entity_id: product.id,
+                    p_entity_type: 'product',
+                    p_category_id: category_ids?.[0],
+                    p_new_data: values.table_settings
+                });
+                if (specError) console.error('產品規格同步失敗:', specError);
+            }
+
             return product;
         },
         onSuccess: (product) => {
@@ -348,6 +360,17 @@ export function useProductsList() {
 
             const { error: productError } = await supabase.from('products').update({ ...productData, updated_at: new Date().toISOString() }).eq('id', id);
             if (productError) throw productError;
+
+            // v6 同步產品規格 (單一產品層級)
+            if (values.table_settings && !values.has_variants) {
+                const { error: specError } = await supabase.rpc('sync_product_specs_v6', {
+                    p_entity_id: id,
+                    p_entity_type: 'product',
+                    p_category_id: category_ids?.[0],
+                    p_new_data: values.table_settings
+                });
+                if (specError) console.error('產品規格同步失敗:', specError);
+            }
         },
         onSuccess: () => {
             forceRefresh();

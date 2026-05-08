@@ -937,6 +937,81 @@ export type Database = {
           },
         ]
       }
+      product_spec_values: {
+        Row: {
+          category_id: string
+          created_at: string | null
+          deleted_at: string | null
+          display_order: number | null
+          entity_id: string
+          entity_type: Database["public"]["Enums"]["spec_entity_type"]
+          id: string
+          instance_uuid: string
+          is_inherited: boolean | null
+          lifecycle_state:
+            | Database["public"]["Enums"]["spec_instance_state"]
+            | null
+          origin_entity_id: string | null
+          parent_id: string | null
+          spec_id: string
+          updated_at: string | null
+          value: Json | null
+        }
+        Insert: {
+          category_id: string
+          created_at?: string | null
+          deleted_at?: string | null
+          display_order?: number | null
+          entity_id: string
+          entity_type: Database["public"]["Enums"]["spec_entity_type"]
+          id?: string
+          instance_uuid?: string
+          is_inherited?: boolean | null
+          lifecycle_state?:
+            | Database["public"]["Enums"]["spec_instance_state"]
+            | null
+          origin_entity_id?: string | null
+          parent_id?: string | null
+          spec_id: string
+          updated_at?: string | null
+          value?: Json | null
+        }
+        Update: {
+          category_id?: string
+          created_at?: string | null
+          deleted_at?: string | null
+          display_order?: number | null
+          entity_id?: string
+          entity_type?: Database["public"]["Enums"]["spec_entity_type"]
+          id?: string
+          instance_uuid?: string
+          is_inherited?: boolean | null
+          lifecycle_state?:
+            | Database["public"]["Enums"]["spec_instance_state"]
+            | null
+          origin_entity_id?: string | null
+          parent_id?: string | null
+          spec_id?: string
+          updated_at?: string | null
+          value?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_spec_values_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_spec_values_spec_id_fkey"
+            columns: ["spec_id"]
+            isOneToOne: false
+            referencedRelation: "specification_definitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_variants: {
         Row: {
           barcode: string | null
@@ -1330,11 +1405,37 @@ export type Database = {
           },
         ]
       }
+      spec_visibility_cache: {
+        Row: {
+          category_id: string
+          created_at: string | null
+          rule_version: number
+          values_hash: string
+          visible_spec_ids: Json
+        }
+        Insert: {
+          category_id: string
+          created_at?: string | null
+          rule_version: number
+          values_hash: string
+          visible_spec_ids: Json
+        }
+        Update: {
+          category_id?: string
+          created_at?: string | null
+          rule_version?: number
+          values_hash?: string
+          visible_spec_ids?: Json
+        }
+        Relationships: []
+      }
       specification_definitions: {
         Row: {
           configuration: Json | null
           created_at: string | null
           default_value: string | null
+          dsl_schema_json: Json | null
+          expected_type: Database["public"]["Enums"]["spec_value_type"]
           id: string
           logic_config: Json | null
           name: string
@@ -1347,6 +1448,8 @@ export type Database = {
           configuration?: Json | null
           created_at?: string | null
           default_value?: string | null
+          dsl_schema_json?: Json | null
+          expected_type?: Database["public"]["Enums"]["spec_value_type"]
           id?: string
           logic_config?: Json | null
           name: string
@@ -1359,6 +1462,8 @@ export type Database = {
           configuration?: Json | null
           created_at?: string | null
           default_value?: string | null
+          dsl_schema_json?: Json | null
+          expected_type?: Database["public"]["Enums"]["spec_value_type"]
           id?: string
           logic_config?: Json | null
           name?: string
@@ -1368,6 +1473,51 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      specification_triggers: {
+        Row: {
+          condition_dsl: Json
+          created_at: string | null
+          id: string
+          max_depth_limit: number | null
+          priority: number | null
+          source_spec_id: string
+          target_spec_id: string
+        }
+        Insert: {
+          condition_dsl?: Json
+          created_at?: string | null
+          id?: string
+          max_depth_limit?: number | null
+          priority?: number | null
+          source_spec_id: string
+          target_spec_id: string
+        }
+        Update: {
+          condition_dsl?: Json
+          created_at?: string | null
+          id?: string
+          max_depth_limit?: number | null
+          priority?: number | null
+          source_spec_id?: string
+          target_spec_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "specification_triggers_source_spec_id_fkey"
+            columns: ["source_spec_id"]
+            isOneToOne: false
+            referencedRelation: "specification_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "specification_triggers_target_spec_id_fkey"
+            columns: ["target_spec_id"]
+            isOneToOne: false
+            referencedRelation: "specification_definitions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       store_products: {
         Row: {
@@ -1807,6 +1957,14 @@ export type Database = {
           source: string
         }[]
       }
+      get_visible_specs_v6: {
+        Args: { p_category_id: string; p_current_values: Json }
+        Returns: {
+          level: number
+          parent_id: string
+          spec_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["system_role"]
@@ -1817,6 +1975,23 @@ export type Database = {
       is_store_member: {
         Args: { _store_id: string; _user_id: string }
         Returns: boolean
+      }
+      safe_eval_dsl: {
+        Args: {
+          p_condition: Json
+          p_type: Database["public"]["Enums"]["spec_value_type"]
+          p_val: Json
+        }
+        Returns: boolean
+      }
+      sync_product_specs_v6: {
+        Args: {
+          p_category_id: string
+          p_entity_id: string
+          p_entity_type: Database["public"]["Enums"]["spec_entity_type"]
+          p_new_data: Json
+        }
+        Returns: undefined
       }
       upsert_brand_product_prices: {
         Args: { p_brand: string; p_products: Json }
@@ -1847,6 +2022,9 @@ export type Database = {
         | "received"
         | "cancelled"
       sales_note_status: "draft" | "shipped" | "received"
+      spec_entity_type: "product" | "variant"
+      spec_instance_state: "active" | "orphaned" | "migrated"
+      spec_value_type: "string" | "number" | "boolean" | "array" | "object"
       store_role: "founder" | "manager" | "employee"
       system_role: "admin" | "customer"
     }
@@ -1997,6 +2175,9 @@ export const Constants = {
         "cancelled",
       ],
       sales_note_status: ["draft", "shipped", "received"],
+      spec_entity_type: ["product", "variant"],
+      spec_instance_state: ["active", "orphaned", "migrated"],
+      spec_value_type: ["string", "number", "boolean", "array", "object"],
       store_role: ["founder", "manager", "employee"],
       system_role: ["admin", "customer"],
     },

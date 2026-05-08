@@ -11,21 +11,28 @@ export interface SpecEntry {
 }
 
 /**
- * 將資料庫資料轉換為前端「路徑字典物件 (Plain Object)」
+ * 將資料庫資料轉換為前端「穩定路徑字典物件 (Plain Object)」
+ * Key 格式: parentId:specId:instanceUuid
  */
 export function deserializeSpecs(data: any): Record<string, any> {
     const obj: Record<string, any> = {};
     if (!data) return obj;
 
     if (Array.isArray(data)) {
-        data.forEach((entry: SpecEntry) => {
-            const key = `${entry.parentId}:${entry.id}`;
+        data.forEach((entry: any) => {
+            // 適配新舊格式
+            const specId = entry.spec_id || entry.id;
+            const parentId = entry.parent_id || entry.parentId || 'root';
+            const instanceUuid = entry.instance_uuid || entry.instanceUuid || specId; // 舊資料暫時用 specId 代替
+            
+            const key = `${parentId}:${specId}:${instanceUuid}`;
             obj[key] = entry.value;
         });
     } else if (typeof data === 'object') {
+        // 向後相容舊 JSONB 格式
         Object.entries(data).forEach(([id, val]) => {
             if (id === '_metadata') return;
-            obj[`root:${id}`] = val;
+            obj[`root:${id}:${id}`] = val;
         });
     }
     return obj;
@@ -44,56 +51,34 @@ export function getSpecValue(data: any, specId: string): any {
 }
 
 /**
- * 將前端路徑字典物件轉換為易讀陣列儲存
- * @param pathObj 目前表單中的值集
- * @param specMap 規格定義地圖 (用於還原稱)
- * @param originalEntries 原始資料庫記錄 (用於保留那些地圖中找不到的「幽靈規格」原始路徑)
+ * 將前端字典物件轉換為 product_spec_values 存儲格式
  */
 export function serializeSpecs(
     pathObj: Record<string, any>, 
-    specMap: Map<string, CategorySpec>,
-    originalEntries?: SpecEntry[]
-): SpecEntry[] {
-    const entries: SpecEntry[] = [];
+    specMap: Map<string, CategorySpec>
+): any[] {
+    const entries: any[] = [];
     if (!pathObj) return entries;
     
     Object.entries(pathObj).forEach(([pathKey, value]) => {
         if (value === undefined || value === null || value === '') return;
         
-        const [parentId, specId] = pathKey.split(':');
+        const parts = pathKey.split(':');
+        const parentId = parts[0];
+        const specId = parts[1];
+        const instanceUuid = parts[2] || specId;
+
         if (!specId) return;
 
-        // 核心改進：始終嘗試從 specMap (全域字典) 找回名字
         const spec = specMap.get(specId);
-        const parent = parentId === 'root' ? null : specMap.get(parentId);
-        
-        // 優先從 specMap 組合路徑 (自動刷新 UUID 為中文)
-        let pathName;
-        if (spec) {
-            pathName = parent 
-                ? `${parent.name} > ${spec.name}`
-                : spec.name;
-        } else {
-            // 如果地圖真的找不到 (代表規格定義已從資料庫徹底刪除)
-            const original = originalEntries?.find(e => e.id === specId);
-            
-            // 判斷是否為「無效幽靈」：字典找不到 且 原始數據的路徑也是 UUID 或 空白
-            const originalPathValid = original?.path && !original.path.match(/^[0-9a-f-]{36}$/i);
-            
-            if (!originalPathValid) {
-                // 這是無效幽靈規格，執行「洗掉」邏輯：直接跳過不存檔
-                return;
-            }
-            
-            // 如果雖然字典沒了，但原始數據有中文名字，則保留它 (保護歷史數據)
-            pathName = original.path;
-        }
+        if (!spec) return; // 沒定義的不存
 
         entries.push({
-            id: specId,
-            parentId: parentId as string,
-            path: pathName,
-            value: value
+            spec_id: specId,
+            parent_id: parentId === 'root' ? null : parentId,
+            instance_uuid: instanceUuid,
+            value: value,
+            display_order: 0
         });
     });
 
@@ -101,64 +86,144 @@ export function serializeSpecs(
 }
 
 /**
- * 核心：計算目前應該顯示哪些規格路徑
+ * DSL 條件評估器 (前端版本，需與後端 safe_eval_dsl 同步)
  */
-export function getVisibleSpecsTree(specFields: CategorySpec[], tableSettings: Record<string, any>) {
+export function evaluateDSL(value: any, specType: string, condition: any): boolean {
+    if (!condition || !condition.op) return false;
+    
+    const op = condition.op;
+    const target = condition.val;
+
+    // exists 運算子：只要有填值就觸發 (模擬原有的 '*')
+    if (op === 'exists') {
+        return value !== undefined && value !== null && value !== '' && value !== false && value !== 'false';
+    }
+
+    if (value === undefined || value === null) return false;
+
+    switch (specType) {
+        case 'number_with_unit':
+        case 'number': {
+            const numVal = Number(value);
+            const numTarget = Number(target);
+            if (isNaN(numVal) || isNaN(numTarget)) return false;
+            if (op === 'gt') return numVal > numTarget;
+            if (op === 'lt') return numVal < numTarget;
+            if (op === 'eq') return numVal === numTarget;
+            break;
+        }
+        case 'multiselect':
+        case 'array': {
+            if (!Array.isArray(value)) return false;
+            // contains: 包含特定值
+            if (op === 'contains') return value.includes(target);
+            // overlap: 兩個陣列有交集
+            if (op === 'overlap') {
+                const targetArr = Array.isArray(target) ? target : [target];
+                return value.some(v => targetArr.includes(v));
+            }
+            if (op === 'eq') return JSON.stringify(value) === JSON.stringify(target);
+            break;
+        }
+        case 'boolean': {
+            const boolVal = value === 'true' || value === true || value === 'on';
+            const boolTarget = target === 'true' || target === true || target === 'on';
+            return boolVal === boolTarget;
+        }
+        case 'select':
+        case 'string':
+        default: {
+            if (op === 'eq') return String(value) === String(target);
+            if (op === 'ne') return String(value) !== String(target);
+            if (op === 'in') {
+                const targetArr = Array.isArray(target) ? target : [target];
+                return targetArr.map(String).includes(String(value));
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * 核心：計算目前應該顯示哪些規格路徑
+ * v5.1 版：支援新舊連動規則混合
+ */
+export function getVisibleSpecsTree(
+    specFields: CategorySpec[], 
+    tableSettings: Record<string, any>,
+    specTriggers: any[] = [] // 傳入從 specification_triggers 表抓取的連動規則
+) {
     const visible = new Map<string, { 
         sourceValue?: any; 
         sourceName?: string;
-        triggerValue?: string;
-        operator?: string;
+        triggerInfo?: any;
     }>();
     if (!specFields || specFields.length === 0) return visible;
     
-    const allTargetIds = new Set<string>();
+    // 1. 初始化根節點
+    const targetSpecIdsInTriggers = new Set(specTriggers.map(t => t.target_spec_id));
+    
     specFields.forEach(f => {
-        const triggers = f.logicConfig?.triggers || f.logic_config?.triggers;
-        triggers?.forEach((t: any) => {
-            getMergedTriggerTargets(t).forEach((tar: any) => allTargetIds.add(tar.id));
-        });
-    });
-
-    specFields.forEach(f => {
-        if (!allTargetIds.has(f.id)) {
-            visible.set(`root:${f.id}`, {});
+        if (!targetSpecIdsInTriggers.has(f.id)) {
+            // 根規格的 instanceUuid 預設為 specId (除非資料中已有不同)
+            visible.set(`root:${f.id}:${f.id}`, {});
         }
     });
+
+    // 如果還是空，預設顯示所有沒有 parent 的規格
+    if (visible.size === 0) {
+        specFields.forEach(f => visible.set(`root:${f.id}:${f.id}`, {}));
+    }
 
     let changed = true;
     let iterations = 0;
     const settings = tableSettings || {};
 
-    while (changed && iterations < 8) {
+    while (changed && iterations < 10) {
         changed = false;
         iterations++;
         
         visible.forEach((info, pathKey) => {
-            const [_, specId] = pathKey.split(':');
+            const parts = pathKey.split(':');
+            const parentId = parts[0];
+            const specId = parts[1];
+            const instanceUuid = parts[2];
+            
             const spec = specFields.find(s => s.id === specId);
-            const val = settings[pathKey] !== undefined && settings[pathKey] !== ''
-                ? settings[pathKey]
-                : (settings[`root:${specId}`] || '');
+            if (!spec) return;
 
-            // 修正：如果是 heading，即使沒有值也要繼續處理觸發器
-            const isHeading = spec?.type === 'heading';
-            if (!spec || (!isHeading && (val === undefined || val === null || val === ''))) return;
+            const val = settings[pathKey] !== undefined ? settings[pathKey] : '';
+            const isHeading = spec.type === 'heading';
 
-            const triggers = spec.logicConfig?.triggers || spec.logic_config?.triggers;
-            triggers?.forEach((t: any) => {
-                // 修正：標題類型只要存在就視為匹配成功 (無視 on_value)
+            // 處理新版規格連動 (specification_triggers 表)
+            const activeTriggers = specTriggers.filter(t => t.source_spec_id === specId);
+            activeTriggers.forEach(t => {
+                const isMatch = isHeading ? true : evaluateDSL(val, spec.type, t.condition_dsl);
+                if (isMatch) {
+                    // 子規格繼承父規格的 instanceUuid (如果是 quantity detail)
+                    const childPathKey = `${specId}:${t.target_spec_id}:${instanceUuid}`;
+                    if (!visible.has(childPathKey)) {
+                        visible.set(childPathKey, {
+                            sourceName: spec.name,
+                            triggerInfo: t.condition_dsl
+                        });
+                        changed = true;
+                    }
+                }
+            });
+
+            // 處理舊版規格連動 (向後相容)
+            const oldTriggers = spec.logicConfig?.triggers || spec.logic_config?.triggers;
+            oldTriggers?.forEach((t: any) => {
                 const isMatch = isHeading ? true : checkSpecTriggerMatch(spec.type, val, t.on_value, t.operator);
                 if (isMatch) {
                     getMergedTriggerTargets(t).forEach((tar: any) => {
-                        const childPathKey = `${spec.id}:${tar.id}`;
+                        const childPathKey = `${specId}:${tar.id}:${instanceUuid}`;
                         if (!visible.has(childPathKey)) {
-                            const sourceValue = tar.is_quantity_detail ? val : (info.sourceValue || null);
                             visible.set(childPathKey, { 
-                                sourceValue,
+                                sourceValue: tar.is_quantity_detail ? val : null,
                                 sourceName: spec.name,
-                                triggerValue: t.on_value,
-                                operator: t.operator || 'eq'
+                                triggerInfo: { op: t.operator || 'eq', val: t.on_value }
                             });
                             changed = true;
                         }
@@ -167,6 +232,16 @@ export function getVisibleSpecsTree(specFields: CategorySpec[], tableSettings: R
             });
         });
     }
+
+    // 去重邏輯
+    const childSpecIds = new Set<string>();
+    visible.forEach((_, pathKey) => {
+        if (!pathKey.startsWith('root:')) {
+            const specId = pathKey.split(':')[1];
+            if (specId) childSpecIds.add(specId);
+        }
+    });
+    childSpecIds.forEach(specId => visible.delete(`root:${specId}:${specId}`));
 
     return visible;
 }

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 import { SpecValueEditor } from './SpecValueEditor';
 import { getVisibleSpecsTree, getTreeSortedVisiblePaths } from '@/utils/specLogic';
@@ -10,12 +11,17 @@ interface DynamicSpecsFieldsProps {
 
 export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
     const selectedCategoryIds = form.watch('category_ids') || [];
-    const { specMap } = useSpecStore();
+    const { specMap, specTriggers, fetchSpecs } = useSpecStore();
     const { data: specFields = [], isLoading: isLoadingSpecs } = useCategorySpecs(selectedCategoryIds);
     const tableSettings = form.watch('table_settings') || {};
 
-    // 使用中央計算器 (v4.3 支持純物件)
-    const visibleInfo = getVisibleSpecsTree(specFields, tableSettings);
+    // 確保規格定義已載入
+    useEffect(() => {
+        fetchSpecs();
+    }, []);
+
+    // 使用中央計算器 (v5.1 支持 DSL)
+    const visibleInfo = getVisibleSpecsTree(specFields, tableSettings, specTriggers);
 
     if (isLoadingSpecs) return <div className="py-4 text-center">正在載入規格...</div>;
     
@@ -27,12 +33,10 @@ export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
     if (!specFields || specFields.length === 0) return null;
 
     /**
-     * 遞迴渲染規格樹 (v4.5 以 visibleInfo 鍵值為準)
+     * 遞迴渲染規格樹 (v5.1 以 visibleInfo 鍵值為準)
      */
     const sortedVisible = getTreeSortedVisiblePaths(specFields, visibleInfo);
     
-    if (!specFields || specFields.length === 0) return null;
-
     return (
         <div className="space-y-4 p-4 border rounded-lg bg-muted/10">
             <h3 className="text-sm font-bold flex items-center gap-2">
@@ -41,15 +45,13 @@ export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
             
             <div className="space-y-4">
                 {sortedVisible.map(({ pathKey, level }) => {
-                    const [parentId, specId] = pathKey.split(':');
+                    const parts = pathKey.split(':');
+                    const specId = parts[1];
                     const spec = specFields.find(f => f.id === specId) || specMap.get(specId);
                     
                     if (!spec) return null;
 
-                    const value = tableSettings[pathKey] !== undefined && tableSettings[pathKey] !== ''
-                        ? tableSettings[pathKey] 
-                        : (tableSettings[`root:${specId}`] || '');
-
+                    const value = tableSettings[pathKey] || '';
                     const info = visibleInfo.get(pathKey);
 
                     return (
@@ -76,8 +78,8 @@ export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
                                                 {info?.sourceName && (
                                                     <span className="text-[10px] font-normal opacity-0 group-hover:opacity-60 transition-opacity">
                                                         依賴於: {info.sourceName} 
-                                                        {info.operator === 'ne' ? ' ≠ ' : ' = '} 
-                                                        {info.triggerValue}
+                                                        {info.triggerInfo?.op === 'ne' ? ' ≠ ' : ' = '} 
+                                                        {info.triggerInfo?.val}
                                                     </span>
                                                 )}
                                             </label>

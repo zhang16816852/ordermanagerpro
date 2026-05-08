@@ -406,18 +406,20 @@ export function useProductImport(onSuccess: () => void) {
                         row.category = Array.from(allCats).join(', ');
                     }
 
-                    // 合併適用型號 (用逗號分隔，並去重)
-                    if (row.device_models && existing.device_models !== row.device_models) {
-                        const allModels = new Set([
-                            ...existing.device_models.split(',').map(m => m.trim()),
-                            ...row.device_models.split(',').map(m => m.trim())
-                        ].filter(Boolean));
-                        row.device_models = Array.from(allModels).join(', ');
-                    }
+                    // 智慧合併基礎欄位 (非破壞性)
+                    const fieldsToMerge = [
+                        'product_name', 'description', 'brand', 'model', 'series', 
+                        'base_wholesale_price', 'base_retail_price', 'product_status', 'device_models'
+                    ] as const;
+                    fieldsToMerge.forEach(f => {
+                        const val = (row as any)[f];
+                        if (val !== undefined && val !== null && val !== '' && val !== 0) {
+                            (existing as any)[f] = val;
+                        }
+                    });
 
                     // 修正：確保變體狀態不會被覆蓋，只要有一列是變體，整個產品就是變體
-                    const is_variant = existing.is_variant || row.is_variant;
-                    Object.assign(existing, { ...row, _specs: existing._specs, is_variant });
+                    existing.is_variant = existing.is_variant || row.is_variant;
                 } else {
                     uniqueProductsMap.set(row.product_sku, row);
                 }
@@ -440,13 +442,59 @@ export function useProductImport(onSuccess: () => void) {
                 logic_config: s.logic_config
             } as any]));
 
-            // [新增] 建立最新的父子關係地圖 (ChildID -> ParentID)
-            const currentParentMap = new Map<string, string>();
+            // 確保規格連結已載入
+            const { data: specLinksData } = await supabase.from('category_spec_links').select('*');
+            const specLinks = (specLinksData as any[]) || [];
+
+            // 預先建立全局父子關係地圖 (基於 logic_config)
+            const childrenMap = new Map<string, string[]>();
+            currentSpecDefs.forEach(spec => {
+                const triggers = spec.logic_config?.triggers || spec.logicConfig?.triggers || [];
+                const targets = new Set<string>();
+                triggers.forEach((t: any) => {
+                    const tars = t.targets || (t as any).target_ids?.map((tid: string) => ({ id: tid })) || [];
+                    tars.forEach((tar: any) => targets.add(tar.id));
+                });
+                if (targets.size > 0) {
+                    childrenMap.set(spec.id, Array.from(targets));
+                }
+            });
+
+            // [核心修正] 建立「分類感知」的父子關係地圖
+            // 由於一個規格在不同分類可能有不同位置，我們需要建立一個 Map<CategoryId, Map<SpecId, ParentId>>
+            const categoryParentMaps = new Map<string, Map<string, string>>();
+            
+            categories.forEach(cat => {
+                const catMap = new Map<string, string>();
+                const catLinks = specLinks.filter(l => l.category_id === cat.id);
+                const linkedSpecIds = new Set(catLinks.map(l => l.spec_id));
+                
+                // 找出該分類下的所有父子關係 (僅限於該分類有連結的規格及其子規格)
+                const queue = Array.from(linkedSpecIds).map(id => ({ id, parentId: 'root' }));
+                const processed = new Set<string>();
+                
+                while (queue.length > 0) {
+                    const next = queue.shift();
+                    if (!next) continue;
+                    const { id, parentId } = next;
+                    if (processed.has(`${parentId}:${id}`)) continue;
+                    processed.add(`${parentId}:${id}`);
+                    
+                    catMap.set(id, parentId);
+                    
+                    const children = childrenMap.get(id) || [];
+                    children.forEach(cid => queue.push({ id: cid, parentId: id }));
+                }
+                categoryParentMaps.set(cat.id, catMap);
+            });
+
+            // 全域回退 Map (保留原本邏輯作為最後手段)
+            const globalParentMap = new Map<string, string>();
             currentSpecDefs.forEach(s => {
                 const triggers = s.logic_config?.triggers || s.logicConfig?.triggers || [];
                 triggers.forEach((t: any) => {
                     const targets = t.targets || (t as any).target_ids?.map((tid: string) => ({ id: tid })) || [];
-                    targets.forEach((tar: any) => currentParentMap.set(tar.id, s.id));
+                    targets.forEach((tar: any) => globalParentMap.set(tar.id, s.id));
                 });
             });
 
@@ -475,11 +523,16 @@ export function useProductImport(onSuccess: () => void) {
                     const [oldParentId, specId] = pathKey.split(':');
                     if (!specId) return;
 
-                    const currentParentId = currentParentMap.get(specId) || 'root';
+                    // [修正] 分類感知遷移邏輯
+                    // 1. 找出該列所屬的分類 ID (優先使用第一分類)
+                    const catName = row.category.split(',')[0].trim();
+                    const catId = categories.find(c => c.name === catName)?.id;
+                    const catParentMap = catId ? categoryParentMaps.get(catId) : null;
+                    
+                    // 2. 決定當前規格的正確父層
+                    const currentParentId = catParentMap?.get(specId) || globalParentMap.get(specId) || 'root';
                     const newKey = `${currentParentId}:${specId}`;
                     
-                    // 如果路徑發生變更 (例如被包進了另一個規格)，則進行遷移
-                    // 注意：如果有重複，則以較新的 (來自 Excel) 為準
                     migratedPathMap.set(newKey, val);
                 });
                 
@@ -617,13 +670,18 @@ export function useProductImport(onSuccess: () => void) {
                     });
                     existing._specs = currentSpecsV;
                     
-                    // 智慧合併其他欄位 (避免空欄位覆蓋已有資料)
-                    const fieldsToMerge = ['barcode', 'option_1', 'option_2', 'option_3', 'variant_device_models'] as const;
-                    fieldsToMerge.forEach(f => {
-                        if (row[f] && !existing[f]) (existing as any)[f] = row[f];
+                    // 智慧合併變體欄位 (非破壞性)
+                    const fieldsToMergeV = [
+                        'variant_name', 'barcode', 'option_1', 'option_2', 'option_3', 
+                        'variant_wholesale_price', 'variant_retail_price', 'variant_status', 'variant_device_models'
+                    ] as const;
+                    
+                    fieldsToMergeV.forEach(f => {
+                        const val = (row as any)[f];
+                        if (val !== undefined && val !== null && val !== '' && val !== 0) {
+                            (existing as any)[f] = val;
+                        }
                     });
-
-                    Object.assign(existing, { ...row, _specs: existing._specs });
                 } else {
                     uniqueVariantsMap.set(sku, row);
                 }
@@ -649,7 +707,13 @@ export function useProductImport(onSuccess: () => void) {
                 pathMapV.forEach((val, pathKey) => {
                     const [oldParentId, specId] = pathKey.split(':');
                     if (!specId) return;
-                    const currentParentId = currentParentMap.get(specId) || 'root';
+
+                    // [修正] 分類感知遷移邏輯 (變體)
+                    const catName = row.category.split(',')[0].trim();
+                    const catId = categories.find(c => c.name === catName)?.id;
+                    const catParentMap = catId ? categoryParentMaps.get(catId) : null;
+                    
+                    const currentParentId = catParentMap?.get(specId) || globalParentMap.get(specId) || 'root';
                     migratedPathMapV.set(`${currentParentId}:${specId}`, val);
                 });
 

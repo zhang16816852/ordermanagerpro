@@ -206,6 +206,16 @@ export function generateProductExcel(
 function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap: Record<string, string>, specMap: Map<string, CategorySpec>, parent?: any) {
     const row: any[] = [];
     
+    // 取得分類名稱
+    let categoryName = '';
+    if (isVariant && parent?.category_names) {
+        categoryName = Array.isArray(parent.category_names) ? parent.category_names.join(', ') : parent.category_names;
+    } else if (item.category_names) {
+        categoryName = Array.isArray(item.category_names) ? item.category_names.join(', ') : item.category_names;
+    } else if (item.category) {
+        categoryName = item.category;
+    }
+
     const baseValues: Record<string, any> = {
         is_variant: isVariant ? '變體' : '主商品',
         sku: isVariant ? (parent?.sku || '') : (item.sku || ''),
@@ -216,10 +226,11 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
         brand: (item.brand_id || parent?.brand_id) ? (brandMap[item.brand_id || parent?.brand_id] || '') : '',
         model: item.model || parent?.model || '',
         series: item.series || parent?.series || '',
-        wholesale_price: item.wholesale_price || item.base_wholesale_price || 0,
-        retail_price: item.retail_price || item.base_retail_price || 0,
+        wholesale_price: isVariant ? (item.wholesale_price || 0) : (item.base_wholesale_price || 0),
+        retail_price: isVariant ? (item.retail_price || 0) : (item.base_retail_price || 0),
         status: item.status || 'active',
         barcode: item.barcode || '',
+        category: categoryName,
         option_1: item.option_1 || '',
         option_2: item.option_2 || '',
         option_3: item.option_3 || '',
@@ -259,13 +270,9 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
             let val = undefined;
             
             if (Array.isArray(settings)) {
-                // 優先精確匹配 (parentId + specId)
+                // 僅執行精確匹配 (parentId + specId)
+                // 這能確保「行動電源」下的規格值不會被錯誤填入到「插頭」分類的同名規格欄位中
                 let found = settings.find((s: any) => s.id === specId && (s.parentId === parentId || (!s.parentId && parentId === 'root')));
-                
-                // [彈性回退] 如果沒找到精確的，找同一個 specId 的任何資料 (處理包裹/層級異動)
-                if (!found) {
-                    found = settings.find((s: any) => s.id === specId);
-                }
                 
                 val = found?.value;
             } else if (parentId === 'root') {

@@ -11,12 +11,12 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { 
-    Check, 
-    Database, 
-    Link as LinkIcon, 
-    Settings2, 
-    X 
+import {
+    Check,
+    Database,
+    Link as LinkIcon,
+    Settings2,
+    X
 } from 'lucide-react';
 import { getStaticSpecTree } from '@/utils/specLogic';
 
@@ -84,8 +84,8 @@ const CategoryDialog = ({
                                     .map(c => (
                                         <Badge key={c.id} variant="secondary" className="gap-1 pr-1">
                                             {c.name}
-                                            <X 
-                                                className="h-3 w-3 cursor-pointer hover:text-destructive" 
+                                            <X
+                                                className="h-3 w-3 cursor-pointer hover:text-destructive"
                                                 onClick={() => setParentIds(parentIds.filter(id => id !== c.id))}
                                             />
                                         </Badge>
@@ -97,9 +97,9 @@ const CategoryDialog = ({
                                     .filter(c => !parentIds.includes(c.id))
                                     .slice(0, 10) // 限制顯示數量
                                     .map(c => (
-                                        <Badge 
-                                            key={c.id} 
-                                            variant="outline" 
+                                        <Badge
+                                            key={c.id}
+                                            variant="outline"
                                             className="cursor-pointer hover:bg-slate-100"
                                             onClick={() => setParentIds([...parentIds, c.id])}
                                         >
@@ -145,15 +145,15 @@ const CategoryDialog = ({
                                 {getStaticSpecTree(specDefinitions).map(({ spec, level }) => {
                                     const isSelected = engine.isSelected(spec.id);
                                     const isManual = engine.isManual(spec.id);
-                                    
+
                                     return (
-                                        <div 
+                                        <div
                                             key={spec.id}
                                             onClick={() => handleToggle(spec.id)}
                                             style={{ marginLeft: `${level * 20}px` }}
                                             className={`
                                                 flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all
-                                                ${isSelected 
+                                                ${isSelected
                                                     ? (isManual ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-100' : 'bg-slate-100 border-slate-200 opacity-80')
                                                     : 'bg-white hover:border-slate-300 hover:shadow-sm'
                                                 }
@@ -202,7 +202,7 @@ const CategoryDialog = ({
                                                     <div className="flex flex-col items-center gap-1">
                                                         <span className="text-[10px] font-mono text-slate-400">#{index + 1}</span>
                                                         <div className="flex flex-col gap-0.5">
-                                                            <Input 
+                                                            <Input
                                                                 type="number"
                                                                 className="h-7 w-14 text-center text-xs p-1"
                                                                 value={config.sortOrder}
@@ -235,9 +235,9 @@ const CategoryDialog = ({
                                                     </div>
 
                                                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <Button 
-                                                            variant="ghost" 
-                                                            size="icon" 
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
                                                             className="h-8 w-8 text-slate-400 hover:text-destructive"
                                                             onClick={() => handleToggle(config.id)}
                                                         >

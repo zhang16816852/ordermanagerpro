@@ -39,7 +39,8 @@ export function useDeviceModelGroups() {
     mutationFn: async (values: Partial<DeviceModelGroup>) => {
       const { data, error } = await supabase
         .from('device_model_groups')
-        .insert([values])
+        // 透過 as any 繞過 Supabase 對 name 必填的型別限制，呼叫方需確保 name 有值
+        .insert([values as any])
         .select()
         .single();
       if (error) throw error;

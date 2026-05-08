@@ -204,7 +204,9 @@ export function CatalogSidebar({
             // Scan product table_settings
             const pSettings = deserializeSpecs(p.table_settings);
             Object.entries(pSettings).forEach(([key, value]) => {
-                const specId = key.includes(':') ? key.split(':').pop()! : key;
+                const parts = key.split(':');
+                const specId = parts.length === 3 ? parts[1] : (parts.length === 2 ? parts[1] : key);
+                
                 // key could be ID or Name (for legacy data)
                 // We check if it matches either the defined IDs or Names
                 if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId) && !definedSpecNames.includes(specId)) return;
@@ -249,7 +251,9 @@ export function CatalogSidebar({
                 // 2. Scan table_settings
                 const vSettings = deserializeSpecs(v.table_settings);
                 Object.entries(vSettings).forEach(([key, value]) => {
-                    const specId = key.includes(':') ? key.split(':').pop()! : key;
+                    const parts = key.split(':');
+                    const specId = parts.length === 3 ? parts[1] : (parts.length === 2 ? parts[1] : key);
+                    
                     if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId) && !definedSpecNames.includes(specId)) return;
 
                     if (!specs[key]) specs[key] = new Set();

@@ -17,21 +17,42 @@ interface VariantSpecsMatrixProps {
 
 export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatrixProps) {
     const queryClient = useQueryClient();
-    const { specMap } = useSpecStore();
+    const { specMap, specTriggers, fetchSpecs } = useSpecStore();
     const { data: specFields = [], isLoading: specsLoading } = useCategorySpecs(categoryIds);
-    console.log("變體資料", specFields)
     const [localData, setLocalData] = useState<Record<string, Record<string, any>>>({});
 
+    // 確保規格定義已載入
+    useEffect(() => {
+        fetchSpecs();
+    }, []);
+
     const { data: variants = [], isLoading: variantsLoading } = useQuery({
-        queryKey: ['product-variants-specs', productId],
+        queryKey: ['product-variants-specs-v6', productId],
         queryFn: async () => {
-            const { data, error } = await supabase
+            // 1. 抓取變體基本資料
+            const { data: vData, error: vError } = await supabase
                 .from('product_variants')
-                .select('id, name, table_settings')
+                .select('id, name')
                 .eq('product_id', productId)
                 .order('sku');
-            if (error) throw error;
-            return data;
+            if (vError) throw vError;
+
+            // 2. 抓取所有變體的規格數值 (新資料表)
+            const vIds = vData.map(v => v.id);
+            const { data: valData, error: valError } = await supabase
+                .from('product_spec_values')
+                .select('*')
+                .in('entity_id', vIds)
+                .eq('entity_type', 'variant')
+                .is('deleted_at', null);
+            
+            if (valError) throw valError;
+
+            // 組合資料
+            return vData.map(v => ({
+                ...v,
+                values: valData.filter(val => val.entity_id === v.id)
+            }));
         },
         enabled: !!productId
     });
@@ -40,30 +61,29 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
         if (variants.length > 0) {
             const initial: Record<string, any> = {};
             variants.forEach(v => {
-                initial[v.id] = deserializeSpecs(v.table_settings);
+                initial[v.id] = deserializeSpecs(v.values);
             });
             setLocalData(initial);
         }
     }, [variants]);
 
     /**
-     * v4.7 樹狀動態路徑計算
+     * v5.1 樹狀動態路徑計算 (支援 DSL)
      */
     const visiblePathRows = useMemo(() => {
         if (specFields.length === 0 || Object.keys(localData).length === 0) return [];
 
-        // 1. 收集「所有變體」目前可見的總合路徑地圖
         const aggregatedVisible = new Map<string, any>();
         Object.keys(localData).forEach(vId => {
-            const variantVisible = getVisibleSpecsTree(specFields, localData[vId]);
+            const variantVisible = getVisibleSpecsTree(specFields, localData[vId], specTriggers);
             variantVisible.forEach((info, path) => aggregatedVisible.set(path, info));
         });
 
-        // 2. 利用樹狀演算法進行 DFS 排序，確保父子連隨
         const sortedPaths = getTreeSortedVisiblePaths(specFields, aggregatedVisible);
 
         return sortedPaths.map(({ pathKey, level }) => {
-            const [_, specId] = pathKey.split(':');
+            const parts = pathKey.split(':');
+            const specId = parts[1];
             const spec = specFields.find(f => f.id === specId) || specMap.get(specId);
             const triggerInfo = aggregatedVisible.get(pathKey);
             return {
@@ -71,31 +91,33 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                 spec,
                 level,
                 name: spec?.name || specId,
-                parentId: pathKey.split(':')[0],
-                triggerInfo // 將觸發資訊帶出 useMemo
+                parentId: parts[0],
+                triggerInfo
             };
         });
-    }, [specFields, localData, specMap]);
+    }, [specFields, localData, specMap, specTriggers]);
 
     const saveMutation = useMutation({
         mutationFn: async () => {
             const results = await Promise.all(
                 Object.entries(localData).map(([id, pathObj]) => {
-                    const originalVariant = variants.find(v => v.id === id);
-                    const serialized = serializeSpecs(
-                        pathObj, 
-                        specMap, 
-                        originalVariant?.table_settings as any
-                    );
-                    return supabase.from('product_variants').update({ table_settings: serialized as any }).eq('id', id);
+                    const serialized = serializeSpecs(pathObj, specMap);
+                    
+                    // 呼叫新版 RPC 原子化同步
+                    return supabase.rpc('sync_product_specs_v6', {
+                        p_entity_id: id,
+                        p_entity_type: 'variant',
+                        p_category_id: categoryIds[0], // 暫取第一個分類
+                        p_new_data: serialized
+                    });
                 })
             );
             const firstError = results.find(r => r.error);
             if (firstError) throw firstError.error;
         },
         onSuccess: () => {
-            toast.success('變體規格矩陣已同步至雲端');
-            queryClient.invalidateQueries({ queryKey: ['product-variants-specs', productId] });
+            toast.success('變體規格矩陣已同步至雲端 (v6 Engine)');
+            queryClient.invalidateQueries({ queryKey: ['product-variants-specs-v6', productId] });
         },
         onError: (err: any) => toast.error('儲存失敗：' + err.message)
     });
@@ -115,7 +137,8 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
             });
             return next;
         });
-        const [_, specId] = pathKey.split(':');
+        const parts = pathKey.split(':');
+        const specId = parts[1];
         toast.info(`已同步「${specMap.get(specId)?.name || specId}」至所有變體`);
     };
 
@@ -176,8 +199,8 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                                         {row.level > 0 && (
                                                             <span className="text-[9px] text-muted-foreground/60 truncate">
                                                                 來自: {specMap.get(row.parentId)?.name || '父規格'} 
-                                                                {row.triggerInfo?.operator === 'ne' ? ' ≠ ' : ' = '}
-                                                                {row.triggerInfo?.triggerValue}
+                                                                {row.triggerInfo?.op === 'ne' ? ' ≠ ' : ' = '}
+                                                                {row.triggerInfo?.val}
                                                             </span>
                                                         )}
                                                     </div>
@@ -189,13 +212,9 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                         <>
                                             {variants.map(v => {
                                                 const vSettings = localData[v.id] || {};
-                                                const vVisiblePaths = getVisibleSpecsTree(specFields, vSettings);
+                                                const vVisiblePaths = getVisibleSpecsTree(specFields, vSettings, specTriggers);
                                                 const isVis = vVisiblePaths.has(row.pathKey);
-
-                                                const [_, specId] = row.pathKey.split(':');
-                                                const value = vSettings[row.pathKey] !== undefined && vSettings[row.pathKey] !== ''
-                                                    ? vSettings[row.pathKey]
-                                                    : (vSettings[`root:${specId}`] || '');
+                                                const value = vSettings[row.pathKey] || '';
 
                                                 return (
                                                     <TableCell key={v.id} className={`p-2 border-r last:border-r-0 transition-all ${!isVis ? 'bg-muted/5' : ''}`}>
@@ -225,11 +244,8 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                                     size="icon"
                                                     className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
                                                     onClick={() => {
-                                                        const [_, specId] = row.pathKey.split(':');
                                                         const firstVData = localData[variants[0].id] || {};
-                                                        const firstValue = firstVData[row.pathKey] !== undefined && firstVData[row.pathKey] !== ''
-                                                            ? firstVData[row.pathKey]
-                                                            : (firstVData[`root:${specId}`] || '');
+                                                        const firstValue = firstVData[row.pathKey] || '';
                                                         applyToAll(row.pathKey, firstValue);
                                                     }}
                                                 >

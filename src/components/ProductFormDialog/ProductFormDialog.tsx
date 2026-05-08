@@ -62,38 +62,59 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
       // 開啟時同步抓取規格定義（快取會處理避免重複抓取）
       fetchSpecs();
 
-      if (initialData) {
-        console.log('[ProductFormDialog] Resetting form with initialData:', initialData);
-        // 先設定基本資料
-        form.reset({
-          ...initialData,
-          category_ids: (initialData as any).category_ids || [],
-          device_model_ids: [],
-          device_model_group_ids: [],
-          device_model_exclusion_ids: [],
-          table_settings: deserializeSpecs(initialData.table_settings),
-        });
+      const loadInitialData = async () => {
+        if (initialData) {
+          console.log('[ProductFormDialog] Resetting form with initialData:', initialData);
+          
+          let currentSpecValues = [];
+          
+          // 編輯模式：從新資料表抓取規格數值
+          if (initialData.id) {
+            const { data, error } = await supabase
+              .from('product_spec_values')
+              .select('*')
+              .eq('entity_id', initialData.id)
+              .eq('entity_type', 'product')
+              .is('deleted_at', null);
+            
+            if (!error && data) {
+              currentSpecValues = data;
+            }
+          }
 
-        // 讀取型號標籤、群組標籤與排除的關聯
-        if (initialData.id) {
-          Promise.all([
-            supabase.from('product_model_links').select('model_id').eq('product_id', initialData.id),
-            supabase.from('product_model_group_links').select('group_id').eq('product_id', initialData.id),
-            supabase.from('product_model_exclusions').select('model_id').eq('product_id', initialData.id)
-          ]).then(([models, groups, exclusions]) => {
-            if (models.data) form.setValue('device_model_ids', models.data.map(d => d.model_id));
-            if (groups.data) form.setValue('device_model_group_ids', groups.data.map(d => d.group_id));
-            if (exclusions.data) form.setValue('device_model_exclusion_ids', exclusions.data.map(d => d.model_id));
+          // 先設定基本資料
+          form.reset({
+            ...initialData,
+            category_ids: (initialData as any).category_ids || [],
+            device_model_ids: [],
+            device_model_group_ids: [],
+            device_model_exclusion_ids: [],
+            table_settings: deserializeSpecs(currentSpecValues.length > 0 ? currentSpecValues : initialData.table_settings),
+          });
+
+          // 讀取型號標籤、群組標籤與排除的關聯
+          if (initialData.id) {
+            Promise.all([
+              supabase.from('product_model_links').select('model_id').eq('product_id', initialData.id),
+              supabase.from('product_model_group_links').select('group_id').eq('product_id', initialData.id),
+              supabase.from('product_model_exclusions').select('model_id').eq('product_id', initialData.id)
+            ]).then(([models, groups, exclusions]) => {
+              if (models.data) form.setValue('device_model_ids', models.data.map(d => d.model_id));
+              if (groups.data) form.setValue('device_model_group_ids', groups.data.map(d => d.group_id));
+              if (exclusions.data) form.setValue('device_model_exclusion_ids', exclusions.data.map(d => d.model_id));
+            });
+          }
+        } else {
+          form.reset({
+            name: '', sku: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_id: null, model: '',
+            base_wholesale_price: 0, base_retail_price: 0,
+            status: 'active', has_variants: false,
+            table_settings: {},
           });
         }
-      } else {
-        form.reset({
-          name: '', sku: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_id: null, model: '',
-          base_wholesale_price: 0, base_retail_price: 0,
-          status: 'active', has_variants: false,
-          table_settings: {},
-        });
-      }
+      };
+
+      loadInitialData();
       setActiveTab('basic'); // 每次打開預設回到基本資訊
     }
   }, [open, initialData, form, fetchSpecs]);
@@ -111,11 +132,9 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
     }
 
     // 將前端的路徑 Object 轉換為後端的易讀 Array
-    // 傳入原始 table_settings 作為 fallback，防止在找不到定義時把中文 Path 刷成 UUID
     const serializedSettings = serializeSpecs(
       values.table_settings,
-      specMap,
-      (initialData as any)?.table_settings
+      specMap
     );
     onSubmit({
       ...values,
