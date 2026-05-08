@@ -334,6 +334,7 @@ export function getTreeSortedVisiblePaths(
         sorted.push({ pathKey, level });
 
         const currentSpecId = pathKey.split(':')[1];
+        const currentSpec = specFields.find(s => s.id === currentSpecId);
         const children = parentIdToChildren.get(currentSpecId) || [];
 
         // 排序：按定義的 sort_order
@@ -345,7 +346,9 @@ export function getTreeSortedVisiblePaths(
             return sortA - sortB;
         });
 
-        children.forEach(childKey => traverse(childKey, level + 1));
+        // 關鍵修正：如果父節點是標籤 (heading)，子項目不增加層級 (保持平級)
+        const nextLevel = currentSpec?.type === 'heading' ? level : level + 1;
+        children.forEach(childKey => traverse(childKey, nextLevel));
     };
 
     // 4. 從所有頂層路徑開始執行 DFS

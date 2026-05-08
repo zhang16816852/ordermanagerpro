@@ -60,7 +60,7 @@ export function ProductDetailDialog({
         }
     }, [open, product?.id]);
 
-    const { specDefinitions, fetchSpecs } = useSpecStore();
+    const { specDefinitions, specTriggers, fetchSpecs } = useSpecStore();
 
     useEffect(() => {
         if (open && specDefinitions.length === 0) {
@@ -176,7 +176,7 @@ export function ProductDetailDialog({
         const visiblePathsMap = getVisibleSpecsTree(
             specDefinitions as any,
             currentValuesDict,
-            (product as any).spec_triggers || []
+            specTriggers
         );
 
         const sortedPaths = getTreeSortedVisiblePaths(specDefinitions as any, visiblePathsMap);
