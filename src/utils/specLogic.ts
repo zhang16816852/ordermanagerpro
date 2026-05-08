@@ -1,13 +1,36 @@
 import { CategorySpec } from '@/hooks/useCategorySpecs';
 
 /**
- * 規格陣列實體格式 (資料庫儲存格式)
+ * 規格資料存儲格式 (v6 product_spec_values 表)
  */
 export interface SpecEntry {
-    id: string;
-    parentId: string | 'root';
-    path: string; // 人類可讀路徑
+    spec_id: string;
+    parent_id: string | 'root';
+    instance_uuid: string;
     value: any;
+}
+
+/**
+ * 產生穩定且合法的 UUID (基於種子字串)
+ * 用於數量連動時產生符合資料庫 UUID 型別約束的識別碼
+ */
+export function generateStableUUID(seed: string): string {
+    // 簡單的哈希處理，將字串轉為固定長度的 16 進制
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+        hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+        hash |= 0;
+    }
+
+    // 將 hash 轉為 8 位 16 進制，並重複/填充以湊足 UUID 的 32 位
+    const hex = Math.abs(hash).toString(16).padStart(8, '0');
+    const part2 = (Math.abs(hash * 31) % 0xFFFF).toString(16).padStart(4, '0');
+    const part3 = (Math.abs(hash * 37) % 0xFFFF).toString(16).padStart(4, '0');
+    const part4 = (Math.abs(hash * 41) % 0xFFFF).toString(16).padStart(4, '0');
+    const part5 = (Math.abs(hash * 43)).toString(16).padEnd(12, '0').substring(0, 12);
+
+    // 輸出格式: 8-4-4-4-12
+    return `${hex}-${part2}-${part3}-${part4}-${part5}`;
 }
 
 /**
@@ -24,7 +47,7 @@ export function deserializeSpecs(data: any): Record<string, any> {
             const specId = entry.spec_id || entry.id;
             const parentId = entry.parent_id || entry.parentId || 'root';
             const instanceUuid = entry.instance_uuid || entry.instanceUuid || specId; // 舊資料暫時用 specId 代替
-            
+
             const key = `${parentId}:${specId}:${instanceUuid}`;
             obj[key] = entry.value;
         });
@@ -44,7 +67,7 @@ export function deserializeSpecs(data: any): Record<string, any> {
 export function getSpecValue(data: any, specId: string): any {
     if (!data) return undefined;
     if (Array.isArray(data)) {
-        const found = data.find((s: SpecEntry) => s.id === specId);
+        const found = data.find((s: SpecEntry) => (s as any).spec_id === specId || (s as any).id === specId);
         return found?.value;
     }
     return data[specId];
@@ -54,15 +77,15 @@ export function getSpecValue(data: any, specId: string): any {
  * 將前端字典物件轉換為 product_spec_values 存儲格式
  */
 export function serializeSpecs(
-    pathObj: Record<string, any>, 
+    pathObj: Record<string, any>,
     specMap: Map<string, CategorySpec>
 ): any[] {
     const entries: any[] = [];
     if (!pathObj) return entries;
-    
+
     Object.entries(pathObj).forEach(([pathKey, value]) => {
         if (value === undefined || value === null || value === '') return;
-        
+
         const parts = pathKey.split(':');
         const parentId = parts[0];
         const specId = parts[1];
@@ -90,7 +113,7 @@ export function serializeSpecs(
  */
 export function evaluateDSL(value: any, specType: string, condition: any): boolean {
     if (!condition || !condition.op) return false;
-    
+
     const op = condition.op;
     const target = condition.val;
 
@@ -149,58 +172,59 @@ export function evaluateDSL(value: any, specType: string, condition: any): boole
  * v5.1 版：支援新舊連動規則混合
  */
 export function getVisibleSpecsTree(
-    specFields: CategorySpec[], 
+    specFields: CategorySpec[],
     tableSettings: Record<string, any>,
-    specTriggers: any[] = [] // 傳入從 specification_triggers 表抓取的連動規則
+    specTriggers: any[] = []
 ) {
-    const visible = new Map<string, { 
-        sourceValue?: any; 
+    const visible = new Map<string, {
+        sourceValue?: any;
         sourceName?: string;
         triggerInfo?: any;
+        isQuantityInstance?: boolean;
+        instanceIndex?: number;
     }>();
     if (!specFields || specFields.length === 0) return visible;
-    
-    // 1. 初始化根節點
+
+    const specMap = new Map(specFields.map(s => [s.id, s]));
+    const settings = tableSettings || {};
+
+    // 1. 找出根規格 (不被任何人觸發，且沒有數量連動來源)
     const targetSpecIdsInTriggers = new Set(specTriggers.map(t => t.target_spec_id));
-    
+    const quantityTargetIds = new Set(specFields.filter(f => f.quantity_source_id).map(f => f.id));
+
     specFields.forEach(f => {
-        if (!targetSpecIdsInTriggers.has(f.id)) {
-            // 根規格的 instanceUuid 預設為 specId (除非資料中已有不同)
+        if (!targetSpecIdsInTriggers.has(f.id) && !quantityTargetIds.has(f.id)) {
             visible.set(`root:${f.id}:${f.id}`, {});
         }
     });
 
-    // 如果還是空，預設顯示所有沒有 parent 的規格
-    if (visible.size === 0) {
-        specFields.forEach(f => visible.set(`root:${f.id}:${f.id}`, {}));
-    }
-
+    // 2. 廣度優先遍歷 (BFS)
     let changed = true;
-    let iterations = 0;
-    const settings = tableSettings || {};
-
-    while (changed && iterations < 10) {
+    while (changed) {
         changed = false;
-        iterations++;
-        
+
         visible.forEach((info, pathKey) => {
             const parts = pathKey.split(':');
-            const parentId = parts[0];
             const specId = parts[1];
             const instanceUuid = parts[2];
-            
-            const spec = specFields.find(s => s.id === specId);
+
+            const spec = specMap.get(specId);
             if (!spec) return;
 
             const val = settings[pathKey] !== undefined ? settings[pathKey] : '';
             const isHeading = spec.type === 'heading';
 
-            // 處理新版規格連動 (specification_triggers 表)
+            // --- 處理 A: 規格連動 (Triggers) ---
             const activeTriggers = specTriggers.filter(t => t.source_spec_id === specId);
             activeTriggers.forEach(t => {
-                const isMatch = isHeading ? true : evaluateDSL(val, spec.type, t.condition_dsl);
+                const isMatch = isHeading ? true : checkSpecTriggerMatch(
+                    spec.type,
+                    val,
+                    t.condition_dsl?.on_value,
+                    t.condition_dsl?.operator
+                );
+
                 if (isMatch) {
-                    // 子規格繼承父規格的 instanceUuid (如果是 quantity detail)
                     const childPathKey = `${specId}:${t.target_spec_id}:${instanceUuid}`;
                     if (!visible.has(childPathKey)) {
                         visible.set(childPathKey, {
@@ -212,28 +236,30 @@ export function getVisibleSpecsTree(
                 }
             });
 
-            // 處理舊版規格連動 (向後相容)
-            const oldTriggers = spec.logicConfig?.triggers || spec.logic_config?.triggers;
-            oldTriggers?.forEach((t: any) => {
-                const isMatch = isHeading ? true : checkSpecTriggerMatch(spec.type, val, t.on_value, t.operator);
-                if (isMatch) {
-                    getMergedTriggerTargets(t).forEach((tar: any) => {
-                        const childPathKey = `${specId}:${tar.id}:${instanceUuid}`;
+            // --- 處理 B: 數量連動 (Quantity Source) ---
+            const quantityTargets = specFields.filter(f => f.quantity_source_id === specId);
+            quantityTargets.forEach(qTarget => {
+                const count = parseInt(String(val)) || 0;
+                if (count > 0) {
+                    for (let i = 1; i <= count; i++) {
+                        // [正規化] 根據規格ID和序號產生穩定且合法的 UUID
+                        const childUuid = generateStableUUID(`${qTarget.id}-${i}`);
+                        const childPathKey = `${specId}:${qTarget.id}:${childUuid}`;
                         if (!visible.has(childPathKey)) {
-                            visible.set(childPathKey, { 
-                                sourceValue: tar.is_quantity_detail ? val : null,
+                            visible.set(childPathKey, {
                                 sourceName: spec.name,
-                                triggerInfo: { op: t.operator || 'eq', val: t.on_value }
+                                isQuantityInstance: true,
+                                instanceIndex: i
                             });
                             changed = true;
                         }
-                    });
+                    }
                 }
             });
         });
     }
 
-    // 去重邏輯
+    // 4. 清理重複項：如果一個規格作為子節點出現，就從根目錄移除它
     const childSpecIds = new Set<string>();
     visible.forEach((_, pathKey) => {
         if (!pathKey.startsWith('root:')) {
@@ -241,7 +267,18 @@ export function getVisibleSpecsTree(
             if (specId) childSpecIds.add(specId);
         }
     });
+
+    //console.log('[SpecLogic] 🌲 原始根節點數:', Array.from(visible.keys()).filter(k => k.startsWith('root:')).length);
     childSpecIds.forEach(specId => visible.delete(`root:${specId}:${specId}`));
+
+    // 5. 保底機制：如果最後算出來什麼都沒有 (可能是規則設定錯誤)，預設顯示所有沒有被當作目標的規格
+    if (visible.size === 0 && specFields.length > 0) {
+        //console.warn('[SpecLogic] ⚠️ 計算結果為空，執行保底顯示所有規格');
+        specFields.forEach(f => visible.set(`root:${f.id}:${f.id}`, {}));
+    }
+
+    //console.log('[SpecLogic] 🌲 最終可見路徑總數:', visible.size);
+    //console.log('[SpecLogic] 🌲 所有路徑清單:', Array.from(visible.keys()));
 
     return visible;
 }
@@ -251,44 +288,54 @@ export function getVisibleSpecsTree(
  * 根據層級關係重新排列 Key 的順序，確保父子連隨
  */
 export function getTreeSortedVisiblePaths(
-    specFields: CategorySpec[], 
+    specFields: CategorySpec[],
     visibleInfo: Map<string, any>
-): { pathKey: string; level: number }[] {
+) {
     const sorted: { pathKey: string; level: number }[] = [];
     const visited = new Set<string>();
 
-    const traverse = (parentId: string = 'root', level: number = 0) => {
-        // 找出所有父規格為 parentId 且可見的路徑
-        const children = Array.from(visibleInfo.keys())
-            .filter(k => k.startsWith(`${parentId}:`))
-            .sort((a, b) => {
-                const specIdA = a.split(':').pop();
-                const specIdB = b.split(':').pop();
-                const specA = specFields.find(s => s.id === specIdA);
-                const specB = specFields.find(s => s.id === specIdB);
-                
-                if (specA && specB) {
-                    if (specA.sort_order !== specB.sort_order) {
-                        return (specA.sort_order || 0) - (specB.sort_order || 0);
-                    }
-                    return specA.name.localeCompare(specB.name);
-                }
-                return a.localeCompare(b);
-            });
+    // 建立 父節點 -> 子路徑 的映射表，方便 DFS
+    const parentToChildren = new Map<string, string[]>();
+    visibleInfo.forEach((_, pathKey) => {
+        const parts = pathKey.split(':');
+        const parentId = parts[0];
+        if (!parentToChildren.has(parentId)) parentToChildren.set(parentId, []);
+        parentToChildren.get(parentId)!.push(pathKey);
+    });
+
+    const traverse = (parentId: string, level: number) => {
+        const children = parentToChildren.get(parentId) || [];
+
+        // 排序
+        children.sort((a, b) => {
+            const specIdA = a.split(':')[1];
+            const specIdB = b.split(':')[1];
+            const sortA = specFields.find(s => s.id === specIdA)?.sort_order || 0;
+            const sortB = specFields.find(s => s.id === specIdB)?.sort_order || 0;
+            return sortA - sortB;
+        });
 
         children.forEach(pathKey => {
             if (visited.has(pathKey)) return;
             visited.add(pathKey);
-            
-            const [_, specId] = pathKey.split(':');
+
             sorted.push({ pathKey, level });
-            
-            // 遞迴尋找該規格的子規格
-            traverse(specId, level + 1);
+
+            // 進入下一層
+            const currentSpecId = pathKey.split(':')[1];
+            traverse(currentSpecId, level + 1);
         });
     };
 
     traverse('root', 0);
+
+    // 補齊
+    visibleInfo.forEach((_, pathKey) => {
+        if (!visited.has(pathKey)) {
+            sorted.push({ pathKey, level: 0 });
+        }
+    });
+
     return sorted;
 }
 
@@ -303,7 +350,7 @@ export const checkSpecTriggerMatch = (
 ): boolean => {
     if (!onValue) return false;
     const val = value === undefined || value === null ? '' : value;
-    
+
     if (onValue === '*') {
         let isNotEmpty = false;
         if (specType === 'boolean') {
@@ -344,7 +391,7 @@ export const getMergedTriggerTargets = (trigger: any) => {
  */
 export function formatSpecValue(val: any, spec?: CategorySpec, allSpecs?: CategorySpec[] | Map<string, CategorySpec>): string {
     if (val === null || val === undefined || val === '') return '';
-    
+
     if (Array.isArray(val)) {
         // v4.11 增加對表格型數據 (Array of Objects) 的易讀化處理
         if (val.length > 0 && typeof val[0] === 'object' && val[0] !== null && !Array.isArray(val[0])) {
@@ -356,13 +403,13 @@ export function formatSpecValue(val: any, spec?: CategorySpec, allSpecs?: Catego
                 return (config?.columns || []).map((col: any) => {
                     const colVal = row[col.id || col.name];
                     if (colVal === undefined || colVal === null || colVal === '') return null;
-                    
+
                     let cellSuffix = col.suffix || '';
                     if (col.type === 'link' && col.linkedSpecId && allSpecs && !cellSuffix) {
-                        const linkedSpec = Array.isArray(allSpecs) 
+                        const linkedSpec = Array.isArray(allSpecs)
                             ? allSpecs.find((s: any) => s.id === col.linkedSpecId)
                             : allSpecs.get(col.linkedSpecId);
-                            
+
                         if (linkedSpec && linkedSpec.type === 'number_with_unit' && linkedSpec.options?.length > 0) {
                             const unitMatch = linkedSpec.options[0].match(/(.+?)\((.+?)\)/);
                             cellSuffix = unitMatch ? unitMatch[2] : linkedSpec.options[0];
@@ -376,13 +423,13 @@ export function formatSpecValue(val: any, spec?: CategorySpec, allSpecs?: Catego
         }
         return val.join('/');
     }
-    
+
     if (typeof val === 'object' && val !== null) {
         // 處理複合型規格或數量分配
         return Object.entries(val)
             .map(([label, value]) => {
                 if (!value && value !== 0) return null;
-                
+
                 const unitMatch = label.match(/(.+?)\((.+?)\)/);
                 if (unitMatch) {
                     const displayName = unitMatch[1];
@@ -395,36 +442,36 @@ export function formatSpecValue(val: any, spec?: CategorySpec, allSpecs?: Catego
             .filter(Boolean)
             .join(' / ');
     }
-    
+
     // 處理布林值
     if (val === 'true' || val === true || val === 'on') return '支援';
     if (val === 'false' || val === false) return '不支援';
-    
+
     return String(val);
 }
 
 /**
- * 將整個規格集 (table_settings) 轉換為縮略的可讀字串
+ * 將整個規格集 (spec_values) 轉換為縮略的可讀字串
  * 支援 CSV 匯出與預覽顯示
  */
 export function formatSpecsToCondensedString(
-    settings: any, 
+    settings: any,
     specNameMap: Record<string, string> = {},
     delimiter: string = ', '
 ): string {
     if (!settings) return '';
-    
+
     // 1. 先反序列化成扁平字典 [id]: value
     // 備註: deserializeSpecs 會回傳 parentId:specId 格式的 Key
     const flatMap = deserializeSpecs(settings);
-    
+
     // 2. 轉換為 名稱:值
     return Object.entries(flatMap)
         .map(([pathKey, val]) => {
             const specId = pathKey.includes(':') ? pathKey.split(':').pop()! : pathKey;
             const name = specNameMap[specId] || specId;
             const formattedVal = formatSpecValue(val);
-            
+
             if (!formattedVal) return null;
             return `${name}:${formattedVal}`;
         })
@@ -438,7 +485,7 @@ export function formatSpecsToCondensedString(
  */
 export function getStaticSpecTree(specDefinitions: any[]): { spec: any; level: number }[] {
     const childToParent = new Map<string, string>();
-    
+
     // 1. 建立子對父的對照表
     specDefinitions.forEach(spec => {
         const triggers = spec.logic_config?.triggers || spec.logicConfig?.triggers;
@@ -454,7 +501,7 @@ export function getStaticSpecTree(specDefinitions: any[]): { spec: any; level: n
 
     // 2. 找出根節點 (沒有被任何人觸發的規格)
     const roots = specDefinitions.filter(s => !childToParent.has(s.id));
-    
+
     const getChildren = (parentId: string): any[] => {
         return specDefinitions.filter(s => childToParent.get(s.id) === parentId);
     };
@@ -471,13 +518,13 @@ export function getStaticSpecTree(specDefinitions: any[]): { spec: any; level: n
             }
             return a.name.localeCompare(b.name);
         });
-        
+
         sortedNodes.forEach(node => {
             if (visited.has(node.id)) return;
             visited.add(node.id);
-            
+
             sorted.push({ spec: node, level });
-            
+
             const children = getChildren(node.id);
             if (children.length > 0) {
                 traverse(children, level + 1);

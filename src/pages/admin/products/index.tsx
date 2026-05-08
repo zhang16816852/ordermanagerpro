@@ -125,9 +125,9 @@ export default function AdminProducts() {
                                 onToggleExpand={toggleExpanded}
                                 getVariants={getProductVariants}
                                 getModels={getProductModels}
-                                onEdit={(p) => { setEditingProduct(p); setIsDialogOpen(true); }}
+                                onEdit={(p) => { setEditingProduct(p as any); setIsDialogOpen(true); }}
                                 onCopy={handleCopy}
-                                onDelete={setDeleteProduct}
+                                onDelete={(p) => setDeleteProduct(p as any)}
                                 onUpdateVariant={(id, updates) => updateVariantPriceMutation.mutate({ id, ...updates })}
                             />
                         </div>
@@ -161,7 +161,7 @@ export default function AdminProducts() {
                 setIsImportOpen={setIsImportOpen}
                 editingProduct={editingProduct}
                 deleteProduct={deleteProduct}
-                setDeleteProduct={setDeleteProduct}
+                setDeleteProduct={setDeleteProduct as any}
                 onFormSubmit={(values) => {
                     if (editingProduct?.id) updateMutation.mutate({ id: editingProduct.id, values });
                     else createMutation.mutate(values);

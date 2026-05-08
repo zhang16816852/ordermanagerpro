@@ -67,7 +67,7 @@ export function VariantEditDialog({
             wholesale_price: 0,
             retail_price: 0,
             status: 'active' as any,
-            table_settings: {} as Record<string, any>,
+            spec_values: {} as Record<string, any>,
             selectedColorIds: [] as string[],
             selectedModelIds: [] as string[],
             selectedGroupIds: [] as string[],
@@ -107,7 +107,7 @@ export function VariantEditDialog({
                         wholesale_price: variant.wholesale_price,
                         retail_price: variant.retail_price,
                         status: variant.status as any,
-                        table_settings: (variant.table_settings as any) || {},
+                        spec_values: (variant as any).spec_values || {},
                         selectedColorIds: colorIds,
                         selectedModelIds: links.data?.map(l => l.model_id) || [],
                         selectedGroupIds: groupLinks.data?.map(l => l.group_id) || [],
@@ -125,7 +125,7 @@ export function VariantEditDialog({
                         wholesale_price: product?.base_wholesale_price || 0,
                         retail_price: product?.base_retail_price || 0,
                         status: 'active',
-                        table_settings: {},
+                        spec_values: {},
                         selectedColorIds: [],
                         selectedModelIds: [],
                         selectedGroupIds: [],
@@ -140,13 +140,13 @@ export function VariantEditDialog({
 
     const createMutation = useMutation({
         mutationFn: async (values: any) => {
-            const { 
-                selectedModelIds, 
-                selectedGroupIds, 
-                selectedExclusionIds, 
-                selectedColorIds, 
-                category_ids, 
-                ...dataToInsert 
+            const {
+                selectedModelIds,
+                selectedGroupIds,
+                selectedExclusionIds,
+                selectedColorIds,
+                category_ids,
+                ...dataToInsert
             } = values;
 
             // 處理顏色名稱
@@ -164,6 +164,16 @@ export function VariantEditDialog({
 
             const { data, error } = await supabase.from('product_variants').insert(finalData).select().single();
             if (error) throw error;
+
+            // v6 規格同步
+            if (values.spec_values && (product as any)?.category_id) {
+                await supabase.rpc('sync_product_specs_v6', {
+                    p_entity_id: data.id,
+                    p_entity_type: 'variant',
+                    p_category_id: (product as any).category_id,
+                    p_new_data: values.spec_values
+                });
+            }
 
             // 處理型號連結、群組連結與排除
             const promises = [];
@@ -199,13 +209,13 @@ export function VariantEditDialog({
 
     const updateMutation = useMutation({
         mutationFn: async (values: any) => {
-            const { 
-                selectedModelIds, 
-                selectedGroupIds, 
-                selectedExclusionIds, 
-                selectedColorIds, 
-                category_ids, 
-                ...updates 
+            const {
+                selectedModelIds,
+                selectedGroupIds,
+                selectedExclusionIds,
+                selectedColorIds,
+                category_ids,
+                ...updates
             } = values;
 
             // 處理顏色名稱
@@ -222,6 +232,16 @@ export function VariantEditDialog({
 
             const { error } = await supabase.from('product_variants').update(finalUpdates).eq('id', variant!.id);
             if (error) throw error;
+
+            // v6 規格同步
+            if (values.spec_values && (product as any)?.category_id) {
+                await supabase.rpc('sync_product_specs_v6', {
+                    p_entity_id: variant!.id,
+                    p_entity_type: 'variant',
+                    p_category_id: (product as any).category_id,
+                    p_new_data: values.spec_values
+                });
+            }
 
             // 更新連結與排除 (先刪後增)
             await Promise.all([
@@ -341,7 +361,7 @@ export function VariantEditDialog({
                                 name="selectedColorIds"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>選項3 (顏色)</FormLabel>
+                                        <FormLabel>顏色</FormLabel>
                                         <FormControl>
                                             <ColorSelectField
                                                 selectedColorIds={field.value}

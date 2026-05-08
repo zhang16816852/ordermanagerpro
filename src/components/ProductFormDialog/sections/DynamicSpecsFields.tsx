@@ -13,7 +13,7 @@ export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
     const selectedCategoryIds = form.watch('category_ids') || [];
     const { specMap, specTriggers, fetchSpecs } = useSpecStore();
     const { data: specFields = [], isLoading: isLoadingSpecs } = useCategorySpecs(selectedCategoryIds);
-    const tableSettings = form.watch('table_settings') || {};
+    const specValues = form.watch('spec_values') || {};
 
     // 確保規格定義已載入
     useEffect(() => {
@@ -21,7 +21,7 @@ export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
     }, []);
 
     // 使用中央計算器 (v5.1 支持 DSL)
-    const visibleInfo = getVisibleSpecsTree(specFields, tableSettings, specTriggers);
+    const visibleInfo = getVisibleSpecsTree(specFields, specValues, specTriggers);
 
     if (isLoadingSpecs) return <div className="py-4 text-center">正在載入規格...</div>;
     
@@ -37,6 +37,9 @@ export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
      */
     const sortedVisible = getTreeSortedVisiblePaths(specFields, visibleInfo);
     
+    console.log('[DynamicSpecs] 當前 spec_values:', specValues);
+    console.log('[DynamicSpecs] 排序後的可見路徑:', sortedVisible.map(s => s.pathKey));
+
     return (
         <div className="space-y-4 p-4 border rounded-lg bg-muted/10">
             <h3 className="text-sm font-bold flex items-center gap-2">
@@ -51,7 +54,7 @@ export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
                     
                     if (!spec) return null;
 
-                    const value = tableSettings[pathKey] || '';
+                    const value = specValues[pathKey] || '';
                     const info = visibleInfo.get(pathKey);
 
                     return (
@@ -86,7 +89,7 @@ export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
                                             <SpecValueEditor 
                                                 spec={spec}
                                                 value={value}
-                                                onChange={(val) => form.setValue(`table_settings.${pathKey}`, val, { shouldDirty: true })}
+                                                onChange={(val) => form.setValue(`spec_values.${pathKey}`, val, { shouldDirty: true })}
                                                 sourceValue={info?.sourceValue}
                                                 variantMode={false}
                                             />

@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useMemo } from 'react';
+import { useSpecStore } from '@/store/useSpecStore';
 
 export interface CategorySpec {
     id: string;
@@ -37,60 +37,35 @@ export interface CategorySpec {
         }[];
     };
     sort_order: number;
+    quantity_source_id?: string | null;
 }
 
+/**
+ * v4.7 分類規格 Hook
+ * [v6] 已改為從 useSpecStore 獲取資料，以支援連動規則合併與版本校驗
+ */
 export function useCategorySpecs(categoryIds: string[]) {
-    return useQuery({
-        queryKey: ['category_specs', categoryIds],
-        enabled: categoryIds.length > 0,
-        queryFn: async () => {
-            const { data, error } = await (supabase
-                .from('category_spec_links' as any) as any)
-                .select(`
-                    category_id,
-                    spec_id,
-                    sort_order,
-                    specification_definitions (
-                        id,
-                        name,
-                        type,
-                        options,
-                        default_value,
-                        logic_config,
-                        configuration,
-                        sort_order
-                    )
-                `)
-                .in('category_id', categoryIds)
-                .order('sort_order', { ascending: true });
+    const { specDefinitions, categoryLinks, isLoading } = useSpecStore();
 
-            if (error) {
-                console.error('[useCategorySpecs] Fetch error:', error);
-                return [];
-            }
+    const filteredSpecs = useMemo(() => {
+        if (!categoryIds || categoryIds.length === 0) return [];
+        
+        // 1. 找出連結到這些分類的 spec_id
+        const linkedSpecIds = new Set(
+            categoryLinks
+                .filter(link => categoryIds.includes(link.category_id))
+                .map(link => link.spec_id)
+        );
 
-            const seenSpecs = new Set<string>();
-            const result: CategorySpec[] = [];
+        // 2. 從 Store 中找出這些規格的完整定義 (已包含合併後的規則)
+        return specDefinitions
+            .filter(spec => linkedSpecIds.has(spec.id))
+            .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+            
+    }, [categoryIds, specDefinitions, categoryLinks]);
 
-            data.forEach((d: any) => {
-                const spec = d.specification_definitions;
-                if (!spec || seenSpecs.has(spec.id)) return;
-                seenSpecs.add(spec.id);
-                result.push({
-                    id: spec.id,
-                    name: spec.name,
-                    key: spec.id,
-                    type: spec.type,
-                    options: spec.options || [],
-                    defaultValue: spec.default_value || '',
-                    logicConfig: spec.logic_config as any,
-                    configuration: spec.configuration,
-                    // 優先使用分類連結中的排序，若無則使用全域排序
-                    sort_order: d.sort_order ?? spec.sort_order ?? 0
-                });
-            });
-
-            return result;
-        },
-    });
+    return {
+        data: filteredSpecs,
+        isLoading: isLoading
+    };
 }

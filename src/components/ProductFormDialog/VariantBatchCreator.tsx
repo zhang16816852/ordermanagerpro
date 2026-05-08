@@ -38,7 +38,7 @@ interface GeneratedVariant {
   option_3: string | null;
   wholesale_price: number;
   retail_price: number;
-  table_settings: any;
+  spec_values: any;
 }
 
 export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: VariantBatchCreatorProps) {
@@ -97,9 +97,9 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
         option_3: v.option_3,
         wholesale_price: v.wholesale_price,
         retail_price: v.retail_price,
-        table_settings: v.table_settings,
+        spec_values: (v as any).spec_values || {},
       })));
-      
+
       toast.success(`已載入 ${variants.length} 個現有變體`);
     } catch (err) {
       console.error('載入變體失敗:', err);
@@ -116,7 +116,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
   const generateVariants = () => {
     const opt1 = parseOptions(option1Values);
     const opt2 = parseOptions(option2Values);
-    
+
     // 取得已選取的顏色對象
     console.log("[Debug] Option 1 Values:", opt1);
     console.log("[Debug] Option 2 Values:", opt2);
@@ -177,7 +177,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
             option_3: v3 ? (v3 as any).name : null,
             wholesale_price: price,
             retail_price: retail,
-            table_settings: {}, // 預設空規格
+            spec_values: {}, // 預設空規格
           });
         }
       }
@@ -189,7 +189,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     }
 
     console.log(`[Debug] Calculated ${variants.length} base combinations.`);
-    
+
     // 智慧合併：如果生成的 SKU 已經存在於目前的預覽中，保留其現有資料 (例如手動改過的價格)
     const mergedVariants = variants.map(newV => {
       const existing = generatedVariants.find(ev => ev.sku === newV.sku);
@@ -216,7 +216,6 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
         option_3: v.option_3 || null,
         wholesale_price: v.wholesale_price,
         retail_price: v.retail_price,
-        table_settings: v.table_settings,
         status: 'active' as const,
       }));
 
@@ -246,8 +245,8 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
   };
 
   const updateVariantField = (index: number, field: keyof GeneratedVariant, value: string) => {
-    setGeneratedVariants(prev => 
-      prev.map((v, i) => 
+    setGeneratedVariants(prev =>
+      prev.map((v, i) =>
         i === index ? { ...v, [field]: (field === 'wholesale_price' || field === 'retail_price') ? parseFloat(value) || 0 : value } : v
       )
     );
@@ -295,24 +294,24 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>選項3 (顏色)</Label>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Label>顏色</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="h-6 px-2 text-[10px]"
                   onClick={() => setIsColorManageOpen(true)}
                 >
                   <Palette className="h-3 w-3 mr-1" /> 管理顏色
                 </Button>
               </div>
-              <ColorSelectField 
+              <ColorSelectField
                 selectedColorIds={selectedColorIds}
                 onChange={setSelectedColorIds}
               />
             </div>
           </div>
 
-          <ColorManagementDialog 
+          <ColorManagementDialog
             open={isColorManageOpen}
             onOpenChange={setIsColorManageOpen}
           />

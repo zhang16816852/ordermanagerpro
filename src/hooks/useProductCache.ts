@@ -14,6 +14,8 @@ export type ProductWithCategories = Product & {
   device_model_groups?: { id: string, name: string }[];
   device_model_exclusions?: { name: string }[];
   effective_model_names?: string[];
+  variants?: any[];       // 注入的變體資料
+  spec_values?: any;      // 注入的規格字典
 };
 
 interface ProductCache {
@@ -40,14 +42,41 @@ function setLocalCache(products: ProductWithCategories[], version: number) {
 }
 
 function normalizeProduct(p: any, categoryMap?: Map<string, string>, groupItemsMap?: Map<string, string[]>, modelIdToName?: Map<string, string>): ProductWithCategories {
-  // Check if we are receiving the junction table data
+  // --- 1. 預處理所有規格 (v6) ---
+  const allSpecRows = p.product_spec_values || [];
+  
+  // 分離產品規格與變體規格
+  const productSpecs = allSpecRows.filter((r: any) => r.entity_type === 'product');
+  const variantSpecsMap = new Map<string, any[]>();
+  
+  allSpecRows.filter((r: any) => r.entity_type === 'variant').forEach((r: any) => {
+    const list = variantSpecsMap.get(r.entity_id) || [];
+    variantSpecsMap.set(r.entity_id, [...list, r]);
+  });
+
+  const transformToDict = (rows: any[]) => {
+    return (rows || []).reduce((acc: any, cur: any) => {
+      // 統一使用三段式 Key: ParentID:SpecID:InstanceID
+      const parentId = cur.parent_id || 'root';
+      const specId = cur.spec_id;
+      const instanceId = cur.instance_uuid || specId;
+      const pathKey = `${parentId}:${specId}:${instanceId}`;
+      acc[pathKey] = cur.value;
+      return acc;
+    }, {});
+  };
+
+  const spec_values = transformToDict(productSpecs);
+
+  // --- 2. 處理變體並注入對應規格 ---
+  const variants = (p.product_variants || []).map((v: any) => ({
+    ...v,
+    spec_values: transformToDict(variantSpecsMap.get(v.id) || [])
+  }));
+
+  // --- 3. 分類資訊扁平化 ---
   const hasLinksProperty = Object.prototype.hasOwnProperty.call(p, 'product_category_links');
   const links = p.product_category_links || [];
-
-  // Priority: 
-  // 1. Junction table (product_category_links)
-  // 2. Legacy array field if exists
-  // 3. Singular legacy field (category_id)
   let category_ids: string[] = [];
 
   if (hasLinksProperty) {
@@ -57,46 +86,35 @@ function normalizeProduct(p: any, categoryMap?: Map<string, string>, groupItemsM
   } else if (p.category_id) {
     category_ids = [p.category_id];
   }
-  
-  // Extract category names
-  // If we have a categoryMap (from the latest fetch), we prioritize resolving by ID for total reliability
+
   let category_names: string[] = [];
-  
   if (categoryMap && category_ids.length > 0) {
     category_names = category_ids.map(id => categoryMap.get(id)).filter(Boolean) as string[];
   } else if (links.length > 0) {
-    // Fallback to joined data if Map is not available
     category_names = links.map((l: any) => {
       const cat = l.categories || l.category;
       return Array.isArray(cat) ? cat[0]?.name : cat?.name;
     }).filter(Boolean);
   }
 
-  // Extract device model info
+  // --- 4. 型號與連動邏輯 ---
   const modelLinks = p.product_model_links || [];
   const device_models = modelLinks.map((l: any) => ({
     name: l.device_models?.name,
     aliases: l.device_models?.aliases || []
   })).filter((m: any) => m.name);
 
-  // Extract group info
   const groupLinks = p.product_model_group_links || [];
   const device_model_groups = groupLinks.map((l: any) => ({
     id: l.group_id,
     name: l.device_model_groups?.name
   })).filter((g: any) => g.name);
 
-  // Extract exclusions
   const exclusions = p.product_model_exclusions || [];
   const exclusionNames = new Set(exclusions.map((l: any) => l.device_models?.name?.toLowerCase()).filter(Boolean));
 
-  // Resolve Effective Models
   const effectiveModelNames = new Set<string>();
-  
-  // 1. Add direct models
   device_models.forEach(m => effectiveModelNames.add(m.name));
-  
-  // 2. Add group models
   if (groupItemsMap && modelIdToName) {
     device_model_groups.forEach(g => {
       const modelIds = groupItemsMap.get(g.id) || [];
@@ -106,21 +124,17 @@ function normalizeProduct(p: any, categoryMap?: Map<string, string>, groupItemsM
       });
     });
   }
-  
-  // 3. Remove exclusions
   const finalModelNames = Array.from(effectiveModelNames).filter(name => !exclusionNames.has(name.toLowerCase()));
-
-  const device_model_exclusions = exclusions.map((l: any) => ({
-    name: l.device_models?.name
-  })).filter((m: any) => m.name);
 
   return {
     ...p,
+    variants,           // 注入變體
+    spec_values,        // 注入規格字典
     category_ids,
-    category_names: category_names,
+    category_names,
     device_models,
     device_model_groups,
-    device_model_exclusions,
+    device_model_exclusions: exclusions.map((l: any) => ({ name: l.device_models?.name })),
     effective_model_names: finalModelNames
   };
 }
@@ -129,76 +143,83 @@ async function checkVersionAndFetch(): Promise<{ products: ProductWithCategories
   const cache = getLocalCache();
   const clientVersion = cache?.version ?? null;
 
-  console.log('[ProductCache] Checking version with Edge Function...');
-  
-  // 1. First, call Edge Function to check version (this reduces data transfer if no update needed)
+  console.log('[ProductCache] 透過 Edge Function 校驗版本...');
+
+  // 1. 呼叫 Edge Function 校驗版本（僅傳版本號，版本一致時不傳資料）
   const { data, error } = await supabase.functions.invoke('check-data-version', {
     body: { tableName: 'products', clientVersion },
   });
 
-  if (error) {
-    console.error('[ProductCache] Edge function error, falling back to direct fetch');
-    // On error, we need both products and categories
-    const [{ data: products, error: fetchError }, { data: cats }] = await Promise.all([
-      supabase.from('products').select(`
-        *, 
-        product_category_links(category_id), 
-        product_model_links(device_models(name, aliases)),
-        product_model_group_links(group_id, device_model_groups(name)),
-        product_model_exclusions(device_models(name))
-      `).order('name'),
-      supabase.from('categories').select('id, name')
-    ]);
+  /*if (error) {
+    // Edge Function 失敗時直接查詢資料庫作為備援
+    console.warn('[ProductCache] Edge Function 失敗，改用直接查詢');
+    return await fetchProductsDirectly(clientVersion || 0);
+  }*/
 
-    if (fetchError) throw fetchError;
-    const catMap = new Map(cats?.map(c => [c.id, c.name]) || []);
-    
-    // Fetch group items and models for resolution
-    const [{ data: groupItems }, { data: allModels }] = await Promise.all([
-      supabase.from('device_model_group_items').select('group_id, model_id'),
-      supabase.from('device_models').select('id, name')
-    ]);
-    
-    const groupItemsMap = new Map<string, string[]>();
-    groupItems?.forEach(item => {
-      const current = groupItemsMap.get(item.group_id) || [];
-      groupItemsMap.set(item.group_id, [...current, item.model_id]);
-    });
-    const modelIdToName = new Map(allModels?.map(m => [m.id, m.name]) || []);
+  const { needsUpdate, version, updatedAt, lastTriggeredBy } = data;
 
-    const mappedProducts = (products || []).map(p => normalizeProduct(p, catMap, groupItemsMap, modelIdToName));
-    return { products: mappedProducts, version: clientVersion || 0 };
-  }
-
-  const { needsUpdate, version, data: rawData } = data;
-
+  // 2. 版本一致，使用本地快取
   if (!needsUpdate && cache) {
-    console.log('[ProductCache] Verions match. Using local cache.');
-    // Check if cache needs a name refresh (e.g. if names were missing before)
+    console.log(
+      `%c[ProductCache] ✅ 版本一致 (v${version})`,
+      'color: #3498db; font-weight: bold',
+      `更新於: ${updatedAt}`
+    );
+
+    // 若快取中分類名稱遺失，補抓
     const needsNameRefresh = cache.products.some(p => p.category_ids.length > 0 && p.category_names.length === 0);
-    
     if (needsNameRefresh) {
-      console.log('[ProductCache] Detected empty category names in cache, fetching names...');
       const { data: cats } = await supabase.from('categories').select('id, name');
       const catMap = new Map(cats?.map(c => [c.id, c.name]) || []);
-      const normalizedProducts = cache.products.map(p => normalizeProduct(p, catMap));
-      return { products: normalizedProducts, version };
+      return { products: cache.products.map(p => normalizeProduct(p, catMap)), version };
     }
-    
+
     return { products: cache.products, version };
   }
 
-  // 2. Data needs update! Fetch categories to ensure names are resolved correctly
-  console.log('[ProductCache] Update needed. Fetching categories and mapping data...');
-  const { data: cats } = await supabase.from('categories').select('id, name');
-  const catMap = new Map(cats?.map(c => [c.id, c.name]) || []);
+  // 3. 版本不同
+  console.log(
+    `%c[ProductCache] 🔄 版本不符 (v${version})`,
+    'color: #9b59b6; font-weight: bold',
+    `觸發來源: ${lastTriggeredBy}, 更新時間: ${updatedAt}`
+  );
+  console.log('[ProductCache] 重新抓取完整資料...');
+  return await fetchProductsDirectly(version);
+}
 
-  // Fetch group items and models for resolution
-  const [{ data: groupItems }, { data: allModels }] = await Promise.all([
+// 完整抓取產品資料（含所有關聯）並更新快取
+async function fetchProductsDirectly(version: number): Promise<{ products: ProductWithCategories[]; version: number }> {
+  const [
+    { data: products, error: fetchError },
+    { data: allSpecValues },
+    { data: cats },
+    { data: groupItems },
+    { data: allModels }
+  ] = await Promise.all([
+    supabase.from('products').select(`
+      *,
+      product_category_links(category_id, categories(name)),
+      product_model_links(device_models(name, aliases)),
+      product_model_group_links(group_id, device_model_groups(name)),
+      product_model_exclusions(device_models(name)),
+      product_variants(*)
+    `).order('name'),
+    supabase.from('product_spec_values').select('*').is('deleted_at', null),
+    supabase.from('categories').select('id, name'),
     supabase.from('device_model_group_items').select('group_id, model_id'),
     supabase.from('device_models').select('id, name')
   ]);
-  
+
+  if (fetchError) throw fetchError;
+
+  // 將所有規格按 entity_id 分類
+  const specMapByEntity = new Map<string, any[]>();
+  allSpecValues?.forEach(row => {
+    const list = specMapByEntity.get(row.entity_id) || [];
+    specMapByEntity.set(row.entity_id, [...list, row]);
+  });
+
+  const catMap = new Map(cats?.map(c => [c.id, c.name]) || []);
   const groupItemsMap = new Map<string, string[]>();
   groupItems?.forEach(item => {
     const current = groupItemsMap.get(item.group_id) || [];
@@ -206,11 +227,24 @@ async function checkVersionAndFetch(): Promise<{ products: ProductWithCategories
   });
   const modelIdToName = new Map(allModels?.map(m => [m.id, m.name]) || []);
 
-  // Map received data with names
-  const products = (rawData || []).map(p => normalizeProduct(p, catMap, groupItemsMap, modelIdToName));
-  setLocalCache(products, version);
-  return { products, version };
+  const mappedProducts = (products || []).map(p => {
+    // 為產品和它的變體注入對應的規格行，供 normalizeProduct 使用
+    const productWithInjectedSpecs = {
+      ...p,
+      product_spec_values: specMapByEntity.get(p.id) || [],
+      product_variants: (p.product_variants || []).map((v: any) => ({
+        ...v,
+        product_spec_values: specMapByEntity.get(v.id) || []
+      }))
+    };
+    return normalizeProduct(productWithInjectedSpecs, catMap, groupItemsMap, modelIdToName);
+  });
+  setLocalCache(mappedProducts, version);
+  console.log(`[ProductCache] 快取已更新 (v${version})，共 ${mappedProducts.length} 筆`);
+
+  return { products: mappedProducts, version };
 }
+
 
 export function useProductCache() {
   const queryClient = useQueryClient();
@@ -223,8 +257,9 @@ export function useProductCache() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['products-with-cache'],
     queryFn: checkVersionAndFetch,
-    staleTime: 1000 * 60 * 5, // Consider data fresh for 5 minutes
-    gcTime: Infinity, // 永久保存
+    staleTime: 1000 * 30, // 30 秒內不重複檢查
+    gcTime: Infinity,
+    refetchOnWindowFocus: true, // 切換回視窗時自動檢查
   });
 
   useEffect(() => {
@@ -302,9 +337,9 @@ export function useStoreProductCache(storeId: string | null) {
     enabled: !!brand,
     staleTime: 1000 * 60 * 5, // 5 分鐘
   });
-  
+
   const { models: storeModels, groups: storeGroups, groupItems: storeGroupItems } = useDeviceModelStore();
-  
+
   // Helper to resolve effective models from links locally
   const resolveEffectiveModels = (target: any, isVariant = false) => {
     const directLinksKey = isVariant ? 'variant_model_links' : 'product_model_links';
@@ -314,17 +349,17 @@ export function useStoreProductCache(storeId: string | null) {
     const directModels = (target[directLinksKey] || []).map((l: any) => l.device_models?.name).filter(Boolean);
     const groupLinks = target[groupLinksKey] || [];
     const exclusions = new Set((target[exclusionsKey] || []).map((l: any) => l.device_models?.name?.toLowerCase()).filter(Boolean));
-    
+
     const resolvedNames = new Set<string>(directModels);
-    
+
     groupLinks.forEach((gl: any) => {
-        const itemIds = storeGroupItems.filter(i => i.group_id === gl.group_id).map(i => i.model_id);
-        itemIds.forEach(mid => {
-            const m = storeModels.find(sm => sm.id === mid);
-            if (m) resolvedNames.add(m.name);
-        });
+      const itemIds = storeGroupItems.filter(i => i.group_id === gl.group_id).map(i => i.model_id);
+      itemIds.forEach(mid => {
+        const m = storeModels.find(sm => sm.id === mid);
+        if (m) resolvedNames.add(m.name);
+      });
     });
-    
+
     return Array.from(resolvedNames).filter(name => !exclusions.has(name.toLowerCase()));
   };
 
@@ -358,7 +393,7 @@ export function useStoreProductCache(storeId: string | null) {
         const variantBrandPrice = brandPrices.find(
           bp => bp.product_id === product.id && bp.variant_id === variant.id
         );
-        
+
         // Resolve variant-specific effective models
         const variantModels = resolveEffectiveModels(variant, true);
         // If variant has no specific models, it inherits from product

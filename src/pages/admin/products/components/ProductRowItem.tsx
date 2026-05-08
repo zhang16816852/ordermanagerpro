@@ -15,7 +15,7 @@ type Product = Tables<'products'>;
 // 判斷規格資料格式 (用於管理員辨識)
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function getSpecFormatInfo(tableSettings: any, hasSyncedToNewTable?: boolean): {
+function getSpecFormatInfo(specValues: any, hasSyncedToNewTable?: boolean): {
     label: string;
     color: string;
     icon: 'new' | 'legacy' | 'empty';
@@ -25,38 +25,32 @@ function getSpecFormatInfo(tableSettings: any, hasSyncedToNewTable?: boolean): {
     if (hasSyncedToNewTable) {
         return { label: '新格式', color: 'text-emerald-600 bg-emerald-50 border-emerald-200', icon: 'new', tip: '規格已同步至新版關聯資料表' };
     }
-    if (!tableSettings) {
+    if (!specValues) {
         return { label: '無規格', color: 'text-slate-400 bg-slate-50 border-slate-200', icon: 'empty', tip: '此產品/變體尚未設定規格' };
     }
-    // 新版陣列格式 [{spec_id: UUID, ...}]
-    if (Array.isArray(tableSettings)) {
-        const hasUuidKeys = tableSettings.length > 0 && tableSettings.every(
-            (item: any) => item?.spec_id && UUID_REGEX.test(item.spec_id)
-        );
-        if (hasUuidKeys) {
-            return { label: '新格式', color: 'text-emerald-600 bg-emerald-50 border-emerald-200', icon: 'new', tip: '規格已使用新版陣列格式儲存' };
-        }
-        if (tableSettings.length === 0) {
-            return { label: '無規格', color: 'text-slate-400 bg-slate-50 border-slate-200', icon: 'empty', tip: '規格為空' };
-        }
-    }
-    // 舊版物件格式
-    if (typeof tableSettings === 'object' && !Array.isArray(tableSettings)) {
-        const keys = Object.keys(tableSettings).filter(k => k !== '_metadata');
+    
+    // v6 格式是字典物件且包含 ":" 路徑 key
+    if (typeof specValues === 'object' && !Array.isArray(specValues)) {
+        const keys = Object.keys(specValues).filter(k => k !== '_metadata');
         if (keys.length === 0) {
             return { label: '無規格', color: 'text-slate-400 bg-slate-50 border-slate-200', icon: 'empty', tip: '規格為空' };
         }
-        const allUuid = keys.every(k => UUID_REGEX.test(k));
-        if (allUuid) {
-            return { label: '待遷移', color: 'text-amber-600 bg-amber-50 border-amber-200', icon: 'legacy', tip: '規格使用舊版物件格式但 Key 為 UUID，重新儲存即可自動升級' };
+        const isV6 = keys.some(k => k.includes(':'));
+        if (isV6) {
+            return { label: '新格式', color: 'text-emerald-600 bg-emerald-50 border-emerald-200', icon: 'new', tip: '規格已符合 v6 標準' };
         }
-        return { label: '舊格式', color: 'text-red-500 bg-red-50 border-red-200', icon: 'legacy', tip: '規格使用舊版非 UUID Key，需手動重新輸入並儲存' };
+        return { label: '待遷移', color: 'text-amber-600 bg-amber-50 border-amber-200', icon: 'legacy', tip: '規格使用舊版物件格式，重新儲存即可自動升級' };
     }
+
+    if (Array.isArray(specValues)) {
+        return { label: '舊格式', color: 'text-amber-600 bg-amber-50 border-amber-200', icon: 'legacy', tip: '規格仍為舊版陣列格式' };
+    }
+
     return { label: '未知', color: 'text-slate-400 bg-slate-50 border-slate-200', icon: 'empty', tip: '格式不明' };
 }
 
-function SpecFormatBadge({ tableSettings, hasSynced }: { tableSettings: any; hasSynced?: boolean }) {
-    const info = getSpecFormatInfo(tableSettings, hasSynced);
+function SpecFormatBadge({ specValues, hasSynced }: { specValues: any; hasSynced?: boolean }) {
+    const info = getSpecFormatInfo(specValues, hasSynced);
     if (info.icon === 'empty') return null;
     return (
         <Tooltip>
@@ -156,7 +150,7 @@ export function ProductRowItem({
                             {/* 規格格式標記 (管理員用) */}
                             {!hasVariants && (
                                 <TooltipProvider>
-                                    <SpecFormatBadge tableSettings={(product as any).table_settings} />
+                                    <SpecFormatBadge specValues={(product as any).spec_values} />
                                 </TooltipProvider>
                             )}
                         </div>
@@ -254,7 +248,7 @@ export function ProductRowItem({
                                                             <span>{[v.option_1, v.option_2, v.option_3].filter(Boolean).join(' / ')}</span>
                                                             {/* 變體規格格式標記 */}
                                                             <TooltipProvider>
-                                                                <SpecFormatBadge tableSettings={v.table_settings} />
+                                                                <SpecFormatBadge specValues={v.spec_values} />
                                                             </TooltipProvider>
                                                         </div>
                                                         {v.variant_model_links && v.variant_model_links.length > 0 && (

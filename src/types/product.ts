@@ -51,7 +51,7 @@ export interface ProductWithDetails extends Product {
     category_id?: string | null;
     brand_name?: string;
     variants?: ProductVariant[];
-    table_settings: any; // 保持為 any 以支援動態規格
+    spec_values?: any; // v6 規格架構
 }
 
 export interface ProductWithPricing extends ProductWithDetails {
@@ -65,5 +65,5 @@ export interface VariantWithPricing extends ProductVariant {
     effective_wholesale_price: number;
     effective_retail_price: number;
     has_brand_price: boolean;
-    table_settings: any;
+    spec_values?: any;
 }

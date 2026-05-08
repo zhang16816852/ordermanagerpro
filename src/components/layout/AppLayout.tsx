@@ -1,9 +1,10 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link, useMatch, useResolvedPath } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useSpecStore } from '@/store/useSpecStore';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useStoreDraft } from '@/stores/useOrderDraftStore';
 import { Badge } from "@/components/ui/badge"; // ← 新增這行
@@ -228,6 +229,8 @@ export function AppLayout({ children }: AppLayoutProps) {
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="p-0 w-64 bg-sidebar border-sidebar-border">
+            <SheetTitle className="sr-only">導覽選單</SheetTitle>
+            <SheetDescription className="sr-only">存取系統的各個模組與功能</SheetDescription>
             <NavContent />
           </SheetContent>
         </Sheet>

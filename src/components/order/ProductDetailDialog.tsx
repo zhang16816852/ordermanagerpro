@@ -14,6 +14,7 @@ import { useStoreDraft } from "@/stores/useOrderDraftStore";
 import { toast } from "sonner";
 import { ShoppingCart, ImageIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useSpecStore } from "@/store/useSpecStore";
 import { supabase } from "@/integrations/supabase/client";
 import { formatSpecValue, deserializeSpecs, getTreeSortedVisiblePaths } from "@/utils/specLogic";
 import { useBrands } from "@/hooks/useBrands";
@@ -67,30 +68,13 @@ export function ProductDetailDialog({
         return product.variants.find(v => v.id === selectedVariantId) || null;
     }, [product?.variants, selectedVariantId]);
 
-    const { data: specDefinitions = [] } = useQuery({
-        queryKey: ['spec_definitions'],
-        queryFn: async () => {
-            const { data, error } = await supabase.from('specification_definitions')
-                .select('*')
-                .order('sort_order', { ascending: true })
-                .order('name');
-            if (error) return [];
-            
-            // Map to CategorySpec format expected by specLogic utils
-            return data.map((s: any) => ({
-                id: s.id,
-                name: s.name,
-                key: s.id,
-                type: s.type,
-                options: s.options || [],
-                defaultValue: s.default_value || '',
-                logicConfig: s.logic_config as any,
-                logic_config: s.logic_config as any,
-                configuration: s.configuration as any,
-                sort_order: s.sort_order || 0
-            }));
-        },
-    });
+    const { specDefinitions, specTriggers, fetchSpecs } = useSpecStore();
+
+    useEffect(() => {
+        if (open && specDefinitions.length === 0) {
+            fetchSpecs();
+        }
+    }, [open, specDefinitions.length, fetchSpecs]);
 
     // Resolve effective models from cache
     const effectiveModels = useMemo(() => {
@@ -99,8 +83,8 @@ export function ProductDetailDialog({
         return (target as any).effective_model_names || [];
     }, [product, selectedVariant]);
 
-    // --- Variant Matrix Logic ---
-    // Pre-process variants to have a clean model display name
+    // --- 變體矩陣邏輯 ---
+    // 預處理變體，產生乾淨的型號顯示名稱
     const processedVariants = useMemo(() => {
         if (!product?.variants) return [];
         return product.variants.map(v => {
@@ -111,8 +95,8 @@ export function ProductDetailDialog({
             if (groupNames.length > 0) modelDisplay = groupNames.join(', ');
             else if (modelNames.length > 0) modelDisplay = modelNames.join(', ');
             else {
-                // If no structured model links, only use name as a dimension if there are NO other options
-                // This prevents redundant long names when option_1/2/3 are already present
+                // 如果沒有結構化的型號連結，僅在沒有其他選項時才將名稱作為維度
+                // 這樣可以防止在已有 option_1/2/3 的情況下出現冗餘的長名稱
                 const hasOptions = !!(v.option_1 || v.option_2 || v.option_3);
                 modelDisplay = hasOptions ? '' : v.name;
             }
@@ -165,10 +149,10 @@ export function ProductDetailDialog({
         if (!product?.has_variants) return;
 
         const match = variants.find(v => {
-            // Normalize '' and null to be equivalent for comparison
+            // 正規化 '' 和 null 以便進行比較
             const vModel = v.modelDisplay || null;
             const sModel = selectedOptions.modelDisplay || null;
-            
+
             return vModel === sModel &&
                 v.option_1 === selectedOptions.option_1 &&
                 v.option_2 === selectedOptions.option_2 &&
@@ -178,15 +162,12 @@ export function ProductDetailDialog({
         if (match) {
             setSelectedVariantId(match.id);
         } else {
-            // If no exact match, maybe clear the ID but keep options
-            // Actually, if they haven't selected all dimensions that exist, we shouldn't clear it yet
-            // But if there ARE no variants matching this combination, we might need to reset.
-            // However, our UI prevents selecting unavailable options.
+            // 如果沒有完全匹配，可能是尚未選擇所有維度
             setSelectedVariantId(null);
         }
     }, [selectedOptions, variants, product?.has_variants]);
 
-    // Handle Option Selection
+    // 處理選項點擊
     const handleOptionClick = (dimKey: string, value: string) => {
         setSelectedOptions(prev => ({
             ...prev,
@@ -196,18 +177,25 @@ export function ProductDetailDialog({
 
     // --- 核心邏輯：深度彙整與樹狀排序 ---
     const combinedSpecs = useMemo(() => {
-        if (!product || specDefinitions.length === 0) return [];
+        if (!product) return [];
+        if (specDefinitions.length === 0) {
+            console.log('[DetailDialog] 規格定義尚未載入');
+            return [];
+        }
+
+        console.log('[DetailDialog] 原始產品規格:', product.spec_values);
+        console.log('[DetailDialog] 變體數量:', product.variants?.length);
 
         // 1. 建立一個 Map 來存放每一個 pathKey 對應到的所有唯一數值
-        // 使用 JSON.stringify(val) 作為 Set 的判斷依據
+        // 使用 JSON.stringify(val) 作為 Set 的判斷依據，以處理物件型規格
         const specsAggregation = new Map<string, { rawValues: any[], stringifiedSet: Set<string> }>();
 
-        const addValueToAgg = (key: string, val: any) => {
+        const addValueToAgg = (pathKey: string, val: any) => {
             if (val === null || val === undefined || val === '') return;
-            if (!specsAggregation.has(key)) {
-                specsAggregation.set(key, { rawValues: [], stringifiedSet: new Set() });
+            if (!specsAggregation.has(pathKey)) {
+                specsAggregation.set(pathKey, { rawValues: [], stringifiedSet: new Set() });
             }
-            const agg = specsAggregation.get(key)!;
+            const agg = specsAggregation.get(pathKey)!;
 
             // 處理物件 Key 排序，確保 {"a":1, "b":2} 等於 {"b":2, "a":1}
             let sVal;
@@ -227,54 +215,52 @@ export function ProductDetailDialog({
             }
         };
 
-        // 2. 搜集數據
-        if (selectedVariant) {
-            const vSpecs = deserializeSpecs(selectedVariant.table_settings);
-            const pSpecs = deserializeSpecs(product.table_settings);
-            // 變體模式下：變體存在的 key 會覆蓋產品
-            const allKeys = new Set([...Object.keys(pSpecs), ...Object.keys(vSpecs)]);
-            allKeys.forEach(key => {
-                const val = vSpecs[key] !== undefined ? vSpecs[key] : pSpecs[key];
-                addValueToAgg(key, val);
+        // 2. 搜集數據：從產品本身與所有變體中提取規格
+        // 產品層級規格
+        if (product.spec_values) {
+            Object.entries(product.spec_values).forEach(([pathKey, val]) => {
+                addValueToAgg(pathKey, val);
             });
-        } else if (product.variants && product.variants.length > 0) {
-            // 初始狀態：預覽所有變體的合集
-            product.variants.forEach(v => {
-                const vSpecs = deserializeSpecs(v.table_settings);
-                Object.entries(vSpecs).forEach(([key, val]) => addValueToAgg(key, val));
-            });
-            // 同時也考慮產品本身的規格 (若有的話)
-            const pSpecs = deserializeSpecs(product.table_settings);
-            Object.entries(pSpecs).forEach(([key, val]) => addValueToAgg(key, val));
-        } else {
-            // 單產品模式
-            const pSpecs = deserializeSpecs(product.table_settings);
-            Object.entries(pSpecs).forEach(([key, val]) => addValueToAgg(key, val));
         }
 
-        // 3. 準備給排序演算法的 Map
+        // 變體層級規格 (僅在沒有選定特定變體時進行聚合顯示)
+        // 收集變體規格
+        const vList = selectedVariantId ? variants.filter(v => v.id === selectedVariantId) : variants;
+        console.log('[DetailDialog] 準備處理的變體數:', vList.length);
+        console.log(vList)
+        vList.forEach(v => {
+            if (v.spec_values) {
+                Object.entries(v.spec_values).forEach(([k, val]) => addValueToAgg(k, val));
+            }
+        });
+
+        console.log('[DetailDialog] 聚合後的 Map 大小:', specsAggregation.size);
+
+        // 3. 準備給排序演算法的 Map (基於當前已有的聚合數值)
         const visibleInfo = new Map<string, any>();
         specsAggregation.forEach((_, key) => visibleInfo.set(key, {}));
 
-        // 4. 執行樹狀排序 (parentId -> id)
-        const sortedPaths = getTreeSortedVisiblePaths(specDefinitions, visibleInfo);
+        // 4. 執行樹狀排序 (DFS)
+        const sortedPaths = getTreeSortedVisiblePaths(specDefinitions as any, visibleInfo);
 
         // 5. 轉換為最終顯示格式
         return sortedPaths.map(({ pathKey, level }) => {
             const agg = specsAggregation.get(pathKey);
             if (!agg) return null;
 
-            const specId = pathKey.includes(':') ? pathKey.split(':').pop()! : pathKey;
-            const def = specDefinitions.find((s: any) => s.id === specId || s.name === specId);
+            const parts = pathKey.split(':');
+            const specId = parts[1];
+            const instanceUuid = parts[2];
+            const def = specDefinitions.find((s: any) => s.id === specId);
 
-            // 如果找不到定義，嘗試從產品的原始 table_settings 中找 path (僅限新格式)
+            // 如果找不到定義，嘗試從資料中找 (僅限相容性用途)
             let displayName = def?.name;
             if (!displayName && product.variants) {
-                // 遍歷所有變體找這個 ID 的 path
                 for (const v of product.variants) {
-                    if (Array.isArray(v.table_settings)) {
-                        const entry = (v.table_settings as any[]).find(e => e.id === specId);
-                        if (entry?.path && !entry.path.match(/^[0-9a-f-]{36}$/i)) {
+                    const specs = v.spec_values;
+                    if (Array.isArray(specs)) {
+                        const entry = (specs as any[]).find(e => (e.spec_id || e.id) === specId);
+                        if (entry?.path) {
                             displayName = entry.path.split(' > ').pop();
                             break;
                         }
@@ -299,7 +285,7 @@ export function ProductDetailDialog({
             };
         }).filter(Boolean) as any[];
     }, [product, specDefinitions]);
-
+    console.log("文字規格:", combinedSpecs)
     // 獲取目前應顯示的價格
     const currentPriceDisplay = useMemo(() => {
         if (!product) return "$0";
@@ -364,6 +350,14 @@ export function ProductDetailDialog({
                             </div>
                         </div>
 
+                        {(product.brand_id || product.model) && (
+                            <div>
+                                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">品牌 / 型號</h3>
+                                <p className="mt-1">
+                                    {getBrandName(product.brand_id)} / {product.model || '-'}
+                                </p>
+                            </div>
+                        )}
                         {((product as any).category_names?.length > 0) && (
                             <div>
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">類別</h3>
@@ -377,14 +371,6 @@ export function ProductDetailDialog({
                             </div>
                         )}
 
-                        {(product.brand_id || product.model) && (
-                            <div>
-                                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">品牌 / 型號</h3>
-                                <p className="mt-1">
-                                    {getBrandName(product.brand_id)} / {product.model || '-'}
-                                </p>
-                            </div>
-                        )}
 
                         <div className="pt-4 border-t">
                             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">產品描述</h3>

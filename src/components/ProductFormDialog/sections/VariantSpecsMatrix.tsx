@@ -45,24 +45,37 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                 .in('entity_id', vIds)
                 .eq('entity_type', 'variant')
                 .is('deleted_at', null);
-            
+
             if (valError) throw valError;
 
             // 組合資料
-            return vData.map(v => ({
-                ...v,
-                values: valData.filter(val => val.entity_id === v.id)
-            }));
+            return vData.map(v => {
+                const variantValues = valData.filter(val => val.entity_id === v.id);
+                return {
+                    ...v,
+                    values: variantValues,
+                    spec_values: variantValues.reduce((acc: any, cur: any) => {
+                        // V6 重要修正：路徑必須符合三段式 ParentId:SpecId:InstanceId
+                        const pathKey = cur.parent_id
+                            ? `${cur.parent_id}:${cur.spec_id}:${cur.instance_uuid || cur.spec_id}`
+                            : `root:${cur.spec_id}:${cur.spec_id}`;
+                        acc[pathKey] = cur.value;
+                        return acc;
+                    }, {})
+                };
+            });
         },
         enabled: !!productId
     });
-
+    console.log("變體", variants)
     useEffect(() => {
         if (variants.length > 0) {
+            console.log('[VariantMatrix] 原始變體資料與聚合後的規格:', variants);
             const initial: Record<string, any> = {};
             variants.forEach(v => {
-                initial[v.id] = deserializeSpecs(v.values);
+                initial[v.id] = (v as any).spec_values || {};
             });
+            console.log('[VariantMatrix] 同步至 localData:', initial);
             setLocalData(initial);
         }
     }, [variants]);
@@ -71,7 +84,10 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
      * v5.1 樹狀動態路徑計算 (支援 DSL)
      */
     const visiblePathRows = useMemo(() => {
-        if (specFields.length === 0 || Object.keys(localData).length === 0) return [];
+        if (specFields.length === 0 || Object.keys(localData).length === 0) {
+            console.warn('[VariantMatrix] 跳過路徑計算: specFields 或 localData 為空', { specFieldsLen: specFields.length, localDataKeys: Object.keys(localData) });
+            return [];
+        }
 
         const aggregatedVisible = new Map<string, any>();
         Object.keys(localData).forEach(vId => {
@@ -79,19 +95,22 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
             variantVisible.forEach((info, path) => aggregatedVisible.set(path, info));
         });
 
+        console.log('[VariantMatrix] 聚合後的可見路徑:', Array.from(aggregatedVisible.keys()));
         const sortedPaths = getTreeSortedVisiblePaths(specFields, aggregatedVisible);
 
         return sortedPaths.map(({ pathKey, level }) => {
             const parts = pathKey.split(':');
+            const parentId = parts[0];
             const specId = parts[1];
             const spec = specFields.find(f => f.id === specId) || specMap.get(specId);
             const triggerInfo = aggregatedVisible.get(pathKey);
+
             return {
                 pathKey,
                 spec,
                 level,
                 name: spec?.name || specId,
-                parentId: parts[0],
+                parentId,
                 triggerInfo
             };
         });
@@ -102,7 +121,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
             const results = await Promise.all(
                 Object.entries(localData).map(([id, pathObj]) => {
                     const serialized = serializeSpecs(pathObj, specMap);
-                    
+
                     // 呼叫新版 RPC 原子化同步
                     return supabase.rpc('sync_product_specs_v6', {
                         p_entity_id: id,
@@ -177,7 +196,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                     <TableBody>
                         {visiblePathRows.map(row => {
                             const isHeading = row.spec?.type === 'heading';
-                            
+
                             return (
                                 <TableRow key={row.pathKey} className={`group hover:bg-muted/5 transition-colors border-b last:border-0 ${isHeading ? 'bg-primary/5' : ''}`}>
                                     <TableCell
@@ -198,7 +217,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                                         <span className="text-xs font-bold text-primary truncate">{row.name}</span>
                                                         {row.level > 0 && (
                                                             <span className="text-[9px] text-muted-foreground/60 truncate">
-                                                                來自: {specMap.get(row.parentId)?.name || '父規格'} 
+                                                                來自: {specMap.get(row.parentId)?.name || '父規格'}
                                                                 {row.triggerInfo?.op === 'ne' ? ' ≠ ' : ' = '}
                                                                 {row.triggerInfo?.val}
                                                             </span>

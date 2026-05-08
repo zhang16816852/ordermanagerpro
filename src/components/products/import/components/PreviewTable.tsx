@@ -598,11 +598,11 @@ export function PreviewTable({
                                         <div className="flex flex-col gap-0.5 max-w-[130px]">
                                             <div
                                                 className="text-[9px] font-medium text-muted-foreground truncate"
-                                                title={row._specs ? Object.entries(row._specs).map(([id, val]) => `${id}: ${val}`).join(', ') : (row.table_settings ? formatSpecValue(row.table_settings) : '-')}
+                                                title={row._specs ? Object.entries(row._specs).map(([id, val]) => `${id}: ${val}`).join(', ') : (row.spec_values ? formatSpecValue(row.spec_values) : '-')}
                                             >
                                                 {row._specs && Object.keys(row._specs).length > 0 
                                                     ? Object.entries(row._specs).map(([id, val]) => `${id}: ${val}`).join(', ') 
-                                                    : (row.table_settings ? formatSpecValue(row.table_settings) : '-')}
+                                                    : (row.spec_values ? formatSpecValue(row.spec_values) : '-')}
                                             </div>
                                         </div>
                                     </TableCell>

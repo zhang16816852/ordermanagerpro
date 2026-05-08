@@ -335,16 +335,19 @@ export type Database = {
       }
       data_versions: {
         Row: {
+          last_triggered_by: string | null
           table_name: string
           updated_at: string
           version: number
         }
         Insert: {
+          last_triggered_by?: string | null
           table_name: string
           updated_at?: string
           version?: number
         }
         Update: {
+          last_triggered_by?: string | null
           table_name?: string
           updated_at?: string
           version?: number
@@ -1026,7 +1029,6 @@ export type Database = {
           retail_price: number
           sku: string
           status: Database["public"]["Enums"]["product_status"]
-          table_settings: Json | null
           updated_at: string
           wholesale_price: number
         }
@@ -1043,7 +1045,6 @@ export type Database = {
           retail_price?: number
           sku: string
           status?: Database["public"]["Enums"]["product_status"]
-          table_settings?: Json | null
           updated_at?: string
           wholesale_price?: number
         }
@@ -1060,7 +1061,6 @@ export type Database = {
           retail_price?: number
           sku?: string
           status?: Database["public"]["Enums"]["product_status"]
-          table_settings?: Json | null
           updated_at?: string
           wholesale_price?: number
         }
@@ -1090,7 +1090,6 @@ export type Database = {
           series: string | null
           sku: string
           status: Database["public"]["Enums"]["product_status"]
-          table_settings: Json | null
           updated_at: string
         }
         Insert: {
@@ -1108,7 +1107,6 @@ export type Database = {
           series?: string | null
           sku: string
           status?: Database["public"]["Enums"]["product_status"]
-          table_settings?: Json | null
           updated_at?: string
         }
         Update: {
@@ -1126,7 +1124,6 @@ export type Database = {
           series?: string | null
           sku?: string
           status?: Database["public"]["Enums"]["product_status"]
-          table_settings?: Json | null
           updated_at?: string
         }
         Relationships: [
@@ -1437,9 +1434,9 @@ export type Database = {
           dsl_schema_json: Json | null
           expected_type: Database["public"]["Enums"]["spec_value_type"]
           id: string
-          logic_config: Json | null
           name: string
           options: Json | null
+          quantity_source_id: string | null
           sort_order: number | null
           type: string
           updated_at: string | null
@@ -1451,9 +1448,9 @@ export type Database = {
           dsl_schema_json?: Json | null
           expected_type?: Database["public"]["Enums"]["spec_value_type"]
           id?: string
-          logic_config?: Json | null
           name: string
           options?: Json | null
+          quantity_source_id?: string | null
           sort_order?: number | null
           type: string
           updated_at?: string | null
@@ -1465,9 +1462,9 @@ export type Database = {
           dsl_schema_json?: Json | null
           expected_type?: Database["public"]["Enums"]["spec_value_type"]
           id?: string
-          logic_config?: Json | null
           name?: string
           options?: Json | null
+          quantity_source_id?: string | null
           sort_order?: number | null
           type?: string
           updated_at?: string | null
@@ -1927,6 +1924,12 @@ export type Database = {
       }
     }
     Functions: {
+      bump_data_version:
+        | { Args: { p_table_name: string }; Returns: undefined }
+        | {
+            Args: { p_source_table?: string; p_table_name: string }
+            Returns: undefined
+          }
       delete_sales_note: {
         Args: { p_sales_note_id: string }
         Returns: undefined
@@ -1976,6 +1979,7 @@ export type Database = {
         Args: { _store_id: string; _user_id: string }
         Returns: boolean
       }
+      migrate_historical_specs_to_v6: { Args: never; Returns: Json }
       safe_eval_dsl: {
         Args: {
           p_condition: Json
@@ -2023,7 +2027,7 @@ export type Database = {
         | "cancelled"
       sales_note_status: "draft" | "shipped" | "received"
       spec_entity_type: "product" | "variant"
-      spec_instance_state: "active" | "orphaned" | "migrated"
+      spec_instance_state: "active" | "orphaned" | "migrated" | "deleted"
       spec_value_type: "string" | "number" | "boolean" | "array" | "object"
       store_role: "founder" | "manager" | "employee"
       system_role: "admin" | "customer"
@@ -2176,7 +2180,7 @@ export const Constants = {
       ],
       sales_note_status: ["draft", "shipped", "received"],
       spec_entity_type: ["product", "variant"],
-      spec_instance_state: ["active", "orphaned", "migrated"],
+      spec_instance_state: ["active", "orphaned", "migrated", "deleted"],
       spec_value_type: ["string", "number", "boolean", "array", "object"],
       store_role: ["founder", "manager", "employee"],
       system_role: ["admin", "customer"],

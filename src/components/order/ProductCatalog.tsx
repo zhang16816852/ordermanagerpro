@@ -134,9 +134,9 @@ export default function ProductCatalog({
           if (!target) return false;
           
           // 如果 target 是變體，它會有 option_1, option_2, option_3
-          // 如果 target 是產品，則主要看 table_settings
+          // 如果 target 是產品，則主要看 spec_values
           const isVariant = 'product_id' in target;
-          const flatSettings = deserializeSpecs(target.table_settings);
+          const flatSettings = deserializeSpecs(target.spec_values);
 
           return specKeys.every((key) => {
             const allowedValues = specFilters[key];

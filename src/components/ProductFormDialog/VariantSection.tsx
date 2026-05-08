@@ -66,7 +66,7 @@ export function VariantSection({ product }: { product: any }) {
         </div>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => setIsBatchOpen(true)}>
-            <Layers className="mr-2 h-4 w-4" /> 
+            <Layers className="mr-2 h-4 w-4" />
             {variants && variants.length > 0 ? '批次編輯 / 產生' : '批次產生'}
           </Button>
           <Button size="sm" onClick={() => { setEditingVariant(null); setIsDialogOpen(true); }}>
@@ -83,7 +83,7 @@ export function VariantSection({ product }: { product: any }) {
               <TableHead>規格名稱</TableHead>
               <TableHead>選項1</TableHead>
               <TableHead>選項2</TableHead>
-              <TableHead>選項3 (顏色)</TableHead>
+              <TableHead>顏色</TableHead>
               <TableHead>狀態</TableHead>
               <TableHead className="text-right">批發價</TableHead>
               <TableHead className="text-right">零售價</TableHead>

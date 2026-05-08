@@ -6,7 +6,6 @@ const corsHeaders = {
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -19,43 +18,40 @@ Deno.serve(async (req) => {
     const { tableName, clientVersion } = await req.json()
 
     if (!tableName) {
-      return new Response(
-        JSON.stringify({ error: 'tableName is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return new Response(JSON.stringify({ error: 'tableName is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    console.log(`Checking version for table: ${tableName}, client version: ${clientVersion}`)
-
-    // Get current server version
+    // 取得伺服器端版本號與觸發來源
     const { data: versionData, error: versionError } = await supabase
       .from('data_versions')
-      .select('version')
+      .select('version, updated_at, last_triggered_by')
       .eq('table_name', tableName)
       .maybeSingle()
 
-    if (versionError) {
-      console.error('Error fetching version:', versionError)
-      throw versionError
-    }
+    if (versionError) throw versionError
 
     const serverVersion = versionData?.version || 0
+    const lastTriggeredBy = versionData?.last_triggered_by || 'unknown'
+    const updatedAt = versionData?.updated_at
 
-    // If client version matches server version, no update needed
+    console.log(`[VersionCheck] 正在檢查 ${tableName}: 客戶端 v${clientVersion} vs 伺服器 v${serverVersion} (最後更新由: ${lastTriggeredBy})`)
+
+    // 版本一致
     if (clientVersion !== null && clientVersion !== undefined && clientVersion === serverVersion) {
-      console.log(`Version match (${serverVersion}), no data transfer needed`)
       return new Response(
         JSON.stringify({
           needsUpdate: false,
           version: serverVersion,
+          updatedAt,
+          lastTriggeredBy,
           data: null
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Version mismatch, fetch and return data
-    console.log(`Version mismatch (client: ${clientVersion}, server: ${serverVersion}), fetching data`)
+    // 版本不一致，抓取最新資料
+    console.log(`[VersionCheck] ⚠️ 版本不符！${tableName} 需要更新。來源表: ${lastTriggeredBy}, 更新時間: ${updatedAt}`)
 
     let data = null
 
@@ -64,32 +60,37 @@ Deno.serve(async (req) => {
         .from('products')
         .select(`
           *,
-          product_category_links(
-            category_id,
-            categories(name)
-          )
+          product_category_links(category_id, categories(name))
         `)
         .order('name')
 
-      if (productsError) {
-        console.error('Error fetching products:', productsError)
-        throw productsError
-      }
-
+      if (productsError) throw productsError
       data = products
-    } else {
-      return new Response(
-        JSON.stringify({ error: `Unsupported table: ${tableName}` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
 
-    console.log(`Returning ${data?.length || 0} records with version ${serverVersion}`)
+    } else if (tableName === 'specs') {
+      const [
+        { data: definitions },
+        { data: triggers },
+        { data: catLinks }
+      ] = await Promise.all([
+        supabase.from('specification_definitions').select('*').order('sort_order', { ascending: true }).order('name'),
+        supabase.from('specification_triggers').select('*').order('priority', { ascending: false }),
+        supabase.from('category_spec_links').select('*')
+      ])
+
+      data = {
+        definitions: definitions || [],
+        triggers: triggers || [],
+        categoryLinks: catLinks || []
+      }
+    }
 
     return new Response(
       JSON.stringify({
         needsUpdate: true,
         version: serverVersion,
+        updatedAt,
+        lastTriggeredBy,
         data
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -97,10 +98,7 @@ Deno.serve(async (req) => {
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    console.error('Error in check-data-version:', error)
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    console.error('[VersionCheck] 🔥 發生錯誤:', error)
+    return new Response(JSON.stringify({ error: errorMessage }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }
 })

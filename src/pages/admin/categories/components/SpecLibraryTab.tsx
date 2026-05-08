@@ -209,16 +209,11 @@ export function SpecLibraryTab() {
 
         if (!confirm(`確定要取消從「${parent.name}」到「${spec.name}」的連動關係嗎？\n(規格定義將保留，僅從此樹狀路徑移除)`)) return;
 
-        const newLogicConfig = JSON.parse(JSON.stringify(parent.logic_config || { triggers: [] }));
-        newLogicConfig.triggers.forEach((t: any) => {
-            t.targets = (t.targets || []).filter((tar: any) => tar.id !== spec.id);
-        });
-        newLogicConfig.triggers = newLogicConfig.triggers.filter((t: any) => (t.targets || []).length > 0);
-
         const { error } = await supabase
-            .from('specification_definitions')
-            .update({ logic_config: newLogicConfig })
-            .eq('id', parent.id);
+            .from('specification_triggers')
+            .delete()
+            .eq('source_spec_id', parent.id)
+            .eq('target_spec_id', spec.id);
 
         if (error) {
             toast.error('移除連動失敗');

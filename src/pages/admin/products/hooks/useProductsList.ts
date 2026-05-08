@@ -11,7 +11,9 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { generateProductExcel } from '@/utils/excelUtils';
 
-type Product = Tables<'products'>;
+import { ProductWithPricing } from '@/types/product';
+
+type Product = ProductWithPricing;
 
 export function useProductsList() {
     const queryClient = useQueryClient();
@@ -36,58 +38,6 @@ export function useProductsList() {
     const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
 
     // --- Queries ---
-
-
-    const { data: allVariants = [], isLoading: variantsLoading } = useQuery({
-        queryKey: ['all-product-variants'],
-        queryFn: async () => {
-            const { data, error } = await supabase
-                .from('product_variants')
-                .select(`
-                    *, 
-                    variant_model_links(model_id, device_models(name)),
-                    variant_model_group_links(group_id, device_model_groups(name)),
-                    variant_model_exclusions(model_id, device_models(name))
-                `)
-                .order('sku');
-            if (error) throw error;
-            return data || [];
-        },
-    });
-
-    const { data: allModelLinks = [], isLoading: modelsLoading } = useQuery({
-        queryKey: ['all-product-model-links'],
-        queryFn: async () => {
-            const { data, error } = await supabase
-                .from('product_model_links')
-                .select('product_id, model_id, device_models(name, aliases)')
-            if (error) throw error;
-            return (data as any) || [];
-        },
-    });
-
-    const { data: allModelGroupLinks = [] } = useQuery({
-        queryKey: ['all-product-model-group-links'],
-        queryFn: async () => {
-            const { data, error } = await supabase
-                .from('product_model_group_links')
-                .select('product_id, group_id, device_model_groups(name)')
-            if (error) throw error;
-            return (data as any) || [];
-        },
-    });
-
-    const { data: allModelExclusionLinks = [] } = useQuery({
-        queryKey: ['all-product-model-exclusion-links'],
-        queryFn: async () => {
-            const { data, error } = await supabase
-                .from('product_model_exclusions')
-                .select('product_id, model_id, device_models(name)')
-            if (error) throw error;
-            return (data as any) || [];
-        },
-    });
-
     const { data: categoryHierarchy = [] } = useQuery({
         queryKey: ['category_hierarchy'],
         queryFn: async () => {
@@ -127,8 +77,9 @@ export function useProductsList() {
     };
 
     const getProductVariants = useCallback((productId: string) => {
-        return allVariants.filter(v => v.product_id === productId);
-    }, [allVariants]);
+        const product = products?.find(p => p.id === productId);
+        return product?.variants || [];
+    }, [products]);
 
     const getProductModelsInfo = useCallback((productId: string) => {
         const product = products?.find(p => p.id === productId);
@@ -137,7 +88,7 @@ export function useProductsList() {
         const models: { name: string, aliases: string[] }[] = [];
 
         // 1. 直連
-        product.device_models?.forEach(m => models.push({ name: m.name, aliases: m.aliases || [] }));
+        product.device_models?.forEach(m => models.push({ name: m.name, aliases: (m as any).aliases || [] }));
 
         // 2. 群組名稱也納入搜尋
         product.device_model_groups?.forEach(g => models.push({ name: g.name, aliases: [] }));
@@ -146,6 +97,12 @@ export function useProductsList() {
     }, [products]);
 
     const getProductModels = useCallback((productId: string) => {
+        const product = products?.find(p => p.id === productId);
+        if (!product) return [];
+        return product.effective_model_names || [];
+    }, [products]);
+
+    const getProductBadgeInfo = useCallback((productId: string) => {
         const product = products?.find(p => p.id === productId);
         if (!product) return [];
 
@@ -213,9 +170,9 @@ export function useProductsList() {
                     });
                 };
 
-                const productMatches = matchesSpec(p.table_settings);
+                const productMatches = matchesSpec((p as any).spec_values);
                 const variants = getProductVariants(p.id);
-                const anyVariantMatches = variants.some((v) => matchesSpec(v.table_settings));
+                const anyVariantMatches = variants.some((v) => matchesSpec((v as any).spec_values));
 
                 if (!productMatches && !anyVariantMatches) return false;
             }
@@ -262,10 +219,15 @@ export function useProductsList() {
                 device_model_ids,
                 device_model_group_ids = [],
                 device_model_exclusion_ids = [],
-                category, category_id, device_models, ...productData
+                category, category_id, device_models,
+                spec_values, // 從主資料中拽出，不寫入 products 表
+                ...productData
             } = values;
 
-            const { data: product, error: productError } = await supabase.from('products').insert(productData).select().single();
+            // 建立產品 (v6 架構下，規格改為透過 RPC 寫入獨立資料表)
+            const { data: product, error: productError } = await supabase.from('products')
+                .insert({ ...productData })
+                .select().single();
             if (productError) throw productError;
 
             const promises = [];
@@ -292,13 +254,13 @@ export function useProductsList() {
 
             if (promises.length > 0) await Promise.all(promises);
 
-            // v6 同步產品規格 (單一產品層級)
-            if (values.table_settings && !values.has_variants) {
+            // v6 同步產品規格至新資料表
+            if (spec_values && !values.has_variants && category_ids?.[0]) {
                 const { error: specError } = await supabase.rpc('sync_product_specs_v6', {
                     p_entity_id: product.id,
                     p_entity_type: 'product',
-                    p_category_id: category_ids?.[0],
-                    p_new_data: values.table_settings
+                    p_category_id: category_ids[0],
+                    p_new_data: spec_values
                 });
                 if (specError) console.error('產品規格同步失敗:', specError);
             }
@@ -311,7 +273,7 @@ export function useProductsList() {
             queryClient.invalidateQueries({ queryKey: ['all-product-model-links'] });
             queryClient.invalidateQueries({ queryKey: ['all-product-variants'] });
             toast.success('產品已新增，您現在可以繼續設定變體與規格');
-            setEditingProduct(product);
+            setEditingProduct(product as any);
             // 不關閉彈窗，讓使用者繼續操作變體
         },
     });
@@ -323,7 +285,9 @@ export function useProductsList() {
                 device_model_ids,
                 device_model_group_ids = [],
                 device_model_exclusion_ids = [],
-                category, category_id, device_models, ...productData
+                category, category_id, device_models,
+                spec_values, // 從主資料中拽出，不寫入 products 表
+                ...productData
             } = values;
 
             // 先刪除所有舊關聯
@@ -358,16 +322,19 @@ export function useProductsList() {
 
             if (promises.length > 0) await Promise.all(promises);
 
-            const { error: productError } = await supabase.from('products').update({ ...productData, updated_at: new Date().toISOString() }).eq('id', id);
+            // 更新主資料
+            const { error: productError } = await supabase.from('products')
+                .update({ ...productData, updated_at: new Date().toISOString() })
+                .eq('id', id);
             if (productError) throw productError;
 
-            // v6 同步產品規格 (單一產品層級)
-            if (values.table_settings && !values.has_variants) {
+            // v6 同步產品規格至新資料表
+            if (spec_values && !values.has_variants && category_ids?.[0]) {
                 const { error: specError } = await supabase.rpc('sync_product_specs_v6', {
                     p_entity_id: id,
                     p_entity_type: 'product',
-                    p_category_id: category_ids?.[0],
-                    p_new_data: values.table_settings
+                    p_category_id: category_ids[0],
+                    p_new_data: spec_values
                 });
                 if (specError) console.error('產品規格同步失敗:', specError);
             }
@@ -420,7 +387,7 @@ export function useProductsList() {
             toast.success('產品及其變體已完整複製');
             if (newProductId) {
                 const { data: newProduct } = await supabase.from('products').select('*').eq('id', newProductId).single();
-                if (newProduct) { setEditingProduct(newProduct); setIsDialogOpen(true); }
+                if (newProduct) { setEditingProduct(newProduct as any); setIsDialogOpen(true); }
             }
         } catch (error: any) { toast.error(`複製失敗：${error.message}`); }
     };

@@ -137,7 +137,7 @@ export function generateProductExcel(
             const linkedSpecIds = new Set(specLinks.map(l => l.spec_id));
             const activeKeys = new Set<string>();
             groupProducts.forEach(p => {
-                const settings = p.table_settings;
+                const settings = p.spec_values;
                 if (Array.isArray(settings)) {
                     settings.forEach((s: any) => {
                         if (!linkedSpecIds.has(s.id)) {
@@ -258,7 +258,7 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
     modelsStr = modelParts.join(', ');
     baseValues.device_models = modelsStr;
 
-    const settings = item.table_settings || [];
+    const settings = item.spec_values || [];
     
     headerIds.forEach(key => {
         if (baseValues[key] !== undefined) {

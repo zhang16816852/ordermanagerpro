@@ -1,38 +1,46 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import Papa from 'papaparse';
 import { SpecDefinition } from '../types';
+import { useSpecStore } from '@/store/useSpecStore';
 
 /**
  * v4.8 規格屬性庫資料層：實作 JSON 100% 保真資料交換
+ * [v6] 已改為使用 useSpecStore 以支援版本校驗與連動規則合併
  */
 
 export function useSpecData() {
     const queryClient = useQueryClient();
+    const { specDefinitions, isLoading: isLoadingSpecs, fetchSpecs } = useSpecStore();
 
-    // --- Query ---
-    const { data: specDefinitions = [], isLoading: isLoadingSpecs } = useQuery({
-        queryKey: ['spec_definitions'],
-        queryFn: async () => {
-            const { data, error } = await supabase.from('specification_definitions')
-                .select('*')
-                .order('sort_order', { ascending: true })
-                .order('name');
-            if (error) return [];
-            return data as unknown as SpecDefinition[];
-        },
-    });
+    // 進入時確保資料已載入
+    useEffect(() => {
+        fetchSpecs();
+    }, [fetchSpecs]);
 
     // --- Mutation ---
     const specMutation = useMutation({
         mutationFn: async (data: { spec: Partial<SpecDefinition>; editingSpecId?: string }) => {
             const { spec, editingSpecId } = data;
+            
+            // [樂觀更新] 立即更新本地 Store 資料，讓 UI 感覺是瞬發的
+            const currentDefs = useSpecStore.getState().specDefinitions;
+            const updatedDefs = editingSpecId 
+                ? currentDefs.map(d => d.id === editingSpecId ? { ...d, ...spec } : d)
+                : [...currentDefs, { ...spec, id: 'temp-' + Date.now() }];
+            
+            useSpecStore.getState().setDefinitions(updatedDefs as any);
+
             let targetId = editingSpecId;
 
             if (editingSpecId) {
                 const { error } = await supabase.from('specification_definitions')
-                    .update(spec as any)
+                    .update({
+                        ...spec,
+                        quantity_source_id: (spec as any).quantity_source_id || null
+                    } as any)
                     .eq('id', editingSpecId);
                 if (error) throw error;
             } else {
@@ -42,7 +50,8 @@ export function useSpecData() {
                     configuration: spec.configuration ?? null,
                     logic_config: spec.logic_config ?? { triggers: [] },
                     options: spec.options ?? [],
-                    sort_order: spec.sort_order ?? 0
+                    sort_order: spec.sort_order ?? 0,
+                    quantity_source_id: (spec as any).quantity_source_id || null
                 };
                 const { data: newSpec, error } = await supabase.from('specification_definitions')
                     .insert([finalSpec as any])
@@ -52,33 +61,37 @@ export function useSpecData() {
                 targetId = newSpec.id;
             }
 
-            // v6 同步規格連動規則 (Triggers)
-            if (targetId && spec.logic_config?.triggers) {
+            // [v6] 同步規格連動規則 (Triggers)
+            if (targetId && spec.logic_config?.triggers && spec.logic_config.triggers.length > 0) {
                 // 先刪除舊規則
                 await supabase.from('specification_triggers').delete().eq('source_spec_id', targetId);
 
-                // 插入新規則
-                const triggers = spec.logic_config.triggers.flatMap((t: any) => {
-                    const operator = t.operator || 'eq';
-                    const onValue = t.on_value;
-                    
+                // 將 logic_config.triggers 陣列轉換成資料庫列格式
+                const triggerRows = spec.logic_config.triggers.flatMap((t: any) => {
                     return (t.targets || []).map((tar: any) => ({
                         source_spec_id: targetId,
                         target_spec_id: tar.id,
-                        condition_operator: operator,
-                        condition_value: onValue,
-                        is_quantity_detail: !!tar.is_quantity_detail
+                        condition_dsl: {
+                            operator: t.operator || 'eq',
+                            on_value: t.on_value,
+                            is_quantity_detail: !!tar.is_quantity_detail
+                        },
+                        priority: t.priority || 0
                     }));
                 });
 
-                if (triggers.length > 0) {
-                    const { error: triggerError } = await supabase.from('specification_triggers').insert(triggers);
-                    if (triggerError) console.error('觸發規則同步失敗:', triggerError);
+                if (triggerRows.length > 0) {
+                    const { error: triggerError } = await supabase.from('specification_triggers').insert(triggerRows as any);
+                    if (triggerError) {
+                        console.error('觸發規則同步失敗:', triggerError);
+                        toast.error('連動規則同步失敗');
+                    }
                 }
             }
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
+            // [關鍵修正] 強制刷新 Store，確保 UI 同步更新
+            useSpecStore.getState().fetchSpecs(true);
             toast.success('規格定義已同步至雲端');
         },
     });
@@ -105,14 +118,14 @@ export function useSpecData() {
             try {
                 const json = JSON.parse(event.target?.result as string);
                 const items = Array.isArray(json) ? json : [json];
-                
+
                 // 批次 Upsert，以 ID 或名稱為基準
                 const { error } = await supabase
                     .from('specification_definitions')
                     .upsert(items, { onConflict: 'id' });
 
                 if (error) throw error;
-                
+
                 queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
                 toast.success(`JSON 匯入成功，共處理 ${items.length} 筆規格`);
             } catch (err: any) {
@@ -129,7 +142,7 @@ export function useSpecData() {
             name: s.name,
             type: s.type,
             options: s.options.join(','),
-            default_value: s.default_value || '',
+            default_value: s.defaultValue || '',
             id: s.id,
             sort_order: s.sort_order || 0,
             // v4.8 額外包含 logic_config 字串
@@ -175,7 +188,7 @@ export function useSpecData() {
                         let logic_config = { triggers: [] };
                         try {
                             if (row.logic_config) logic_config = JSON.parse(row.logic_config);
-                        } catch (e) {}
+                        } catch (e) { }
 
                         return {
                             id: targetId || undefined,

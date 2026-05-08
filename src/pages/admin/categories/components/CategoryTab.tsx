@@ -31,10 +31,10 @@ function buildTree(cats: Category[], h: CategoryHierarchy[], links: any[]): any[
                 if (!child) return null;
                 // 找出該分類關聯的規格
                 const specs = links.filter(l => l.category_id === child.id);
-                return { 
-                    ...child, 
+                return {
+                    ...child,
                     spec_schema: specs,
-                    children: getChildren(child.id) 
+                    children: getChildren(child.id)
                 };
             })
             .filter(Boolean);
@@ -42,10 +42,10 @@ function buildTree(cats: Category[], h: CategoryHierarchy[], links: any[]): any[
 
     return roots.map(root => {
         const specs = links.filter(l => l.category_id === root.id);
-        return { 
-            ...root, 
+        return {
+            ...root,
             spec_schema: specs,
-            children: getChildren(root.id) 
+            children: getChildren(root.id)
         };
     });
 }
@@ -132,9 +132,7 @@ export function CategoryTab() {
     };
 
     const tree = buildTree(categories, categoryHierarchy, categorySpecLinks);
-    console.log(tree)
-    console.log('--- 所有分類與規格的連結原始資料 ---');
-    console.log(categorySpecLinks);
+
     return (
         <>
             {/* 工具列 */}

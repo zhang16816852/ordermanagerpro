@@ -116,7 +116,7 @@ export function CatalogSidebar({
 
     const { brands } = useBrands();
 
-    console.log(products)
+    //console.log("分類產品", products)
     const categoryTree = useMemo(() => {
         // Deduplicate hierarchy links
         const seen = new Set<string>();
@@ -184,7 +184,7 @@ export function CatalogSidebar({
     const availableSpecs = useMemo(() => {
         const specs: Record<string, Set<string>> = {};
 
-        // Use the fetched spec IDs as the keys for filtering table_settings
+        // Use the fetched spec IDs as the keys for filtering spec_values
         const definedSpecIds = specFields.map(f => f.id);
         const definedSpecNames = specFields.map(f => f.name);
         const selectedCatDetails = categories.find(c => c.id === selectedCategory);
@@ -201,12 +201,12 @@ export function CatalogSidebar({
                 if (!hasMatchInLinks && !hasMatchInLegacy) return;
             }
 
-            // Scan product table_settings
-            const pSettings = deserializeSpecs(p.table_settings);
+            // Scan product spec_values
+            const pSettings = deserializeSpecs(p.spec_values);
             Object.entries(pSettings).forEach(([key, value]) => {
                 const parts = key.split(':');
                 const specId = parts.length === 3 ? parts[1] : (parts.length === 2 ? parts[1] : key);
-                
+
                 // key could be ID or Name (for legacy data)
                 // We check if it matches either the defined IDs or Names
                 if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId) && !definedSpecNames.includes(specId)) return;
@@ -232,8 +232,10 @@ export function CatalogSidebar({
                 }
             });
 
-            // Scan variant table_settings and core options
-            p.variants?.forEach((v) => {
+            // Scan variant spec_values and core options
+            p.variants?.forEach(v => {
+                const vSettings = deserializeSpecs(v.spec_values);
+
                 // 1. Scan core options (option_1, option_2, option_3)
                 if (v.option_1) {
                     if (!specs['core:option_1']) specs['core:option_1'] = new Set();
@@ -248,12 +250,11 @@ export function CatalogSidebar({
                     specs['core:option_3'].add(v.option_3);
                 }
 
-                // 2. Scan table_settings
-                const vSettings = deserializeSpecs(v.table_settings);
+                // 2. Scan spec_values
                 Object.entries(vSettings).forEach(([key, value]) => {
                     const parts = key.split(':');
                     const specId = parts.length === 3 ? parts[1] : (parts.length === 2 ? parts[1] : key);
-                    
+
                     if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId) && !definedSpecNames.includes(specId)) return;
 
                     if (!specs[key]) specs[key] = new Set();

@@ -25,7 +25,7 @@ const productSchema = z.object({
   base_retail_price: z.coerce.number().min(0),
   status: z.enum(['active', 'discontinued', 'preorder', 'sold_out']),
   has_variants: z.boolean().default(false),
-  table_settings: z.any().nullable().optional(),
+  spec_values: z.any().nullable().optional(),
 });
 
 type Product = Tables<'products'>;
@@ -52,7 +52,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
       name: '', sku: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_id: null, model: '',
       base_wholesale_price: 0, base_retail_price: 0,
       status: 'active', has_variants: false,
-      table_settings: {},
+      spec_values: {},
     },
   });
 
@@ -65,9 +65,9 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
       const loadInitialData = async () => {
         if (initialData) {
           console.log('[ProductFormDialog] Resetting form with initialData:', initialData);
-          
+
           let currentSpecValues = [];
-          
+
           // 編輯模式：從新資料表抓取規格數值
           if (initialData.id) {
             const { data, error } = await supabase
@@ -76,7 +76,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
               .eq('entity_id', initialData.id)
               .eq('entity_type', 'product')
               .is('deleted_at', null);
-            
+
             if (!error && data) {
               currentSpecValues = data;
             }
@@ -89,9 +89,9 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
             device_model_ids: [],
             device_model_group_ids: [],
             device_model_exclusion_ids: [],
-            table_settings: deserializeSpecs(currentSpecValues.length > 0 ? currentSpecValues : initialData.table_settings),
+            spec_values: deserializeSpecs(currentSpecValues.length > 0 ? currentSpecValues : (initialData as any).spec_values),
           });
-
+          console.log(form)
           // 讀取型號標籤、群組標籤與排除的關聯
           if (initialData.id) {
             Promise.all([
@@ -109,7 +109,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
             name: '', sku: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_id: null, model: '',
             base_wholesale_price: 0, base_retail_price: 0,
             status: 'active', has_variants: false,
-            table_settings: {},
+            spec_values: {},
           });
         }
       };
@@ -121,31 +121,23 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
 
   // 封裝 Submit 以進行資料轉換 (Object -> Array)
   const handleWrappedSubmit = (values: any) => {
-    // 當產品有變體時，產品層級的 table_settings 應維持為空
-    // 因為規格是記錄在各個變體的 table_settings 裡面
-    if (values.has_variants) {
-      onSubmit({
-        ...values,
-        table_settings: [] // 強制清空產品層級規格
-      });
-      return;
-    }
-
-    // 將前端的路徑 Object 轉換為後端的易讀 Array
+    // 將前端的路徑 Object 轉換為後端的 V6 Entry 格式
     const serializedSettings = serializeSpecs(
-      values.table_settings,
+      values.spec_values,
       specMap
     );
     onSubmit({
       ...values,
-      table_settings: serializedSettings as any
+      spec_values: serializedSettings as any
     });
-
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col p-0 ">
+      <DialogContent
+        className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col"
+        aria-describedby={undefined}
+      >
         <DialogHeader className="p-6 pb-0">
           <DialogTitle>{initialData ? `編輯產品: ${initialData.name}` : '新增產品'}</DialogTitle>
           <DialogDescription>
