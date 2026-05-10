@@ -6,9 +6,10 @@ import { toast } from 'sonner';
 import { SpecDialog } from './SpecDialog';
 import { useSpecData } from '../hooks/useSpecData';
 import { SpecDefinition } from '../types';
+import { useSpecStore } from '@/store/useSpecStore';
 import { Toolbar } from './spec-library/SpecLibraryToolbar';
 import { GridView } from './spec-library/SpecLibraryGridView';
-import { TreeView } from './spec-library/SpecLibraryTreeView';
+import { TreeView, SpecTreeNode } from './spec-library/SpecLibraryTreeView';
 
 // 規格屬性庫面板 (v4.12 支援自訂排序與智慧連動移除)
 export function SpecLibraryTab() {
@@ -99,9 +100,14 @@ export function SpecLibraryTab() {
 
         const query = searchQuery.toLowerCase().trim();
 
-        const buildTree = (spec: SpecDefinition, onValue?: string, parentId?: string): any => {
-            const node: any = {
-                id: spec.id,
+        const buildTree = (spec: SpecDefinition, onValue?: string, parentId?: string, path: string = ''): SpecTreeNode => {
+            // 將觸發條件 (onValue) 納入路徑，確保同一個規格被多次引用時 ID 唯一
+            const segment = onValue ? `[${onValue}]${spec.id}` : spec.id;
+            const currentPath = path ? `${path}>${segment}` : segment;
+
+            const node: SpecTreeNode = {
+                id: currentPath, // 用於 DND 的唯一 Key (包含路徑與條件)
+                specId: spec.id, // 用於資料庫更新的 UUID
                 spec: spec,
                 onValue,
                 parentId,
@@ -114,7 +120,7 @@ export function SpecLibraryTab() {
                 (t.targets || []).forEach((tar: any) => {
                     const childSpec = specDefinitions.find(s => s.id === tar.id);
                     if (childSpec) {
-                        node.children.push(buildTree(childSpec, prefix + t.on_value, spec.id));
+                        node.children.push(buildTree(childSpec, prefix + t.on_value, spec.id, currentPath));
                     }
                 });
             });
@@ -163,7 +169,7 @@ export function SpecLibraryTab() {
 
         return roots;
     }, [specDefinitions, viewMode, searchQuery]);
-
+    console.log("樹狀", treeData)
     const openSpecDialog = (spec: SpecDefinition | null = null) => {
         if (spec) {
             setEditingSpec(spec);
@@ -185,7 +191,7 @@ export function SpecLibraryTab() {
     };
 
     const handleSubmit = () => {
-        console.log(specForm)
+        console.log("handleSubmit", specForm)
         const cleaned = { ...specForm, options: (specForm.options || []).filter(o => o.trim() !== '') };
         specMutation.mutate({ spec: cleaned, editingSpecId: editingSpec?.id }, {
             onSuccess: () => setIsSpecDialogOpen(false),
@@ -224,6 +230,48 @@ export function SpecLibraryTab() {
         }
     };
 
+    const handleReorder = async (updates: { id: string; sort_order: number }[]) => {
+        // --- 1. 樂觀更新 (Optimistic Update) ---
+        // 立即更新本地 Store 狀態，讓 UI 無感切換
+        const currentDefs = [...specDefinitions];
+        updates.forEach(u => {
+            const spec = currentDefs.find(s => s.id === u.id);
+            if (spec) spec.sort_order = u.sort_order;
+        });
+        // 根據新的 sort_order 進行排序
+        currentDefs.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        useSpecStore.getState().setDefinitions(currentDefs);
+
+        // --- 2. 背景更新資料庫 ---
+        try {
+            const promises = updates.map(u =>
+                supabase.from('specification_definitions')
+                    .update({ sort_order: u.sort_order })
+                    .eq('id', u.id)
+            );
+
+            // 不使用 await 阻塞 UI 渲染，讓它在背景執行
+            Promise.all(promises).then(async () => {
+                // 觸發版號更新 (用於其他分頁同步)
+                const { error: rpcError } = await supabase.rpc('bump_data_version', { p_table_name: 'specs' });
+                if (rpcError) {
+                    await supabase.from('data_versions')
+                        .update({ version: Date.now(), updated_at: new Date().toISOString() })
+                        .eq('table_name', 'specs');
+                }
+                // 靜默更新快取，不觸發重新渲染
+                queryClient.setQueryData(['spec_definitions'], currentDefs);
+            });
+
+            toast.success('排序已儲存', { duration: 1000 });
+        } catch (error) {
+            console.error('排序更新失敗:', error);
+            toast.error('排序同步失敗，請重新整理');
+            // 如果失敗，可以考慮在這裡重新拉取資料以恢復狀態
+            useSpecStore.getState().fetchSpecs(true);
+        }
+    };
+
     return (
         <TooltipProvider>
             <div className="space-y-6 pb-20">
@@ -255,6 +303,7 @@ export function SpecLibraryTab() {
                                 treeData={treeData}
                                 onEdit={openSpecDialog}
                                 onDelete={handleRemoveLink}
+                                onReorder={handleReorder}
                             />
                         )}
                     </>

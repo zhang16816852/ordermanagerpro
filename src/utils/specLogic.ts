@@ -216,7 +216,9 @@ export function getVisibleSpecsTree(
             const isHeading = spec.type === 'heading';
 
             // --- 處理 A: 規格連動 (Triggers) ---
-            const activeTriggers = specTriggers.filter(t => t.source_spec_id === specId);
+            let activeTriggers = specTriggers.filter(t => t.source_spec_id === specId);
+
+
             activeTriggers.forEach(t => {
                 const isMatch = isHeading ? true : checkSpecTriggerMatch(
                     spec.type,
@@ -303,20 +305,13 @@ export function getVisibleSpecsTree(
  */
 export function getTreeSortedVisiblePaths(
     specFields: CategorySpec[],
-    visibleInfo: Map<string, any>
+    visibleInfo: Map<string, any>,
+    categorySortMap?: Record<string, number>
 ) {
     const sorted: { pathKey: string; level: number }[] = [];
     const visited = new Set<string>();
 
     // 1. 建立 父路徑節點 -> 子路徑 的映射表
-    // 這裡我們需要知道每個 pathKey 的「主體 ID」(specId) 是什麼，因為子項目的 parentId 會指向它
-    const specIdToPaths = new Map<string, string[]>();
-    visibleInfo.forEach((_, pathKey) => {
-        const specId = pathKey.split(':')[1];
-        if (!specIdToPaths.has(specId)) specIdToPaths.set(specId, []);
-        specIdToPaths.get(specId)!.push(pathKey);
-    });
-
     const parentIdToChildren = new Map<string, string[]>();
     visibleInfo.forEach((_, pathKey) => {
         const parentId = pathKey.split(':')[0];
@@ -325,7 +320,6 @@ export function getTreeSortedVisiblePaths(
     });
 
     // 2. 識別所有「頂層路徑」
-    // 頂層路徑定義：其 parentId 為 'root'，或者其 parentId 不在當前可見的 specId 列表中
     const allVisibleSpecIds = new Set(Array.from(visibleInfo.keys()).map(k => k.split(':')[1]));
     const topLevelPaths: string[] = [];
 
@@ -336,6 +330,21 @@ export function getTreeSortedVisiblePaths(
         }
     });
 
+    // 排序函式：優先使用分類權重，其次使用全域權重
+    const sortByKey = (a: string, b: string) => {
+        const idA = a.split(':')[1];
+        const idB = b.split(':')[1];
+        
+        const catSortA = categorySortMap?.[idA] ?? 999;
+        const catSortB = categorySortMap?.[idB] ?? 999;
+
+        if (catSortA !== catSortB) return catSortA - catSortB;
+
+        const sortA = specFields.find(s => s.id === idA)?.sort_order || 0;
+        const sortB = specFields.find(s => s.id === idB)?.sort_order || 0;
+        return sortA - sortB;
+    };
+
     // 3. DFS 遍歷函數
     const traverse = (pathKey: string, level: number) => {
         if (visited.has(pathKey)) return;
@@ -344,32 +353,17 @@ export function getTreeSortedVisiblePaths(
         sorted.push({ pathKey, level });
 
         const currentSpecId = pathKey.split(':')[1];
-        const currentSpec = specFields.find(s => s.id === currentSpecId);
         const children = parentIdToChildren.get(currentSpecId) || [];
 
-        // 排序：按定義的 sort_order
-        children.sort((a, b) => {
-            const idA = a.split(':')[1];
-            const idB = b.split(':')[1];
-            const sortA = specFields.find(s => s.id === idA)?.sort_order || 0;
-            const sortB = specFields.find(s => s.id === idB)?.sort_order || 0;
-            return sortA - sortB;
-        });
+        children.sort(sortByKey);
 
-        // 關鍵修正：如果父節點是標籤 (heading)，子項目不增加層級 (保持平級)
-        const nextLevel = currentSpec?.type === 'heading' ? level : level + 1;
+        // 統一增加層級，無論父節點是否為標籤 (heading)
+        const nextLevel = level + 1;
         children.forEach(childKey => traverse(childKey, nextLevel));
     };
 
     // 4. 從所有頂層路徑開始執行 DFS
-    // 先按 sort_order 排序頂層路徑
-    topLevelPaths.sort((a, b) => {
-        const idA = a.split(':')[1];
-        const idB = b.split(':')[1];
-        const sortA = specFields.find(s => s.id === idA)?.sort_order || 0;
-        const sortB = specFields.find(s => s.id === idB)?.sort_order || 0;
-        return sortA - sortB;
-    });
+    topLevelPaths.sort(sortByKey);
 
     topLevelPaths.forEach(path => traverse(path, 0));
 
@@ -528,7 +522,7 @@ export function formatSpecsToCondensedString(
  * v4.12 靜態規格樹建構演算法 (用於後台分類設定)
  * 根據規格定義中的 triggers 關係建構 DFS 排序後的樹狀清單
  */
-export function getStaticSpecTree(specDefinitions: any[]): { spec: any; level: number }[] {
+export function getStaticSpecTree(specDefinitions: any[]): { spec: any; level: number; id: string }[] {
     const childToParent = new Map<string, string>();
 
     // 1. 建立子對父的對照表
@@ -551,11 +545,10 @@ export function getStaticSpecTree(specDefinitions: any[]): { spec: any; level: n
         return specDefinitions.filter(s => childToParent.get(s.id) === parentId);
     };
 
-    const sorted: { spec: any; level: number }[] = [];
+    const sorted: { spec: any; level: number; id: string }[] = [];
     const visited = new Set<string>();
 
-    const traverse = (nodes: any[], level: number = 0) => {
-        // 同層按名稱排序
+    const traverse = (nodes: any[], level: number = 0, path: string = '') => {
         // 同層按排序與名稱排序
         const sortedNodes = [...nodes].sort((a, b) => {
             if (a.sort_order !== b.sort_order) {
@@ -565,14 +558,18 @@ export function getStaticSpecTree(specDefinitions: any[]): { spec: any; level: n
         });
 
         sortedNodes.forEach(node => {
-            if (visited.has(node.id)) return;
-            visited.add(node.id);
+            const currentPath = path ? `${path}>${node.id}` : node.id;
+            
+            // 雖然是靜態樹，但為了防止資料配置錯誤導致無限迴圈
+            const visitKey = `${currentPath}`;
+            if (visited.has(visitKey)) return;
+            visited.add(visitKey);
 
-            sorted.push({ spec: node, level });
+            sorted.push({ spec: node, level, id: currentPath });
 
             const children = getChildren(node.id);
             if (children.length > 0) {
-                traverse(children, level + 1);
+                traverse(children, level + 1, currentPath);
             }
         });
     };

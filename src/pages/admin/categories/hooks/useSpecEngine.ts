@@ -26,6 +26,7 @@ export function useSpecEngine(specDefinitions: SpecData[]) {
         deselect: useCallback((id: ID, source?: SpecSource) => engineRef.current.deselect(id, source), []),
         toggle: useCallback((id: ID) => engineRef.current.toggle(id), []),
         setSortOrder: useCallback((id: ID, order: number) => engineRef.current.setSortOrder(id, order), []),
+        reorder: useCallback((configs: { id: ID, sortOrder: number }[]) => engineRef.current.reorder(configs), []),
         restore: useCallback((snapshot: any) => engineRef.current.restore(snapshot), []),
         bulkUpdate: useCallback((ids: ID[]) => engineRef.current.bulkUpdate(ids), []),
         

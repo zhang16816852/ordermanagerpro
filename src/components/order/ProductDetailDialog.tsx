@@ -60,7 +60,7 @@ export function ProductDetailDialog({
         }
     }, [open, product?.id]);
 
-    const { specDefinitions, specTriggers, fetchSpecs } = useSpecStore();
+    const { specDefinitions, specTriggers, categoryLinks, fetchSpecs } = useSpecStore();
 
     useEffect(() => {
         if (open && specDefinitions.length === 0) {
@@ -128,9 +128,9 @@ export function ProductDetailDialog({
         if (!product?.has_variants) return;
         const match = variants.find(v => {
             return (v.modelDisplay || null) === (selectedOptions.modelDisplay || null) &&
-                   v.option_1 === selectedOptions.option_1 &&
-                   v.option_2 === selectedOptions.option_2 &&
-                   v.option_3 === selectedOptions.option_3;
+                v.option_1 === selectedOptions.option_1 &&
+                v.option_2 === selectedOptions.option_2 &&
+                v.option_3 === selectedOptions.option_3;
         });
         setSelectedVariantId(match ? match.id : null);
     }, [selectedOptions, variants, product?.has_variants]);
@@ -146,13 +146,30 @@ export function ProductDetailDialog({
     const combinedSpecs = useMemo(() => {
         if (!product || specDefinitions.length === 0) return [];
 
-        const specsAggregation = new Map<string, { rawValues: any[], stringifiedSet: Set<string> }>();
-        const addValueToAgg = (pathKey: string, val: any) => {
+        // 1. 建立分類專屬排序權重表 (Category Sort Map)
+        const productCategoryIds = (product as any).product_category_links?.map((l: any) => l.category_id) || [];
+        const categorySortMap: Record<string, number> = {};
+        
+        categoryLinks
+            .filter(link => productCategoryIds.includes(link.category_id))
+            .forEach(link => {
+                if (categorySortMap[link.spec_id] === undefined || link.sort_order < categorySortMap[link.spec_id]) {
+                    categorySortMap[link.spec_id] = link.sort_order;
+                }
+            });
+
+        // 2. 建立以 specId 為主的彙整表
+        const specIdAgg = new Map<string, { rawValues: any[], stringifiedSet: Set<string> }>();
+        const addValue = (pathKey: string, val: any) => {
             if (val === null || val === undefined || val === '') return;
-            if (!specsAggregation.has(pathKey)) {
-                specsAggregation.set(pathKey, { rawValues: [], stringifiedSet: new Set() });
+            // 提取真正的 specId (從 A:B:C 中提取 B)
+            const parts = pathKey.split(':');
+            const specId = parts.length >= 2 ? parts[1] : pathKey;
+            
+            if (!specIdAgg.has(specId)) {
+                specIdAgg.set(specId, { rawValues: [], stringifiedSet: new Set() });
             }
-            const agg = specsAggregation.get(pathKey)!;
+            const agg = specIdAgg.get(specId)!;
             const sVal = JSON.stringify(val);
             if (!agg.stringifiedSet.has(sVal)) {
                 agg.stringifiedSet.add(sVal);
@@ -160,36 +177,50 @@ export function ProductDetailDialog({
             }
         };
 
-        if (product.spec_values) {
-            Object.entries(product.spec_values).forEach(([k, v]) => addValueToAgg(k, v));
-        }
+        // 收集產品與變體的所有規格數據
+        if (product.spec_values) Object.entries(product.spec_values).forEach(([k, v]) => addValue(k, v));
         const vList = selectedVariantId ? variants.filter(v => v.id === selectedVariantId) : variants;
         vList.forEach(v => {
-            if (v.spec_values) {
-                Object.entries(v.spec_values).forEach(([k, val]) => addValueToAgg(k, val));
+            if (v.spec_values) Object.entries(v.spec_values).forEach(([k, val]) => addValue(k, val));
+        });
+
+        // 2. 建立一個「智慧值字典」給 getVisibleSpecsTree 使用
+        // 透過 Proxy 讓連動計算時，不管傳入什麼路徑 (pathKey)，都能對應到正確的 specId 數值
+        const flattenedValues: Record<string, any> = {};
+        specIdAgg.forEach((agg, specId) => { flattenedValues[specId] = agg.rawValues[0]; });
+
+        const valueProxy = new Proxy(flattenedValues, {
+            get: (target, prop: string) => {
+                if (typeof prop !== 'string') return undefined;
+                const sid = prop.includes(':') ? prop.split(':')[1] : prop;
+                return target[sid];
             }
         });
 
-        const currentValuesDict: Record<string, any> = {};
-        specsAggregation.forEach((agg, key) => { currentValuesDict[key] = agg.rawValues[0]; });
-
+        // 3. 計算可見路徑 (這會觸發所有隱藏的 Triggers)
         const visiblePathsMap = getVisibleSpecsTree(
             specDefinitions as any,
-            currentValuesDict,
+            valueProxy as any,
             specTriggers
         );
 
-        const sortedPaths = getTreeSortedVisiblePaths(specDefinitions as any, visiblePathsMap);
+        const sortedPaths = getTreeSortedVisiblePaths(
+            specDefinitions as any, 
+            visiblePathsMap,
+            categorySortMap
+        );
 
+        // 4. 映射回顯示格式
         return sortedPaths.map(({ pathKey, level }) => {
             const specId = pathKey.split(':')[1];
             const def = specDefinitions.find((s: any) => s.id === specId);
             if (!def) return null;
 
-            const agg = specsAggregation.get(pathKey);
-            const hasValue = agg && agg.rawValues.length > 0;
+            const agg = specIdAgg.get(specId);
             const isHeading = def.type === 'heading';
+            const hasValue = agg && agg.rawValues.length > 0;
 
+            // 標題一律顯示；其餘項目若無數據則隱藏
             if (!isHeading && !hasValue) return null;
 
             return {
@@ -200,7 +231,7 @@ export function ProductDetailDialog({
                 isMultiple: hasValue && agg.rawValues.length > 1
             };
         }).filter(Boolean);
-    }, [product, variants, selectedVariantId, specDefinitions]);
+    }, [product, variants, selectedVariantId, specDefinitions, specTriggers]);
 
     const currentPriceDisplay = useMemo(() => {
         if (!product) return "$0";
@@ -235,7 +266,10 @@ export function ProductDetailDialog({
     };
 
     if (!product) return null;
-
+    console.log("specDefinitions", specDefinitions)
+    console.log("specTriggers", specTriggers)
+    console.log("product", product)
+    console.log("combinedSpecs", combinedSpecs)
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-2xl overflow-y-auto max-h-[90vh]">
@@ -302,39 +336,49 @@ export function ProductDetailDialog({
                             <div className="pt-4 border-t">
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">產品規格</h3>
                                 <div className="space-y-0.5">
-                                    {combinedSpecs.map((spec) => {
-                                        const parts = spec.id.split(':');
-                                        const def = specDefinitions.find((s: any) => s.id === parts[1]);
-                                        const isHeading = def?.type === 'heading' && !spec.value;
+                                {combinedSpecs.map((spec) => {
+                                    const parts = spec.id.split(':');
+                                    const specId = parts.length >= 2 ? parts[1] : spec.id;
+                                    const def = specDefinitions.find((s: any) => s.id === specId);
+                                    const isHeading = def?.type === 'heading' && !spec.value;
 
-                                        if (isHeading) {
-                                            return (
-                                                <div key={spec.id} className="pt-4 pb-1 border-b border-primary/10">
-                                                    <h4 className="text-xs font-bold text-primary uppercase tracking-widest flex items-center gap-2">
-                                                        <span className="w-1 h-3 bg-primary rounded-full" />
-                                                        {spec.name}
-                                                    </h4>
-                                                </div>
-                                            );
-                                        }
-
+                                    if (isHeading) {
                                         return (
                                             <div key={spec.id} className={cn(
-                                                "flex flex-col text-sm py-2 border-b last:border-0 border-muted/30",
-                                                spec.level > 0 && "bg-muted/5"
+                                                "pt-4 pb-1 border-b border-primary/10",
+                                                spec.level > 0 && "ml-4"
                                             )}>
-                                                <div className="flex justify-between items-start w-full gap-4">
-                                                    <span className={cn("text-muted-foreground shrink-0", spec.level > 0 && "text-xs flex items-center gap-1")} style={{ paddingLeft: `${spec.level * 16}px` }}>
-                                                        {spec.level > 0 && <span className="opacity-50 text-[10px]">└─</span>}
-                                                        {spec.name}
-                                                    </span>
-                                                    <span className="font-medium text-right">
-                                                        {formatSpecValue(spec.value, def, specDefinitions as any)}
-                                                    </span>
-                                                </div>
+                                                <h4 className="text-[10px] font-bold text-primary/70 uppercase tracking-widest flex items-center gap-2">
+                                                    {spec.level > 0 && <span className="opacity-30">└─</span>}
+                                                    {spec.name}
+                                                </h4>
                                             </div>
                                         );
-                                    })}
+                                    }
+
+                                    return (
+                                        <div key={spec.id} className={cn(
+                                            "flex flex-col text-sm py-2 border-b last:border-0 border-muted/30",
+                                            spec.level > 0 && "bg-slate-50/30"
+                                        )}>
+                                            <div className="flex justify-between items-start w-full gap-4">
+                                                <span 
+                                                    className={cn(
+                                                        "text-muted-foreground shrink-0 transition-all",
+                                                        spec.level > 0 ? "text-xs flex items-center gap-1.5" : "font-medium"
+                                                    )} 
+                                                    style={{ paddingLeft: `${spec.level * 16}px` }}
+                                                >
+                                                    {spec.level > 0 && <span className="opacity-40 text-[10px]">└─</span>}
+                                                    {spec.name}
+                                                </span>
+                                                <span className="font-semibold text-right text-slate-700">
+                                                    {formatSpecValue(spec.value, def, specDefinitions as any)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                                 </div>
                             </div>
                         )}
@@ -360,9 +404,9 @@ export function ProductDetailDialog({
                             <div key={dimKey as string} className="space-y-3">
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
                                     {dimKey === 'modelDisplay' ? '型號 / 名稱' :
-                                     dimKey === 'option_1' ? '規格 / 屬性' :
-                                     dimKey === 'option_2' ? '類型 / 附加規格' :
-                                     dimKey === 'option_3' ? '顏色 / 樣式' : '規格選項'}
+                                        dimKey === 'option_1' ? '規格 / 屬性' :
+                                            dimKey === 'option_2' ? '類型 / 附加規格' :
+                                                dimKey === 'option_3' ? '顏色 / 樣式' : '規格選項'}
                                 </h3>
                                 <div className="flex flex-wrap gap-2">
                                     {(values as string[]).map((val: string) => {

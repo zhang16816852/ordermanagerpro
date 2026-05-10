@@ -115,18 +115,16 @@ export const useSpecStore = create<SpecStore>((set, get) => ({
     },
 
     fetchSpecs: async (force = false) => {
-        console.log(`[SpecStore] 🔍 fetchSpecs 調用 (force: ${force}), 當前資料量: ${get().specDefinitions.length}`);
-        
-        if (!force && get().specDefinitions.length > 0) {
-            console.log('[SpecStore] ⏭️ 資料已存在且非強制刷新，跳過。');
-            return;
-        }
+        if (get().isLoading) return;
 
         set({ isLoading: true });
         try {
             const cache = getLocalSpecCache();
-            const clientVersion = cache?.version ?? null;
-            console.log(`[SpecStore] 📦 本地快取版本: ${clientVersion}`);
+            // 如果記憶體已有資料且非強制刷新，優先使用記憶體中的版本號進行校驗
+            const currentVersion = get().specVersion || cache?.version || null;
+            const clientVersion = force ? null : currentVersion;
+            
+            console.log(`[SpecStore] 📦 版本校驗 (clientVersion: ${clientVersion}, force: ${force})`);
 
             // 透過 Edge Function 做版本校驗
             const { data: versionResult, error: versionError } = await supabase.functions.invoke('check-data-version', {

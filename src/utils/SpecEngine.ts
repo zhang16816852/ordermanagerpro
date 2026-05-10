@@ -265,6 +265,16 @@ export class SpecEngine {
         }
     }
 
+    public reorder(configs: { id: ID, sortOrder: number }[]) {
+        configs.forEach(c => {
+            const state = this.selectedSpecs.get(c.id);
+            if (state) {
+                state.sortOrder = c.sortOrder;
+            }
+        });
+        this.notify();
+    }
+
     public isSelected(id: ID): boolean {
         return this.selectedSpecs.has(id);
     }

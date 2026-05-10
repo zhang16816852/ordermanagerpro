@@ -90,6 +90,22 @@ export function useCategoryData() {
                 }));
                 await (supabase.from('category_spec_links' as any) as any).insert(links);
             }
+
+            // [關鍵修正] 手動觸發版號更新，確保 Edge Function 會通知客戶端刷新
+            try {
+                const { error: rpcError } = await supabase.rpc('bump_data_version', { p_table_name: 'specs' });
+                if (rpcError) {
+                    await supabase.from('data_versions')
+                        .update({ 
+                            version: Date.now(),
+                            updated_at: new Date().toISOString(),
+                            last_triggered_by: 'admin_category_mutation'
+                        })
+                        .eq('table_name', 'specs');
+                }
+            } catch (err) {
+                console.warn('[useCategoryData] 版號更新失敗', err);
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['categories'] });
@@ -266,6 +282,13 @@ export function useCategoryData() {
                             const { error: sError } = await (supabase.from('category_spec_links' as any) as any).insert(newSpecLinks);
                             if (sError) throw sError;
                         }
+                    }
+
+                    // [關鍵修正] 手動觸發版號更新
+                    try {
+                        await supabase.rpc('bump_data_version', { p_table_name: 'specs' });
+                    } catch (err) {
+                        console.warn('[useCategoryData] 匯入版號更新失敗', err);
                     }
 
                     queryClient.invalidateQueries({ queryKey: ['categories'] });

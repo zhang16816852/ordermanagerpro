@@ -20,6 +20,9 @@ import {
 } from 'lucide-react';
 import { getStaticSpecTree } from '@/utils/specLogic';
 
+import { CategorySpecLibraryTab } from './CategorySpecLibraryTab';
+import { CategorySelectedConfigTab } from './CategorySelectedConfigTab';
+
 interface CategoryDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -48,14 +51,6 @@ const CategoryDialog = ({
     onSubmit,
 }: CategoryDialogProps) => {
     const [activeTab, setActiveTab] = useState<'library' | 'config'>('library');
-
-    const handleToggle = (id: string) => {
-        engine.toggle(id);
-    };
-
-    const handleSortOrderChange = (id: string, order: number) => {
-        engine.setSortOrder(id, order);
-    };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -140,116 +135,19 @@ const CategoryDialog = ({
                             </div>
                         </div>
 
-                        <TabsContent value="library" className="mt-0 border rounded-xl overflow-hidden bg-slate-50/30">
-                            <div className="flex flex-col gap-1 p-4 max-h-[400px] overflow-y-auto">
-                                {getStaticSpecTree(specDefinitions).map(({ spec, level }) => {
-                                    const isSelected = engine.isSelected(spec.id);
-                                    const isManual = engine.isManual(spec.id);
-
-                                    return (
-                                        <div
-                                            key={spec.id}
-                                            onClick={() => handleToggle(spec.id)}
-                                            style={{ marginLeft: `${level * 20}px` }}
-                                            className={`
-                                                flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all
-                                                ${isSelected
-                                                    ? (isManual ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-100' : 'bg-slate-100 border-slate-200 opacity-80')
-                                                    : 'bg-white hover:border-slate-300 hover:shadow-sm'
-                                                }
-                                            `}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                {level > 0 && <LinkIcon className="h-3 w-3 text-slate-300" />}
-                                                <div className="flex flex-col">
-                                                    <span className={`text-sm font-medium ${isSelected && isManual ? 'text-blue-700' : 'text-slate-700'}`}>
-                                                        {spec.name}
-                                                    </span>
-                                                    <span className="text-[10px] text-slate-400 uppercase tracking-wider">{spec.type}</span>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                {isSelected && (
-                                                    isManual ? <Check className="h-4 w-4 text-blue-600" /> : <LinkIcon className="h-3 w-3 text-slate-400 animate-pulse" />
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                                {specDefinitions.length === 0 && (
-                                    <div className="p-12 text-center text-muted-foreground italic">
-                                        尚未建立任何規格定義
-                                    </div>
-                                )}
-                            </div>
+                        <TabsContent value="library" className="mt-0 border rounded-xl overflow-hidden bg-white shadow-sm">
+                            <CategorySpecLibraryTab 
+                                specDefinitions={specDefinitions}
+                                engine={engine}
+                            />
                         </TabsContent>
 
-                        <TabsContent value="config" className="mt-0 border rounded-xl bg-white shadow-inner">
-                            <div className="max-h-[400px] overflow-y-auto">
-                                {activeConfiguration.length === 0 ? (
-                                    <div className="p-12 text-center text-muted-foreground space-y-2">
-                                        <Settings2 className="h-12 w-12 mx-auto opacity-20" />
-                                        <p>尚未選擇任何規格</p>
-                                    </div>
-                                ) : (
-                                    <div className="divide-y">
-                                        {activeConfiguration.map((config, index) => {
-                                            const spec = specDefinitions.find(s => s.id === config.id);
-                                            if (!spec) return null;
-
-                                            return (
-                                                <div key={config.id} className="flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors group">
-                                                    <div className="flex flex-col items-center gap-1">
-                                                        <span className="text-[10px] font-mono text-slate-400">#{index + 1}</span>
-                                                        <div className="flex flex-col gap-0.5">
-                                                            <Input
-                                                                type="number"
-                                                                className="h-7 w-14 text-center text-xs p-1"
-                                                                value={config.sortOrder}
-                                                                onChange={(e) => handleSortOrderChange(config.id, parseInt(e.target.value) || 0)}
-                                                            />
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex items-center gap-2">
-                                                            <h4 className="font-semibold text-slate-900 truncate">{spec.name}</h4>
-                                                            {config.isManual ? (
-                                                                <Badge variant="outline" className="text-[10px] h-4 px-1 border-blue-200 text-blue-600 bg-blue-50">MANUAL</Badge>
-                                                            ) : (
-                                                                <Badge variant="outline" className="text-[10px] h-4 px-1">PASSIVE</Badge>
-                                                            )}
-                                                        </div>
-                                                        <div className="flex flex-wrap gap-1 mt-1">
-                                                            {config.sources.map((src: any, i: number) => {
-                                                                if (src.type === 'manual') return null;
-                                                                const parentSpec = specDefinitions.find(s => s.id === src.id);
-                                                                return (
-                                                                    <span key={i} className="inline-flex items-center text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                                                                        <LinkIcon className="h-2 w-2 mr-1" />
-                                                                        {parentSpec?.name || 'Unknown'}
-                                                                    </span>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-8 w-8 text-slate-400 hover:text-destructive"
-                                                            onClick={() => handleToggle(config.id)}
-                                                        >
-                                                            <X className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
+                        <TabsContent value="config" className="mt-0 border rounded-xl bg-white shadow-inner overflow-hidden">
+                            <CategorySelectedConfigTab 
+                                activeConfiguration={activeConfiguration}
+                                specDefinitions={specDefinitions}
+                                engine={engine}
+                            />
                         </TabsContent>
                     </Tabs>
                 </div>
