@@ -180,6 +180,7 @@ export function getVisibleSpecsTree(
         sourceValue?: any;
         sourceName?: string;
         triggerInfo?: any;
+        isQuantityDetail?: boolean;
         isQuantityInstance?: boolean;
         instanceIndex?: number;
     }>();
@@ -229,7 +230,9 @@ export function getVisibleSpecsTree(
                     if (!visible.has(childPathKey)) {
                         visible.set(childPathKey, {
                             sourceName: spec.name,
-                            triggerInfo: t.condition_dsl
+                            sourceValue: val, // 傳遞父規格的值作為總量參考
+                            triggerInfo: t.condition_dsl,
+                            isQuantityDetail: !!t.condition_dsl?.is_quantity_detail // 從 DSL 中提取分配模式標記
                         });
                         changed = true;
                     }
@@ -238,8 +241,12 @@ export function getVisibleSpecsTree(
 
             // --- 處理 B: 數量連動 (Quantity Source) ---
             const quantityTargets = specFields.filter(f => f.quantity_source_id === specId);
+            if (quantityTargets.length > 0) {
+                console.log(`[SpecLogic] 發現數量連動: ${spec.name} (值: ${val}) 觸發了 ${quantityTargets.length} 個目標`, quantityTargets.map(t => t.name));
+            }
             quantityTargets.forEach(qTarget => {
                 const count = parseInt(String(val)) || 0;
+                console.log(`[SpecLogic] ${qTarget.name} 將產生 ${count} 個實例`);
                 if (count > 0) {
                     for (let i = 1; i <= count; i++) {
                         // [正規化] 根據規格ID和序號產生穩定且合法的 UUID
@@ -277,9 +284,12 @@ export function getVisibleSpecsTree(
         specFields.forEach(f => visible.set(`root:${f.id}:${f.id}`, {}));
     }
 
-    //console.log('[SpecLogic] 🌲 最終可見路徑總數:', visible.size);
-    //console.log('[SpecLogic] 🌲 所有路徑清單:', Array.from(visible.keys()));
-
+    const sortedVisible = getTreeSortedVisiblePaths(specFields, visible);
+    /*
+    console.log('[DynamicSpecs] 當前 spec_values:', tableSettings);
+    console.log('[DynamicSpecs] 排序後的可見路徑:', sortedVisible.map(s => s.pathKey));
+    console.log('[DynamicSpecs] visibleInfo 內容:', Object.fromEntries(visible.entries()));
+*/
     return visible;
 }
 
@@ -318,7 +328,7 @@ export function getTreeSortedVisiblePaths(
     // 頂層路徑定義：其 parentId 為 'root'，或者其 parentId 不在當前可見的 specId 列表中
     const allVisibleSpecIds = new Set(Array.from(visibleInfo.keys()).map(k => k.split(':')[1]));
     const topLevelPaths: string[] = [];
-    
+
     visibleInfo.forEach((_, pathKey) => {
         const parentId = pathKey.split(':')[0];
         if (parentId === 'root' || !allVisibleSpecIds.has(parentId)) {

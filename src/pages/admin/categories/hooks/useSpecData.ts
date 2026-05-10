@@ -35,26 +35,28 @@ export function useSpecData() {
 
             let targetId = editingSpecId;
 
+            // [關鍵修正] 剔除 logic_config 與時間戳記，因為連動規則現在儲存在獨立的 specification_triggers 表
+            const { logic_config, created_at, updated_at, ...dbPayload } = spec as any;
+
             if (editingSpecId) {
                 const { error } = await supabase.from('specification_definitions')
                     .update({
-                        ...spec,
-                        quantity_source_id: (spec as any).quantity_source_id || null
-                    } as any)
+                        ...dbPayload,
+                        quantity_source_id: dbPayload.quantity_source_id || null
+                    })
                     .eq('id', editingSpecId);
                 if (error) throw error;
             } else {
                 const finalSpec = {
-                    ...spec,
-                    default_value: spec.default_value ?? null,
-                    configuration: spec.configuration ?? null,
-                    logic_config: spec.logic_config ?? { triggers: [] },
-                    options: spec.options ?? [],
-                    sort_order: spec.sort_order ?? 0,
-                    quantity_source_id: (spec as any).quantity_source_id || null
+                    ...dbPayload,
+                    default_value: dbPayload.default_value ?? null,
+                    configuration: dbPayload.configuration ?? null,
+                    options: dbPayload.options ?? [],
+                    sort_order: dbPayload.sort_order ?? 0,
+                    quantity_source_id: dbPayload.quantity_source_id || null
                 };
                 const { data: newSpec, error } = await supabase.from('specification_definitions')
-                    .insert([finalSpec as any])
+                    .insert([finalSpec])
                     .select('id')
                     .single();
                 if (error) throw error;
@@ -88,6 +90,23 @@ export function useSpecData() {
                     }
                 }
             }
+
+            // [關鍵修正] 手動觸發版號更新，確保 Edge Function 會通知客戶端刷新
+            try {
+                // 如果有設定 rpc 則優先使用，否則退回直接 update
+                const { error: rpcError } = await supabase.rpc('bump_data_version', { p_table_name: 'specs' });
+                if (rpcError) {
+                    await supabase.from('data_versions')
+                        .update({ 
+                            version: Date.now(),
+                            updated_at: new Date().toISOString(),
+                            last_triggered_by: 'admin_spec_mutation'
+                        })
+                        .eq('table_name', 'specs');
+                }
+            } catch (err) {
+                console.warn('版號更新失敗，可能需要手動重整', err);
+            }
         },
         onSuccess: () => {
             // [關鍵修正] 強制刷新 Store，確保 UI 同步更新
@@ -119,10 +138,16 @@ export function useSpecData() {
                 const json = JSON.parse(event.target?.result as string);
                 const items = Array.isArray(json) ? json : [json];
 
+                // [關鍵修正] 剔除 logic_config 與時間戳記
+                const cleanedItems = items.map(({ logic_config, created_at, updated_at, ...rest }: any) => ({
+                    ...rest,
+                    quantity_source_id: rest.quantity_source_id || null
+                }));
+
                 // 批次 Upsert，以 ID 或名稱為基準
                 const { error } = await supabase
                     .from('specification_definitions')
-                    .upsert(items, { onConflict: 'id' });
+                    .upsert(cleanedItems, { onConflict: 'id' });
 
                 if (error) throw error;
 
@@ -197,7 +222,7 @@ export function useSpecData() {
                             options: row.options ? row.options.split(',').map((s: any) => s.trim()) : [],
                             default_value: row.default_value || null,
                             sort_order: parseInt(row.sort_order) || 0,
-                            logic_config
+                            // 這裡不回傳 logic_config，因為 CSV 匯入目前僅處理基礎欄位
                         };
                     }).filter(Boolean);
 

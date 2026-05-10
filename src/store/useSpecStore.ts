@@ -2,8 +2,8 @@ import { create } from 'zustand';
 import { supabase } from '@/integrations/supabase/client';
 import { CategorySpec } from '@/hooks/useCategorySpecs';
 
-// 本地快取 Key
-const SPEC_CACHE_KEY = 'specs_cache_v1';
+// 本地快取 Key (升級為 v2，強制清除可能損毀的舊快取)
+const SPEC_CACHE_KEY = 'specs_cache_v2';
 
 // 對應資料庫 specification_triggers 表的實際結構
 interface SpecTrigger {
@@ -67,7 +67,7 @@ const mergeTriggersToDefs = (definitions: any[], triggers: any[]) => {
 
         // 根據 on_value + operator 分組，重構成 UI 期待的格式
         const groupedTriggers = specTriggers.reduce((acc, t) => {
-            const dsl = t.condition_dsl as any;
+            const dsl = (t.condition_dsl as any) || {};
             const key = `${dsl.on_value}-${dsl.operator}`;
             if (!acc[key]) {
                 acc[key] = {
@@ -78,7 +78,7 @@ const mergeTriggersToDefs = (definitions: any[], triggers: any[]) => {
             }
             acc[key].targets.push({
                 id: t.target_spec_id,
-                is_quantity_detail: dsl.is_quantity_detail
+                is_quantity_detail: dsl.is_quantity_detail || false
             });
             return acc;
         }, {} as Record<string, any>);

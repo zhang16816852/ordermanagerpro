@@ -52,13 +52,13 @@ export function useCategorySpecs(categoryIds: string[]) {
         
         // 1. 找出連結到這些分類的 spec_id
         const linkedSpecIds = new Set(
-            categoryLinks
+            (categoryLinks || [])
                 .filter(link => categoryIds.includes(link.category_id))
                 .map(link => link.spec_id)
         );
 
         // 2. 從 Store 中找出這些規格的完整定義 (已包含合併後的規則)
-        return specDefinitions
+        return (specDefinitions || [])
             .filter(spec => linkedSpecIds.has(spec.id))
             .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
             

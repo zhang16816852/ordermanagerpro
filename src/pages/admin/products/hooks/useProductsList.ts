@@ -4,6 +4,7 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { useProductCache } from '@/hooks/useProductCache';
+import { useSpecStore } from '@/store/useSpecStore';
 import { toast } from 'sonner';
 import { formatSpecsToCondensedString } from '@/utils/specLogic';
 import { useBrands } from '@/hooks/useBrands';
@@ -18,6 +19,7 @@ type Product = ProductWithPricing;
 export function useProductsList() {
     const queryClient = useQueryClient();
     const { products, isLoading, version, forceRefresh } = useProductCache();
+    const { specDefinitions: specDefs } = useSpecStore();
     const { brandMap } = useBrands();
 
     // --- UI States ---
@@ -393,7 +395,6 @@ export function useProductsList() {
     };
 
     const handleBatchExport = async () => {
-        const { data: specDefs } = await supabase.from('specification_definitions').select('*');
         const { data: categoriesData } = await supabase.from('categories').select('*');
         const { data: specLinks } = await supabase.from('category_spec_links').select('*');
 

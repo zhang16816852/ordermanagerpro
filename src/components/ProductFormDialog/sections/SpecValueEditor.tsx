@@ -14,6 +14,7 @@ interface SpecValueEditorProps {
     value: any;
     onChange: (val: any) => void;
     sourceValue?: any; 
+    isQuantityDetail?: boolean; // 新增：是否為數量分配明細
     variantMode?: boolean; 
 }
 
@@ -385,9 +386,10 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
  * 數量配比編輯組件 (觸發總量連動與驗證)
  */
 function QuantityAllocationEditor({ spec, value, onChange, sourceValue, variantMode }: SpecValueEditorProps) {
-    const targetTotal = parseInt(sourceValue) || 0;
+    // 強化：確保 sourceValue 轉為字串再解析，避免 number 0 導致的 falsy 問題
+    const targetTotal = parseInt(String(sourceValue || '0')) || 0;
     const currentValues = (typeof value === 'object' && value !== null && !Array.isArray(value)) ? value : {};
-    const currentTotal = Object.values(currentValues).reduce((sum: number, val: any) => sum + (parseInt(val) || 0), 0) as number;
+    const currentTotal = Object.values(currentValues).reduce((sum: number, val: any) => sum + (parseInt(String(val)) || 0), 0) as number;
     const isError = currentTotal !== targetTotal && targetTotal > 0;
 
     const toggleOption = (opt: string, checked: boolean) => {
@@ -473,10 +475,14 @@ function QuantityAllocationEditor({ spec, value, onChange, sourceValue, variantM
  * 主組件：SpecValueEditor
  */
 export function SpecValueEditor(props: SpecValueEditorProps) {
-    const { spec, sourceValue } = props;
+    const { spec, sourceValue, isQuantityDetail } = props;
 
     // 優先檢查是否為數量明細 (觸發總量連動)
-    if (sourceValue && spec.options?.length > 0) {
+    // v4.8 優化：只有在明確標記為數量明細，或者當前 sourceValue 是有效數字且有選項時才觸發
+    const numericSource = parseInt(String(sourceValue));
+    const isActuallyQuantity = isQuantityDetail || (!isNaN(numericSource) && numericSource > 0);
+
+    if (isActuallyQuantity && spec.options?.length > 0) {
         return <QuantityAllocationEditor {...props} />;
     }
 

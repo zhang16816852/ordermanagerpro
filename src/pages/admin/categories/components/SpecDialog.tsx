@@ -267,13 +267,30 @@ export function SpecDialog({
                                     </select>
                                     <Input className="h-7 text-xs flex-1" value={trigger.on_value} onChange={(e) => updateTrigger(idx, 'on_value', e.target.value)} placeholder="觸發值 (如: true, *)" />
                                 </div>
-                                <div className="p-1 border rounded bg-slate-50 max-h-32 overflow-y-auto">
-                                    {allSpecs.filter(s => s.id !== editingSpec?.id).map(s => (
-                                        <div key={s.id} className="flex items-center gap-2 p-1 hover:bg-white rounded">
-                                            <Checkbox checked={(trigger.targets || []).some((t: any) => t.id === s.id)} onCheckedChange={() => updateTrigger(idx, 'target_toggle', null, s.id)} />
-                                            <span className="text-[10px] truncate">{s.name}</span>
-                                        </div>
-                                    ))}
+                                <div className="p-1 border rounded bg-slate-50 max-h-48 overflow-y-auto space-y-1">
+                                    {allSpecs.filter(s => s.id !== editingSpec?.id).map(s => {
+                                        const targetObj = (trigger.targets || []).find((t: any) => t.id === s.id);
+                                        const isChecked = !!targetObj;
+                                        return (
+                                            <div key={s.id} className={`flex items-center justify-between p-1 rounded ${isChecked ? 'bg-blue-50 border border-blue-100' : 'hover:bg-white'}`}>
+                                                <div className="flex items-center gap-2">
+                                                    <Checkbox checked={isChecked} onCheckedChange={() => updateTrigger(idx, 'target_toggle', null, s.id)} />
+                                                    <span className={`text-[11px] ${isChecked ? 'font-bold text-blue-700' : ''}`}>{s.name}</span>
+                                                </div>
+                                                {isChecked && (
+                                                    <label className="flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer hover:text-blue-600 bg-white px-1.5 py-0.5 rounded shadow-sm">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            className="rounded-sm"
+                                                            checked={!!targetObj.is_quantity_detail} 
+                                                            onChange={() => updateTrigger(idx, 'target_is_detail', null, s.id)} 
+                                                        />
+                                                        啟用數量分配器
+                                                    </label>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         ))}

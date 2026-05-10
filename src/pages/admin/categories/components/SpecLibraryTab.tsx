@@ -131,14 +131,14 @@ export function SpecLibraryTab() {
         };
 
         const filterTree = (node: any): any | null => {
-            const isMatch = node.spec.name.toLowerCase().includes(query) || 
-                          node.spec.type.toLowerCase().includes(query) ||
-                          node.spec.options?.some((o: string) => o.toLowerCase().includes(query));
-            
+            const isMatch = node.spec.name.toLowerCase().includes(query) ||
+                node.spec.type.toLowerCase().includes(query) ||
+                node.spec.options?.some((o: string) => o.toLowerCase().includes(query));
+
             const filteredChildren = node.children
                 .map((child: any) => filterTree(child))
                 .filter(Boolean);
-            
+
             if (isMatch || filteredChildren.length > 0) {
                 return { ...node, children: filteredChildren };
             }
@@ -185,6 +185,7 @@ export function SpecLibraryTab() {
     };
 
     const handleSubmit = () => {
+        console.log(specForm)
         const cleaned = { ...specForm, options: (specForm.options || []).filter(o => o.trim() !== '') };
         specMutation.mutate({ spec: cleaned, editingSpecId: editingSpec?.id }, {
             onSuccess: () => setIsSpecDialogOpen(false),

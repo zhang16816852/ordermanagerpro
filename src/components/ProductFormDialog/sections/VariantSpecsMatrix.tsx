@@ -245,6 +245,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                                                         value={value}
                                                                         onChange={(val) => handleValueChange(v.id, row.pathKey, val)}
                                                                         sourceValue={vVisiblePaths.get(row.pathKey)?.sourceValue}
+                                                                        isQuantityDetail={vVisiblePaths.get(row.pathKey)?.isQuantityDetail}
                                                                         variantMode={true}
                                                                     />
                                                                 </div>

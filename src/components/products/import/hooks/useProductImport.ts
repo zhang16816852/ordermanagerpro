@@ -10,6 +10,7 @@ import { useDeviceModelStore } from '@/store/useDeviceModelStore';
 import { useEffect } from 'react';
 import { parseProductExcel, generateProductExcel } from '@/utils/excelUtils';
 import * as XLSX from 'xlsx';
+import { useSpecStore } from '@/store/useSpecStore';
 
 export interface ImportRow {
     product_sku: string;
@@ -64,14 +65,7 @@ export function useProductImport(onSuccess: () => void) {
         },
     });
 
-    const { data: specDefs = [] } = useQuery({
-        queryKey: ['specification_definitions_all'],
-        queryFn: async () => {
-            const { data, error } = await (supabase.from('specification_definitions' as any) as any).select('*');
-            if (error) return [];
-            return data as any[];
-        },
-    });
+    const { specDefinitions: specDefs, fetchSpecs } = useSpecStore();
 
     const { colors: allColors, fetchColors } = useColorStore();
     const {
@@ -83,7 +77,8 @@ export function useProductImport(onSuccess: () => void) {
     useEffect(() => {
         fetchColors();
         fetchDeviceData();
-    }, []);
+        fetchSpecs();
+    }, [fetchColors, fetchDeviceData, fetchSpecs]);
 
     // 當顏色或型號庫更新時，自動重新校驗所有資料
     useEffect(() => {
@@ -438,7 +433,7 @@ export function useProductImport(onSuccess: () => void) {
                 name: s.name,
                 type: s.type,
                 options: s.options || [],
-                defaultValue: s.default_value || '',
+                defaultValue: s.defaultValue || '',
                 logic_config: s.logic_config
             } as any]));
 

@@ -91,6 +91,7 @@ export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
                                                 value={value}
                                                 onChange={(val) => form.setValue(`spec_values.${pathKey}`, val, { shouldDirty: true })}
                                                 sourceValue={info?.sourceValue}
+                                                isQuantityDetail={info?.isQuantityDetail}
                                                 variantMode={false}
                                             />
                                         </>
