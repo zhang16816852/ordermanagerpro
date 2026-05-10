@@ -58,10 +58,11 @@ const mergeTriggersToDefs = (definitions: any[], triggers: any[]) => {
     return definitions.map(def => {
         const specTriggers = triggers.filter(t => t.source_spec_id === def.id);
         if (specTriggers.length === 0) {
-            // 確保 logic_config 存在且 triggers 為空陣列
+            // [v6 修復] 如果關聯表沒有資料，但舊版 JSON 內有資料，則保留舊版 JSON 的 triggers 以便向下相容
+            const legacyTriggers = def.logic_config?.triggers || [];
             return {
                 ...def,
-                logic_config: { ...(def.logic_config as any || {}), triggers: [] }
+                logic_config: { ...(def.logic_config as any || {}), triggers: legacyTriggers }
             };
         }
 
