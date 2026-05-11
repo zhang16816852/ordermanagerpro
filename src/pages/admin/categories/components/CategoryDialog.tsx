@@ -51,7 +51,7 @@ const CategoryDialog = ({
     onSubmit,
 }: CategoryDialogProps) => {
     const [activeTab, setActiveTab] = useState<'library' | 'config'>('library');
-
+    console.log("已選規格", activeConfiguration)
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
@@ -136,14 +136,14 @@ const CategoryDialog = ({
                         </div>
 
                         <TabsContent value="library" className="mt-0 border rounded-xl overflow-hidden bg-white shadow-sm">
-                            <CategorySpecLibraryTab 
+                            <CategorySpecLibraryTab
                                 specDefinitions={specDefinitions}
                                 engine={engine}
                             />
                         </TabsContent>
 
                         <TabsContent value="config" className="mt-0 border rounded-xl bg-white shadow-inner overflow-hidden">
-                            <CategorySelectedConfigTab 
+                            <CategorySelectedConfigTab
                                 activeConfiguration={activeConfiguration}
                                 specDefinitions={specDefinitions}
                                 engine={engine}

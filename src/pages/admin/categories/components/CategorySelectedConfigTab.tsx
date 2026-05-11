@@ -30,7 +30,7 @@ interface SortableConfigItemProps {
 
 const SortableConfigItem = ({ node, specDefinitions, index, onToggle, onSortOrderChange, isRoot }: SortableConfigItemProps) => {
     const { config, spec, children } = node;
-    const [isExpanded, setIsExpanded] = React.useState(false); // 預設展開
+    const [isExpanded, setIsExpanded] = React.useState(false); // 預設收合
 
     const {
         attributes,

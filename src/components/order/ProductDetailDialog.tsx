@@ -147,9 +147,9 @@ export function ProductDetailDialog({
         if (!product || specDefinitions.length === 0) return [];
 
         // 1. 建立分類專屬排序權重表 (Category Sort Map)
-        const productCategoryIds = (product as any).product_category_links?.map((l: any) => l.category_id) || [];
+        const productCategoryIds = (product as any).category_ids || [];
         const categorySortMap: Record<string, number> = {};
-        
+
         categoryLinks
             .filter(link => productCategoryIds.includes(link.category_id))
             .forEach(link => {
@@ -158,6 +158,10 @@ export function ProductDetailDialog({
                 }
             });
 
+        console.log("[Detail] 產品分類 IDs:", productCategoryIds);
+        console.log("[Detail] 生成的排序權重表:", categorySortMap);
+        console.log("[Detail] Store 中的分類連結總數:", categoryLinks.length);
+
         // 2. 建立以 specId 為主的彙整表
         const specIdAgg = new Map<string, { rawValues: any[], stringifiedSet: Set<string> }>();
         const addValue = (pathKey: string, val: any) => {
@@ -165,7 +169,7 @@ export function ProductDetailDialog({
             // 提取真正的 specId (從 A:B:C 中提取 B)
             const parts = pathKey.split(':');
             const specId = parts.length >= 2 ? parts[1] : pathKey;
-            
+
             if (!specIdAgg.has(specId)) {
                 specIdAgg.set(specId, { rawValues: [], stringifiedSet: new Set() });
             }
@@ -205,7 +209,7 @@ export function ProductDetailDialog({
         );
 
         const sortedPaths = getTreeSortedVisiblePaths(
-            specDefinitions as any, 
+            specDefinitions as any,
             visiblePathsMap,
             categorySortMap
         );
@@ -232,7 +236,7 @@ export function ProductDetailDialog({
             };
         }).filter(Boolean);
     }, [product, variants, selectedVariantId, specDefinitions, specTriggers]);
-
+    console.log("combinedSpecs", combinedSpecs)
     const currentPriceDisplay = useMemo(() => {
         if (!product) return "$0";
         if (selectedVariant) {
@@ -336,49 +340,49 @@ export function ProductDetailDialog({
                             <div className="pt-4 border-t">
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">產品規格</h3>
                                 <div className="space-y-0.5">
-                                {combinedSpecs.map((spec) => {
-                                    const parts = spec.id.split(':');
-                                    const specId = parts.length >= 2 ? parts[1] : spec.id;
-                                    const def = specDefinitions.find((s: any) => s.id === specId);
-                                    const isHeading = def?.type === 'heading' && !spec.value;
+                                    {combinedSpecs.map((spec) => {
+                                        const parts = spec.id.split(':');
+                                        const specId = parts.length >= 2 ? parts[1] : spec.id;
+                                        const def = specDefinitions.find((s: any) => s.id === specId);
+                                        const isHeading = def?.type === 'heading' && !spec.value;
 
-                                    if (isHeading) {
+                                        if (isHeading) {
+                                            return (
+                                                <div key={spec.id} className={cn(
+                                                    "pt-4 pb-1 border-b border-primary/10",
+                                                    spec.level > 0 && "ml-4"
+                                                )}>
+                                                    <h4 className="text-[10px] font-bold text-primary/70 uppercase tracking-widest flex items-center gap-2">
+                                                        {spec.level > 0 && <span className="opacity-30">└─</span>}
+                                                        {spec.name}
+                                                    </h4>
+                                                </div>
+                                            );
+                                        }
+
                                         return (
                                             <div key={spec.id} className={cn(
-                                                "pt-4 pb-1 border-b border-primary/10",
-                                                spec.level > 0 && "ml-4"
+                                                "flex flex-col text-sm py-2 border-b last:border-0 border-muted/30",
+                                                spec.level > 0 && "bg-slate-50/30"
                                             )}>
-                                                <h4 className="text-[10px] font-bold text-primary/70 uppercase tracking-widest flex items-center gap-2">
-                                                    {spec.level > 0 && <span className="opacity-30">└─</span>}
-                                                    {spec.name}
-                                                </h4>
+                                                <div className="flex justify-between items-start w-full gap-4">
+                                                    <span
+                                                        className={cn(
+                                                            "text-muted-foreground shrink-0 transition-all",
+                                                            spec.level > 0 ? "text-xs flex items-center gap-1.5" : "font-medium"
+                                                        )}
+                                                        style={{ paddingLeft: `${spec.level * 16}px` }}
+                                                    >
+                                                        {spec.level > 0 && <span className="opacity-40 text-[10px]">└─</span>}
+                                                        {spec.name}
+                                                    </span>
+                                                    <span className="font-semibold text-right text-slate-700">
+                                                        {formatSpecValue(spec.value, def, specDefinitions as any)}
+                                                    </span>
+                                                </div>
                                             </div>
                                         );
-                                    }
-
-                                    return (
-                                        <div key={spec.id} className={cn(
-                                            "flex flex-col text-sm py-2 border-b last:border-0 border-muted/30",
-                                            spec.level > 0 && "bg-slate-50/30"
-                                        )}>
-                                            <div className="flex justify-between items-start w-full gap-4">
-                                                <span 
-                                                    className={cn(
-                                                        "text-muted-foreground shrink-0 transition-all",
-                                                        spec.level > 0 ? "text-xs flex items-center gap-1.5" : "font-medium"
-                                                    )} 
-                                                    style={{ paddingLeft: `${spec.level * 16}px` }}
-                                                >
-                                                    {spec.level > 0 && <span className="opacity-40 text-[10px]">└─</span>}
-                                                    {spec.name}
-                                                </span>
-                                                <span className="font-semibold text-right text-slate-700">
-                                                    {formatSpecValue(spec.value, def, specDefinitions as any)}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                                    })}
                                 </div>
                             </div>
                         )}
