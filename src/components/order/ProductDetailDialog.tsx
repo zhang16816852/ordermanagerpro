@@ -158,10 +158,6 @@ export function ProductDetailDialog({
                 }
             });
 
-        console.log("[Detail] 產品分類 IDs:", productCategoryIds);
-        console.log("[Detail] 生成的排序權重表:", categorySortMap);
-        console.log("[Detail] Store 中的分類連結總數:", categoryLinks.length);
-
         // 2. 建立以 specId 為主的彙整表
         const specIdAgg = new Map<string, { rawValues: any[], stringifiedSet: Set<string> }>();
         const addValue = (pathKey: string, val: any) => {
@@ -236,7 +232,7 @@ export function ProductDetailDialog({
             };
         }).filter(Boolean);
     }, [product, variants, selectedVariantId, specDefinitions, specTriggers]);
-    console.log("combinedSpecs", combinedSpecs)
+    // console.log("combinedSpecs", combinedSpecs)
     const currentPriceDisplay = useMemo(() => {
         if (!product) return "$0";
         if (selectedVariant) {
@@ -270,10 +266,10 @@ export function ProductDetailDialog({
     };
 
     if (!product) return null;
-    console.log("specDefinitions", specDefinitions)
-    console.log("specTriggers", specTriggers)
-    console.log("product", product)
-    console.log("combinedSpecs", combinedSpecs)
+    // console.log("specDefinitions", specDefinitions)
+    // console.log("specTriggers", specTriggers)
+    // console.log("product", product)
+    // console.log("combinedSpecs", combinedSpecs)
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-2xl overflow-y-auto max-h-[90vh]">
