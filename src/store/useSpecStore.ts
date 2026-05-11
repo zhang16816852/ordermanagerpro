@@ -10,17 +10,20 @@ interface SpecTrigger {
     id: string;
     source_spec_id: string;
     target_spec_id: string;
-    condition_dsl: any;       // DSL 連動規則（JSON 格式）
-    max_depth_limit: number;  // 遞迴深度上限
+    condition_dsl: any;
+    max_depth_limit: number;
     priority: number;
     created_at: string;
 }
 
 interface SpecCache {
-    version: number;
+    version: number; // 儲存 lastSequenceId
     definitions: any[];
     triggers: SpecTrigger[];
     categoryLinks: any[];
+    categories: any[];
+    categoryHierarchy: any[];
+    categoryVersion: number; // 儲存 lastCategorySequenceId
 }
 
 function getLocalSpecCache(): SpecCache | null {
@@ -39,26 +42,28 @@ function setLocalSpecCache(cache: SpecCache) {
 }
 
 interface SpecStore {
-    specDefinitions: CategorySpec[];
+    specDefinitions: any[];
     specMap: Map<string, CategorySpec>;
     specTriggers: SpecTrigger[];
     categoryLinks: any[];
     specVersion: number;
+    categories: any[];
+    categoryHierarchy: any[];
+    categoryVersion: number;
     isLoading: boolean;
-    fetchSpecs: (force?: boolean) => Promise<void>;
     invalidateCache: () => void;
     setDefinitions: (newDefs: any[]) => void;
+    fetchSpecs: (force?: boolean, incomingData?: any, version?: number) => Promise<void>;
+    fetchCategories: (force?: boolean, incomingData?: any, version?: number) => Promise<void>;
 }
 
 /**
- * [v6 修正] 將獨立存放的 specification_triggers 合併回 definitions.logic_config
- * 確保原本的 UI 元件 (如 SpecDialog) 能正確讀取並顯示連動規則
+ * [V7.5] 將獨立存放的 specification_triggers 合併回 definitions.logic_config
  */
 const mergeTriggersToDefs = (definitions: any[], triggers: any[]) => {
     return definitions.map(def => {
         const specTriggers = triggers.filter(t => t.source_spec_id === def.id);
         if (specTriggers.length === 0) {
-            // [v6 修復] 如果關聯表沒有資料，但舊版 JSON 內有資料，則保留舊版 JSON 的 triggers 以便向下相容
             const legacyTriggers = def.logic_config?.triggers || [];
             return {
                 ...def,
@@ -66,21 +71,13 @@ const mergeTriggersToDefs = (definitions: any[], triggers: any[]) => {
             };
         }
 
-        // 根據 on_value + operator 分組，重構成 UI 期待的格式
         const groupedTriggers = specTriggers.reduce((acc, t) => {
             const dsl = (t.condition_dsl as any) || {};
             const key = `${dsl.on_value}-${dsl.operator}`;
             if (!acc[key]) {
-                acc[key] = {
-                    on_value: dsl.on_value,
-                    operator: dsl.operator || 'eq',
-                    targets: []
-                };
+                acc[key] = { on_value: dsl.on_value, operator: dsl.operator || 'eq', targets: [] };
             }
-            acc[key].targets.push({
-                id: t.target_spec_id,
-                is_quantity_detail: dsl.is_quantity_detail || false
-            });
+            acc[key].targets.push({ id: t.target_spec_id, is_quantity_detail: dsl.is_quantity_detail || false });
             return acc;
         }, {} as Record<string, any>);
 
@@ -94,132 +91,177 @@ const mergeTriggersToDefs = (definitions: any[], triggers: any[]) => {
     });
 };
 
-export const useSpecStore = create<SpecStore>((set, get) => ({
-    specDefinitions: [],
-    specMap: new Map(),
-    specTriggers: [],
-    categoryLinks: [],
-    specVersion: 0,
-    isLoading: false,
+export const useSpecStore = create<SpecStore>((set, get) => {
+    const cache = getLocalSpecCache();
 
-    // 清除快取
-    invalidateCache: () => {
-        localStorage.removeItem(SPEC_CACHE_KEY);
-        set({ specDefinitions: [], specMap: new Map(), specTriggers: [], specVersion: 0 });
-    },
+    return {
+        specDefinitions: cache?.definitions || [],
+        specMap: new Map(), // 將在下文由 buildSpecMap 初始化
+        specTriggers: cache?.triggers || [],
+        categoryLinks: cache?.categoryLinks || [],
+        specVersion: cache?.version || 0,
+        
+        categories: cache?.categories || [],
+        categoryHierarchy: cache?.categoryHierarchy || [],
+        categoryVersion: cache?.categoryVersion || 0,
 
-    // 樂觀更新：手動設定規格定義
-    setDefinitions: (newDefs: any[]) => {
-        const specMap = buildSpecMap(newDefs);
-        set({ specDefinitions: newDefs, specMap });
-    },
+        isLoading: false,
 
-    fetchSpecs: async (force = false) => {
-        if (get().isLoading) return;
-
-        set({ isLoading: true });
-        try {
-            const cache = getLocalSpecCache();
-            // 如果記憶體已有資料且非強制刷新，優先使用記憶體中的版本號進行校驗
-            const currentVersion = get().specVersion || cache?.version || null;
-            const clientVersion = force ? null : currentVersion;
-            
-            console.log(`[SpecStore] 📦 版本校驗 (clientVersion: ${clientVersion}, force: ${force})`);
-
-            // 透過 Edge Function 做版本校驗
-            const { data: versionResult, error: versionError } = await supabase.functions.invoke('check-data-version', {
-                body: { tableName: 'specs', clientVersion }
+        invalidateCache: () => {
+            localStorage.removeItem(SPEC_CACHE_KEY);
+            set({
+                specDefinitions: [],
+                specMap: new Map(),
+                specTriggers: [],
+                categoryLinks: [],
+                specVersion: 0,
+                categories: [],
+                categoryHierarchy: [],
+                categoryVersion: 0
             });
+        },
 
-            if (!versionError && versionResult && !versionResult.needsUpdate && cache) {
-                // 版本一致，使用本地快取
-                console.log(`%c[SpecStore] ✅ 版本一致 (v${cache.version})`, 'color: #2ecc71; font-weight: bold', `更新於: ${versionResult.updatedAt}`);
-                console.log('[SpecStore] 快取內容 - 定義數:', cache.definitions.length, '規則數:', cache.triggers.length);
-                
-                const specMap = buildSpecMap(cache.definitions);
-                set({
-                    specDefinitions: cache.definitions,
-                    specMap,
-                    specTriggers: cache.triggers,
-                    categoryLinks: cache.categoryLinks,
-                    specVersion: cache.version,
-                    isLoading: false
-                });
-                return;
-            }
+        setDefinitions: (newDefs: any[]) => {
+            const specMap = buildSpecMap(newDefs);
+            set({ specDefinitions: newDefs, specMap });
+        },
 
-            // 版本不一致或有錯誤，從伺服器抓取最新資料
-            let definitions: any[] = [];
-            let triggers: SpecTrigger[] = [];
-            let categoryLinks: any[] = [];
-            let newVersion = cache?.version ?? 0;
+        fetchSpecs: async (force = false, incomingData?: any, version?: number) => {
+            if (get().isLoading) return;
+            set({ isLoading: true });
+            try {
+                let definitions = get().specDefinitions;
+                let triggers = get().specTriggers;
+                let categoryLinks = get().categoryLinks;
+                let newSequenceId = version ?? get().specVersion;
 
-            if (!versionError && versionResult?.needsUpdate && versionResult.data) {
-                // Edge Function 回傳最新資料
-                const rawDefinitions = versionResult.data.definitions || [];
-                triggers = versionResult.data.triggers || [];
-                categoryLinks = versionResult.data.categoryLinks || [];
-                newVersion = versionResult.version;
+                if (incomingData) {
+                    const { syncMode, snapshot, changes, deletedIds, serverSequenceId } = incomingData;
+                    newSequenceId = serverSequenceId;
 
-                // 合併規則供 UI 使用
-                definitions = mergeTriggersToDefs(rawDefinitions, triggers);
+                    // 1. 全量快照模式 (Gap Recovery)
+                    if (syncMode === 'full' && snapshot) {
+                        console.log(`[SpecStore] 📸 載入規格快照 (v${serverSequenceId})`);
+                        definitions = snapshot;
+                    }
 
-                console.log(
-                    `%c[SpecStore] 🔄 版本更新至 v${newVersion}`,
-                    'color: #f39c12; font-weight: bold',
-                    `觸發來源: ${versionResult.lastTriggeredBy}, 更新時間: ${versionResult.updatedAt}`
-                );
-            } else {
-                // Fallback：直接查詢資料庫
-                console.warn('[SpecStore] Edge Function 失敗，改用直接查詢');
-                const [
-                    { data: defData },
-                    { data: triggerData },
-                    { data: catLinkData }
-                ] = await Promise.all([
-                    supabase.from('specification_definitions').select('*').order('sort_order', { ascending: true }).order('name'),
-                    supabase.from('specification_triggers').select('*').order('priority', { ascending: false }),
-                    supabase.from('category_spec_links').select('*')
-                ]);
+                    // 2. 建立 Map 進行 Smart Merge
+                    const defMap = new Map(definitions.map(d => [d.id, d]));
+                    
+                    // 3. 處理刪除 (Tombstone)
+                    if (deletedIds) deletedIds.forEach(id => defMap.delete(id));
 
-                const rawDefinitions = defData || [];
-                triggers = (triggerData || []) as unknown as SpecTrigger[];
-                categoryLinks = catLinkData || [];
+                    // 4. 處理增量 Patch (基於時序的單緒回放)
+                    if (changes) {
+                        changes.forEach((change: any) => {
+                            const oldData = defMap.get(change.id) || {};
+                            const newData = { ...oldData };
+                            // 欄位級 Patch Merge: 僅覆蓋非 undefined 欄位
+                            Object.entries(change.data).forEach(([key, value]) => {
+                                if (value !== undefined) newData[key] = value;
+                            });
+                            defMap.set(change.id, newData);
+                        });
+                    }
 
-                // 合併規則供 UI 使用
-                definitions = mergeTriggersToDefs(rawDefinitions, triggers);
-            }
-
-                // 更新本地快取
-                setLocalSpecCache({ version: newVersion, definitions, triggers, categoryLinks });
-                console.log('[SpecStore] 💾 已更新本地快取 (v' + newVersion + ')');
-
-                const specMap = buildSpecMap(definitions);
-                console.log('[SpecStore] 🗺️ SpecMap 已建立，總數:', specMap.size);
-                
-                // 偵錯：看看「電池資訊」合併後的結果
-                const batteryInfo = definitions.find(d => d.name === '電池資訊');
-                if (batteryInfo) {
-                    console.log('[SpecStore] 🐞 偵錯「電池資訊」:', batteryInfo.logic_config);
+                    const rawDefinitions = Array.from(defMap.values());
+                    definitions = mergeTriggersToDefs(rawDefinitions, triggers);
+                } else if (force) {
+                    console.log(`[SpecStore] 📡 執行規格強制重整...`);
+                    const [{ data: defData }, { data: triggerData }, { data: catLinkData }] = await Promise.all([
+                        supabase.from('specification_definitions').select('*').order('sort_order', { ascending: true }),
+                        supabase.from('specification_triggers').select('*').order('priority', { ascending: false }),
+                        supabase.from('category_spec_links').select('*')
+                    ]);
+                    triggers = (triggerData || []) as unknown as SpecTrigger[];
+                    categoryLinks = catLinkData || [];
+                    definitions = mergeTriggersToDefs(defData || [], triggers);
+                    newSequenceId = Date.now();
                 }
+
+                const currentCache = getLocalSpecCache() || { version: 0, definitions: [], triggers: [], categoryLinks: [], categories: [], categoryHierarchy: [], categoryVersion: 0 };
+                setLocalSpecCache({ ...currentCache, version: newSequenceId, definitions, triggers, categoryLinks });
 
                 set({
                     specDefinitions: definitions,
-                    specMap,
+                    specMap: buildSpecMap(definitions),
                     specTriggers: triggers,
                     categoryLinks,
-                    specVersion: newVersion,
+                    specVersion: newSequenceId,
                     isLoading: false
                 });
 
-        } catch (err) {
-            console.error('[SpecStore] Fetch failed:', err);
-            set({ isLoading: false });
-        }
-    }
-}));
+                if (incomingData) {
+                    console.log(`%c[SpecStore] ✅ 規格同步完成 (Mode: ${incomingData.syncMode}, Seq: ${newSequenceId})`, 'color: #2ecc71; font-weight: bold');
+                }
+            } catch (error) {
+                console.error('[SpecStore] 🔴 規格同步失敗:', error);
+                set({ isLoading: false });
+            }
+        },
 
-// 將規格定義陣列轉換為 Map 供快速查找
+        fetchCategories: async (force = false, incomingData?: any, version?: number) => {
+            if (get().isLoading) return;
+            set({ isLoading: true });
+            try {
+                let categories = get().categories;
+                let categoryHierarchy = get().categoryHierarchy;
+                let newSequenceId = version ?? get().categoryVersion;
+
+                if (incomingData) {
+                    const { syncMode, snapshot, changes, deletedIds, serverSequenceId } = incomingData;
+                    newSequenceId = serverSequenceId;
+
+                    if (syncMode === 'full' && snapshot) {
+                        console.log(`[SpecStore] 📸 載入分類快照 (v${serverSequenceId})`);
+                        categories = snapshot;
+                    }
+
+                    const catMap = new Map(categories.map(c => [c.id, c]));
+                    if (deletedIds) deletedIds.forEach(id => catMap.delete(id));
+                    if (changes) {
+                        changes.forEach((change: any) => {
+                            const oldData = catMap.get(change.id) || {};
+                            const newData = { ...oldData };
+                            Object.entries(change.data).forEach(([key, value]) => {
+                                if (value !== undefined) newData[key] = value;
+                            });
+                            catMap.set(change.id, newData);
+                        });
+                    }
+                    categories = Array.from(catMap.values());
+                } else if (force) {
+                    console.log(`[SpecStore] 📡 執行分類強制重整...`);
+                    const [{ data: catData }, { data: hierarchyData }] = await Promise.all([
+                        supabase.from('categories').select('*').order('sort_order', { ascending: true }),
+                        supabase.from('category_hierarchy').select('*')
+                    ]);
+                    categories = catData || [];
+                    categoryHierarchy = hierarchyData || [];
+                    newSequenceId = Date.now();
+                }
+
+                const currentCache = getLocalSpecCache() || { version: 0, definitions: [], triggers: [], categoryLinks: [], categories: [], categoryHierarchy: [], categoryVersion: 0 };
+                setLocalSpecCache({ ...currentCache, categories, categoryHierarchy, categoryVersion: newSequenceId });
+
+                set({
+                    categories,
+                    categoryHierarchy,
+                    categoryVersion: newSequenceId,
+                    isLoading: false
+                });
+
+                if (incomingData) {
+                    console.log(`%c[SpecStore] 🏷️ 分類同步完成 (Mode: ${incomingData.syncMode}, Seq: ${newSequenceId})`, 'color: #1abc9c; font-weight: bold');
+                }
+            } catch (error) {
+                console.error('[SpecStore] 🔴 分類同步失敗:', error);
+                set({ isLoading: false });
+            }
+        },
+    };
+});
+
 function buildSpecMap(definitions: any[]): Map<string, CategorySpec> {
     const map = new Map<string, CategorySpec>();
     definitions.forEach((s: any) => {

@@ -101,7 +101,12 @@ export function useProductsList() {
     const getProductModels = useCallback((productId: string) => {
         const product = products?.find(p => p.id === productId);
         if (!product) return [];
-        return product.effective_model_names || [];
+        
+        // 彙整產品本身與所有變體的適用型號
+        const pModels = product.effective_model_names || [];
+        const vModels = (product as any).variants?.flatMap((v: any) => v.effective_model_names || []) || [];
+        
+        return Array.from(new Set([...pModels, ...vModels])).filter(Boolean) as string[];
     }, [products]);
 
     const getProductBadgeInfo = useCallback((productId: string) => {

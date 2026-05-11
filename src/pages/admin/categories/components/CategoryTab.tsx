@@ -10,6 +10,22 @@ import { useCategoryData } from '../hooks/useCategoryData';
 import { useSpecData } from '../hooks/useSpecData';
 import { useSpecEngine } from '../hooks/useSpecEngine';
 import { Category, CategoryHierarchy } from '../types';
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+
 // 工具：將平坦分類清單建構成樹狀結構
 function buildTree(cats: Category[], h: CategoryHierarchy[], links: any[]): any[] {
     const seen = new Set<string>();
@@ -21,7 +37,10 @@ function buildTree(cats: Category[], h: CategoryHierarchy[], links: any[]): any[
     });
 
     const childIds = new Set(uniqueH.map(item => item.child_id));
-    const roots = cats.filter(c => !childIds.has(c.id));
+    // 取得根分類並排序
+    const roots = cats
+        .filter(c => !childIds.has(c.id))
+        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
     const getChildren = (nodeId: string): any[] => {
         return uniqueH
@@ -37,7 +56,9 @@ function buildTree(cats: Category[], h: CategoryHierarchy[], links: any[]): any[
                     children: getChildren(child.id)
                 };
             })
-            .filter(Boolean);
+            .filter((node): node is any => node !== null)
+            // 子分類也要排序
+            .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     };
 
     return roots.map(root => {
@@ -58,6 +79,7 @@ export function CategoryTab() {
         categorySpecLinks,
         categoryHierarchy,
         categoryMutation,
+        reorderMutation,
         handleCategoryExport,
         handleCategoryImport,
     } = useCategoryData();
@@ -65,6 +87,62 @@ export function CategoryTab() {
     const { specDefinitions } = useSpecData();
     // 門面模式：一切規格邏輯交由此 Hook
     const { engine, activeConfiguration } = useSpecEngine(specDefinitions);
+
+    // DnD Sensors
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
+
+    // 處理拖移結束（僅限同層級）
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+
+        // 找出被拖移的項目與其目標所在的父層清單
+        const activeItem = categories.find(c => c.id === active.id);
+        const overItem = categories.find(c => c.id === over.id);
+        if (!activeItem || !overItem) return;
+
+        // 找到同一層的所有兄弟分類
+        // 首先找出 activeItem 的所有父 ID
+        const activeParentIds = categoryHierarchy
+            .filter(h => h.child_id === active.id)
+            .map(h => h.parent_id);
+        
+        // 找出 overItem 的所有父 ID
+        const overParentIds = categoryHierarchy
+            .filter(h => h.child_id === over.id)
+            .map(h => h.parent_id);
+
+        // 檢查是否為同一層級（父分類集合相同，若是根分類則都為空）
+        const isSameLevel = JSON.stringify(activeParentIds.sort()) === JSON.stringify(overParentIds.sort());
+        if (!isSameLevel) return;
+
+        // 取得該層級的所有項目
+        const siblings = categories.filter(c => {
+            const cParentIds = categoryHierarchy
+                .filter(h => h.child_id === c.id)
+                .map(h => h.parent_id);
+            return JSON.stringify(cParentIds.sort()) === JSON.stringify(activeParentIds.sort());
+        }).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+        const oldIndex = siblings.findIndex(s => s.id === active.id);
+        const newIndex = siblings.findIndex(s => s.id === over.id);
+
+        if (oldIndex !== -1 && newIndex !== -1) {
+            const newSiblingsOrder = arrayMove(siblings, oldIndex, newIndex);
+            // 重新分配 sort_order
+            const updates = newSiblingsOrder.map((s, idx) => ({
+                id: s.id,
+                sort_order: idx,
+                name: s.name // 加入 name 以符合類型要求
+            }));
+            reorderMutation.mutate(updates);
+        }
+    };
 
     // Dialog 狀態
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -180,16 +258,31 @@ export function CategoryTab() {
                         </div>
                     ) : (
                         <div className="space-y-1">
-                            {tree.map(node => (
-                                <CategoryTreeNode
-                                    key={node.id}
-                                    node={node}
-                                    expandedIds={expandedIds}
-                                    setExpandedIds={setExpandedIds}
-                                    categorySpecLinks={categorySpecLinks}
-                                    openDialog={openDialog}
-                                />
-                            ))}
+                            <DndContext
+                                sensors={sensors}
+                                collisionDetection={closestCenter}
+                                onDragEnd={handleDragEnd}
+                            >
+                                <SortableContext
+                                    items={tree.map(node => node.id)}
+                                    strategy={verticalListSortingStrategy}
+                                >
+                                    {tree.map(node => (
+                                        <CategoryTreeNode
+                                            key={node.id}
+                                            node={node}
+                                            expandedIds={expandedIds}
+                                            setExpandedIds={setExpandedIds}
+                                            categorySpecLinks={categorySpecLinks}
+                                            openDialog={openDialog}
+                                            // 傳入排序所需的 props
+                                            onReorder={reorderMutation.mutate}
+                                            categoryHierarchy={categoryHierarchy}
+                                            allCategories={categories}
+                                        />
+                                    ))}
+                                </SortableContext>
+                            </DndContext>
                         </div>
                     )}
                 </CardContent>

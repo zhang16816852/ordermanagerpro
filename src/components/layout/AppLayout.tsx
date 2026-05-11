@@ -37,6 +37,7 @@ import {
 import { cn } from '@/lib/utils';
 import { GlobalSearch } from './GlobalSearch';
 import { NotificationDropdown } from './NotificationDropdown';
+import { performGlobalDataSync } from '@/utils/versionCheck';
 
 interface NavItem {
   title: string;
@@ -115,11 +116,16 @@ function SideNavLink({
     </Link>
   );
 }
+
 export function AppLayout({ children }: AppLayoutProps) {
   const { user, isAdmin, signOut, storeRoles } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // [v6] 啟動全域版本同步 (邏輯已封裝至 versionCheck.ts)
+  useEffect(() => {
+    performGlobalDataSync();
+  }, []);
   const storeId = storeRoles[0]?.store_id;
   const { totalItems: totalCartItems } = useStoreDraft(storeId);
   const baseStoreNavItems: NavItem[] = [

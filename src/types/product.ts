@@ -52,6 +52,11 @@ export interface ProductWithDetails extends Product {
     brand_name?: string;
     variants?: ProductVariant[];
     spec_values?: any; // v6 規格架構
+    // 裝置模型相關屬性 (相容後台列表)
+    device_models?: any[];
+    device_model_groups?: any[];
+    device_model_exclusions?: any[];
+    effective_model_names?: string[];
 }
 
 export interface ProductWithPricing extends ProductWithDetails {
@@ -59,6 +64,7 @@ export interface ProductWithPricing extends ProductWithDetails {
     retail_price: number;
     has_store_price: boolean;
     variants?: VariantWithPricing[];
+    image_url?: string;
 }
 
 export interface VariantWithPricing extends ProductVariant {

@@ -158,8 +158,8 @@ export function ProductRowItem({
                     <TableCell>
                         <div className="flex flex-wrap gap-1 max-w-[150px]">
                             {(product as any).category_names?.length > 0 ? (
-                                (product as any).category_names.map((name: string) => (
-                                    <Badge key={name} variant="outline" className="text-[10px] px-1 h-5">
+                                (product as any).category_names.map((name: string, idx: number) => (
+                                    <Badge key={`${product.id}-cat-${idx}`} variant="outline" className="text-[10px] px-1 h-5">
                                         {name}
                                     </Badge>
                                 ))
@@ -177,8 +177,8 @@ export function ProductRowItem({
                             </div>
                             {models.length > 0 && (
                                 <div className="flex flex-wrap gap-1 mt-1">
-                                    {models.map(model => (
-                                        <Badge key={model} variant="secondary" className="text-[9px] px-1 h-4 bg-amber-100 text-amber-800 hover:bg-amber-100/80 border-transparent">
+                                    {models.map((model, idx) => (
+                                        <Badge key={`${product.id}-model-${idx}`} variant="secondary" className="text-[9px] px-1 h-4 bg-amber-100 text-amber-800 hover:bg-amber-100/80 border-transparent">
                                             {model}
                                         </Badge>
                                     ))}
@@ -253,8 +253,8 @@ export function ProductRowItem({
                                                         </div>
                                                         {v.variant_model_links && v.variant_model_links.length > 0 && (
                                                             <div className="flex flex-wrap gap-1 mt-1">
-                                                                {v.variant_model_links.map((link: any) => (
-                                                                    <Badge key={link.model_id} variant="secondary" className="text-[8px] px-1 h-3.5 bg-amber-50 text-amber-900 border-amber-200">
+                                                                {v.variant_model_links.map((link: any, idx: number) => (
+                                                                    <Badge key={link.model_id || idx} variant="secondary" className="text-[8px] px-1 h-3.5 bg-amber-50 text-amber-900 border-amber-200">
                                                                         {link.device_models?.name}
                                                                     </Badge>
                                                                 ))}

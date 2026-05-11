@@ -333,6 +333,51 @@ export type Database = {
           },
         ]
       }
+      data_change_logs: {
+        Row: {
+          action: string
+          created_at: string | null
+          id: number
+          record_id: string
+          table_name: string
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          id?: number
+          record_id: string
+          table_name: string
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          id?: number
+          record_id?: string
+          table_name?: string
+        }
+        Relationships: []
+      }
+      data_snapshots: {
+        Row: {
+          data_json: Json
+          last_sequence_id: number
+          table_name: string
+          updated_at: string | null
+        }
+        Insert: {
+          data_json: Json
+          last_sequence_id: number
+          table_name: string
+          updated_at?: string | null
+        }
+        Update: {
+          data_json?: Json
+          last_sequence_id?: number
+          table_name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       data_versions: {
         Row: {
           last_triggered_by: string | null
@@ -1937,6 +1982,10 @@ export type Database = {
       duplicate_product_with_variants: {
         Args: { new_name: string; new_sku: string; target_product_id: string }
         Returns: string
+      }
+      fn_create_consistent_snapshot: {
+        Args: { p_table_name: string }
+        Returns: undefined
       }
       get_shared_order_details: {
         Args: { p_identifier: string; p_token: string }

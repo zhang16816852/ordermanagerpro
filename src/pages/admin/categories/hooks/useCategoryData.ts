@@ -115,6 +115,51 @@ export function useCategoryData() {
         },
     });
 
+    const reorderMutation = useMutation({
+        mutationFn: async (updates: { id: string, sort_order: number, name: string }[]) => {
+            const { error } = await supabase.from('categories').upsert(updates);
+            if (error) throw error;
+            
+            // 觸發版號更新，讓其他客戶端同步
+            try {
+                await supabase.rpc('bump_data_version', { p_table_name: 'specs' });
+            } catch (err) {
+                console.warn('[useCategoryData] 排序版號更新失敗', err);
+            }
+        },
+        onMutate: async (newOrder) => {
+            // 1. 取消正在進行的查詢
+            await queryClient.cancelQueries({ queryKey: ['categories'] });
+            // 2. 備份目前的資料
+            const previousCategories = queryClient.getQueryData(['categories']);
+            
+            // 3. 執行樂觀更新
+            queryClient.setQueryData(['categories'], (old: any) => {
+                if (!old) return [];
+                const newCats = [...old];
+                newOrder.forEach(update => {
+                    const idx = newCats.findIndex(c => c.id === update.id);
+                    if (idx !== -1) {
+                        newCats[idx] = { ...newCats[idx], sort_order: update.sort_order };
+                    }
+                });
+                // 立即重新排序
+                return newCats.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+            });
+            
+            return { previousCategories };
+        },
+        onError: (err, newOrder, context) => {
+            // 出錯時恢復舊資料
+            queryClient.setQueryData(['categories'], context?.previousCategories);
+            toast.error('排序更新失敗');
+        },
+        onSettled: () => {
+            // 最後重新拉取確保資料正確
+            queryClient.invalidateQueries({ queryKey: ['categories'] });
+        },
+    });
+
     // --- 匯出 CSV（以名稱為主，輔以 ID 備查）---
 
     const handleCategoryExport = (specDefinitions: any[]) => {
@@ -310,6 +355,7 @@ export function useCategoryData() {
         categorySpecLinks,
         categoryHierarchy,
         categoryMutation,
+        reorderMutation,
         handleCategoryExport,
         handleCategoryImport,
     };
