@@ -79,9 +79,14 @@ export default function CartPanel({
                 >
                   <div className="flex justify-between items-start gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm break-words leading-tight">
-                        {item.options && item.options.length > 0 ? item.options.join(' / ') : (item.variantName || item.name)}
+                      <p className="font-semibold text-sm break-words leading-tight">
+                        {item.productName || item.name}
                       </p>
+                      {item.options && item.options.length > 0 && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {item.options.join(' / ')}
+                        </p>
+                      )}
                       <p className="text-xs text-muted-foreground mt-1 font-mono">
                         {item.sku}
                       </p>
@@ -149,10 +154,19 @@ export default function CartPanel({
                   {items.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>
-                        <div className="w-[140px] font-medium text-sm">
-                          {item.options && item.options.length > 0 ? item.options.join(' / ') : (item.variantName || item.name)}
+                        <div className="flex flex-col gap-0.5">
+                          <div className="font-semibold text-sm">
+                            {item.productName || item.name}
+                          </div>
+                          {item.options && item.options.length > 0 && (
+                            <div className="text-xs text-muted-foreground">
+                              {item.options.join(' / ')}
+                            </div>
+                          )}
+                          <div className="text-[10px] text-muted-foreground font-mono">
+                            {item.sku}
+                          </div>
                         </div>
-
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col items-center gap-2">

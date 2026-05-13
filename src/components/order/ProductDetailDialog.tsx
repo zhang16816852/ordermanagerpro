@@ -251,13 +251,7 @@ export function ProductDetailDialog({
             return;
         }
         if (selectedVariant) {
-            addItem({
-                ...product,
-                id: selectedVariant.id,
-                name: `${product.name} (${selectedVariant.name})`,
-                wholesale_price: selectedVariant.effective_wholesale_price ?? selectedVariant.wholesale_price,
-                retail_price: selectedVariant.effective_retail_price ?? selectedVariant.retail_price,
-            } as any);
+            addItem(product, selectedVariant);
             toast.success(`${product.name} (${selectedVariant.name}) 已加入購物車`);
         } else {
             addItem(product);

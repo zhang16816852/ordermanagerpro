@@ -11,6 +11,7 @@ export interface OrderDraftItem {
   sku: string;
   price: number;
   quantity: number;
+  productName: string;
   variantName?: string;
   options?: string[];
 }
@@ -94,11 +95,17 @@ export const useOrderDraftStore = create<OrderDraftState>()(
             const newItem: OrderDraftItem = {
               id: itemId,
               productId: product.id,
+              productName: product.name,
               variantId: variant?.id,
-              name: variant ? `${product.name} - ${variant.name}` : product.name,
+              // 如果變體名稱已經包含了產品名稱，則直接使用變體名稱，避免冗餘
+              name: variant 
+                ? (variant.name.includes(product.name) ? variant.name : `${product.name} - ${variant.name}`) 
+                : product.name,
               variantName: variant?.name,
               sku: variant?.sku || product.sku,
-              price: variant?.effective_wholesale_price ?? product.wholesale_price,
+              price: variant 
+                ? (variant.effective_wholesale_price ?? variant.wholesale_price) 
+                : product.wholesale_price,
               quantity: 1,
               options: variant
                 ? [variant.option_1, variant.option_2, variant.option_3].filter((o): o is string => !!o)
