@@ -582,6 +582,7 @@ export type Database = {
           expires_at: string
           id: string
           invited_by: string
+          is_pre_created: boolean | null
           role: Database["public"]["Enums"]["store_role"]
           status: Database["public"]["Enums"]["invitation_status"]
           store_id: string | null
@@ -593,6 +594,7 @@ export type Database = {
           expires_at?: string
           id?: string
           invited_by: string
+          is_pre_created?: boolean | null
           role: Database["public"]["Enums"]["store_role"]
           status?: Database["public"]["Enums"]["invitation_status"]
           store_id?: string | null
@@ -604,6 +606,7 @@ export type Database = {
           expires_at?: string
           id?: string
           invited_by?: string
+          is_pre_created?: boolean | null
           role?: Database["public"]["Enums"]["store_role"]
           status?: Database["public"]["Enums"]["invitation_status"]
           store_id?: string | null
@@ -1969,12 +1972,26 @@ export type Database = {
       }
     }
     Functions: {
+      accept_invitation: {
+        Args: { p_invitation_id: string }
+        Returns: undefined
+      }
+      bind_user_to_store: {
+        Args: { p_role: string; p_store_id: string; p_user_id: string }
+        Returns: undefined
+      }
       bump_data_version:
         | { Args: { p_table_name: string }; Returns: undefined }
         | {
             Args: { p_source_table?: string; p_table_name: string }
             Returns: undefined
           }
+      cleanup_expired_invitations: {
+        Args: never
+        Returns: {
+          deleted_count: number
+        }[]
+      }
       delete_sales_note: {
         Args: { p_sales_note_id: string }
         Returns: undefined

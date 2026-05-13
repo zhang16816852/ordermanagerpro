@@ -77,14 +77,17 @@ export default function StoreTeam() {
     mutationFn: async () => {
       if (!storeId || !user) throw new Error("未登入或未選擇店鋪");
 
-      const { error } = await supabase.from("invitations").insert({
-        email: inviteEmail,
-        store_id: storeId,
-        role: inviteRole as "founder" | "manager" | "employee",
-        invited_by: user.id,
+      const { data, error } = await supabase.functions.invoke("invitation-service", {
+        body: {
+          email: inviteEmail,
+          storeId: storeId,
+          role: inviteRole,
+          invitedBy: user.id,
+        },
       });
 
       if (error) throw error;
+      if (data.error) throw new Error(data.error);
     },
     onSuccess: () => {
       toast.success("邀請已發送");

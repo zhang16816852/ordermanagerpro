@@ -16,6 +16,7 @@ interface InvitationDetails {
   role: string;
   status: string;
   expires_at: string;
+  is_pre_created: boolean;
   store: {
     id: string;
     name: string;
@@ -34,20 +35,25 @@ const signUpSchema = z.object({
 const AcceptInvite = () => {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const { user, loading: authLoading, signUp } = useAuth();
+  const { user, loading: authLoading, signUp, refreshRoles } = useAuth();
 
   const [invitation, setInvitation] = useState<InvitationDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 註冊表單狀態
+  // 表單狀態
+  // showSignUp: 控制是否顯示密碼設定表單
+  // 若 is_pre_created=true 則在邀請載入後自動設為 true
+  // 若 is_pre_created=false (已有真實帳號) 則維持 false，引導登入
   const [showSignUp, setShowSignUp] = useState(false);
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [registering, setRegistering] = useState(false);
+  // 是否為「已有真實帳號」的使用者（非預建帳號）
+  const [isAlreadyRegistered, setIsAlreadyRegistered] = useState(false);
 
   useEffect(() => {
     console.log({
@@ -71,6 +77,7 @@ const AcceptInvite = () => {
             role,
             status,
             expires_at,
+            is_pre_created,
             store:stores(id, name)
           `)
           .eq('token', token)
@@ -97,7 +104,17 @@ const AcceptInvite = () => {
         }
         console.log('invite data', data);
 
-        setInvitation(data as InvitationDetails);
+        const inviteData = data as InvitationDetails;
+        setInvitation(inviteData);
+
+        // 根據 is_pre_created 決定初始 UI 狀態
+        if (inviteData.is_pre_created === true) {
+          // 系統預建帳號（新流程）：直接顯示設定密碼表單
+          setShowSignUp(true);
+        } else if (inviteData.is_pre_created === false) {
+          // 帳號已經存在，直接顯示登入提示畫面，不顯示註冊選項
+          setIsAlreadyRegistered(true);
+        }
       } catch (err) {
         setError('無法載入邀請資訊');
       } finally {
@@ -131,64 +148,121 @@ const AcceptInvite = () => {
     setRegistering(true);
 
     try {
-      // 1. 註冊用戶
-      const { error: signUpError, data: authData } = await supabase.auth.signUp({
-        email: invitation.email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-          data: {
-            full_name: fullName,
+      if (invitation.is_pre_created) {
+        // 如果是預建帳號，使用 Edge Function 領取
+        const { data, error } = await supabase.functions.invoke('invitation-service', {
+          body: {
+            action: 'claim',
+            token: token,
+            password: password,
+            fullName: fullName,
+          }
+        });
+
+        if (error || data.error) {
+          throw new Error(error?.message || data.error);
+        }
+
+        toast.success('帳號已啟用！已加入店鋪');
+      } else {
+        // 舊系統邀請流程：直接使用 Supabase Auth 註冊
+        const { error: signUpError, data: authData } = await supabase.auth.signUp({
+          email: invitation.email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/`,
+            data: {
+              full_name: fullName,
+            },
           },
-        },
+        });
+
+        if (signUpError) {
+          // Email 已被使用 → 引導登入
+          if (
+            signUpError.message.toLowerCase().includes('already registered') ||
+            signUpError.message.toLowerCase().includes('user already registered') ||
+            signUpError.status === 422
+          ) {
+            toast.error('此 Email 已有帳號，請直接登入以接受邀請');
+            setShowSignUp(false); // 回到選擇畫面
+            setIsAlreadyRegistered(true); // 顯示「登入」UI
+          } else {
+            toast.error(signUpError.message);
+          }
+          setRegistering(false);
+          return;
+        }
+
+        // Supabase 有時回傳 user 但沒有 id（Email 已被使用的情況）
+        if (!authData.user || !authData.user.id) {
+          toast.error('此 Email 已有帳號，請直接登入以接受邀請');
+          setShowSignUp(false);
+          setIsAlreadyRegistered(true);
+          setRegistering(false);
+          return;
+        }
+
+        // 更新邀請狀態為已接受 (透過 RPC 迴避 RLS 限制)
+        const { error: rpcUpdateError } = await supabase.rpc('accept_invitation', {
+          p_invitation_id: invitation.id
+        });
+        
+        if (rpcUpdateError) {
+          console.error('RPC failed to update invitation status:', rpcUpdateError);
+          // Fallback
+          await supabase
+            .from('invitations')
+            .update({ status: 'accepted' })
+            .eq('id', invitation.id);
+        }
+
+        toast.success('註冊成功！');
+      }
+
+      // 自動登入（取得完整 Session 後再綁定店鋪）
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: invitation.email,
+        password: password,
       });
 
-      if (signUpError) {
-        if (signUpError.message.includes('already registered')) {
-          toast.error('此 Email 已經註冊過，請直接登入');
-          setShowSignUp(false);
-        } else {
-          toast.error(signUpError.message);
-        }
-        setRegistering(false);
+      if (signInError || !signInData.user) {
+        toast.error('自動登入失敗，請手動登入');
+        navigate('/auth');
         return;
       }
 
-      if (!authData.user) {
-        toast.error('註冊失敗，請稍後再試');
-        setRegistering(false);
-        return;
-      }
-
-      // 2. 添加用戶到 store_users
+      // 登入成功後，以完整 Session 將用戶綁定到店鋪
       const { error: insertError } = await supabase
         .from('store_users')
         .insert({
-          store_id: invitation.store.id,
-          user_id: authData.user.id,
+          store_id: invitation.store?.id,
+          user_id: signInData.user.id,
           role: invitation.role as 'founder' | 'manager' | 'employee',
         });
 
-      if (insertError) {
-        console.error('Failed to add store user:', insertError);
-        // 即使失敗也繼續，因為用戶已經創建
+      if (insertError && insertError.code !== '23505') {
+        console.error('綁定店鋪失敗:', insertError);
+        // 嘗試透過 RPC 以系統權限綁定
+        const { error: rpcError } = await supabase.rpc('bind_user_to_store', {
+          p_store_id: invitation.store?.id,
+          p_user_id: signInData.user.id,
+          p_role: invitation.role,
+        });
+        if (rpcError) {
+          console.error('RPC 綁定也失敗:', rpcError);
+          toast.error('加入店鋪失敗，請聯繫管理員');
+        }
       }
 
-      // 3. 更新邀請狀態
-      const { error: updateError } = await supabase
-        .from('invitations')
-        .update({ status: 'accepted' })
-        .eq('id', invitation.id);
+      // 刷新角色資料，確保 auth context 即時更新
+      await refreshRoles();
+      toast.success('已成功加入店鋪！');
 
-      if (updateError) {
-        console.error('Failed to update invitation status:', updateError);
-      }
-
-      toast.success('註冊成功！已加入店鋪');
-      navigate('/store/dashboard');
-    } catch (err) {
-      console.error('Registration error:', err);
-      toast.error('註冊失敗，請稍後再試');
+      navigate('/dashboard');
+    } catch (err: any) {
+      console.error('Registration/Claim error:', err);
+      toast.error(err.message || '操作失敗，請稍後再試');
     } finally {
       setRegistering(false);
     }
@@ -225,18 +299,27 @@ const AcceptInvite = () => {
         return;
       }
 
-      // Update invitation status to accepted
-      const { error: updateError } = await supabase
-        .from('invitations')
-        .update({ status: 'accepted' })
-        .eq('id', invitation.id);
+      // Update invitation status to accepted (透過 RPC 迴避 RLS 限制)
+      const { error: rpcUpdateError } = await supabase.rpc('accept_invitation', {
+        p_invitation_id: invitation.id
+      });
 
-      if (updateError) {
-        console.error('Failed to update invitation status:', updateError);
+      if (rpcUpdateError) {
+        console.error('Failed to update invitation status via RPC:', rpcUpdateError);
+        // Fallback
+        const { error: updateError } = await supabase
+          .from('invitations')
+          .update({ status: 'accepted' })
+          .eq('id', invitation.id);
+        if (updateError) {
+          console.error('Failed to update invitation status:', updateError);
+        }
       }
 
       toast.success('成功加入店鋪！');
-      navigate('/store/dashboard');
+      // 刷新角色資料後再跳轉
+      await refreshRoles();
+      navigate('/dashboard');
     } catch (err) {
       console.error('Accept invitation error:', err);
       toast.error('接受邀請失敗，請稍後再試');
@@ -287,20 +370,75 @@ const AcceptInvite = () => {
     );
   }
 
-  if (!invitation || !invitation.store) {
+  // 如果載入完成但沒有邀請資訊，且沒有錯誤，則顯示無效邀請
+  if (!loading && !error && (!invitation || !invitation.store)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CardTitle>載入中...</CardTitle>
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+              <XCircle className="h-6 w-6 text-destructive" />
+            </div>
+            <CardTitle>邀請無效</CardTitle>
+            <CardDescription>找不到相關的邀請資訊或商店資訊。</CardDescription>
           </CardHeader>
+          <CardContent className="flex justify-center">
+            <Button onClick={() => navigate('/')} variant="outline">
+              返回首頁
+            </Button>
+          </CardContent>
         </Card>
       </div>
     );
   }
 
-  // 用戶未登入 - 顯示註冊表單
+  // 用戶未登入 - 根據 is_pre_created 決定顯示哪種 UI
   if (!user) {
+    // 情況 A0：用戶嘗試以已有帳號 Email 註冊失敗後，引導登入
+    if (isAlreadyRegistered) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                <Store className="h-6 w-6 text-primary" />
+              </div>
+              <CardTitle>此 Email 已有帳號</CardTitle>
+              <CardDescription>
+                {invitation?.store?.name} 邀請您以 {getRoleLabel(invitation?.role || '')} 身份加入
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border p-4 bg-muted/50">
+                <p className="text-sm text-muted-foreground">邀請 Email</p>
+                <p className="font-medium">{invitation?.email}</p>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-sm text-amber-700">
+                  此 Email 已有帳號，請直接登入以接受邀請。
+                </p>
+              </div>
+              <Button
+                className="w-full"
+                onClick={() => navigate(`/auth?redirect=/invite/${token}`)}
+              >
+                <Mail className="mr-2 h-4 w-4" />
+                登入帳號以接受邀請
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full text-sm"
+                onClick={() => setIsAlreadyRegistered(false)}
+              >
+                返回
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
+    // 情況 A：系統預建帳號（is_pre_created=true），直接顯示設定密碼表單
     if (showSignUp) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -309,9 +447,9 @@ const AcceptInvite = () => {
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
                 <UserPlus className="h-6 w-6 text-primary" />
               </div>
-              <CardTitle>註冊並加入店鋪</CardTitle>
+              <CardTitle>設定您的帳號</CardTitle>
               <CardDescription>
-                填寫資料完成註冊，即可加入 {invitation.store.name}
+                填寫姓名與密碼，即可加入 {invitation.store?.name}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -338,7 +476,7 @@ const AcceptInvite = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password">密碼</Label>
+                  <Label htmlFor="password">設定密碼</Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -373,7 +511,7 @@ const AcceptInvite = () => {
                   <div className="flex items-center gap-2 text-sm">
                     <Store className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">將加入店鋪：</span>
-                    <span className="font-medium">{invitation.store.name}</span>
+                    <span className="font-medium">{invitation.store?.name}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm mt-1">
                     <UserPlus className="h-4 w-4 text-muted-foreground" />
@@ -382,26 +520,16 @@ const AcceptInvite = () => {
                   </div>
                 </div>
 
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => setShowSignUp(false)}
-                  >
-                    返回
-                  </Button>
-                  <Button type="submit" className="flex-1" disabled={registering}>
-                    {registering ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        註冊中...
-                      </>
-                    ) : (
-                      '註冊並加入'
-                    )}
-                  </Button>
-                </div>
+                <Button type="submit" className="w-full" disabled={registering}>
+                  {registering ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      處理中...
+                    </>
+                  ) : (
+                    '確認並加入店鋪'
+                  )}
+                </Button>
               </form>
             </CardContent>
           </Card>
@@ -409,6 +537,8 @@ const AcceptInvite = () => {
       );
     }
 
+    // 情況 B2：舊系統邀請（is_pre_created=false/null）
+    // 讓用戶選擇「註冊新帳號」或「已有帳號登入」
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
@@ -418,13 +548,13 @@ const AcceptInvite = () => {
             </div>
             <CardTitle>您已被邀請加入店鋪</CardTitle>
             <CardDescription>
-              {invitation.store.name} 邀請您以 {getRoleLabel(invitation.role)} 身份加入
+              {invitation?.store?.name} 邀請您以 {getRoleLabel(invitation?.role || '')} 身份加入
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-lg border p-4 bg-muted/50">
               <p className="text-sm text-muted-foreground">邀請 Email</p>
-              <p className="font-medium">{invitation.email}</p>
+              <p className="font-medium">{invitation?.email}</p>
             </div>
             <p className="text-sm text-muted-foreground text-center">
               請選擇登入或註冊帳號以接受邀請
@@ -442,6 +572,7 @@ const AcceptInvite = () => {
                 className="w-full"
                 onClick={() => navigate(`/auth?redirect=/invite/${token}`)}
               >
+                <Mail className="mr-2 h-4 w-4" />
                 已有帳號，登入
               </Button>
             </div>

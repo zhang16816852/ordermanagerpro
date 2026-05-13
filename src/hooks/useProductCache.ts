@@ -100,14 +100,25 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
                     return Array.from(new Set([...direct, ...group])).filter(Boolean) as string[];
                 };
 
+                // 輔助函式：攤平物件
+                const flattenModels = (target: any) => ({
+                    device_models: (target.product_model_links || target.variant_model_links)?.map((l: any) => l.device_models).filter(Boolean) || [],
+                    device_model_groups: (target.product_model_group_links || target.variant_model_group_links)?.map((l: any) => l.device_model_groups).filter(Boolean) || [],
+                    device_model_exclusions: (target.product_model_exclusions || target.variant_model_exclusions)?.map((l: any) => l.device_models).filter(Boolean) || []
+                });
+
+                const flattenedP = flattenModels(p);
+
                 return {
                     ...p,
+                    ...flattenedP,
                     category_ids: p.product_category_links?.map((l: any) => l.category_id) || [],
                     category_names: p.product_category_links?.map((l: any) => l.categories?.name).filter(Boolean) || [],
                     effective_model_names: getModelNames(p),
                     spec_values: specsMap.get(p.id) || {},
                     variants: p.variants?.map((v: any) => ({
                         ...v,
+                        ...flattenModels(v),
                         effective_model_names: getModelNames(v),
                         spec_values: specsMap.get(v.id) || {}
                     }))

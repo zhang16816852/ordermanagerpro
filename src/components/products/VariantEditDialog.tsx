@@ -33,6 +33,8 @@ import { StandaloneDeviceModelSelectField } from './StandaloneDeviceModelSelectF
 import { ColorSelectField } from '../ProductFormDialog/ColorSelectField';
 import { useColorStore } from '@/store/useColorStore';
 import { DynamicSpecsFields } from '../ProductFormDialog/sections/DynamicSpecsFields';
+import { serializeSpecs, deserializeSpecs } from '@/utils/specLogic';
+import { useSpecStore } from '@/store/useSpecStore';
 
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;
@@ -55,6 +57,7 @@ export function VariantEditDialog({
 }: VariantEditDialogProps) {
     const queryClient = useQueryClient();
     const { colors, fetchColors } = useColorStore();
+    const { specMap, fetchSpecs } = useSpecStore();
 
     const form = useForm({
         defaultValues: {
@@ -81,13 +84,15 @@ export function VariantEditDialog({
         const init = async () => {
             if (open) {
                 const latestColors = await fetchColors();
+                fetchSpecs();
 
                 if (variant) {
                     // 取得設備型號連結與群組連結與排除
-                    const [links, groupLinks, exclusions] = await Promise.all([
+                    const [links, groupLinks, exclusions, specValues] = await Promise.all([
                         supabase.from('variant_model_links').select('model_id').eq('variant_id', variant.id),
                         supabase.from('variant_model_group_links').select('group_id').eq('variant_id', variant.id),
-                        supabase.from('variant_model_exclusions').select('model_id').eq('variant_id', variant.id)
+                        supabase.from('variant_model_exclusions').select('model_id').eq('variant_id', variant.id),
+                        supabase.from('product_spec_values').select('*').eq('entity_id', variant.id).eq('entity_type', 'variant').is('deleted_at', null)
                     ]);
 
                     // 根據 option_3 的名稱找回顏色 ID
@@ -107,12 +112,12 @@ export function VariantEditDialog({
                         wholesale_price: variant.wholesale_price,
                         retail_price: variant.retail_price,
                         status: variant.status as any,
-                        spec_values: (variant as any).spec_values || {},
+                        spec_values: deserializeSpecs(specValues.data || []),
                         selectedColorIds: colorIds,
                         selectedModelIds: links.data?.map(l => l.model_id) || [],
                         selectedGroupIds: groupLinks.data?.map(l => l.group_id) || [],
                         selectedExclusionIds: exclusions.data?.map(l => l.model_id) || [],
-                        category_ids: (product as any)?.category_id ? [(product as any).category_id] : [],
+                        category_ids: (product as any)?.category_ids || [],
                     });
                 } else {
                     form.reset({
@@ -130,13 +135,13 @@ export function VariantEditDialog({
                         selectedModelIds: [],
                         selectedGroupIds: [],
                         selectedExclusionIds: [],
-                        category_ids: (product as any)?.category_id ? [(product as any).category_id] : [],
+                        category_ids: (product as any)?.category_ids || [],
                     });
                 }
             }
         };
         init();
-    }, [open, variant, product, form, fetchColors]);
+    }, [open, variant, product, form, fetchColors, fetchSpecs]);
 
     const createMutation = useMutation({
         mutationFn: async (values: any) => {
@@ -146,6 +151,7 @@ export function VariantEditDialog({
                 selectedExclusionIds,
                 selectedColorIds,
                 category_ids,
+                spec_values, // 排除 spec_values，以免寫入 product_variants 表
                 ...dataToInsert
             } = values;
 
@@ -166,12 +172,13 @@ export function VariantEditDialog({
             if (error) throw error;
 
             // v6 規格同步
-            if (values.spec_values && (product as any)?.category_id) {
+            if (values.spec_values && (product as any)?.category_ids?.length > 0) {
+                const serializedSpecsData = serializeSpecs(values.spec_values, specMap);
                 await supabase.rpc('sync_product_specs_v6', {
                     p_entity_id: data.id,
                     p_entity_type: 'variant',
-                    p_category_id: (product as any).category_id,
-                    p_new_data: values.spec_values
+                    p_category_id: (product as any).category_ids[0],
+                    p_new_data: serializedSpecsData
                 });
             }
 
@@ -215,6 +222,7 @@ export function VariantEditDialog({
                 selectedExclusionIds,
                 selectedColorIds,
                 category_ids,
+                spec_values, // 排除 spec_values，以免寫入 product_variants 表
                 ...updates
             } = values;
 
@@ -234,12 +242,13 @@ export function VariantEditDialog({
             if (error) throw error;
 
             // v6 規格同步
-            if (values.spec_values && (product as any)?.category_id) {
+            if (values.spec_values && (product as any)?.category_ids?.length > 0) {
+                const serializedSpecsData = serializeSpecs(values.spec_values, specMap);
                 await supabase.rpc('sync_product_specs_v6', {
                     p_entity_id: variant!.id,
                     p_entity_type: 'variant',
-                    p_category_id: (product as any).category_id,
-                    p_new_data: values.spec_values
+                    p_category_id: (product as any).category_ids[0],
+                    p_new_data: serializedSpecsData
                 });
             }
 
