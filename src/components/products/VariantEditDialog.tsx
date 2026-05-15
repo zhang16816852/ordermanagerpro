@@ -36,6 +36,7 @@ import { DynamicSpecsFields } from '../ProductFormDialog/sections/DynamicSpecsFi
 import { serializeSpecs, deserializeSpecs } from '@/utils/specLogic';
 import { useSpecStore } from '@/store/useSpecStore';
 import { entityRelationService } from '@/services/entityRelationService';
+import { ProductImageManager } from '@/components/products/images/ProductImageManager';
 
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;
@@ -456,6 +457,20 @@ export function VariantEditDialog({
                                 </FormItem>
                             )}
                         />
+
+                        {/* 變體圖片管理（僅編輯模式顯示） */}
+                        {variant && (
+                            <div className="space-y-2 border-t pt-4">
+                                <div>
+                                    <h4 className="text-sm font-medium">變體圖片</h4>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        小圖營揚展時，前台會點擊變體選項後自動切換為此變體的圖片。
+                                        若變體沒有圖片，則顯示主商品圖片。
+                                    </p>
+                                </div>
+                                <ProductImageManager entityType="variant" entityId={variant.id} />
+                            </div>
+                        )}
 
                         <div className="flex justify-end gap-2 pt-4 border-t">
                             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

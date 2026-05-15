@@ -10,6 +10,7 @@ import { BasicInfoForm } from './BasicInfoForm';
 import { VariantSection } from './VariantSection';
 import { VariantSpecsMatrix } from './sections/VariantSpecsMatrix';
 import { VariantModelMatrix } from './sections/VariantModelMatrix';
+import { ProductImageManager } from '@/components/products/images/ProductImageManager';
 
 // 統一定義 Schema
 const productSchema = z.object({
@@ -152,8 +153,15 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
                 基本資訊
               </TabsTrigger>
               <TabsTrigger
+                value="images"
+                disabled={!initialData}
+                className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
+              >
+                圖片 {!initialData && '(儲存後可用)'}
+              </TabsTrigger>
+              <TabsTrigger
                 value="variants"
-                disabled={!initialData || !form.watch('has_variants')} // 即時監控 Form 內的 has_variants
+                disabled={!initialData || !form.watch('has_variants')}
                 className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
               >
                 變體列表 {!initialData && '(儲存後可用)'}
@@ -177,6 +185,15 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
                 isLoading={isLoading}
                 onCancel={() => onOpenChange(false)}
               />
+            </TabsContent>
+
+            <TabsContent value="images" className="m-0 focus-visible:ring-0 p-2">
+              {initialData && (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">管理主商品封面與圖庫圖片。第一張圖片會自動設為封面，顯示在商品卡片上。</p>
+                  <ProductImageManager entityType="product" entityId={initialData.id} />
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="variants" className="m-0 focus-visible:ring-0">

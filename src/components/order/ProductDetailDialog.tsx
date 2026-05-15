@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { ProductWithPricing, VariantWithPricing } from "@/types/product";
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
 import { toast } from "sonner";
-import { ShoppingCart, ImageIcon } from "lucide-react";
+import { ShoppingCart, ImageIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { useSpecStore } from "@/store/useSpecStore";
 import { supabase } from "@/integrations/supabase/client";
 import { formatSpecValue, deserializeSpecs, getTreeSortedVisiblePaths, getVisibleSpecsTree } from "@/utils/specLogic";
@@ -20,12 +20,95 @@ import { useBrands } from "@/hooks/useBrands";
 import { calculatePriceRange } from "@/utils/priceUtils";
 import { VariantOptionsPicker } from "./VariantOptionsPicker";
 import { useProductColors } from "@/hooks/useProductColors";
+import type { ProductImage } from "@/components/products/images/ProductImageManager";
 
 interface ProductDetailDialogProps {
     product: ProductWithPricing | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     storeId: string;
+}
+
+// =============================================
+// 圖片輪播子元件
+// =============================================
+function ImageGallery({ images, coverUrl }: { images: ProductImage[], coverUrl?: string | null }) {
+    const [activeIndex, setActiveIndex] = useState(0);
+
+    const allImages = useMemo(() => {
+        if (images.length > 0) return images;
+        // 若無圖片但有封面 URL（來自快取），產生一個虛擬項目
+        if (coverUrl) return [{ id: 'cover', url: coverUrl } as unknown as ProductImage];
+        return [];
+    }, [images, coverUrl]);
+
+    useEffect(() => { setActiveIndex(0); }, [allImages]);
+
+    if (allImages.length === 0) {
+        return (
+            <div className="aspect-square bg-muted rounded-lg flex items-center justify-center overflow-hidden border">
+                <div className="flex flex-col items-center text-muted-foreground">
+                    <ImageIcon className="h-12 w-12 mb-2" />
+                    <span className="text-xs">尚無圖片</span>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-2">
+            {/* 主圖 */}
+            <div className="aspect-square bg-muted rounded-lg overflow-hidden border relative group">
+                <img
+                    src={allImages[activeIndex]?.url}
+                    alt="產品圖片"
+                    className="w-full h-full object-cover"
+                />
+                {allImages.length > 1 && (
+                    <>
+                        <button
+                            className="absolute left-1 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => setActiveIndex(i => (i - 1 + allImages.length) % allImages.length)}
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button
+                            className="absolute right-1 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => setActiveIndex(i => (i + 1) % allImages.length)}
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </button>
+                        <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1">
+                            {allImages.map((_, i) => (
+                                <div
+                                    key={i}
+                                    className={cn('h-1.5 rounded-full transition-all', i === activeIndex ? 'w-4 bg-white' : 'w-1.5 bg-white/50')}
+                                />
+                            ))}
+                        </div>
+                    </>
+                )}
+            </div>
+
+            {/* 縮圖列（超過 1 張才顯示）*/}
+            {allImages.length > 1 && (
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                    {allImages.map((img, i) => (
+                        <div
+                            key={img.id}
+                            className={cn(
+                                'w-14 h-14 flex-shrink-0 rounded overflow-hidden border-2 cursor-pointer transition-all',
+                                i === activeIndex ? 'border-primary' : 'border-transparent hover:border-muted-foreground/40'
+                            )}
+                            onClick={() => setActiveIndex(i)}
+                        >
+                            <img src={img.url} alt="" className="w-full h-full object-cover" />
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
 }
 
 /**
@@ -41,6 +124,51 @@ export function ProductDetailDialog({
     const { getBrandName } = useBrands();
     const { colors } = useProductColors();
     const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+
+    // 抓取圖片
+    const [productImages, setProductImages] = useState<ProductImage[]>([]);
+    const [variantImageMap, setVariantImageMap] = useState<Map<string, ProductImage[]>>(new Map());
+
+    useEffect(() => {
+        if (!open || !product) {
+            setProductImages([]);
+            setVariantImageMap(new Map());
+            return;
+        }
+        // 抓取此主商品 + 所有變體的圖片
+        const entityIds = [product.id, ...(product.variants?.map(v => v.id) || [])];
+        supabase
+            .from('product_images')
+            .select('*')
+            .in('entity_id', entityIds)
+            .order('sort_order', { ascending: true })
+            .then(({ data }) => {
+                if (!data) return;
+                
+                const typedData = data as unknown as ProductImage[];
+                
+                const pImgs = typedData.filter(img => img.entity_id === product.id && img.entity_type === 'product');
+                setProductImages(pImgs);
+
+                const vMap = new Map<string, ProductImage[]>();
+                typedData
+                    .filter(img => img.entity_type === 'variant')
+                    .forEach(img => {
+                        if (!vMap.has(img.entity_id)) vMap.set(img.entity_id, []);
+                        vMap.get(img.entity_id)!.push(img);
+                    });
+                setVariantImageMap(vMap);
+            });
+    }, [open, product]);
+
+    // 決定目前顯示的圖片（選了變體就用變體圖，否則用主商品圖）
+    const displayImages = useMemo(() => {
+        if (selectedVariantId) {
+            const vImgs = variantImageMap.get(selectedVariantId);
+            if (vImgs && vImgs.length > 0) return vImgs;
+        }
+        return productImages;
+    }, [selectedVariantId, productImages, variantImageMap]);
 
     const handleVariantSelect = useCallback((v: any | null) => {
         setSelectedVariantId(v?.id || null);
@@ -179,15 +307,9 @@ export function ProductDetailDialog({
             const isHeading = def.type === 'heading';
             const hasValue = agg && agg.rawValues.length > 0;
 
-            // 嚴格過濾邏輯：
-            // 1. 如果是標題，必須符合以下其中之一才顯示：
-            //    - 該標題明確綁定在目前產品的分類中 (isLinkedToCategory)
-            //    - 該標題雖然沒綁定，但底下有任何子規格帶有數值 (hasValue)
-            // 2. 如果不是標題，則必須有數值才顯示
             const isLinkedToCategory = categorySortMap[specId] !== undefined;
 
             if (isHeading) {
-                // 檢查此標題下是否有任何子項目帶有數值
                 const hasVisibleChildrenWithValues = Array.from(specIdAgg.keys()).some(sid => {
                     const childDef = specDefinitions.find((s: any) => s.id === sid);
                     return childDef?.parent_id === specId && specIdAgg.get(sid)?.rawValues.length! > 0;
@@ -207,7 +329,7 @@ export function ProductDetailDialog({
             };
         }).filter(Boolean);
     }, [product, variants, selectedVariantId, specDefinitions, specTriggers]);
-    // console.log("combinedSpecs", combinedSpecs)
+
     const currentPriceDisplay = useMemo(() => {
         if (!product) return "$0";
         if (selectedVariant) {
@@ -235,10 +357,7 @@ export function ProductDetailDialog({
     };
 
     if (!product) return null;
-    // console.log("specDefinitions", specDefinitions)
-    // console.log("specTriggers", specTriggers)
-    // console.log("product", product)
-    // console.log("combinedSpecs", combinedSpecs)
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-2xl overflow-y-auto max-h-[90vh]">
@@ -250,12 +369,11 @@ export function ProductDetailDialog({
                 </DialogHeader>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                    <div className="aspect-square bg-muted rounded-lg flex items-center justify-center overflow-hidden border">
-                        <div className="flex flex-col items-center text-muted-foreground">
-                            <ImageIcon className="h-12 w-12 mb-2" />
-                            <span className="text-xs">尚無圖片</span>
-                        </div>
-                    </div>
+                    {/* 圖片輪播區域 */}
+                    <ImageGallery
+                        images={displayImages}
+                        coverUrl={(product as any).image_url}
+                    />
 
                     <div className="space-y-4">
                         <div>

@@ -56,12 +56,14 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
                 { data: allLinks },
                 { data: allGroupLinks },
                 { data: allExclusions },
-                { data: allSpecs }
+                { data: allSpecs },
+                { data: allCovers }   // 封面圖片
             ] = await Promise.all([
                 supabase.from('device_model_links').select('entity_id, model_id, device_models(id, name)'),
                 supabase.from('device_model_group_links').select('entity_id, group_id, device_model_groups(id, name, device_model_group_items(device_models(id, name)))'),
                 supabase.from('device_model_exclusions').select('entity_id, model_id, device_models(id, name)'),
-                supabase.from('entity_spec_values').select('*').eq('lifecycle_state', 'active')
+                supabase.from('entity_spec_values').select('*').eq('lifecycle_state', 'active'),
+                supabase.from('product_images').select('entity_type, entity_id, url').eq('is_cover', true)
             ]);
 
             // 3. 建立索引索引 Map
@@ -89,6 +91,12 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
                 const entitySpecs = specsMap.get(sv.entity_id)!;
                 const pathKey = `${sv.instance_uuid}:${sv.spec_id}${sv.parent_id ? `:${sv.parent_id}` : ''}`;
                 entitySpecs[pathKey] = sv.value;
+            });
+
+            // 建立封面圖 Map (entity_id -> image_url)
+            const coversMap = new Map<string, string>();
+            allCovers?.forEach((img: any) => {
+                coversMap.set(img.entity_id, img.url);
             });
 
             // 4. 資料對映處理
@@ -143,6 +151,7 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
                 return {
                     ...p,
                     ...modelDataP,
+                    image_url: coversMap.get(p.id) || null,   // 注入主商品封面圖
                     category_ids: p.product_category_links?.map((l: any) => l.category_id) || [],
                     category_names: p.product_category_links?.map((l: any) => l.categories?.name).filter(Boolean) || [],
                     effective_model_names: modelDataP._expanded_models,
@@ -152,6 +161,7 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
                         return {
                             ...v,
                             ...modelDataV,
+                            image_url: coversMap.get(v.id) || null,   // 注入變體封面圖
                             effective_model_names: modelDataV._expanded_models,
                             spec_values: specsMap.get(v.id) || {}
                         };
