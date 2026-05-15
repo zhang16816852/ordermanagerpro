@@ -41,12 +41,13 @@ export function VariantModelMatrix({ productId }: VariantModelMatrixProps) {
             if (variantIds.length === 0) return [];
             
             const { data, error } = await supabase
-                .from('variant_model_links' as any)
-                .select('variant_id, model_id')
-                .in('variant_id', variantIds);
+                .from('device_model_links')
+                .select('entity_id, model_id')
+                .in('entity_id', variantIds)
+                .eq('entity_type', 'variant');
             
             if (error) throw error;
-            return data as unknown as { variant_id: string, model_id: string }[];
+            return data as unknown as { entity_id: string, model_id: string }[];
         },
         enabled: variants.length > 0
     });
@@ -60,8 +61,8 @@ export function VariantModelMatrix({ productId }: VariantModelMatrixProps) {
                 initial[v.id] = new Set();
             });
             existingLinks.forEach(link => {
-                if (initial[link.variant_id]) {
-                    initial[link.variant_id].add(link.model_id);
+                if (initial[link.entity_id]) {
+                    initial[link.entity_id].add(link.model_id);
                 }
             });
             setLocalLinks(initial);
@@ -91,23 +92,24 @@ export function VariantModelMatrix({ productId }: VariantModelMatrixProps) {
 
             // 1. Delete all existing links for these variants
             const { error: deleteError } = await supabase
-                .from('variant_model_links' as any)
+                .from('device_model_links')
                 .delete()
-                .in('variant_id', variantIds);
+                .in('entity_id', variantIds)
+                .eq('entity_type', 'variant');
             
             if (deleteError) throw deleteError;
 
             // 2. Prepare all new links
-            const newLinks: { variant_id: string, model_id: string }[] = [];
+            const newLinks: any[] = [];
             Object.entries(localLinks).forEach(([vId, modelIds]) => {
                 modelIds.forEach(mId => {
-                    newLinks.push({ variant_id: vId, model_id: mId });
+                    newLinks.push({ entity_id: vId, model_id: mId, entity_type: 'variant' });
                 });
             });
 
             if (newLinks.length > 0) {
                 const { error: insertError } = await supabase
-                    .from('variant_model_links' as any)
+                    .from('device_model_links')
                     .insert(newLinks);
                 if (insertError) throw insertError;
             }

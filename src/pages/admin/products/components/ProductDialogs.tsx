@@ -15,6 +15,7 @@ interface ProductDialogsProps {
     setDeleteProduct: (p: Product | null) => void;
     onFormSubmit: (values: any) => void;
     onDeleteConfirm: (id: string) => void;
+    onImportSuccess: () => void;
     isMutationLoading: boolean;
 }
 
@@ -28,6 +29,7 @@ export function ProductDialogs({
     setDeleteProduct,
     onFormSubmit,
     onDeleteConfirm,
+    onImportSuccess,
     isMutationLoading
 }: ProductDialogsProps) {
     return (
@@ -60,7 +62,11 @@ export function ProductDialogs({
                 </AlertDialogContent>
             </AlertDialog>
 
-            <UnifiedProductImport open={isImportOpen} onOpenChange={setIsImportOpen} />
+            <UnifiedProductImport 
+                open={isImportOpen} 
+                onOpenChange={setIsImportOpen} 
+                onSuccess={onImportSuccess}
+            />
         </>
     );
 }

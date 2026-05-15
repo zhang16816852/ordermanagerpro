@@ -30,7 +30,7 @@ export function AddProductCard({
             </CardHeader>
             <CardContent>
                 <div className="flex gap-4">
-                    <Select value={selectedProductId} onValueChange={onProductSelect}>
+                    <Select value={selectedProductId || ""} onValueChange={onProductSelect}>
                         <SelectTrigger className="flex-1">
                             <SelectValue placeholder="選擇產品" />
                         </SelectTrigger>

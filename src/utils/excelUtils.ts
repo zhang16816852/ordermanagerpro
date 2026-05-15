@@ -6,6 +6,7 @@ import { formatSpecValue, getSpecValue } from './specLogic';
  * 產品匯出入基礎欄位定義
  */
 export const BASE_COLUMNS = {
+    'ID': 'id',
     '產品類型': 'is_variant',
     'SKU': 'sku',
     '產品名稱': 'name',
@@ -156,42 +157,68 @@ export function generateProductExcel(
             });
         }
 
-        // 構建 Headers (三列)
+        // 構建 Headers (四列)
         // Row 1: 顯示名稱
-        // Row 2: 完整路徑 (隱藏)
-        // Row 3: 技術 ID (隱藏)
+        // Row 2: 填寫說明 (顯示)
+        // Row 3: 完整路徑 (隱藏)
+        // Row 4: 技術 ID (隱藏)
         const row1Names = [...Object.keys(BASE_COLUMNS)];
-        const row2Paths = [...Object.keys(BASE_COLUMNS).map(() => '')];
-        const row3Ids = [...Object.values(BASE_COLUMNS) as string[]];
+        const row2Instructions = [...Object.keys(BASE_COLUMNS).map(() => '')];
+        const row3Paths = [...Object.keys(BASE_COLUMNS).map(() => '')];
+        const row4Ids = [...Object.values(BASE_COLUMNS) as string[]];
+
+        const baseKeys = Object.keys(BASE_COLUMNS);
+        
+        // 狀態與適用型號說明
+        const statusColIndex = baseKeys.indexOf('狀態');
+        if (statusColIndex >= 0) row2Instructions[statusColIndex] = '上架中, 已停售, 預購中, 售完停產';
+
+        const modelColIndex = baseKeys.indexOf('適用型號');
+        if (modelColIndex >= 0) row2Instructions[modelColIndex] = '多個用逗號分隔。\n特定寫法:\ngroup:名稱\nexclude:名稱';
 
         definedSpecKeys.forEach(spec => {
             row1Names.push(spec.name);
-            row2Paths.push(spec.path);
-            row3Ids.push(spec.key);
+            row3Paths.push(spec.path);
+            row4Ids.push(spec.key);
+
+            let instruction = '';
+            const specId = spec.key.split(':').pop();
+            if (specId) {
+                const specData = specMap.get(specId);
+                if (specData && Array.isArray(specData.options) && specData.options.length > 0) {
+                    instruction = `可選值:\n${specData.options.join('\n')}`;
+                }
+            }
+            row2Instructions.push(instruction);
         });
 
-        const rows: any[] = [row1Names, row2Paths, row3Ids];
+        const rows: any[] = [row1Names, row2Instructions, row3Paths, row4Ids];
         
         groupProducts.forEach(p => {
-            rows.push(buildRowV3(p, false, row3Ids, brandMap, specMap));
+            rows.push(buildRowV3(p, false, row4Ids, brandMap, specMap));
             if (p.variants && p.variants.length > 0) {
                 p.variants.forEach((v: any) => {
-                    rows.push(buildRowV3(v, true, row3Ids, brandMap, specMap, p));
+                    rows.push(buildRowV3(v, true, row4Ids, brandMap, specMap, p));
                 });
             }
         });
 
         const worksheet = XLSX.utils.aoa_to_sheet(rows);
-        const wscols = row1Names.map(h => ({ wch: Math.max(h.length * 2, 12) }));
+
+        // 隱藏第一欄 (ID)、第三列與第四列
+        const wscols = row1Names.map((h, i) => ({ 
+            wch: Math.max(h.length * 2, 12),
+            hidden: i === 0 // 隱藏 ID 欄
+        }));
         worksheet['!cols'] = wscols;
 
-        // 隱藏第二列與第三列
         if (!worksheet['!rows']) worksheet['!rows'] = [];
-        worksheet['!rows'][1] = { hidden: true };
+        worksheet['!rows'][1] = { hpt: 45 }; // 加高第二列(說明列)
         worksheet['!rows'][2] = { hidden: true };
+        worksheet['!rows'][3] = { hidden: true };
 
-        // 凍結前三列
-        worksheet['!view'] = [{ state: 'frozen', ySplit: 3 }];
+        // 凍結前四列
+        worksheet['!view'] = [{ state: 'frozen', ySplit: 4 }];
 
         const sanitizedCatName = catName.replace(/[:\\/?*\[\]]/g, '_').substring(0, 31);
         XLSX.utils.book_append_sheet(workbook, worksheet, sanitizedCatName);
@@ -215,8 +242,15 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
     } else if (item.category) {
         categoryName = item.category;
     }
+    const STATUS_MAP: Record<string, string> = {
+        'active': '上架中',
+        'discontinued': '已停售',
+        'preorder': '預購中',
+        'sold_out': '售完停產',
+    };
 
     const baseValues: Record<string, any> = {
+        id: item.id || '',
         is_variant: isVariant ? '變體' : '主商品',
         sku: isVariant ? (parent?.sku || '') : (item.sku || ''),
         name: isVariant ? (parent?.name || '') : (item.name || ''),
@@ -228,37 +262,48 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
         series: item.series || parent?.series || '',
         wholesale_price: isVariant ? (item.wholesale_price || 0) : (item.base_wholesale_price || 0),
         retail_price: isVariant ? (item.retail_price || 0) : (item.base_retail_price || 0),
-        status: item.status || 'active',
+        status: STATUS_MAP[item.status || 'active'] || '上架中',
         barcode: item.barcode || '',
         category: categoryName,
         option_1: item.option_1 || '',
         option_2: item.option_2 || '',
-        option_3: item.option_3 || '',
+        option_3: item.color || item.option_3 || '',
     };
 
-    const rawModels = item.device_models || item.variant_model_links || [];
-    const rawGroups = item.device_model_groups || item.variant_model_group_links || [];
-    let modelsStr = '';
-    
-    const modelParts: string[] = [];
-    if (Array.isArray(rawModels)) {
-        rawModels.forEach((m: any) => {
-            // 處理主商品層級 (device_models) 或 變體層級 (variant_model_links)
-            const name = typeof m === 'string' ? m : (m.name || m.device_models?.name);
-            if (name) modelParts.push(`model:${name}`);
-        });
-    }
-    if (Array.isArray(rawGroups)) {
-        rawGroups.forEach((g: any) => {
-            // 處理主商品層級 (device_model_groups) 或 變體層級 (variant_model_group_links)
-            const name = typeof g === 'string' ? g : (g.name || g.device_model_groups?.name);
-            if (name) modelParts.push(`group:${name}`);
-        });
-    }
-    modelsStr = modelParts.join(', ');
-    baseValues.device_models = modelsStr;
 
-    const settings = item.spec_values || [];
+    // 處理型號資料
+    let deviceModelValue = '';
+    if (Array.isArray(item.device_model_rules) && item.device_model_rules.length > 0) {
+        // [V7.6] 優先使用快取中預先處理好的原始規則
+        deviceModelValue = item.device_model_rules.join(', ');
+    } else {
+        const modelParts: string[] = [];
+        // 1. 直接型號
+        if (Array.isArray(item.device_models)) {
+            item.device_models.forEach((m: any) => {
+                const name = typeof m === 'string' ? m : m.name;
+                if (name) modelParts.push(`model:${name}`);
+            });
+        }
+        // 2. 型號群組
+        if (Array.isArray(item.device_model_groups)) {
+            item.device_model_groups.forEach((g: any) => {
+                if (typeof g === 'string') modelParts.push(`group:${g}`);
+            });
+        }
+        // 3. 排除型號
+        if (Array.isArray(item.device_model_exclusions)) {
+            item.device_model_exclusions.forEach((e: any) => {
+                const name = typeof e === 'string' ? e : e.name;
+                if (name) modelParts.push(`exclude:${name}`);
+            });
+        }
+        deviceModelValue = modelParts.join(', ');
+    }
+
+    baseValues.device_models = deviceModelValue;
+
+    const settings = item.spec_values || {}; 
     
     headerIds.forEach(key => {
         if (baseValues[key] !== undefined) {
@@ -266,20 +311,24 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
         } else {
             // key 格式為 parentId:specId
             const [parentId, specId] = key.split(':');
-            const spec = specMap.get(specId); // 獲取規格定義
+            const spec = specMap.get(specId); 
             let val = undefined;
             
-            if (Array.isArray(settings)) {
-                // 僅執行精確匹配 (parentId + specId)
-                // 這能確保「行動電源」下的規格值不會被錯誤填入到「插頭」分類的同名規格欄位中
-                let found = settings.find((s: any) => s.id === specId && (s.parentId === parentId || (!s.parentId && parentId === 'root')));
-                
-                val = found?.value;
+            // 在物件中尋找匹配的規格值
+            // 快取的 Key 格式為 instance_uuid:specId[:parentId]
+            const matchingKey = Object.keys(settings).find(k => {
+                const parts = k.split(':');
+                const kSpecId = parts[1];
+                const kParentId = parts[2] || 'root';
+                return kSpecId === specId && kParentId === parentId;
+            });
+
+            if (matchingKey) {
+                val = settings[matchingKey];
             } else if (parentId === 'root') {
                 val = settings[specId];
             }
             
-            // 傳入 spec 定義，確保 Table 等複雜類型能正確格式化
             row.push(formatSpecValue(val, spec, specMap) || '');
         }
     });
@@ -298,10 +347,19 @@ export function parseProductExcel(buffer: ArrayBuffer) {
         const worksheet = workbook.Sheets[sheetName];
         const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
         
-        if (rows.length < 3) return; 
+        if (rows.length < 3) return; // 至少需要3列
 
-        const headerKeys = rows[2].map(h => String(h).trim());
-        const dataRows = rows.slice(3); // 資料從第四列開始
+        // 自動偵測哪一列是「技術 ID」列 (特徵是第一格為 'id', 第三格為 'sku')
+        let headerRowIndex = 2; // 預設舊版 3-row layout 的 index 是 2
+        for (let i = 0; i < Math.min(5, rows.length); i++) {
+            if (String(rows[i][0]).trim() === 'id' && String(rows[i][2]).trim() === 'sku') {
+                headerRowIndex = i;
+                break;
+            }
+        }
+
+        const headerKeys = rows[headerRowIndex].map(h => String(h).trim());
+        const dataRows = rows.slice(headerRowIndex + 1); // 資料從技術 ID 的下一列開始
 
         dataRows.forEach(row => {
             if (!row || row.length === 0) return;
@@ -319,6 +377,8 @@ export function parseProductExcel(buffer: ArrayBuffer) {
                 if (isBase) {
                     if (key === 'is_variant') {
                         item.is_variant = (value === '變體' || value === '是' || value === true);
+                    } else if (key === 'id') {
+                        item.id = String(value).trim();
                     } else {
                         item[key] = value;
                     }

@@ -7,8 +7,9 @@ interface ValidationSummaryProps {
 }
 
 export function ValidationSummary({ data }: ValidationSummaryProps) {
-    const validRows = data.filter(r => r.isValid);
-    const invalidRows = data.filter(r => !r.isValid);
+    const safeData = data || [];
+    const validRows = safeData.filter(r => r.isValid);
+    const invalidRows = safeData.filter(r => !r.isValid);
     const productCount = new Set(validRows.map(r => r.product_sku)).size;
     const variantCount = validRows.filter(r => r.is_variant).length;
 
@@ -41,7 +42,7 @@ export function ValidationSummary({ data }: ValidationSummaryProps) {
                     <ul className="text-[11px] space-y-1 text-destructive/80 max-h-40 overflow-auto pr-2 custom-scrollbar">
                         {invalidRows.map((row, i) => (
                             <li key={i} className="flex gap-2">
-                                <span className="font-bold"># {data.indexOf(row) + 1}:</span>
+                                <span className="font-bold"># {safeData.indexOf(row) + 1}:</span>
                                 <span>{row.errors.join('、')}</span>
                             </li>
                         ))}

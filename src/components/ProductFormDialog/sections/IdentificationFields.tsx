@@ -47,7 +47,7 @@ export function IdentificationFields({ form }: IdentificationFieldsProps) {
                 render={({ field }) => (
                     <FormItem>
                         <FormLabel>銷售狀態</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
                             <FormControl>
                                 <SelectTrigger>
                                     <SelectValue placeholder="選擇狀態" />

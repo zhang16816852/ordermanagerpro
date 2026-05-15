@@ -10,7 +10,9 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Check, X, AlertCircle, Filter, Info } from 'lucide-react';
+import { Search, Plus, Check, X, AlertCircle, Filter, Info, Trash2, Edit, Save, Palette } from 'lucide-react';
+import { QuickColorAdd } from '@/components/colors/QuickColorAdd';
+import { ProductColor } from '@/hooks/useProductColors';
 import { ImportRow } from '../hooks/useProductImport';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -49,14 +51,16 @@ export function PreviewTable({
     } = useDeviceModelStore();
     const [searchQuery, setSearchQuery] = useState('');
 
-    // 顏色新增表單狀態
+    // 顏色新增彈窗狀態
     const [addingColorForIndex, setAddingColorForIndex] = useState<number | null>(null);
-    const [newColorForm, setNewColorForm] = useState({ name: '', code: '', hex_code: '#808080' });
 
     // 裝置型號新增表單狀態
     const [addingModelForIndex, setAddingModelForIndex] = useState<number | null>(null);
     const [newModelForm, setNewModelForm] = useState({ name: '', brand_id: '', device_series: '', device_type: 'smartphone' });
-    console.log("匯入產品資料", data)
+    
+    const safeData = data || [];
+    console.log("匯入產品資料", safeData)
+    
     React.useEffect(() => {
         fetchColors();
         fetchDeviceData();
@@ -75,20 +79,29 @@ export function PreviewTable({
                     let name = part;
                     let exists = false;
 
-                    if (part.startsWith('group:')) {
+                    const checkExists = (searchName: string) => {
+                        const search = searchName.trim().toLowerCase();
+                        return allDeviceModels.some(m => 
+                            (m.name?.trim().toLowerCase() === search) || 
+                            (Array.isArray(m.aliases) && m.aliases.some((a: string) => a?.trim().toLowerCase() === search))
+                        );
+                    };
+
+                    const lowerPart = part.toLowerCase();
+                    if (lowerPart.startsWith('group:')) {
                         type = 'group';
-                        name = part.replace('group:', '');
-                        exists = allDeviceGroups.some(g => g.name.toLowerCase() === name.toLowerCase());
-                    } else if (part.startsWith('exclude:')) {
+                        name = part.substring(6).trim();
+                        exists = allDeviceGroups.some(g => g.name.trim().toLowerCase() === name.toLowerCase());
+                    } else if (lowerPart.startsWith('exclude:')) {
                         type = 'exclude';
-                        name = part.replace('exclude:', '');
-                        exists = allDeviceModels.some(m => m.name.toLowerCase() === name.toLowerCase());
-                    } else if (part.startsWith('model:')) {
+                        name = part.substring(8).trim();
+                        exists = checkExists(name);
+                    } else if (lowerPart.startsWith('model:')) {
                         type = 'model';
-                        name = part.replace('model:', '');
-                        exists = allDeviceModels.some(m => m.name.toLowerCase() === name.toLowerCase());
+                        name = part.substring(6).trim();
+                        exists = checkExists(name);
                     } else {
-                        exists = allDeviceModels.some(m => m.name.toLowerCase() === name.toLowerCase());
+                        exists = checkExists(name);
                     }
 
                     return (
@@ -129,7 +142,7 @@ export function PreviewTable({
                             <SelectValue placeholder="所有項目" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">顯示所有 ({data.length})</SelectItem>
+                            <SelectItem value="all">顯示所有 ({safeData.length})</SelectItem>
                             <SelectItem value="changed">僅限變更項目</SelectItem>
                             <SelectItem value="new">僅限新增項目</SelectItem>
                             <SelectItem value="error">僅限錯誤項目</SelectItem>
@@ -145,8 +158,9 @@ export function PreviewTable({
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">所有分類</SelectItem>
-                            {categories.map(cat => (
-                                <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                            {/* [優化] 僅顯示目前預覽資料中出現的分類 */}
+                            {Array.from(new Set(safeData.map(r => r.category).filter(Boolean))).map(catName => (
+                                <SelectItem key={catName} value={catName}>{catName}</SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
@@ -181,7 +195,7 @@ export function PreviewTable({
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {data.map((row, index) => (
+                            {safeData.map((row, index) => (
                                 <TableRow key={index} className={!row.isValid ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'}>
                                     <TableCell className="text-center px-1">
                                         {row.isValid ? (
@@ -424,45 +438,45 @@ export function PreviewTable({
                                                             {renderDeviceModels(row.variant_device_models, true)}
                                                         </div>
                                                     </PopoverTrigger>
-                                                            <PopoverContent className="p-0 w-[260px]" align="start" onWheel={(e) => e.stopPropagation()}>
-                                                                <Command>
-                                                                    <CommandInput placeholder="搜尋型號..." className="h-9 text-xs" />
-                                                                    <CommandList className="max-h-[300px] overflow-y-auto">
-                                                                        <CommandEmpty className="py-3 text-xs text-center text-muted-foreground">
-                                                                            找不到型號
-                                                                        </CommandEmpty>
-                                                                        <CommandGroup heading="型號群組">
-                                                                            {allDeviceGroups.map((g) => {
-                                                                                const isSelected = row.variant_device_models?.split(',').map(s => s.trim().toLowerCase()).includes(`group:${g.name.toLowerCase()}`);
-                                                                                return (
-                                                                                    <CommandItem
-                                                                                        key={`vgroup-${g.id}`}
-                                                                                        onSelect={() => {
-                                                                                            const current = row.variant_device_models ? row.variant_device_models.split(',').map(s => s.trim()) : [];
-                                                                                            const groupValue = `group:${g.name}`;
-                                                                                            let next;
-                                                                                            if (isSelected) {
-                                                                                                next = current.filter(s => s.toLowerCase() !== groupValue.toLowerCase());
-                                                                                            } else {
-                                                                                                next = [...current, groupValue];
-                                                                                            }
-                                                                                            onUpdate(index, 'variant_device_models', next.join(', '));
-                                                                                        }}
-                                                                                        className={cn(
-                                                                                            "flex items-center gap-2 py-2 cursor-pointer",
-                                                                                            isSelected && "bg-blue-50 text-blue-700 font-medium"
-                                                                                        )}
-                                                                                    >
-                                                                                        <div className="flex flex-col flex-1 min-w-0">
-                                                                                            <span className="text-xs font-medium truncate">{g.name}</span>
-                                                                                            <span className="text-[9px] text-muted-foreground">群組</span>
-                                                                                        </div>
-                                                                                        {isSelected && <Check className="h-3.5 w-3.5 text-blue-600" />}
-                                                                                    </CommandItem>
-                                                                                );
-                                                                            })}
-                                                                        </CommandGroup>
-                                                                        <CommandGroup heading="現有型號庫">
+                                                    <PopoverContent className="p-0 w-[260px]" align="start" onWheel={(e) => e.stopPropagation()}>
+                                                        <Command>
+                                                            <CommandInput placeholder="搜尋型號..." className="h-9 text-xs" />
+                                                            <CommandList className="max-h-[300px] overflow-y-auto">
+                                                                <CommandEmpty className="py-3 text-xs text-center text-muted-foreground">
+                                                                    找不到型號
+                                                                </CommandEmpty>
+                                                                <CommandGroup heading="型號群組">
+                                                                    {allDeviceGroups.map((g) => {
+                                                                        const isSelected = row.variant_device_models?.split(',').map(s => s.trim().toLowerCase()).includes(`group:${g.name.toLowerCase()}`);
+                                                                        return (
+                                                                            <CommandItem
+                                                                                key={`vgroup-${g.id}`}
+                                                                                onSelect={() => {
+                                                                                    const current = row.variant_device_models ? row.variant_device_models.split(',').map(s => s.trim()) : [];
+                                                                                    const groupValue = `group:${g.name}`;
+                                                                                    let next;
+                                                                                    if (isSelected) {
+                                                                                        next = current.filter(s => s.toLowerCase() !== groupValue.toLowerCase());
+                                                                                    } else {
+                                                                                        next = [...current, groupValue];
+                                                                                    }
+                                                                                    onUpdate(index, 'variant_device_models', next.join(', '));
+                                                                                }}
+                                                                                className={cn(
+                                                                                    "flex items-center gap-2 py-2 cursor-pointer",
+                                                                                    isSelected && "bg-blue-50 text-blue-700 font-medium"
+                                                                                )}
+                                                                            >
+                                                                                <div className="flex flex-col flex-1 min-w-0">
+                                                                                    <span className="text-xs font-medium truncate">{g.name}</span>
+                                                                                    <span className="text-[9px] text-muted-foreground">群組</span>
+                                                                                </div>
+                                                                                {isSelected && <Check className="h-3.5 w-3.5 text-blue-600" />}
+                                                                            </CommandItem>
+                                                                        );
+                                                                    })}
+                                                                </CommandGroup>
+                                                                <CommandGroup heading="現有型號庫">
                                                                     {[...allDeviceModels].sort((a, b) => {
                                                                         const aSel = row.variant_device_models?.split(',').map(s => s.trim().toLowerCase()).includes(a.name.toLowerCase());
                                                                         const bSel = row.variant_device_models?.split(',').map(s => s.trim().toLowerCase()).includes(b.name.toLowerCase());
@@ -507,59 +521,102 @@ export function PreviewTable({
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        {row.brand_id ? (
-                                            <div className="flex flex-col gap-1">
-                                                <Badge variant="outline" className="text-[10px] w-fit border-emerald-500/30 text-emerald-700 bg-emerald-50/50">
-                                                    {row.brand}
-                                                </Badge>
-                                                <span className="text-[9px] text-muted-foreground ml-1">{row.series || '-'}</span>
-                                            </div>
+                                        {!row.is_variant ? (
+                                            row.brand_id ? (
+                                                <div className="flex flex-col gap-1">
+                                                    <Badge variant="outline" className="text-[10px] w-fit border-emerald-500/30 text-emerald-700 bg-emerald-50/50">
+                                                        {row.brand}
+                                                    </Badge>
+                                                    <span className="text-[9px] text-muted-foreground ml-1">{row.series || '-'}</span>
+                                                </div>
+                                            ) : (
+                                                <Popover>
+                                                    <PopoverTrigger asChild>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="h-8 w-full text-[10px] border-destructive/50 text-destructive bg-destructive/5 hover:bg-destructive/10"
+                                                        >
+                                                            {row.brand || '未設定品牌'} ⚠️
+                                                        </Button>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="p-0 w-[200px]" align="start" onWheel={(e) => e.stopPropagation()}>
+                                                        <Command>
+                                                            <CommandInput placeholder="搜尋品牌..." />
+                                                            <CommandList>
+                                                                <CommandEmpty>找不到品牌</CommandEmpty>
+                                                                <CommandGroup>
+                                                                    {allBrands.map((b) => (
+                                                                        <CommandItem
+                                                                            key={b.id}
+                                                                            onSelect={() => {
+                                                                                onUpdate(index, 'brand', b.name);
+                                                                                onUpdate(index, 'brand_id', b.id);
+                                                                            }}
+                                                                            className="text-xs"
+                                                                        >
+                                                                            <Check className={cn("mr-2 h-3 w-3", row.brand_id === b.id ? "opacity-100" : "opacity-0")} />
+                                                                            {b.name}
+                                                                        </CommandItem>
+                                                                    ))}
+                                                                </CommandGroup>
+                                                            </CommandList>
+                                                        </Command>
+                                                    </PopoverContent>
+                                                </Popover>
+                                            )
                                         ) : (
-                                            <Popover>
-                                                <PopoverTrigger asChild>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-8 w-full text-[10px] border-destructive/50 text-destructive bg-destructive/5 hover:bg-destructive/10"
-                                                    >
-                                                        {row.brand || '未設定品牌'} ⚠️
-                                                    </Button>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="p-0 w-[200px]" align="start" onWheel={(e) => e.stopPropagation()}>
-                                                    <Command>
-                                                        <CommandInput placeholder="搜尋品牌..." />
-                                                        <CommandList>
-                                                            <CommandEmpty>找不到品牌</CommandEmpty>
-                                                            <CommandGroup>
-                                                                {allBrands.map((b) => (
-                                                                    <CommandItem
-                                                                        key={b.id}
-                                                                        onSelect={() => {
-                                                                            onUpdate(index, 'brand', b.name);
-                                                                            onUpdate(index, 'brand_id', b.id);
-                                                                        }}
-                                                                        className="text-xs"
-                                                                    >
-                                                                        <Check className={cn("mr-2 h-3 w-3", row.brand_id === b.id ? "opacity-100" : "opacity-0")} />
-                                                                        {b.name}
-                                                                    </CommandItem>
-                                                                ))}
-                                                            </CommandGroup>
-                                                        </CommandList>
-                                                    </Command>
-                                                </PopoverContent>
-                                            </Popover>
+                                            <span className="text-[9px] text-muted-foreground/20 italic pl-2">-</span>
                                         )}
                                     </TableCell>
                                     <TableCell>
-                                        <Input
-                                            value={row.category}
-                                            onChange={(e) => onUpdate(index, 'category', e.target.value)}
-                                            className={cn(
-                                                "h-8 text-xs border-none bg-transparent focus-visible:bg-background",
-                                                row.diff?.includes('分類') && "bg-amber-500/10 text-amber-900"
-                                            )}
-                                        />
+                                        {!row.is_variant ? (
+                                            row.category_id ? (
+                                                <Badge variant="outline" className="text-[10px] w-fit border-indigo-500/30 text-indigo-700 bg-indigo-50/50">
+                                                    {row.category}
+                                                </Badge>
+                                            ) : (
+                                                <Popover>
+                                                    <PopoverTrigger asChild>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className={cn(
+                                                                "h-8 w-full text-[10px] justify-start px-2",
+                                                                !row.category_id && "border-destructive/50 text-destructive bg-destructive/5 hover:bg-destructive/10"
+                                                            )}
+                                                        >
+                                                            {row.category || '未設定分類'} ⚠️
+                                                        </Button>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="p-0 w-[240px]" align="start" onWheel={(e) => e.stopPropagation()}>
+                                                        <Command>
+                                                            <CommandInput placeholder="搜尋分類..." />
+                                                            <CommandList>
+                                                                <CommandEmpty>找不到分類</CommandEmpty>
+                                                                <CommandGroup>
+                                                                    {categories.map((c) => (
+                                                                        <CommandItem
+                                                                            key={c.id}
+                                                                            onSelect={() => {
+                                                                                onUpdate(index, 'category', c.name);
+                                                                                onUpdate(index, 'category_id', c.id);
+                                                                            }}
+                                                                            className="text-xs"
+                                                                        >
+                                                                            <Check className={cn("mr-2 h-3 w-3", row.category_id === c.id ? "opacity-100" : "opacity-0")} />
+                                                                            {c.name}
+                                                                        </CommandItem>
+                                                                    ))}
+                                                                </CommandGroup>
+                                                            </CommandList>
+                                                        </Command>
+                                                    </PopoverContent>
+                                                </Popover>
+                                            )
+                                        ) : (
+                                            <span className="text-[9px] text-muted-foreground/20 italic pl-2">-</span>
+                                        )}
                                     </TableCell>
                                     <TableCell className="px-1">
                                         <div className="flex flex-col items-end gap-0.5">
@@ -647,83 +704,14 @@ export function PreviewTable({
                                                     </PopoverTrigger>
                                                     <PopoverContent className="p-0 w-[240px]" align="start" onWheel={(e) => e.stopPropagation()}>
                                                         {addingColorForIndex === index ? (
-                                                            <div className="p-3 space-y-3 bg-background">
-                                                                <div className="flex items-center justify-between border-b pb-2 mb-2">
-                                                                    <h4 className="text-xs font-bold">新增顏色</h4>
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="icon"
-                                                                        className="h-5 w-5"
-                                                                        onClick={() => setAddingColorForIndex(null)}
-                                                                    >
-                                                                        <X className="h-3 w-3" />
-                                                                    </Button>
-                                                                </div>
-                                                                <div className="space-y-2">
-                                                                    <div className="space-y-1">
-                                                                        <label className="text-[10px] text-muted-foreground">顏色名稱</label>
-                                                                        <Input
-                                                                            value={newColorForm.name}
-                                                                            onChange={e => setNewColorForm({ ...newColorForm, name: e.target.value })}
-                                                                            placeholder="例如：奶茶色"
-                                                                            className="h-8 text-xs"
-                                                                        />
-                                                                    </div>
-                                                                    <div className="space-y-1">
-                                                                        <label className="text-[10px] text-muted-foreground">顏色代碼 (SKU 用)</label>
-                                                                        <Input
-                                                                            value={newColorForm.code}
-                                                                            onChange={e => setNewColorForm({ ...newColorForm, code: e.target.value.toUpperCase() })}
-                                                                            placeholder="例如：MC"
-                                                                            className="h-8 text-xs font-mono"
-                                                                        />
-                                                                    </div>
-                                                                    <div className="space-y-1">
-                                                                        <label className="text-[10px] text-muted-foreground">色標</label>
-                                                                        <div className="flex gap-2">
-                                                                            <input
-                                                                                type="color"
-                                                                                value={newColorForm.hex_code}
-                                                                                onChange={e => setNewColorForm({ ...newColorForm, hex_code: e.target.value })}
-                                                                                className="w-8 h-8 p-0 border-none bg-transparent cursor-pointer"
-                                                                            />
-                                                                            <Input
-                                                                                value={newColorForm.hex_code}
-                                                                                onChange={e => setNewColorForm({ ...newColorForm, hex_code: e.target.value })}
-                                                                                className="h-8 text-[10px] font-mono flex-1 uppercase"
-                                                                            />
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                <div className="flex gap-2 pt-2">
-                                                                    <Button
-                                                                        className="flex-1 h-8 text-xs"
-                                                                        onClick={async () => {
-                                                                            if (!newColorForm.name || !newColorForm.code) {
-                                                                                toast.error('名稱與代碼為必填');
-                                                                                return;
-                                                                            }
-                                                                            try {
-                                                                                const res = await addColor({
-                                                                                    name: newColorForm.name,
-                                                                                    code: newColorForm.code,
-                                                                                    hex_code: newColorForm.hex_code,
-                                                                                    sort_order: allColors.length
-                                                                                });
-                                                                                if (res) {
-                                                                                    onUpdate(index, 'option_3', (res as any).name);
-                                                                                    setAddingColorForIndex(null);
-                                                                                    toast.success(`已建立顏色：${newColorForm.name}`);
-                                                                                }
-                                                                            } catch (err) {
-                                                                                toast.error('建立失敗，名稱或代碼可能重複');
-                                                                            }
-                                                                        }}
-                                                                    >
-                                                                        建立並套用
-                                                                    </Button>
-                                                                </div>
-                                                            </div>
+                                                            <QuickColorAdd 
+                                                                initialName={searchQuery || row.option_3 || ''}
+                                                                onSuccess={(newColor) => {
+                                                                    onUpdate(index, 'option_3', newColor.name);
+                                                                    setAddingColorForIndex(null);
+                                                                }}
+                                                                onCancel={() => setAddingColorForIndex(null)}
+                                                            />
                                                         ) : (
                                                             <Command>
                                                                 <CommandInput
@@ -736,23 +724,17 @@ export function PreviewTable({
                                                                     <CommandGroup heading="快速操作">
                                                                         <CommandItem
                                                                             onSelect={() => {
-                                                                                const initialName = searchQuery || row.option_3 || '';
-                                                                                setNewColorForm({
-                                                                                    name: initialName,
-                                                                                    code: initialName.substring(0, 2).toUpperCase(),
-                                                                                    hex_code: '#808080'
-                                                                                });
                                                                                 setAddingColorForIndex(index);
                                                                             }}
                                                                             className="flex items-center gap-2 py-2 cursor-pointer text-primary"
                                                                         >
                                                                             <Plus className="h-3.5 w-3.5" />
-                                                                            <span className="text-xs">建立新顏色 {searchQuery ? `"${searchQuery}"` : ''}</span>
+                                                                            <span className="text-xs">建立新顏色 {searchQuery || row.option_3 ? `"${searchQuery || row.option_3}"` : ''}</span>
                                                                         </CommandItem>
                                                                     </CommandGroup>
 
                                                                     <CommandEmpty className="py-3 text-xs text-center text-muted-foreground">
-                                                                        找不到顏色，請點擊上方建立。
+                                                                        找不到顏色 "{searchQuery}"
                                                                     </CommandEmpty>
 
                                                                     <CommandGroup heading="現有顏色庫">

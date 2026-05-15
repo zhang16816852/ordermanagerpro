@@ -35,96 +35,129 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
         let newSequenceId = version ?? (cache?.version || 0);
 
         if (incomingData) {
-            const { syncMode, snapshot, changes, deletedIds, serverSequenceId } = incomingData;
-            newSequenceId = serverSequenceId;
+            console.log(`[ProductCache] 收到增量更新訊號 (SyncMode: ${incomingData.syncMode})，準備執行全量拉取以涵蓋關聯資料`);
+            newSequenceId = incomingData.serverSequenceId ?? newSequenceId;
+        }
 
-            if (syncMode === 'full' && snapshot) {
-                products = snapshot;
-            }
+        console.log(`[ProductCache] 📡 執行更新 (V8.0 統一關聯表)...`);
 
-            const prodMap = new Map<string, ProductWithDetails>(products.map(p => [p.id, p]));
-            if (deletedIds) deletedIds.forEach((id: string) => prodMap.delete(id));
-            if (changes) {
-                changes.forEach((change: any) => {
-                    const oldData = prodMap.get(change.id) || {} as ProductWithDetails;
-                    const newData = { ...oldData, ...change.data };
-                    prodMap.set(change.id, newData as ProductWithDetails);
-                });
-            }
-            products = Array.from(prodMap.values());
-        } else {
-            console.log(`[ProductCache] 📡 執行全量更新...`);
-
-            // [V7.5] 修正查詢語法，改用聯集表 (Junction Tables) 抓取型號資料
+            // 1. 基本資料抓取 (Products + Variants)
             const { data: productsData, error: productsError } = await supabase.from('products')
                 .select(`
                     *,
-                    variants:product_variants(
-                        *,
-                        variant_model_links(model_id, device_models(name)),
-                        variant_model_group_links(group_id, device_model_groups(name)),
-                        variant_model_exclusions(model_id, device_models(name))
-                    ),
-                    product_model_links(model_id, device_models(name)),
-                    product_model_group_links(group_id, device_model_groups(name)),
-                    product_model_exclusions(model_id, device_models(name)),
+                    variants:product_variants(*),
                     product_category_links(category_id, categories(name))
                 `);
 
             if (productsError) throw productsError;
 
-            // [V7.5] 額外抓取所有規格值
-            const { data: specsData, error: specsError } = await supabase.from('product_spec_values')
-                .select('*')
-                .eq('lifecycle_state', 'active');
+            // 2. 關聯資料全量抓取 (優化效能：不再使用嵌套 Select)
+            const [
+                { data: allLinks },
+                { data: allGroupLinks },
+                { data: allExclusions },
+                { data: allSpecs }
+            ] = await Promise.all([
+                supabase.from('device_model_links').select('entity_id, model_id, device_models(id, name)'),
+                supabase.from('device_model_group_links').select('entity_id, group_id, device_model_groups(id, name, device_model_group_items(device_models(id, name)))'),
+                supabase.from('device_model_exclusions').select('entity_id, model_id, device_models(id, name)'),
+                supabase.from('entity_spec_values').select('*').eq('lifecycle_state', 'active')
+            ]);
 
-            if (specsError) throw specsError;
+            // 3. 建立索引索引 Map
+            const linksMap = new Map<string, any[]>();
+            allLinks?.forEach(l => {
+                if (!linksMap.has(l.entity_id)) linksMap.set(l.entity_id, []);
+                linksMap.get(l.entity_id)!.push(l);
+            });
 
-            // 建立規格值索引：entity_id -> { [pathKey]: value }
+            const groupsMap = new Map<string, any[]>();
+            allGroupLinks?.forEach(l => {
+                if (!groupsMap.has(l.entity_id)) groupsMap.set(l.entity_id, []);
+                groupsMap.get(l.entity_id)!.push(l);
+            });
+
+            const exclusionsMap = new Map<string, any[]>();
+            allExclusions?.forEach(l => {
+                if (!exclusionsMap.has(l.entity_id)) exclusionsMap.set(l.entity_id, []);
+                exclusionsMap.get(l.entity_id)!.push(l);
+            });
+
             const specsMap = new Map<string, Record<string, any>>();
-            (specsData || []).forEach((sv: any) => {
-                if (!specsMap.has(sv.entity_id)) {
-                    specsMap.set(sv.entity_id, {});
-                }
+            allSpecs?.forEach((sv: any) => {
+                if (!specsMap.has(sv.entity_id)) specsMap.set(sv.entity_id, {});
                 const entitySpecs = specsMap.get(sv.entity_id)!;
-                // 構造路徑 Key (A:B:C 格式，此處簡化為 InstanceUUID:SpecID:ParentID)
                 const pathKey = `${sv.instance_uuid}:${sv.spec_id}${sv.parent_id ? `:${sv.parent_id}` : ''}`;
                 entitySpecs[pathKey] = sv.value;
             });
 
+            // 4. 資料對映處理
             products = (productsData || []).map((p: any) => {
-                // 輔助函式：從聯集表中提取型號名稱
-                const getModelNames = (target: any) => {
-                    const direct = (target.product_model_links || target.variant_model_links)?.map((l: any) => l.device_models?.name) || [];
-                    const group = (target.product_model_group_links || target.variant_model_group_links)?.map((l: any) => l.device_model_groups?.name) || [];
-                    return Array.from(new Set([...direct, ...group])).filter(Boolean) as string[];
+                const processModels = (entityId: string) => {
+                    const rules: string[] = [];
+                    const directLinks = linksMap.get(entityId) || [];
+                    const exclusionLinks = exclusionsMap.get(entityId) || [];
+                    const groupLinks = groupsMap.get(entityId) || [];
+
+                    const exclusions = new Set<string>();
+                    exclusionLinks.forEach(l => {
+                        if (l.device_models) {
+                            exclusions.add(l.device_models.id);
+                            rules.push(`exclude:${l.device_models.name}`);
+                        }
+                    });
+
+                    const directModels = directLinks
+                        .filter(l => l.device_models && !exclusions.has(l.device_models.id))
+                        .map(l => {
+                            rules.push(`model:${l.device_models.name}`);
+                            return l.device_models;
+                        });
+
+                    const groupNames: string[] = [];
+                    const expandedFromGroups: any[] = [];
+                    groupLinks.forEach(link => {
+                        const group = link.device_model_groups;
+                        if (group) {
+                            groupNames.push(group.name);
+                            rules.push(`group:${group.name}`);
+                            (group.device_model_group_items || []).forEach((item: any) => {
+                                if (item.device_models && !exclusions.has(item.device_models.id)) {
+                                    expandedFromGroups.push(item.device_models);
+                                }
+                            });
+                        }
+                    });
+
+                    return {
+                        device_models: directModels,
+                        device_model_groups: groupNames,
+                        device_model_rules: rules,
+                        _expanded_models: Array.from(new Set([...directModels, ...expandedFromGroups].map(m => m.name))),
+                        device_model_exclusions: Array.from(exclusions)
+                    };
                 };
 
-                // 輔助函式：攤平物件
-                const flattenModels = (target: any) => ({
-                    device_models: (target.product_model_links || target.variant_model_links)?.map((l: any) => l.device_models).filter(Boolean) || [],
-                    device_model_groups: (target.product_model_group_links || target.variant_model_group_links)?.map((l: any) => l.device_model_groups).filter(Boolean) || [],
-                    device_model_exclusions: (target.product_model_exclusions || target.variant_model_exclusions)?.map((l: any) => l.device_models).filter(Boolean) || []
-                });
-
-                const flattenedP = flattenModels(p);
+                const modelDataP = processModels(p.id);
 
                 return {
                     ...p,
-                    ...flattenedP,
+                    ...modelDataP,
                     category_ids: p.product_category_links?.map((l: any) => l.category_id) || [],
                     category_names: p.product_category_links?.map((l: any) => l.categories?.name).filter(Boolean) || [],
-                    effective_model_names: getModelNames(p),
+                    effective_model_names: modelDataP._expanded_models,
                     spec_values: specsMap.get(p.id) || {},
-                    variants: p.variants?.map((v: any) => ({
-                        ...v,
-                        ...flattenModels(v),
-                        effective_model_names: getModelNames(v),
-                        spec_values: specsMap.get(v.id) || {}
-                    }))
+                    variants: p.variants?.map((v: any) => {
+                        const modelDataV = processModels(v.id);
+                        return {
+                            ...v,
+                            ...modelDataV,
+                            effective_model_names: modelDataV._expanded_models,
+                            spec_values: specsMap.get(v.id) || {}
+                        };
+                    })
                 };
             }) as unknown as ProductWithDetails[];
-        }
 
         setProductCache({ version: newSequenceId, data: products });
         return products;

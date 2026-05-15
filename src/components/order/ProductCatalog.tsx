@@ -26,6 +26,7 @@ import { useMemo } from "react";
 import { calculatePriceRange } from "@/utils/priceUtils";
 import { useProductColors } from "@/hooks/useProductColors";
 import { getContrastColor } from "@/utils/colorUtils";
+import { VariantOptionsPicker } from "./VariantOptionsPicker";
 
 interface ProductCatalogProps {
   products: ProductWithPricing[];
@@ -53,6 +54,7 @@ export default function ProductCatalog({
   const [searchParams, setSearchParams] = useSearchParams();
   const { colors } = useProductColors();
   const [variantDialogProduct, setVariantDialogProduct] = useState<ProductWithPricing | null>(null);
+  const [selectedVariantForDialog, setSelectedVariantForDialog] = useState<VariantWithPricing | null>(null);
   const [detailProduct, setDetailProduct] = useState<ProductWithPricing | null>(null);
 
   const { addItem, getItemQuantity, getTotalProductQuantity } = useStoreDraft(storeId);
@@ -190,7 +192,12 @@ export default function ProductCatalog({
     .map((product) => {
       if (keywords.length === 0) return product;
 
-      const productTexts = [product.name, product.sku, ...(product.category_names || [])]
+      const productTexts = [
+        product.name, 
+        product.sku, 
+        ...(product.category_names || []),
+        ...(product.effective_model_names || [])
+      ]
         .filter(Boolean)
         .map((v) => v!.toLowerCase());
 
@@ -207,6 +214,7 @@ export default function ProductCatalog({
             variant.option_1,
             variant.option_2,
             variant.option_3,
+            ...((variant as any).effective_model_names || [])
           ]
             .filter(Boolean)
             .map((v) => v!.toLowerCase());
@@ -470,51 +478,24 @@ export default function ProductCatalog({
             </DialogDescription>
           </DialogHeader>
           {variantDialogProduct && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="text-sm text-muted-foreground">{variantDialogProduct.name}</div>
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {variantDialogProduct.variants?.map((variant) => {
-                  const qty = getItemQuantity(variantDialogProduct.id, variant.id);
-                  const variantWithPricing = variant as VariantWithPricing;
-                  const price = variantWithPricing.effective_wholesale_price ?? variant.wholesale_price;
+              
+              <VariantOptionsPicker 
+                product={variantDialogProduct}
+                onVariantSelect={(v) => setSelectedVariantForDialog(v)}
+              />
 
-                  return (
-                    <div
-                      key={variant.id}
-                      className="p-3 border rounded-lg hover:border-primary cursor-pointer transition-colors"
-                      onClick={() => handleVariantSelect(variantDialogProduct, variant as VariantWithPricing)}
-                    >
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <div className="font-medium">{variant.name}</div>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {variant.option_1 && <Badge variant="secondary" className="text-xs">{variant.option_1}</Badge>}
-                            {variant.option_2 && <Badge variant="secondary" className="text-xs">{variant.option_2}</Badge>}
-                            {variant.option_3 && (() => {
-                              const colorData = colors.find(c => c.name === variant.option_3);
-                              return (
-                                <Badge 
-                                  variant="secondary" 
-                                  className="text-xs border-none shadow-sm"
-                                  style={colorData?.hex_code ? {
-                                    backgroundColor: colorData.hex_code,
-                                    color: getContrastColor(colorData.hex_code)
-                                  } : {}}
-                                >
-                                  {variant.option_3}
-                                </Badge>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-medium">${Number(price)}</div>
-                          {qty > 0 && <div className="text-sm text-primary">已加入 x{qty}</div>}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="pt-4 border-t flex justify-end gap-3">
+                <Button variant="ghost" onClick={() => setVariantDialogProduct(null)}>
+                  取消
+                </Button>
+                <Button 
+                  disabled={!selectedVariantForDialog}
+                  onClick={() => selectedVariantForDialog && handleVariantSelect(variantDialogProduct, selectedVariantForDialog)}
+                >
+                  確認加入
+                </Button>
               </div>
             </div>
           )}

@@ -21,7 +21,7 @@ export default function AdminProducts() {
         expandedProducts, toggleExpanded, filteredProducts,
         isDialogOpen, setIsDialogOpen, isImportOpen, setIsImportOpen,
         editingProduct, setEditingProduct, deleteProduct, setDeleteProduct,
-        handleCopy, handleBatchExport, getProductVariants, getProductModels,
+        handleCopy, handleBatchExport, handleImportSuccess, getProductVariants, getProductModels,
         createMutation, updateMutation, deleteMutation, updateVariantPriceMutation,
         selectedCategory, setSelectedCategory,
         selectedSpecs, setSelectedSpecs,
@@ -167,6 +167,7 @@ export default function AdminProducts() {
                     else createMutation.mutate(values);
                 }}
                 onDeleteConfirm={(id) => deleteMutation.mutate(id)}
+                onImportSuccess={handleImportSuccess}
                 isMutationLoading={isMutationLoading}
             />
         </div>

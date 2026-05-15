@@ -80,10 +80,10 @@ export const performGlobalDataSync = async () => {
         let productsUpdated = false;
 
         if (prodResult?.needsUpdate) {
-            await syncProducts(prodResult.data, prodResult.serverSequenceId);
+            console.log(`[GlobalSync] 🔄 產品資料有異動，觸發全量拉取 (涵蓋複雜關聯)`);
+            // Option A: Pass undefined as incomingData to force full fetch, but pass the new sequence ID
+            await syncProducts(undefined, prodResult.serverSequenceId);
             productsUpdated = true;
-        } else {
-            await syncProducts();
         }
 
         // 4. 同步變體 (Variants)
@@ -91,7 +91,8 @@ export const performGlobalDataSync = async () => {
             // 注意：產品的 sequenceId 通常涵蓋了變體，但若有獨立異動則檢查
             const vResult = await checkServerSequence('product_variants', prodSeq);
             if (vResult?.needsUpdate) {
-                await syncProducts(vResult.data, vResult.serverSequenceId);
+                console.log(`[GlobalSync] 🔄 變體資料有異動，觸發全量拉取 (涵蓋複雜關聯)`);
+                await syncProducts(undefined, vResult.serverSequenceId);
             }
         }
 

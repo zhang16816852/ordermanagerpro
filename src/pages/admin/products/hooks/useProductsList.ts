@@ -11,6 +11,7 @@ import { useBrands } from '@/hooks/useBrands';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { generateProductExcel } from '@/utils/excelUtils';
+import { entityRelationService } from '@/services/entityRelationService';
 
 import { ProductWithPricing } from '@/types/product';
 
@@ -101,31 +102,15 @@ export function useProductsList() {
     const getProductModels = useCallback((productId: string) => {
         const product = products?.find(p => p.id === productId);
         if (!product) return [];
-        
+
         // 彙整產品本身與所有變體的適用型號
         const pModels = product.effective_model_names || [];
         const vModels = (product as any).variants?.flatMap((v: any) => v.effective_model_names || []) || [];
-        
+
         return Array.from(new Set([...pModels, ...vModels])).filter(Boolean) as string[];
     }, [products]);
 
-    const getProductBadgeInfo = useCallback((productId: string) => {
-        const product = products?.find(p => p.id === productId);
-        if (!product) return [];
 
-        const parts: string[] = [];
-
-        // 1. 直連型號 (model:NAME)
-        product.device_models?.forEach(m => parts.push(`model:${m.name}`));
-
-        // 2. 群組 (group:NAME)
-        product.device_model_groups?.forEach(g => parts.push(`group:${g.name}`));
-
-        // 3. 排除 (exclude:NAME)
-        product.device_model_exclusions?.forEach(e => parts.push(`exclude:${e.name}`));
-
-        return parts;
-    }, [products]);
 
     // v4.12 搜尋邏輯升級：支援分類、品牌、規格進階篩選
     const filteredProducts = useMemo(() => {
@@ -167,7 +152,8 @@ export function useProductsList() {
             if (specKeys.length > 0) {
                 const matchesSpec = (settingsRaw: any) => {
                     if (!settingsRaw) return false;
-                    const flatSettings = deserializeSpecs(settingsRaw);
+                    // 若 settingsRaw 已經是物件（快取結構），則直接使用
+                    const flatSettings = typeof settingsRaw === 'object' ? settingsRaw : deserializeSpecs(settingsRaw);
                     return specKeys.every((key) => {
                         const allowedValues = selectedSpecs[key];
                         if (!allowedValues || allowedValues.length === 0) return true;
@@ -226,42 +212,32 @@ export function useProductsList() {
                 device_model_ids,
                 device_model_group_ids = [],
                 device_model_exclusion_ids = [],
-                category, category_id, device_models,
-                spec_values, // 從主資料中拽出，不寫入 products 表
+                spec_values,
                 ...productData
             } = values;
 
-            // 建立產品 (v6 架構下，規格改為透過 RPC 寫入獨立資料表)
+            // 1. 建立產品
             const { data: product, error: productError } = await supabase.from('products')
                 .insert({ ...productData })
                 .select().single();
             if (productError) throw productError;
 
-            const promises = [];
+            // 2. 建立分類關聯
             if (category_ids?.length > 0) {
-                promises.push(supabase.from('product_category_links').insert(
+                const { error } = await supabase.from('product_category_links').insert(
                     category_ids.map((catId: string) => ({ product_id: product.id, category_id: catId }))
-                ));
-            }
-            if (device_model_ids?.length > 0) {
-                promises.push(supabase.from('product_model_links').insert(
-                    device_model_ids.map((mId: string) => ({ product_id: product.id, model_id: mId }))
-                ));
-            }
-            if (device_model_group_ids.length > 0) {
-                promises.push(supabase.from('product_model_group_links').insert(
-                    device_model_group_ids.map((gId: string) => ({ product_id: product.id, group_id: gId }))
-                ));
-            }
-            if (device_model_exclusion_ids.length > 0) {
-                promises.push(supabase.from('product_model_exclusions').insert(
-                    device_model_exclusion_ids.map((mId: string) => ({ product_id: product.id, model_id: mId }))
-                ));
+                );
+                if (error) throw error;
             }
 
-            if (promises.length > 0) await Promise.all(promises);
+            // 3. 使用統一服務建立型號關聯
+            await entityRelationService.updateRelations('product', product.id, {
+                modelIds: device_model_ids,
+                groupIds: device_model_group_ids,
+                exclusions: device_model_exclusion_ids.map((id: string) => ({ model_id: id }))
+            });
 
-            // v6 同步產品規格至新資料表
+            // 4. 同步產品規格
             if (spec_values && !values.has_variants && category_ids?.[0]) {
                 const { error: specError } = await supabase.rpc('sync_product_specs_v6', {
                     p_entity_id: product.id,
@@ -269,7 +245,7 @@ export function useProductsList() {
                     p_category_id: category_ids[0],
                     p_new_data: spec_values
                 });
-                if (specError) console.error('產品規格同步失敗:', specError);
+                if (specError) throw specError;
             }
 
             return product;
@@ -277,11 +253,8 @@ export function useProductsList() {
         onSuccess: (product) => {
             forceRefresh();
             queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
-            queryClient.invalidateQueries({ queryKey: ['all-product-model-links'] });
-            queryClient.invalidateQueries({ queryKey: ['all-product-variants'] });
-            toast.success('產品已新增，您現在可以繼續設定變體與規格');
+            toast.success('產品已新增');
             setEditingProduct(product as any);
-            // 不關閉彈窗，讓使用者繼續操作變體
         },
     });
 
@@ -292,50 +265,32 @@ export function useProductsList() {
                 device_model_ids,
                 device_model_group_ids = [],
                 device_model_exclusion_ids = [],
-                category, category_id, device_models,
-                spec_values, // 從主資料中拽出，不寫入 products 表
+                spec_values,
                 ...productData
             } = values;
 
-            // 先刪除所有舊關聯
-            await Promise.all([
-                supabase.from('product_category_links').delete().eq('product_id', id),
-                supabase.from('product_model_links').delete().eq('product_id', id),
-                supabase.from('product_model_group_links').delete().eq('product_id', id),
-                supabase.from('product_model_exclusions').delete().eq('product_id', id),
-            ]);
-
-            const promises = [];
-            if (category_ids?.length > 0) {
-                promises.push(supabase.from('product_category_links').insert(
-                    category_ids.map((catId: string) => ({ product_id: id, category_id: catId }))
-                ));
-            }
-            if (device_model_ids?.length > 0) {
-                promises.push(supabase.from('product_model_links').insert(
-                    device_model_ids.map((mId: string) => ({ product_id: id, model_id: mId }))
-                ));
-            }
-            if (device_model_group_ids.length > 0) {
-                promises.push(supabase.from('product_model_group_links').insert(
-                    device_model_group_ids.map((gId: string) => ({ product_id: id, group_id: gId }))
-                ));
-            }
-            if (device_model_exclusion_ids.length > 0) {
-                promises.push(supabase.from('product_model_exclusions').insert(
-                    device_model_exclusion_ids.map((mId: string) => ({ product_id: id, model_id: mId }))
-                ));
-            }
-
-            if (promises.length > 0) await Promise.all(promises);
-
-            // 更新主資料
+            // 1. 更新主資料
             const { error: productError } = await supabase.from('products')
                 .update({ ...productData, updated_at: new Date().toISOString() })
                 .eq('id', id);
             if (productError) throw productError;
 
-            // v6 同步產品規格至新資料表
+            // 2. 更新分類關聯
+            await supabase.from('product_category_links').delete().eq('product_id', id);
+            if (category_ids?.length > 0) {
+                await supabase.from('product_category_links').insert(
+                    category_ids.map((catId: string) => ({ product_id: id, category_id: catId }))
+                );
+            }
+
+            // 3. 使用統一服務更新型號關聯
+            await entityRelationService.updateRelations('product', id, {
+                modelIds: device_model_ids,
+                groupIds: device_model_group_ids,
+                exclusions: device_model_exclusion_ids.map((id: string) => ({ model_id: id }))
+            });
+
+            // 4. 同步產品規格
             if (spec_values && !values.has_variants && category_ids?.[0]) {
                 const { error: specError } = await supabase.rpc('sync_product_specs_v6', {
                     p_entity_id: id,
@@ -343,7 +298,7 @@ export function useProductsList() {
                     p_category_id: category_ids[0],
                     p_new_data: spec_values
                 });
-                if (specError) console.error('產品規格同步失敗:', specError);
+                if (specError) throw specError;
             }
         },
         onSuccess: () => {
@@ -424,12 +379,19 @@ export function useProductsList() {
             link.download = `產品匯出_${new Date().toISOString().slice(0, 10)}.xlsx`;
             link.click();
             URL.revokeObjectURL(url);
+            setSelectedProductIds(new Set());
             toast.success('匯出成功');
         } catch (error: any) {
             console.error('Export error:', error);
             toast.error(`匯出失敗: ${error.message}`);
         }
     };
+
+    const handleImportSuccess = useCallback(() => {
+        setSelectedProductIds(new Set());
+        forceRefresh();
+        toast.success('產品資料匯入成功，已重置選擇狀態');
+    }, [forceRefresh]);
 
     const clearFilters = useCallback(() => {
         setSelectedCategory(null);
@@ -446,7 +408,7 @@ export function useProductsList() {
         expandedProducts, toggleExpanded, filteredProducts,
         isDialogOpen, setIsDialogOpen, isImportOpen, setIsImportOpen,
         editingProduct, setEditingProduct, deleteProduct, setDeleteProduct,
-        handleCopy, handleBatchExport, getProductVariants, getProductModels,
+        handleCopy, handleBatchExport, handleImportSuccess, getProductVariants, getProductModels,
         createMutation, updateMutation, deleteMutation, updateVariantPriceMutation,
         selectedCategory, setSelectedCategory,
         selectedSpecs, setSelectedSpecs,

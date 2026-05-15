@@ -35,6 +35,7 @@ import { useColorStore } from '@/store/useColorStore';
 import { DynamicSpecsFields } from '../ProductFormDialog/sections/DynamicSpecsFields';
 import { serializeSpecs, deserializeSpecs } from '@/utils/specLogic';
 import { useSpecStore } from '@/store/useSpecStore';
+import { entityRelationService } from '@/services/entityRelationService';
 
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;
@@ -89,10 +90,10 @@ export function VariantEditDialog({
                 if (variant) {
                     // 取得設備型號連結與群組連結與排除
                     const [links, groupLinks, exclusions, specValues] = await Promise.all([
-                        supabase.from('variant_model_links').select('model_id').eq('variant_id', variant.id),
-                        supabase.from('variant_model_group_links').select('group_id').eq('variant_id', variant.id),
-                        supabase.from('variant_model_exclusions').select('model_id').eq('variant_id', variant.id),
-                        supabase.from('product_spec_values').select('*').eq('entity_id', variant.id).eq('entity_type', 'variant').is('deleted_at', null)
+                        supabase.from('device_model_links').select('model_id').eq('entity_id', variant.id).eq('entity_type', 'variant'),
+                        supabase.from('device_model_group_links').select('group_id').eq('entity_id', variant.id).eq('entity_type', 'variant'),
+                        supabase.from('device_model_exclusions').select('model_id').eq('entity_id', variant.id).eq('entity_type', 'variant'),
+                        supabase.from('entity_spec_values').select('*').eq('entity_id', variant.id).eq('entity_type', 'variant').is('deleted_at', null)
                     ]);
 
                     // 根據 option_3 的名稱找回顏色 ID
@@ -151,17 +152,15 @@ export function VariantEditDialog({
                 selectedExclusionIds,
                 selectedColorIds,
                 category_ids,
-                spec_values, // 排除 spec_values，以免寫入 product_variants 表
+                spec_values,
                 ...dataToInsert
             } = values;
 
-            // 處理顏色名稱
             const selectedColor = colors.find(c => c.id === selectedColorIds[0]);
             const finalData = {
                 ...dataToInsert,
                 product_id: product?.id,
                 option_3: selectedColor?.name || null,
-                // 確保空字串轉為 null
                 barcode: dataToInsert.barcode || null,
                 color: dataToInsert.color || null,
                 option_1: dataToInsert.option_1 || null,
@@ -182,24 +181,12 @@ export function VariantEditDialog({
                 });
             }
 
-            // 處理型號連結、群組連結與排除
-            const promises = [];
-            if (values.selectedModelIds.length > 0) {
-                promises.push(supabase.from('variant_model_links').insert(
-                    values.selectedModelIds.map((mId: string) => ({ variant_id: data.id, model_id: mId }))
-                ));
-            }
-            if (values.selectedGroupIds.length > 0) {
-                promises.push(supabase.from('variant_model_group_links').insert(
-                    values.selectedGroupIds.map((gId: string) => ({ variant_id: data.id, group_id: gId }))
-                ));
-            }
-            if (values.selectedExclusionIds.length > 0) {
-                promises.push(supabase.from('variant_model_exclusions').insert(
-                    values.selectedExclusionIds.map((mId: string) => ({ variant_id: data.id, model_id: mId }))
-                ));
-            }
-            if (promises.length > 0) await Promise.all(promises);
+            // 使用統一服務建立型號關聯
+            await entityRelationService.updateRelations('variant', data.id, {
+                modelIds: selectedModelIds,
+                groupIds: selectedGroupIds,
+                exclusions: selectedExclusionIds.map((id: string) => ({ model_id: id }))
+            });
         },
         onSuccess: () => {
             if (product) {
@@ -222,16 +209,14 @@ export function VariantEditDialog({
                 selectedExclusionIds,
                 selectedColorIds,
                 category_ids,
-                spec_values, // 排除 spec_values，以免寫入 product_variants 表
+                spec_values,
                 ...updates
             } = values;
 
-            // 處理顏色名稱
             const selectedColor = colors.find(c => c.id === selectedColorIds[0]);
             const finalUpdates = {
                 ...updates,
                 option_3: selectedColor?.name || null,
-                // 確保空字串轉為 null
                 barcode: updates.barcode || null,
                 color: updates.color || null,
                 option_1: updates.option_1 || null,
@@ -252,30 +237,12 @@ export function VariantEditDialog({
                 });
             }
 
-            // 更新連結與排除 (先刪後增)
-            await Promise.all([
-                supabase.from('variant_model_links').delete().eq('variant_id', variant!.id),
-                supabase.from('variant_model_group_links').delete().eq('variant_id', variant!.id),
-                supabase.from('variant_model_exclusions').delete().eq('variant_id', variant!.id),
-            ]);
-
-            const promises = [];
-            if (values.selectedModelIds.length > 0) {
-                promises.push(supabase.from('variant_model_links').insert(
-                    values.selectedModelIds.map((mId: string) => ({ variant_id: variant!.id, model_id: mId }))
-                ));
-            }
-            if (values.selectedGroupIds.length > 0) {
-                promises.push(supabase.from('variant_model_group_links').insert(
-                    values.selectedGroupIds.map((gId: string) => ({ variant_id: variant!.id, group_id: gId }))
-                ));
-            }
-            if (values.selectedExclusionIds.length > 0) {
-                promises.push(supabase.from('variant_model_exclusions').insert(
-                    values.selectedExclusionIds.map((mId: string) => ({ variant_id: variant!.id, model_id: mId }))
-                ));
-            }
-            if (promises.length > 0) await Promise.all(promises);
+            // 使用統一服務更新型號關聯
+            await entityRelationService.updateRelations('variant', variant!.id, {
+                modelIds: selectedModelIds,
+                groupIds: selectedGroupIds,
+                exclusions: selectedExclusionIds.map((id: string) => ({ model_id: id }))
+            });
         },
         onSuccess: () => {
             if (product) {
@@ -451,7 +418,7 @@ export function VariantEditDialog({
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>狀態</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <Select onValueChange={field.onChange} value={field.value || ""}>
                                             <FormControl>
                                                 <SelectTrigger>
                                                     <SelectValue />

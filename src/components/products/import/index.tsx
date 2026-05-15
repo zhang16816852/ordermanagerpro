@@ -18,9 +18,10 @@ import { ValidationSummary } from './components/ValidationSummary';
 interface UnifiedProductImportProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onSuccess?: () => void;
 }
 
-export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImportProps) {
+export function UnifiedProductImport({ open, onOpenChange, onSuccess }: UnifiedProductImportProps) {
     const {
         step,
         importData,
@@ -38,7 +39,10 @@ export function UnifiedProductImport({ open, onOpenChange }: UnifiedProductImpor
         downloadTemplate,
         resetState,
         allBrands
-    } = useProductImport(() => onOpenChange(false));
+    } = useProductImport(() => {
+        onSuccess?.();
+        onOpenChange(false);
+    });
 
     const handleClose = () => {
         resetState();

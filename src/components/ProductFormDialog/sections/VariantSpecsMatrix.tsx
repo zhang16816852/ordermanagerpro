@@ -40,7 +40,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
             // 2. 抓取所有變體的規格數值 (新資料表)
             const vIds = vData.map(v => v.id);
             const { data: valData, error: valError } = await supabase
-                .from('product_spec_values')
+                .from('entity_spec_values')
                 .select('*')
                 .in('entity_id', vIds)
                 .eq('entity_type', 'variant')

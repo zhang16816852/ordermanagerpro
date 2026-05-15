@@ -76,13 +76,28 @@ export function VariantManager({ products, search }: VariantManagerProps) {
     queryKey: ['product-variants', selectedProductId],
     queryFn: async () => {
       if (!selectedProductId) return [];
-      const { data, error } = await supabase
+      const { data: variants, error: variantsError } = await supabase
         .from('product_variants')
-        .select('*, variant_model_links(model_id, device_models(name))')
+        .select('*')
         .eq('product_id', selectedProductId)
         .order('sku');
-      if (error) throw error;
-      return data;
+      
+      if (variantsError) throw variantsError;
+      if (!variants || variants.length === 0) return [];
+
+      const variantIds = variants.map(v => v.id);
+      const { data: linksData, error: linksError } = await supabase
+        .from('device_model_links')
+        .select('entity_id, model_id, device_models(name)')
+        .eq('entity_type', 'variant')
+        .in('entity_id', variantIds);
+      
+      if (linksError) throw linksError;
+
+      return variants.map(v => ({
+        ...v,
+        device_model_links: linksData?.filter(link => link.entity_id === v.id) || []
+      }));
     },
     enabled: !!selectedProductId,
   });
@@ -231,9 +246,9 @@ export function VariantManager({ products, search }: VariantManagerProps) {
                       <Badge variant={variant.status === 'active' ? 'default' : 'secondary'}>
                         {STATUS_LABELS[variant.status]}
                       </Badge>
-                      {variant.variant_model_links && variant.variant_model_links.length > 0 && (
+                      {variant.device_model_links && variant.device_model_links.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {variant.variant_model_links.map((link: any) => (
+                          {variant.device_model_links.map((link: any) => (
                             <Badge key={link.model_id} variant="secondary" className="text-[9px] px-1 h-3.5 bg-amber-100 text-amber-800 hover:bg-amber-100/80 border-transparent">
                               {link.device_models?.name}
                             </Badge>

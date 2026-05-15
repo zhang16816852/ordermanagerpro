@@ -71,7 +71,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
           // 編輯模式：從新資料表抓取規格數值
           if (initialData.id) {
             const { data, error } = await supabase
-              .from('product_spec_values')
+              .from('entity_spec_values')
               .select('*')
               .eq('entity_id', initialData.id)
               .eq('entity_type', 'product')
@@ -95,9 +95,9 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
           // 讀取型號標籤、群組標籤與排除的關聯
           if (initialData.id) {
             Promise.all([
-              supabase.from('product_model_links').select('model_id').eq('product_id', initialData.id),
-              supabase.from('product_model_group_links').select('group_id').eq('product_id', initialData.id),
-              supabase.from('product_model_exclusions').select('model_id').eq('product_id', initialData.id)
+              supabase.from('device_model_links').select('model_id').eq('entity_id', initialData.id).eq('entity_type', 'product'),
+              supabase.from('device_model_group_links').select('group_id').eq('entity_id', initialData.id).eq('entity_type', 'product'),
+              supabase.from('device_model_exclusions').select('model_id').eq('entity_id', initialData.id).eq('entity_type', 'product')
             ]).then(([models, groups, exclusions]) => {
               if (models.data) form.setValue('device_model_ids', models.data.map(d => d.model_id));
               if (groups.data) form.setValue('device_model_group_ids', groups.data.map(d => d.group_id));

@@ -11,6 +11,7 @@ import { useEffect } from 'react';
 import { parseProductExcel, generateProductExcel } from '@/utils/excelUtils';
 import * as XLSX from 'xlsx';
 import { useSpecStore } from '@/store/useSpecStore';
+import { entityRelationService } from '@/services/entityRelationService';
 
 export interface ImportRow {
     product_sku: string;
@@ -39,22 +40,24 @@ export interface ImportRow {
     device_models?: string;
     variant_device_models?: string;
     is_variant: boolean;
+    product_id?: string;
+    variant_id?: string;
     _specs?: Record<string, any>;
     errors: string[];
     isValid: boolean;
     action?: 'create' | 'update';
     diff?: string[];
+    has_variants?: boolean; // 用於內部判定
+    _multiSpecs?: Record<string, Record<string, any>>; // category_id -> specs
+    _categoryIds?: string[]; // 收集所有出現過的分類 IDs
 }
-
-const PRODUCT_REQUIRED = ['product_sku', 'product_name'];
-const PRODUCT_OPTIONAL = ['description', 'category', 'category_id', 'brand', 'model', 'series', 'base_wholesale_price', 'base_retail_price', 'product_status', 'spec_values', 'device_models', 'is_variant'];
-const VARIANT_FIELDS = ['variant_sku', 'variant_name', 'option_1', 'option_2', 'option_3', 'variant_wholesale_price', 'variant_retail_price', 'variant_status', 'variant_spec_values', 'barcode', 'variant_device_models'];
 
 export function useProductImport(onSuccess: () => void) {
     const queryClient = useQueryClient();
     const [step, setStep] = useState<'upload' | 'preview'>('upload');
     const [importData, setImportData] = useState<ImportRow[]>([]);
     const [filterCategory, setFilterCategory] = useState<string>('all');
+    const [filterStatus, setFilterStatus] = useState<string>('all');
 
     const { data: categories = [] } = useQuery({
         queryKey: ['categories'],
@@ -66,7 +69,6 @@ export function useProductImport(onSuccess: () => void) {
     });
 
     const { specDefinitions: specDefs, fetchSpecs } = useSpecStore();
-
     const { colors: allColors, fetchColors } = useColorStore();
     const {
         models: allDeviceModels,
@@ -80,7 +82,6 @@ export function useProductImport(onSuccess: () => void) {
         fetchSpecs();
     }, [fetchColors, fetchDeviceData, fetchSpecs]);
 
-    // 當顏色或型號庫更新時，自動重新校驗所有資料
     useEffect(() => {
         if (importData.length === 0) return;
         setImportData(prev => prev.map(row => {
@@ -104,18 +105,23 @@ export function useProductImport(onSuccess: () => void) {
         const pairs = specStr.split(',').map(p => p.trim()).filter(Boolean);
 
         pairs.forEach(pair => {
-            const [name, ...valParts] = pair.split(':');
-            const value = valParts.join(':').trim();
-            const specId = specDefs.find(sd => sd.name === name.trim())?.id || name.trim();
+            const separatorIndex = pair.indexOf(':');
+            if (separatorIndex === -1) return;
+            const name = pair.substring(0, separatorIndex).trim();
+            const value = pair.substring(separatorIndex + 1).trim();
+            const specDef = specDefs.find(sd => sd.name === name);
+            const specId = specDef?.id || name;
 
             if (value.includes('/')) {
                 const items = value.split('/').map(v => v.trim());
                 if (items.some(item => item.includes('*'))) {
                     const obj: Record<string, number> = {};
                     items.forEach(item => {
-                        const [opt, qty] = item.split('*');
-                        if (opt && qty) {
-                            obj[opt.trim()] = parseInt(qty.trim()) || 0;
+                        const starIndex = item.indexOf('*');
+                        if (starIndex !== -1) {
+                            const opt = item.substring(0, starIndex).trim();
+                            const qty = item.substring(starIndex + 1).trim();
+                            obj[opt] = parseInt(qty) || 0;
                         }
                     });
                     settings[specId] = obj;
@@ -123,22 +129,15 @@ export function useProductImport(onSuccess: () => void) {
                     settings[specId] = items;
                 }
             } else if (value.includes('*')) {
-                const [opt, qty] = value.split('*');
-                if (opt && qty) {
-                    settings[specId] = { [opt.trim()]: parseInt(qty.trim()) || 0 };
-                } else {
-                    settings[specId] = value;
-                }
+                const starIndex = value.indexOf('*');
+                const opt = value.substring(0, starIndex).trim();
+                const qty = value.substring(starIndex + 1).trim();
+                settings[specId] = { [opt]: parseInt(qty) || 0 };
             } else {
                 settings[specId] = value;
             }
         });
         return settings;
-    };
-
-    const resetState = () => {
-        setStep('upload');
-        setImportData([]);
     };
 
     const normalizeBarcode = (value: any): string => {
@@ -149,12 +148,7 @@ export function useProductImport(onSuccess: () => void) {
         } else {
             str = String(value).trim();
         }
-
-        // 移除 Excel 可能添加的字首單引號
-        if (str.startsWith("'")) {
-            str = str.substring(1);
-        }
-
+        if (str.startsWith("'")) str = str.substring(1);
         if (/e\+/i.test(str)) return Number(str).toLocaleString('fullwide', { useGrouping: false });
         return str;
     };
@@ -163,31 +157,69 @@ export function useProductImport(onSuccess: () => void) {
         const errors: string[] = [];
         if (!row.product_sku) errors.push('產品 SKU 為必填');
         if (!row.product_name) errors.push('產品名稱為必填');
+        
         const is_variant = typeof (row as any).is_variant === 'boolean'
             ? (row as any).is_variant
             : !!(row.variant_sku || row.variant_name);
 
         if (is_variant) {
-            if (!row.variant_sku) errors.push('變體 SKU 為必填（當有變體資料時）');
-            if (!row.variant_name) errors.push('變體名稱為必填（當有變體資料時）');
+            if (!row.variant_sku) errors.push('變體 SKU 為必填');
+            if (!row.variant_name) errors.push('變體名稱為必填');
         }
 
-        // v4.11 品牌校驗
         if (row.brand && !row.brand_id) {
             errors.push(`找不到品牌 "${row.brand}"`);
         }
 
-        // 顏色校驗 (針對 option_3)
+        if (row.category && !row.category_id) {
+            errors.push(`找不到分類 "${row.category}"`);
+        }
+
         if (row.option_3 && is_variant) {
             const searchColor = row.option_3.trim().toLowerCase();
             const colorExists = allColors.some(c =>
-                c.name.trim().toLowerCase() === searchColor ||
-                c.code.trim().toLowerCase() === searchColor
+                (c.name?.trim().toLowerCase() === searchColor) ||
+                (c.code?.trim().toLowerCase() === searchColor)
             );
-            if (!colorExists) {
-                errors.push(`顏色 "${row.option_3}" 不存在於顏色庫`);
-            }
+            if (!colorExists) errors.push(`顏色 "${row.option_3}" 不存在於顏色庫`);
         }
+
+        const checkModels = (modelStr: string | undefined, fieldName: string) => {
+            if (!modelStr) return;
+            const parts = modelStr.split(',').map(s => s.trim()).filter(Boolean);
+            parts.forEach(part => {
+                let name = part;
+                let type: 'group' | 'model' | 'exclude' = 'model';
+                const lowerPart = part.toLowerCase();
+
+                if (lowerPart.startsWith('group:')) {
+                    type = 'group';
+                    name = part.substring(6).trim();
+                } else if (lowerPart.startsWith('exclude:')) {
+                    type = 'exclude';
+                    name = part.substring(8).trim();
+                } else if (lowerPart.startsWith('model:')) {
+                    type = 'model';
+                    name = part.substring(6).trim();
+                }
+
+                if (type === 'group') {
+                    if (!allGroups.some(g => g.name.toLowerCase() === name.toLowerCase())) {
+                        errors.push(`${fieldName}: 找不到型號群組 "${name}"`);
+                    }
+                } else {
+                    if (!allDeviceModels.some(m =>
+                        (m.name?.trim().toLowerCase() === name.toLowerCase()) ||
+                        (Array.isArray(m.aliases) && m.aliases.some((a: string) => a?.trim().toLowerCase() === name.toLowerCase()))
+                    )) {
+                        errors.push(`${fieldName}: 找不到型號 "${name}"`);
+                    }
+                }
+            });
+        };
+
+        checkModels(row.device_models, '主商品型號');
+        if (is_variant) checkModels(row.variant_device_models, '變體型號');
 
         return { errors, is_variant };
     };
@@ -202,27 +234,7 @@ export function useProductImport(onSuccess: () => void) {
             if (!(result instanceof ArrayBuffer)) return;
 
             try {
-                let parsedRows: any[] = [];
-
-                if (file.name.endsWith('.csv')) {
-                    // 暫時保留 CSV 支援，但簡單處理
-                    const uint8Array = new Uint8Array(result);
-                    const binaryString = Array.from(uint8Array.slice(0, 1000)).map(b => String.fromCharCode(b)).join('');
-                    const detection = jschardet.detect(binaryString);
-                    const encoding = detection.encoding || 'UTF-8';
-
-                    const text = new TextDecoder(encoding).decode(result);
-                    const csvResult = Papa.parse(text, { header: true, skipEmptyLines: true });
-                    parsedRows = csvResult.data.map((r: any) => ({
-                        ...r,
-                        is_variant: r.is_variant === '是' || r.is_variant === 'true',
-                        _specs: r.規格 ? parseCondensedSpecs(r.規格) : (r.變體規格 ? parseCondensedSpecs(r.變體規格) : {})
-                    }));
-                } else {
-                    // Excel 處理
-                    parsedRows = parseProductExcel(result);
-                }
-
+                const parsedRows = parseProductExcel(result);
                 if (parsedRows.length === 0) {
                     toast.error('檔案中沒有有效的產品資料');
                     return;
@@ -243,6 +255,9 @@ export function useProductImport(onSuccess: () => void) {
                 };
 
                 const rawParsed = parsedRows.map(row => {
+                    const is_variant = !!row.is_variant;
+                    const has_variant_sku = !!(row['變體 SKU'] || row.variant_sku);
+                    
                     const baseRow: ImportRow = {
                         product_sku: String(row.sku || row.product_sku || '').trim(),
                         product_name: String(row.name || row.product_name || '').trim(),
@@ -251,11 +266,19 @@ export function useProductImport(onSuccess: () => void) {
                         series: String(row.series || '').trim(),
                         description: String(row.description || '').trim(),
                         category: String(row.category || row._categoryName || '').trim(),
-                        base_wholesale_price: parseFloat(row.wholesale_price || row.base_wholesale_price) || 0,
-                        base_retail_price: parseFloat(row.retail_price || row.base_retail_price) || 0,
-                        product_status: parseStatus(row.status || row.product_status),
-                        variant_sku: String(row['變體 SKU'] || row.variant_sku || (row.is_variant ? row.sku : '') || '').trim(),
-                        variant_name: String(row['變體名稱'] || row.variant_name || (row.is_variant ? row.name : '') || '').trim(),
+                        
+                        // 主商品欄位 (只有在非變體列時才有值)
+                        base_wholesale_price: !is_variant ? (parseFloat(row.wholesale_price || row.base_wholesale_price) || 0) : 0,
+                        base_retail_price: !is_variant ? (parseFloat(row.retail_price || row.base_retail_price) || 0) : 0,
+                        product_status: !is_variant ? parseStatus(row.status || row.product_status) : 'active',
+                        
+                        // 變體欄位
+                        variant_sku: is_variant 
+                            ? String(row['變體 SKU'] || row.variant_sku || '').trim() 
+                            : (has_variant_sku ? '' : String(row.sku || row.product_sku || '').trim()),
+                        variant_name: is_variant 
+                            ? String(row['變體名稱'] || row.variant_name || '').trim() 
+                            : (has_variant_sku ? '' : String(row.name || row.product_name || '').trim()),
                         option_1: String(row['規格 1'] || row.option_1 || '').trim(),
                         option_2: String(row['規格 2'] || row.option_2 || '').trim(),
                         option_3: String(row['顏色 (規格 3)'] || row.option_3 || '').trim(),
@@ -263,49 +286,58 @@ export function useProductImport(onSuccess: () => void) {
                         variant_retail_price: parseFloat(row.variant_retail_price || row.retail_price) || undefined,
                         variant_status: parseStatus(row.variant_status || row.status),
                         barcode: normalizeBarcode(row.barcode),
-                        device_models: String(row['適用型號'] || row.device_models || '').trim(),
-                        variant_device_models: String(row['適用型號'] || row.variant_device_models || '').trim(),
-                        is_variant: !!row.is_variant,
+                        
+                        device_models: !is_variant ? String(row['適用型號'] || row.device_models || '').trim() : '',
+                        variant_device_models: is_variant ? String(row['適用型號'] || row.device_models || row.variant_device_models || '').trim() : '',
+                        
+                        is_variant,
+                        product_id: !is_variant ? row.id : undefined,
+                        variant_id: is_variant ? row.id : undefined,
                         _specs: row._specs || {},
                         errors: [],
                         isValid: true
                     };
 
-                    // 自動匹配品牌 ID
                     if (baseRow.brand) {
-                        const matched = allBrands.find(b => b.name.toLowerCase() === baseRow.brand.toLowerCase());
+                        const search = baseRow.brand.trim().toLowerCase();
+                        const matched = allBrands.find(b => b.name?.trim().toLowerCase() === search);
                         if (matched) (baseRow as any).brand_id = matched.id;
                     }
 
-                    const { errors, is_variant } = validateRow(baseRow as any);
-                    return { ...baseRow, is_variant, errors, isValid: errors.length === 0 };
+                    if (baseRow.category) {
+                        const search = baseRow.category.split(',')[0].trim().toLowerCase();
+                        const matched = categories.find(c => c.name?.trim().toLowerCase() === search);
+                        if (matched) baseRow.category_id = matched.id;
+                    }
+
+                    const { errors } = validateRow(baseRow as any);
+                    return { ...baseRow, errors, isValid: errors.length === 0 };
                 });
 
                 const allSkus = rawParsed.map(r => r.product_sku).filter(Boolean);
                 const allVariantSkus = rawParsed.map(r => r.variant_sku).filter(Boolean);
+                const allIds = rawParsed.map(r => r.product_id || r.variant_id).filter(Boolean);
 
-                const { data: existingProducts } = await supabase.from('products').select('*').in('sku', allSkus) as { data: any[] | null };
-                const { data: existingVariants } = await supabase.from('product_variants').select('*').in('sku', allVariantSkus) as { data: any[] | null };
-
-                const productIds = (existingProducts || []).map(p => p.id);
-                const { data: existingCatLinks } = await (supabase.from('product_category_links' as any) as any).select('product_id, category_id').in('product_id', productIds);
+                const { data: existingProducts } = await supabase.from('products').select('*')
+                    .or(`sku.in.(${allSkus.join(',')})${allIds.length > 0 ? `,id.in.(${allIds.join(',')})` : ''}`) as { data: any[] | null };
+                
+                const { data: existingVariants } = await supabase.from('product_variants').select('*')
+                    .or(`sku.in.(${allVariantSkus.join(',')})${allIds.length > 0 ? `,id.in.(${allIds.join(',')})` : ''}`) as { data: any[] | null };
 
                 const enrichedData = rawParsed.map(row => {
-                    const product = (existingProducts || []).find(p => p.sku === row.product_sku);
-                    const variant = (existingVariants || []).find(v => v.sku === row.variant_sku);
+                    const product = (existingProducts || []).find(p => (row.product_id && p.id === row.product_id) || p.sku === row.product_sku);
+                    const variant = (existingVariants || []).find(v => (row.variant_id && v.id === row.variant_id) || v.sku === row.variant_sku);
 
                     const diff: string[] = [];
                     let action: 'create' | 'update' = 'create';
 
                     if (product) {
                         action = 'update';
-                        row.spec_values = product.spec_values; // 保存現有規格供增量更新使用
-
+                        row.product_id = product.id;
+                        row.spec_values = product.spec_values;
                         if (product.name !== row.product_name) diff.push('產品名稱');
-                        if (product.base_wholesale_price !== row.base_wholesale_price) diff.push('批發價');
-                        if (product.base_retail_price !== row.base_retail_price) diff.push('零售價');
-
-                        // 規格比較
+                        if (!row.is_variant && product.base_wholesale_price !== row.base_wholesale_price) diff.push('批發價');
+                        
                         const incomingSpecs = row._specs || {};
                         const currentSpecs = deserializeSpecs(product.spec_values);
                         const hasSpecDiff = Object.entries(incomingSpecs).some(([id, val]) => {
@@ -317,17 +349,9 @@ export function useProductImport(onSuccess: () => void) {
 
                     if (row.variant_sku && variant) {
                         action = 'update';
-                        row.variant_spec_values = variant.spec_values; // 保存現有規格
-
+                        row.variant_id = variant.id;
+                        row.variant_spec_values = variant.spec_values;
                         if (variant.name !== row.variant_name) diff.push('變體名稱');
-
-                        const incomingSpecsV = row._specs || {};
-                        const currentSpecsV = deserializeSpecs(variant.spec_values);
-                        const hasSpecDiffV = Object.entries(incomingSpecsV).some(([id, val]) => {
-                            const currentVal = currentSpecsV[`root:${id}`] || currentSpecsV[id];
-                            return formatSpecValue(currentVal) !== String(val);
-                        });
-                        if (hasSpecDiffV) diff.push('變體規格');
                     }
 
                     return { ...row, action, diff };
@@ -343,589 +367,394 @@ export function useProductImport(onSuccess: () => void) {
         reader.readAsArrayBuffer(file);
     }, [specDefs, allBrands, allColors]);
 
-    const updateRow = (index: number, field: keyof ImportRow, value: any) => {
+    const resetState = useCallback(() => {
+        setStep('upload');
+        setImportData([]);
+        setFilterCategory('all');
+    }, []);
+
+    const updateRow = useCallback((index: number, updatedRow: ImportRow) => {
         setImportData(prev => {
-            const updated = [...prev];
-            const targetRow = updated[index];
-            const productLevelFields: (keyof ImportRow)[] = [
-                'product_name', 'description', 'category', 'brand', 'brand_id',
-                'model', 'series', 'base_wholesale_price', 'base_retail_price',
-                'product_status', 'spec_values', 'device_models'
-            ];
-
-            if (productLevelFields.includes(field)) {
-                // 如果是主商品層級欄位，同步所有相同 SKU 的列
-                return updated.map(row => {
-                    if (row.product_sku === targetRow.product_sku) {
-                        const newRow = { ...row, [field]: value };
-                        const { errors, is_variant } = validateRow(newRow as any);
-                        return { ...newRow, errors, is_variant, isValid: errors.length === 0 };
-                    }
-                    return row;
-                });
-            } else {
-                // 否則只更新當前列（變體層級欄位）
-                const row = { ...targetRow, [field]: value };
-                const { errors, is_variant } = validateRow(row as any);
-                updated[index] = { ...row, errors, is_variant, isValid: errors.length === 0 };
-                return updated;
-            }
+            const next = [...prev];
+            next[index] = { ...updatedRow };
+            return next;
         });
-    };
+    }, []);
 
-    const removeRow = (index: number) => setImportData(prev => prev.filter((_, i) => i !== index));
+    const removeRow = useCallback((index: number) => {
+        setImportData(prev => prev.filter((_, i) => i !== index));
+    }, []);
 
     const importMutation = useMutation({
         mutationFn: async () => {
             const validRows = importData.filter(r => r.isValid);
+            
+            // 1. 建立產品 Map
             const uniqueProductsMap = new Map<string, ImportRow>();
             validRows.forEach(row => {
-                const existing = uniqueProductsMap.get(row.product_sku);
-                if (existing) {
-                    // 智慧合併規格：僅在數值非空時覆蓋
-                    const incomingSpecs = row._specs || {};
-                    const currentSpecs = existing._specs || {};
-                    Object.entries(incomingSpecs).forEach(([key, val]) => {
-                        if (val !== undefined && val !== null && val !== '') {
-                            currentSpecs[key] = val;
-                        }
-                    });
-                    existing._specs = currentSpecs;
+                const sku = row.product_sku;
+                const existing = uniqueProductsMap.get(sku);
+                
+                // 取得分類 ID (從明確的 category_id，或是從 _categoryName / category 對應名稱)
+                const getCatId = (cName: string | undefined) => categories.find(c => c.name === cName?.split(',')[0].trim())?.id;
+                const catId = row.category_id || getCatId((row as any)._categoryName) || getCatId(row.category);
 
-                    // 合併分類 (用逗號分隔，並去重)
-                    if (row.category && existing.category !== row.category) {
-                        const allCats = new Set([
-                            ...existing.category.split(',').map(c => c.trim()),
-                            ...row.category.split(',').map(c => c.trim())
-                        ].filter(Boolean));
-                        row.category = Array.from(allCats).join(', ');
+                if (!existing) {
+                    const newRow = { ...row, has_variants: false, _categoryIds: [], _multiSpecs: {} };
+                    if (catId) {
+                        newRow._categoryIds.push(catId);
+                        if (row._specs) newRow._multiSpecs![catId] = { ...row._specs };
                     }
-
-                    // 智慧合併基礎欄位 (非破壞性)
-                    const fieldsToMerge = [
-                        'product_name', 'description', 'brand', 'model', 'series',
-                        'base_wholesale_price', 'base_retail_price', 'product_status', 'device_models'
-                    ] as const;
-                    fieldsToMerge.forEach(f => {
-                        const val = (row as any)[f];
-                        if (val !== undefined && val !== null && val !== '' && val !== 0) {
-                            (existing as any)[f] = val;
-                        }
-                    });
-
-                    // 修正：確保變體狀態不會被覆蓋，只要有一列是變體，整個產品就是變體
-                    existing.is_variant = existing.is_variant || row.is_variant;
+                    uniqueProductsMap.set(sku, newRow);
                 } else {
-                    uniqueProductsMap.set(row.product_sku, row);
+                    const merged = { ...existing };
+                    if (!row.is_variant) {
+                        Object.assign(merged, row);
+                    }
+                    merged.has_variants = existing.has_variants || row.is_variant;
+                    merged._categoryIds = [...(existing._categoryIds || [])];
+                    if (catId && !merged._categoryIds.includes(catId)) {
+                        merged._categoryIds.push(catId);
+                    }
+                    merged._multiSpecs = { ...(existing._multiSpecs || {}) };
+                    if (catId && row._specs) {
+                        merged._multiSpecs[catId] = { ...(merged._multiSpecs[catId] || {}), ...row._specs };
+                    }
+                    uniqueProductsMap.set(sku, merged);
                 }
             });
 
-            // 確保規格定義已載入
-            let currentSpecDefs = specDefs;
-            if (!currentSpecDefs || currentSpecDefs.length === 0) {
-                const { data: fetchedSpecs } = await (supabase.from('specification_definitions' as any) as any).select('*');
-                if (fetchedSpecs) currentSpecDefs = fetchedSpecs;
-            }
-
-            // 建立規格字典供序列化使用
-            const specMap = new Map(currentSpecDefs.map(s => [s.id, {
-                id: s.id,
-                name: s.name,
-                type: s.type,
-                options: s.options || [],
-                defaultValue: s.defaultValue || '',
-                logic_config: s.logic_config
-            } as any]));
-
-            // 確保規格連結已載入
-            const { data: specLinksData } = await supabase.from('category_spec_links').select('*');
-            const specLinks = (specLinksData as any[]) || [];
-
-            // 預先建立全局父子關係地圖 (基於 logic_config)
-            const childrenMap = new Map<string, string[]>();
-            currentSpecDefs.forEach(spec => {
-                const triggers = spec.logic_config?.triggers || spec.logicConfig?.triggers || [];
-                const targets = new Set<string>();
-                triggers.forEach((t: any) => {
-                    const tars = t.targets || (t as any).target_ids?.map((tid: string) => ({ id: tid })) || [];
-                    tars.forEach((tar: any) => targets.add(tar.id));
-                });
-                if (targets.size > 0) {
-                    childrenMap.set(spec.id, Array.from(targets));
+            // 標註是否有變體
+            validRows.forEach(row => {
+                if (row.is_variant || (row.variant_sku && row.variant_sku !== row.product_sku)) {
+                    const p = uniqueProductsMap.get(row.product_sku);
+                    if (p) p.has_variants = true;
                 }
             });
 
-            // [核心修正] 建立「分類感知」的父子關係地圖
-            // 由於一個規格在不同分類可能有不同位置，我們需要建立一個 Map<CategoryId, Map<SpecId, ParentId>>
-            const categoryParentMaps = new Map<string, Map<string, string>>();
+            // 2. 準備規格字典
+            const { data: specDefsData } = await supabase.from('specification_definitions').select('*');
+            const specMap = new Map(specDefsData?.map(s => [s.id, s]) || []);
 
-            categories.forEach(cat => {
-                const catMap = new Map<string, string>();
-                const catLinks = specLinks.filter(l => l.category_id === cat.id);
-                const linkedSpecIds = new Set(catLinks.map(l => l.spec_id));
-
-                // 找出該分類下的所有父子關係 (僅限於該分類有連結的規格及其子規格)
-                const queue = Array.from(linkedSpecIds).map(id => ({ id, parentId: 'root' }));
-                const processed = new Set<string>();
-
-                while (queue.length > 0) {
-                    const next = queue.shift();
-                    if (!next) continue;
-                    const { id, parentId } = next;
-                    if (processed.has(`${parentId}:${id}`)) continue;
-                    processed.add(`${parentId}:${id}`);
-
-                    catMap.set(id, parentId);
-
-                    const children = childrenMap.get(id) || [];
-                    children.forEach(cid => queue.push({ id: cid, parentId: id }));
-                }
-                categoryParentMaps.set(cat.id, catMap);
-            });
-
-            // 全域回退 Map (保留原本邏輯作為最後手段)
-            const globalParentMap = new Map<string, string>();
-            currentSpecDefs.forEach(s => {
-                const triggers = s.logic_config?.triggers || s.logicConfig?.triggers || [];
-                triggers.forEach((t: any) => {
-                    const targets = t.targets || (t as any).target_ids?.map((tid: string) => ({ id: tid })) || [];
-                    targets.forEach((tar: any) => globalParentMap.set(tar.id, s.id));
-                });
-            });
-
+            // 3. 處理產品寫入
             const productsToInsert = Array.from(uniqueProductsMap.values()).map(row => {
-                const incomingSpecs = row._specs || {};
-
-                // [增量更新邏輯]
-                // 1. 如果是更新動作且已有舊規格，則先載入舊規格
-                let pathMap = new Map();
-                if (row.action === 'update' && row.spec_values) {
-                    const existingSpecs = deserializeSpecs(row.spec_values);
-                    Object.entries(existingSpecs).forEach(([path, val]) => pathMap.set(path, val));
-                }
-
-                // 2. 將 Excel 中的新規格覆蓋上去
-                Object.entries(incomingSpecs).forEach(([key, val]) => {
-                    const pathKey = key.includes(':') ? key : `root:${key}`;
-                    pathMap.set(pathKey, val);
-                });
-
-                // [新增] 規格層級自動遷移機制 (Schema Migration)
-                // 根據目前的規格定義，自動將規格值移轉到正確的 parentId 之下
-                const migratedPathMap = new Map<string, any>();
-
-                pathMap.forEach((val, pathKey) => {
-                    const [oldParentId, specId] = pathKey.split(':');
-                    if (!specId) return;
-
-                    // [修正] 分類感知遷移邏輯
-                    // 1. 找出該列所屬的分類 ID (優先使用第一分類)
-                    const catName = row.category.split(',')[0].trim();
-                    const catId = categories.find(c => c.name === catName)?.id;
-                    const catParentMap = catId ? categoryParentMaps.get(catId) : null;
-
-                    // 2. 決定當前規格的正確父層
-                    const currentParentId = catParentMap?.get(specId) || globalParentMap.get(specId) || 'root';
-                    const newKey = `${currentParentId}:${specId}`;
-
-                    migratedPathMap.set(newKey, val);
-                });
-
-                const serializedSettings = serializeSpecs(Object.fromEntries(migratedPathMap), specMap);
-
-                return {
+                const data: any = {
                     sku: row.product_sku,
                     name: row.product_name,
                     description: row.description || null,
+                    brand_id: row.brand_id || null,
                     model: row.model || null,
                     series: row.series || null,
-                    brand_id: row.brand_id || null,
                     base_wholesale_price: row.base_wholesale_price,
                     base_retail_price: row.base_retail_price,
                     status: row.product_status,
-                    has_variants: row.is_variant,
-                    _specPayload: serializedSettings,  // 暫存，不寫進 DB
-                    _categoryName: row.category,       // 暫存分類名稱
+                    has_variants: row.has_variants
+                };
+                if (row.product_id) data.id = row.product_id;
+
+                return { 
+                    data, 
+                    row 
                 };
             });
 
-            // 分離暫存欄位，避免寫入資料庫
-            const productSpecPayloads = new Map<string, any>();
-            const cleanProducts = productsToInsert.map((p: any) => {
-                const { _specPayload, _categoryName, ...rest } = p;
-                productSpecPayloads.set(p.sku, { payload: _specPayload, categoryName: _categoryName });
+            // 過濾掉 category 欄位（因為資料表不存在此欄位）
+            const productsUpsertData = productsToInsert.map(p => {
+                const { category, ...rest } = (p.data as any);
                 return rest;
             });
 
-            const { error: productError } = await supabase.from('products').upsert(cleanProducts, { onConflict: 'sku' });
-            if (productError) throw productError;
+            const { error: pErr } = await supabase.from('products').upsert(productsUpsertData, { onConflict: 'sku' });
+            if (pErr) throw pErr;
 
-            const { data: products, error: fetchError } = await supabase.from('products').select('id, sku').in('sku', Array.from(uniqueProductsMap.keys()));
-            if (fetchError) throw fetchError;
+            const { data: products } = await supabase.from('products').select('id, sku').in('sku', Array.from(uniqueProductsMap.keys()));
             const productIdMap = new Map(products?.map(p => [p.sku, p.id]) || []);
 
-            // v6 同步產品規格至新資料表
-            await Promise.allSettled(
-                Array.from(productSpecPayloads.entries()).map(async ([sku, { payload, categoryName }]) => {
-                    const pId = productIdMap.get(sku);
-                    if (!pId || !payload || payload.length === 0) return;
-                    const catName = (categoryName || '').split(',')[0].trim();
-                    const catId = categories.find((c: any) => c.name === catName)?.id;
-                    if (!catId) return;
-                    const row = uniqueProductsMap.get(sku);
-                    if (row?.is_variant) return; // 有變體的產品規格由變體端管理
-                    await supabase.rpc('sync_product_specs_v6', {
-                        p_entity_id: pId,
-                        p_entity_type: 'product',
-                        p_category_id: catId,
-                        p_new_data: payload
-                    });
-                })
-            );
-
-            const catLinks: any[] = [];
-            Array.from(uniqueProductsMap.values()).forEach(row => {
-                const pId = productIdMap.get(row.product_sku);
+            // 4. 同步產品規格與分類關聯
+            await Promise.all(productsToInsert.map(async p => {
+                const pId = productIdMap.get(p.data.sku);
                 if (!pId) return;
 
-                if (row.category) {
-                    const catNames = row.category.split(',').map(c => c.trim()).filter(Boolean);
-                    catNames.forEach(name => {
-                        const matchedCat = categories.find(c => c.name === name);
-                        if (matchedCat) {
-                            catLinks.push({ product_id: pId, category_id: matchedCat.id });
-                        }
-                    });
+                const categoryIds = p.row._categoryIds || [];
+
+                // 更新分類關聯表
+                if (categoryIds.length > 0) {
+                    await supabase.from('product_category_links').upsert(
+                        categoryIds.map(cid => ({
+                            product_id: pId,
+                            category_id: cid
+                        })), 
+                        { onConflict: 'product_id,category_id' }
+                    );
                 }
-            });
 
-            if (catLinks.length > 0) {
-                const productIds = Array.from(productIdMap.values());
-                await (supabase.from('product_category_links' as any) as any).delete().in('product_id', productIds);
-                await (supabase.from('product_category_links' as any) as any).insert(catLinks);
-            }
-            const productModelLinksToInsert: any[] = [];
-            const productGroupLinksToInsert: any[] = [];
-
-            Array.from(uniqueProductsMap.values()).forEach(row => {
-                if (!row.device_models) return;
-                const parts = row.device_models.split(',').map(n => n.trim()).filter(Boolean);
-                const pId = productIdMap.get(row.product_sku);
-                if (!pId) return;
-
-                parts.forEach(part => {
-                    let type: 'group' | 'model' | 'auto' = 'auto';
-                    let searchStr = part;
-
-                    if (part.startsWith('group:')) {
-                        type = 'group';
-                        searchStr = part.replace('group:', '');
-                    } else if (part.startsWith('model:')) {
-                        type = 'model';
-                        searchStr = part.replace('model:', '');
+                // 同步規格
+                for (const catId of categoryIds) {
+                    const specsForCat = p.row._multiSpecs?.[catId] || {};
+                    let pathMap = new Map();
+                    if (p.row.spec_values) {
+                        const existingSpecs = deserializeSpecs(p.row.spec_values);
+                        Object.entries(existingSpecs).forEach(([p, v]) => pathMap.set(p, v));
                     }
+                    Object.entries(specsForCat).forEach(([id, val]) => pathMap.set(`root:${id}`, val));
+                    const serialized = serializeSpecs(Object.fromEntries(pathMap), specMap as any);
 
-                    if (type === 'group' || type === 'auto') {
-                        const gMatched = allGroups.find(g => g.name.toLowerCase() === searchStr.toLowerCase());
-                        if (gMatched) {
-                            productGroupLinksToInsert.push({ product_id: pId, group_id: gMatched.id });
-                            if (type === 'group') return; // 如果指定是 group，就不用再找 model
-                        }
+                    if (serialized && serialized.length > 0) {
+                        await supabase.rpc('sync_product_specs_v6', {
+                            p_entity_id: pId,
+                            p_entity_type: 'product',
+                            p_category_id: catId,
+                            p_new_data: serialized
+                        });
                     }
+                }
+            }));
 
-                    if (type === 'model' || type === 'auto') {
-                        // 三層匹配：1. Name, 2. Alias (TODO: aliases is JSON array)
-                        const mMatched = allDeviceModels.find(dm =>
-                            dm.name.toLowerCase() === searchStr.toLowerCase() ||
-                            (Array.isArray(dm.aliases) && dm.aliases.some((a: string) => a.toLowerCase() === searchStr.toLowerCase()))
-                        );
-                        if (mMatched) {
-                            productModelLinksToInsert.push({ product_id: pId, model_id: mMatched.id });
-                        }
-                    }
-                });
-            });
-
-            // 型號連結去重
-            const uniqueProductModelLinks = Array.from(
-                productModelLinksToInsert.reduce((map, item) => {
-                    const key = `${item.product_id}-${item.model_id}`;
-                    map.set(key, item);
-                    return map;
-                }, new Map<string, any>()).values()
-            );
-
-            const uniqueProductGroupLinks = Array.from(
-                productGroupLinksToInsert.reduce((map, item) => {
-                    const key = `${item.product_id}-${item.group_id}`;
-                    map.set(key, item);
-                    return map;
-                }, new Map<string, any>()).values()
-            );
-
-            const pIds = Array.from(productIdMap.values());
-            // 先清理舊關聯
-            if (pIds.length > 0) {
-                await supabase.from('product_model_links').delete().in('product_id', pIds);
-                await supabase.from('product_model_group_links').delete().in('product_id', pIds);
-            }
-
-            if (uniqueProductModelLinks.length > 0) {
-                await supabase.from('product_model_links').insert(uniqueProductModelLinks as any);
-            }
-            if (uniqueProductGroupLinks.length > 0) {
-                await supabase.from('product_model_group_links').insert(uniqueProductGroupLinks as any);
-            }
-
-            // 合併變體資料
+            // 5. 處理變體寫入
             const uniqueVariantsMap = new Map<string, ImportRow>();
-            validRows.filter(r => r.is_variant).forEach(row => {
-                const sku = row.variant_sku!;
-                const existing = uniqueVariantsMap.get(sku);
-                if (existing) {
-                    // 智慧合併規格：僅在數值非空時覆蓋
-                    const incomingSpecsV = row._specs || {};
-                    const currentSpecsV = existing._specs || {};
-                    Object.entries(incomingSpecsV).forEach(([key, val]) => {
-                        if (val !== undefined && val !== null && val !== '') {
-                            currentSpecsV[key] = val;
-                        }
-                    });
-                    existing._specs = currentSpecsV;
-
-                    // 智慧合併變體欄位 (非破壞性)
-                    const fieldsToMergeV = [
-                        'variant_name', 'barcode', 'option_1', 'option_2', 'option_3',
-                        'variant_wholesale_price', 'variant_retail_price', 'variant_status', 'variant_device_models'
-                    ] as const;
-
-                    fieldsToMergeV.forEach(f => {
-                        const val = (row as any)[f];
-                        if (val !== undefined && val !== null && val !== '' && val !== 0) {
-                            (existing as any)[f] = val;
-                        }
-                    });
-                } else {
-                    uniqueVariantsMap.set(sku, row);
-                }
+            const skuGroups = new Map<string, ImportRow[]>();
+            validRows.forEach(r => {
+                const g = skuGroups.get(r.product_sku) || [];
+                g.push(r);
+                skuGroups.set(r.product_sku, g);
             });
 
-            const variantsToInsert = Array.from(uniqueVariantsMap.values()).map(row => {
-                const incomingSpecsV = row._specs || {};
+            skuGroups.forEach((rows, pSku) => {
+                // 如果有變體列，就處理變體列；如果沒有，但有填寫 variant_sku，則視為主商品當變體
+                const targetRows = rows.filter(r => r.is_variant);
+                const processRows = targetRows.length > 0 ? targetRows : (rows[0].variant_sku ? [rows[0]] : []);
 
-                // [增量更新邏輯]
-                let pathMapV = new Map();
-                if (row.action === 'update' && row.variant_spec_values) {
-                    const existingSpecsV = deserializeSpecs(row.variant_spec_values);
-                    Object.entries(existingSpecsV).forEach(([path, val]) => pathMapV.set(path, val));
-                }
-
-                Object.entries(incomingSpecsV).forEach(([key, val]) => {
-                    const pathKey = key.includes(':') ? key : `root:${key}`;
-                    pathMapV.set(pathKey, val);
+                processRows.forEach(row => {
+                    if (!row.variant_sku) return;
+                    
+                    const getCatId = (cName: string | undefined) => categories.find(c => c.name === cName?.split(',')[0].trim())?.id;
+                    const catId = row.category_id || getCatId((row as any)._categoryName) || getCatId(row.category);
+                    
+                    const existing = uniqueVariantsMap.get(row.variant_sku);
+                    if (!existing) {
+                        const newRow = { ...row, _categoryIds: [], _multiSpecs: {} };
+                        if (catId) {
+                            newRow._categoryIds.push(catId);
+                            if (row._specs) newRow._multiSpecs![catId] = { ...row._specs };
+                        }
+                        uniqueVariantsMap.set(row.variant_sku, newRow);
+                    } else {
+                        const merged = { ...existing };
+                        Object.assign(merged, row);
+                        merged._categoryIds = [...(existing._categoryIds || [])];
+                        if (catId && !merged._categoryIds.includes(catId)) {
+                            merged._categoryIds.push(catId);
+                        }
+                        merged._multiSpecs = { ...(existing._multiSpecs || {}) };
+                        if (catId && row._specs) {
+                            merged._multiSpecs[catId] = { ...(merged._multiSpecs[catId] || {}), ...row._specs };
+                        }
+                        uniqueVariantsMap.set(row.variant_sku, merged);
+                    }
                 });
-
-                // [遷移] 自動修正層級
-                const migratedPathMapV = new Map<string, any>();
-                pathMapV.forEach((val, pathKey) => {
-                    const [oldParentId, specId] = pathKey.split(':');
-                    if (!specId) return;
-
-                    // [修正] 分類感知遷移邏輯 (變體)
-                    const catName = row.category.split(',')[0].trim();
-                    const catId = categories.find(c => c.name === catName)?.id;
-                    const catParentMap = catId ? categoryParentMaps.get(catId) : null;
-
-                    const currentParentId = catParentMap?.get(specId) || globalParentMap.get(specId) || 'root';
-                    migratedPathMapV.set(`${currentParentId}:${specId}`, val);
-                });
-
-                const serializedSettingsV = serializeSpecs(Object.fromEntries(migratedPathMapV), specMap);
-
-                return {
-                    product_id: productIdMap.get(row.product_sku) as any,
-                    sku: row.variant_sku!,
-                    name: row.variant_name!,
-                    option_1: row.option_1 || null,
-                    option_2: row.option_2 || null,
-                    option_3: row.option_3 || null,
-                    wholesale_price: row.variant_wholesale_price || row.base_wholesale_price,
-                    retail_price: row.variant_retail_price || row.base_retail_price,
-                    barcode: normalizeBarcode(row.barcode) || null,
-                    status: row.variant_status || row.product_status,
-                    // v6 架構：規格改寫入 product_spec_values
-                    _specPayload: serializedSettingsV, // 暫存，不寫進 DB
-                    _categoryName: row.category,      // 暫存分類名稱
-                };
             });
+
+            const variantsToInsert = Array.from(uniqueVariantsMap.values())
+                .filter(r => !!r.variant_sku)
+                .map(row => {
+                    const data: any = {
+                        product_id: productIdMap.get(row.product_sku),
+                        sku: row.variant_sku,
+                        name: row.variant_name || row.product_name,
+                        option_1: row.option_1 || null,
+                        option_2: row.option_2 || null,
+                        option_3: row.option_3 || null,
+                        wholesale_price: row.variant_wholesale_price || row.base_wholesale_price,
+                        retail_price: row.variant_retail_price || row.base_retail_price,
+                        status: row.variant_status || row.product_status,
+                        barcode: row.barcode || null
+                    };
+                    if (row.variant_id) data.id = row.variant_id;
+                    return data;
+                });
 
             if (variantsToInsert.length > 0) {
-                // 去重：確保同一個 SKU 不會出現在同一次 upsert 中，避免 "on conflict do update command cannot affect row a second time"
-                const uniqueVariants = Array.from(
-                    variantsToInsert.reduce((map, item) => {
-                        map.set(item.sku, item);
-                        return map;
-                    }, new Map<string, any>()).values()
-                );
+                const { error: vErr } = await supabase.from('product_variants').upsert(variantsToInsert, { onConflict: 'sku' });
+                if (vErr) throw vErr;
+            }
 
-                // 分離暫存欄位，避免寫入資料庫
-                const variantSpecPayloads = new Map<string, any>();
-                const cleanVariants = uniqueVariants.map((v: any) => {
-                    const { _specPayload, _categoryName, ...rest } = v;
-                    variantSpecPayloads.set(v.sku, { payload: _specPayload, categoryName: _categoryName });
-                    return rest;
+            // 6. 處理實體關聯 (Models, Groups, Exclusions)
+            const parseModelString = (modelStr: string | undefined) => {
+                const result: { modelIds: string[]; groupIds: string[]; exclusions: { model_id: string }[] } = {
+                    modelIds: [],
+                    groupIds: [],
+                    exclusions: []
+                };
+                if (modelStr === undefined) return result; // 沒填或沒這欄
+                if (modelStr.trim() === '') return result; // 故意清空
+
+                const parts = modelStr.split(',').map(s => s.trim()).filter(Boolean);
+                parts.forEach(part => {
+                    let name = part;
+                    let type: 'group' | 'model' | 'exclude' = 'model';
+                    const lowerPart = part.toLowerCase();
+
+                    if (lowerPart.startsWith('group:')) {
+                        type = 'group';
+                        name = part.substring(6).trim();
+                    } else if (lowerPart.startsWith('exclude:')) {
+                        type = 'exclude';
+                        name = part.substring(8).trim();
+                    } else if (lowerPart.startsWith('model:')) {
+                        type = 'model';
+                        name = part.substring(6).trim();
+                    }
+
+                    if (type === 'group') {
+                        const group = allGroups.find(g => g.name.toLowerCase() === name.toLowerCase());
+                        if (group) result.groupIds.push(group.id);
+                    } else if (type === 'exclude') {
+                        const model = allDeviceModels.find(m => 
+                            m.name.toLowerCase() === name.toLowerCase() || 
+                            (m.aliases || []).some((a: string) => a.toLowerCase() === name.toLowerCase())
+                        );
+                        if (model) result.exclusions.push({ model_id: model.id });
+                    } else {
+                        const model = allDeviceModels.find(m => 
+                            m.name.toLowerCase() === name.toLowerCase() || 
+                            (m.aliases || []).some((a: string) => a.toLowerCase() === name.toLowerCase())
+                        );
+                        if (model) result.modelIds.push(model.id);
+                    }
                 });
+                return result;
+            };
 
-                const { data: upsertedVariants, error } = await supabase.from('product_variants').upsert(cleanVariants, { onConflict: 'sku' }).select('id, sku');
-                if (error) throw error;
-                if (upsertedVariants) {
-                    const variantIdMap = new Map(upsertedVariants.map(v => [v.sku, v.id]));
+            const relationPromises: Promise<void>[] = [];
 
-                    // v6 同步變體規格至新資料表
-                    await Promise.allSettled(
-                        upsertedVariants.map(async (v: any) => {
-                            const specInfo = variantSpecPayloads.get(v.sku);
-                            if (!specInfo?.payload || specInfo.payload.length === 0) return;
-                            const catName = (specInfo.categoryName || '').split(',')[0].trim();
-                            const catId = categories.find((c: any) => c.name === catName)?.id;
-                            if (!catId) return;
-                            await supabase.rpc('sync_product_specs_v6', {
-                                p_entity_id: v.id,
-                                p_entity_type: 'variant',
-                                p_category_id: catId,
-                                p_new_data: specInfo.payload
-                            });
-                        })
-                    );
-                    const variantModelLinksToInsert: any[] = [];
-                    const variantGroupLinksToInsert: any[] = [];
+            // 處理主商品關聯
+            for (const row of Array.from(uniqueProductsMap.values())) {
+                const pId = productIdMap.get(row.product_sku);
+                if (!pId || row.device_models === undefined) continue;
+                
+                const relations = parseModelString(row.device_models);
+                relationPromises.push(entityRelationService.updateRelations('product', pId, relations));
+            }
 
-                    validRows.filter(r => r.is_variant).forEach(row => {
-                        if (!row.variant_device_models) return;
-                        const parts = row.variant_device_models.split(',').map(n => n.trim()).filter(Boolean);
-                        const vId = variantIdMap.get(row.variant_sku!);
-                        if (!vId) return;
+            // 取得剛匯入的 variants IDs
+            const { data: insertedVariants } = await supabase.from('product_variants').select('id, sku').in('sku', variantsToInsert.map(v => v.sku));
+            const variantIdMap = new Map(insertedVariants?.map(v => [v.sku, v.id]) || []);
 
-                        parts.forEach(part => {
-                            let type: 'group' | 'model' | 'auto' = 'auto';
-                            let searchStr = part;
+            // 處理變體關聯與規格
+            const variantSpecPromises: PromiseLike<any>[] = [];
 
-                            if (part.startsWith('group:')) {
-                                type = 'group';
-                                searchStr = part.replace('group:', '');
-                            } else if (part.startsWith('model:')) {
-                                type = 'model';
-                                searchStr = part.replace('model:', '');
-                            }
+            for (const row of Array.from(uniqueVariantsMap.values())) {
+                if (!row.variant_sku) continue;
+                const vId = variantIdMap.get(row.variant_sku);
+                if (!vId) continue;
 
-                            if (type === 'group' || type === 'auto') {
-                                const gMatched = allGroups.find(g => g.name.toLowerCase() === searchStr.toLowerCase());
-                                if (gMatched) {
-                                    variantGroupLinksToInsert.push({ variant_id: vId, group_id: gMatched.id });
-                                    if (type === 'group') return;
-                                }
-                            }
+                // 處理型號關聯
+                if (row.variant_device_models !== undefined) {
+                    const relations = parseModelString(row.variant_device_models);
+                    relationPromises.push(entityRelationService.updateRelations('variant', vId, relations));
+                }
 
-                            if (type === 'model' || type === 'auto') {
-                                const mMatched = allDeviceModels.find(dm =>
-                                    dm.name.toLowerCase() === searchStr.toLowerCase() ||
-                                    (Array.isArray(dm.aliases) && dm.aliases.some((a: string) => a.toLowerCase() === searchStr.toLowerCase()))
-                                );
-                                if (mMatched) {
-                                    variantModelLinksToInsert.push({ variant_id: vId, model_id: mMatched.id });
-                                }
-                            }
-                        });
-                    });
-
-                    const vIds = Array.from(variantIdMap.values()) as string[];
-                    if (vIds.length > 0) {
-                        await supabase.from('variant_model_links').delete().in('variant_id', vIds);
-                        await supabase.from('variant_model_group_links').delete().in('variant_id', vIds);
-                    }
-
-                    if (variantModelLinksToInsert.length > 0) {
-                        const uniqueVML = Array.from(variantModelLinksToInsert.reduce((map, item) => {
-                            const key = `${item.variant_id}-${item.model_id}`;
-                            map.set(key, item); return map;
-                        }, new Map<string, any>()).values());
-                        await supabase.from('variant_model_links').insert(uniqueVML as any);
-                    }
-                    if (variantGroupLinksToInsert.length > 0) {
-                        const uniqueVGL = Array.from(variantGroupLinksToInsert.reduce((map, item) => {
-                            const key = `${item.variant_id}-${item.group_id}`;
-                            map.set(key, item); return map;
-                        }, new Map<string, any>()).values());
-                        await supabase.from('variant_model_group_links').insert(uniqueVGL as any);
+                // 處理變體規格
+                const categoryIds = row._categoryIds || [];
+                
+                for (const catId of categoryIds) {
+                    const specsForCat = row._multiSpecs?.[catId] || {};
+                    const hasSpecs = Object.keys(specsForCat).length > 0 || (row.spec_values && Object.keys(row.spec_values).length > 0);
+                    
+                    if (hasSpecs) {
+                        let pathMap = new Map();
+                        // 1. 保留原本可能已經存在的規格
+                        if (row.spec_values) {
+                            const existingSpecs = deserializeSpecs(row.spec_values);
+                            Object.entries(existingSpecs).forEach(([p, v]) => pathMap.set(p, v));
+                        }
+                        // 2. 覆蓋該分類下的新規格
+                        Object.entries(specsForCat).forEach(([id, val]) => pathMap.set(`root:${id}`, val));
+                        
+                        const serialized = serializeSpecs(Object.fromEntries(pathMap), specMap as any);
+                        
+                        if (serialized.length > 0) {
+                            variantSpecPromises.push(
+                                supabase.rpc('sync_product_specs_v6', {
+                                    p_entity_id: vId,
+                                    p_entity_type: 'variant',
+                                    p_category_id: catId,
+                                    p_new_data: serialized
+                                })
+                            );
+                        }
                     }
                 }
             }
+
+            // 批次執行所有關聯更新與規格更新，避免一次發出太多請求
+            for (let i = 0; i < relationPromises.length; i += 5) {
+                await Promise.all(relationPromises.slice(i, i + 5));
+            }
+
+            for (let i = 0; i < variantSpecPromises.length; i += 5) {
+                await Promise.all(variantSpecPromises.slice(i, i + 5));
+            }
+
+            // 通知版本系統：產品資料有異動，觸發前台快取全量同步
+            await supabase.rpc('bump_data_version', { p_table_name: 'products' });
+
+            return { success: true };
         },
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['products'] });
             toast.success('匯入成功');
-            queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
-            queryClient.invalidateQueries({ queryKey: ['all-active-variants'] });
-            queryClient.invalidateQueries({ queryKey: ['product-variants'] });
             onSuccess();
+            resetState();
         },
-        onError: (error: Error) => toast.error(`匯入失敗：${error.message}`),
-    });
-
-    const downloadTemplate = async () => {
-        const { data: specDefs } = await supabase.from('specification_definitions').select('*');
-        const { data: categoriesData } = await supabase.from('categories').select('*');
-        const { data: specLinks } = await supabase.from('category_spec_links').select('*');
-
-        // 為每個分類產生一個範例列
-        const sampleProducts = (categoriesData || []).map(cat => ({
-            sku: `NEW-${cat.name}-001`,
-            name: `${cat.name}產品範例`,
-            description: '產品描述',
-            brand_id: allBrands[0]?.id || null,
-            model: '型號',
-            series: '系列',
-            category_ids: [cat.id],
-            category_names: [cat.name],
-            base_wholesale_price: 0,
-            base_retail_price: 0,
-            status: 'active',
-            spec_values: {},
-            variants: []
-        }));
-
-        const brandMap = Object.fromEntries(allBrands.map(b => [b.id, b.name]));
-
-        try {
-            const workbook = generateProductExcel(sampleProducts, categoriesData || [], specDefs || [], specLinks || [], brandMap);
-            const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-            const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = '產品匯出入範本.xlsx';
-            link.click();
-            URL.revokeObjectURL(url);
-            toast.success('範本已生成');
-        } catch (error: any) {
-            toast.error(`生成範本失敗: ${error.message}`);
+        onError: (err: any) => {
+            console.error('Import error:', err);
+            toast.error(`匯入失敗: ${err.message}`);
         }
-    };
-
-    const [filterStatus, setFilterStatus] = useState<string>('all');
-    const filteredData = importData.filter(r => {
-        const matchCat = filterCategory === 'all' || r.category === filterCategory;
-        const matchStatus = filterStatus === 'all' ||
-            (filterStatus === 'changed' && r.action === 'update' && r.diff && r.diff.length > 0) ||
-            (filterStatus === 'new' && r.action === 'create') ||
-            (filterStatus === 'error' && !r.isValid);
-        return matchCat && matchStatus;
     });
+
+    const filteredData = importData.filter(row => {
+        const categoryMatch = filterCategory === 'all' || row.category === filterCategory;
+        const statusMatch = filterStatus === 'all' || 
+            (filterStatus === 'changed' && row.diff && row.diff.length > 0) ||
+            (filterStatus === 'new' && row.action === 'create') ||
+            (filterStatus === 'error' && !row.isValid);
+        return categoryMatch && statusMatch;
+    });
+
+    const downloadTemplate = useCallback(() => {
+        const { categoryLinks } = useSpecStore.getState();
+        const brandMap = Object.fromEntries(allBrands.map(b => [b.id, b.name]));
+        const blob = generateProductExcel([], categories, specDefs, categoryLinks, brandMap);
+        
+        // generateProductExcel returns a workbook, we need to convert it to a blob
+        const excelBuffer = XLSX.write(blob, { bookType: 'xlsx', type: 'array' });
+        const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        
+        const url = URL.createObjectURL(data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '產品匯入範本.xlsx';
+        a.click();
+        URL.revokeObjectURL(url);
+    }, [categories, specDefs, allBrands]);
 
     return {
-        step, setStep, importData, filteredData, filterCategory, setFilterCategory,
-        filterStatus, setFilterStatus, isLoading: importMutation.isPending,
-        handleFileUpload, updateRow, removeRow, importMutation, downloadTemplate, resetState, categories,
-        allBrands, allColors
+        step,
+        importData,
+        filteredData,
+        filterCategory,
+        setFilterCategory,
+        filterStatus,
+        setFilterStatus,
+        categories,
+        isLoading: importMutation.isPending,
+        handleFileUpload,
+        updateRow,
+        removeRow,
+        importMutation,
+        downloadTemplate,
+        resetState,
+        allBrands
     };
 }

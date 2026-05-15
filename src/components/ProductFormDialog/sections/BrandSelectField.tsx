@@ -33,7 +33,7 @@ export function BrandSelectField({ form }: BrandSelectFieldProps) {
             render={({ field }) => (
                 <FormItem>
                     <FormLabel>品牌</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || undefined} disabled={isLoadingBrands}>
+                    <Select onValueChange={field.onChange} value={field.value || ""} disabled={isLoadingBrands}>
                         <FormControl>
                             <SelectTrigger>
                                 <SelectValue placeholder={isLoadingBrands ? "載入中..." : "選擇品牌"} />

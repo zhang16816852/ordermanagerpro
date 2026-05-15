@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useColorStore } from '@/store/useColorStore';
 import { ProductColor } from '@/hooks/useProductColors';
-import { Check, ChevronsUpDown, Plus, Search, X } from 'lucide-react';
+import { Check, ChevronsUpDown, Plus, Search, X, Palette } from 'lucide-react';
+import { QuickColorAdd } from '@/components/colors/QuickColorAdd';
 import { Button } from '@/components/ui/button';
 import {
   Command,
@@ -43,6 +44,8 @@ export function ColorSelectField({ selectedColorIds, onChange, multiple = true }
       .filter((c): c is ProductColor => !!c);
   }, [selectedColorIds, colors]);
 
+  const [isAddingNew, setIsAddingNew] = useState(false);
+
   const toggleColor = (id: string) => {
     if (!multiple) {
       onChange([id]);
@@ -57,28 +60,10 @@ export function ColorSelectField({ selectedColorIds, onChange, multiple = true }
     }
   };
 
-  const handleAddNewColor = async () => {
-    if (!searchQuery.trim()) return;
-    
-    try {
-      const name = searchQuery.trim();
-      // 簡單生成一個代碼 (取前兩個字母或拼音首字母，這裡簡單處理)
-      const code = name.substring(0, 2).toUpperCase();
-      
-      const newColor = await addColor({
-        name,
-        code,
-        hex_code: '#808080', // 預設灰色
-      });
-      
-      if (newColor) {
-        toggleColor((newColor as any).id);
-        setSearchQuery('');
-        toast.success(`已新增顏色：${name}`);
-      }
-    } catch (error: any) {
-      toast.error('新增顏色失敗：' + (error.message || '名稱可能重複'));
-    }
+  const handleQuickAddSuccess = (newColor: ProductColor) => {
+    toggleColor(newColor.id);
+    setIsAddingNew(false);
+    setSearchQuery('');
   };
 
   return (
@@ -124,38 +109,45 @@ export function ColorSelectField({ selectedColorIds, onChange, multiple = true }
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[300px] p-0" align="start">
-          <Command>
-            <CommandInput 
-              placeholder="搜尋或新增顏色..." 
-              value={searchQuery}
-              onValueChange={setSearchQuery}
+        <PopoverContent className="w-[320px] p-0" align="start">
+          {isAddingNew ? (
+            <QuickColorAdd 
+              initialName={searchQuery}
+              onSuccess={handleQuickAddSuccess}
+              onCancel={() => setIsAddingNew(false)}
             />
-            <CommandList 
-              className="max-h-[300px] overflow-y-auto overscroll-contain"
-              onWheel={(e) => e.stopPropagation()}
-            >
-              <CommandEmpty>
-                <div className="p-2">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="w-full justify-start gap-2"
-                    onClick={handleAddNewColor}
-                    disabled={isAdding}
-                  >
-                    <Plus className="h-4 w-4" />
-                    新增顏色 "{searchQuery}"
-                  </Button>
-                </div>
-              </CommandEmpty>
-              <CommandGroup>
-                {colors.map((color) => (
-                  <CommandItem
-                    key={color.id}
-                    value={color.name}
-                    onSelect={() => toggleColor(color.id)}
-                  >
+          ) : (
+            <Command>
+              <CommandInput 
+                placeholder="搜尋或新增顏色..." 
+                value={searchQuery}
+                onValueChange={setSearchQuery}
+              />
+              <CommandList 
+                className="max-h-[300px] overflow-y-auto overscroll-contain"
+                onWheel={(e) => e.stopPropagation()}
+              >
+                <CommandEmpty>
+                  <div className="p-2 space-y-2">
+                    <p className="text-[10px] text-muted-foreground px-2">找不到顏色 "{searchQuery}"</p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="w-full justify-start gap-2 h-8 text-xs border-dashed"
+                      onClick={() => setIsAddingNew(true)}
+                    >
+                      <Palette className="h-3.5 w-3.5" />
+                      建立新顏色並編輯詳情
+                    </Button>
+                  </div>
+                </CommandEmpty>
+                <CommandGroup>
+                  {colors.map((color) => (
+                    <CommandItem
+                      key={color.id}
+                      value={color.name}
+                      onSelect={() => toggleColor(color.id)}
+                    >
                     <Check
                       className={cn(
                         "mr-2 h-4 w-4",
@@ -174,7 +166,8 @@ export function ColorSelectField({ selectedColorIds, onChange, multiple = true }
                 ))}
               </CommandGroup>
             </CommandList>
-          </Command>
+            </Command>
+          )}
         </PopoverContent>
       </Popover>
     </div>
