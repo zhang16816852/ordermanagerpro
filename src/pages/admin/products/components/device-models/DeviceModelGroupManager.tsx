@@ -81,11 +81,11 @@ export function DeviceModelGroupManager() {
       if (error) throw error;
 
       // 按群組彙整
-      const groupMap = new Map<string, { name: string, description: string, models: string[] }>();
+      const groupMap = new Map<string, { id: string, name: string, description: string, models: string[] }>();
       
       // 先把所有現有群組加入 Map (確保沒型號的群組也被匯出)
       groups.forEach(g => {
-        groupMap.set(g.id, { name: g.name, description: g.description || '', models: [] });
+        groupMap.set(g.id, { id: g.id, name: g.name, description: g.description || '', models: [] });
       });
 
       // 填入型號
@@ -97,6 +97,7 @@ export function DeviceModelGroupManager() {
       });
 
       const exportData = Array.from(groupMap.values()).map(g => ({
+        '群組ID': g.id, // 放第一欄作為識別
         '群組名稱': g.name,
         '群組描述': g.description,
         '適用型號': g.models.join(', ')
@@ -133,7 +134,21 @@ export function DeviceModelGroupManager() {
           // 1. 建立名稱到 ID 的映射 (用於型號解析)
           const modelMap = new Map(models.map(m => [m.name.toLowerCase(), m.id]));
 
+          // 提前取得現有的型號關聯，用來做差異比對
+          const { data: allExistingItems } = await supabase.from('device_model_group_items').select('group_id, model_id');
+          const existingGroupItemsMap = new Map<string, Set<string>>();
+          allExistingItems?.forEach(item => {
+            if (!existingGroupItemsMap.has(item.group_id)) {
+              existingGroupItemsMap.set(item.group_id, new Set());
+            }
+            existingGroupItemsMap.get(item.group_id)!.add(item.model_id);
+          });
+
+          let updatedCount = 0;
+          let addedCount = 0;
+
           for (const row of rows) {
+            const groupIdFromCsv = row['群組ID'];
             const groupName = row['群組名稱'];
             const description = row['群組描述'] || '';
             const modelsStr = row['適用型號'] || '';
@@ -142,33 +157,52 @@ export function DeviceModelGroupManager() {
 
             // 2. 建立或更新群組
             let groupId;
-            const existingGroup = groups.find(g => g.name === groupName);
+            // 優先使用 UUID(群組ID) 識別，若無則降級使用名稱匹配
+            let existingGroup = null;
+            if (groupIdFromCsv) {
+              existingGroup = groups.find(g => g.id === groupIdFromCsv);
+            }
+            if (!existingGroup) {
+              existingGroup = groups.find(g => g.name === groupName);
+            }
             
             if (existingGroup) {
               groupId = existingGroup.id;
-              await updateGroupMutation.mutateAsync({ id: groupId, values: { description } });
+              // 差異化更新：只有名稱或描述有變更時才打 API
+              if (existingGroup.name !== groupName || (existingGroup.description || '') !== description) {
+                await updateGroupMutation.mutateAsync({ id: groupId, values: { name: groupName, description } });
+                updatedCount++;
+              }
             } else {
               const newGroup = await createGroupMutation.mutateAsync({ name: groupName, description });
               groupId = newGroup.id;
+              addedCount++;
             }
 
-            // 3. 處理型號關聯 (同步模式)
+            // 3. 處理型號關聯 (差異化比對)
             const modelNames = modelsStr.split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
             const modelIdsToLink = modelNames.map((name: string) => modelMap.get(name)).filter(Boolean) as string[];
 
-            if (modelIdsToLink.length > 0) {
-              // 刪除該群組現有的所有連結，達成完整同步
-              const { data: existingItems } = await supabase.from('device_model_group_items').select('model_id').eq('group_id', groupId);
-              const existingIds = existingItems?.map(i => i.model_id) || [];
-              if (existingIds.length > 0) {
-                await removeItemsMutation.mutateAsync({ groupId, modelIds: existingIds });
-              }
-              await addItemsMutation.mutateAsync({ groupId, modelIds: modelIdsToLink });
+            const existingModelIds = existingGroupItemsMap.get(groupId) || new Set<string>();
+            const newModelIds = new Set(modelIdsToLink);
+
+            // 計算要新增和刪除的項目
+            const toAdd = [...newModelIds].filter(id => !existingModelIds.has(id));
+            const toRemove = [...existingModelIds].filter(id => !newModelIds.has(id));
+
+            if (toRemove.length > 0) {
+              await removeItemsMutation.mutateAsync({ groupId, modelIds: toRemove });
+              if (existingGroup && updatedCount === 0) updatedCount++; // 若有改變關聯也算作更新
+            }
+            
+            if (toAdd.length > 0) {
+              await addItemsMutation.mutateAsync({ groupId, modelIds: toAdd });
+              if (existingGroup && updatedCount === 0) updatedCount++;
             }
           }
 
           toast.dismiss();
-          toast.success('匯入完成');
+          toast.success(`匯入完成: 新增 ${addedCount} 筆，更新 ${updatedCount} 筆`);
           e.target.value = ''; // 清除 input
         } catch (err: any) {
           toast.dismiss();

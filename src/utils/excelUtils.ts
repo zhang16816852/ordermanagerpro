@@ -113,10 +113,27 @@ export function generateProductExcel(
         };
 
         if (currentCatId) {
-            // 找出該分類的所有連結
-            const links = specLinks
-                .filter(link => link.category_id === currentCatId)
+            // 找出該群組中所有產品的分類 (包含父分類)
+            const allCatIdsForGroup = new Set<string>();
+            groupProducts.forEach(p => {
+                if (Array.isArray(p.category_ids)) {
+                    p.category_ids.forEach((id: string) => allCatIdsForGroup.add(id));
+                }
+            });
+            // 確保當前分類一定在裡面
+            allCatIdsForGroup.add(currentCatId);
+
+            // 找出這些分類的所有連結
+            const rawLinks = specLinks
+                .filter(link => allCatIdsForGroup.has(link.category_id))
                 .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+            
+            const uniqueSpecIds = new Set<string>();
+            const links = rawLinks.filter(l => {
+                if (uniqueSpecIds.has(l.spec_id)) return false;
+                uniqueSpecIds.add(l.spec_id);
+                return true;
+            });
             
             const linkedSpecIds = new Set(links.map(l => l.spec_id));
             

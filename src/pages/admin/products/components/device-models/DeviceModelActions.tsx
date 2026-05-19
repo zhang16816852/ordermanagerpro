@@ -57,7 +57,7 @@ export function DeviceModelActions({
         </div>
       </div>
       <div className="flex gap-2 shrink-0">
-        <input type="file" accept=".csv" className="hidden" ref={fileInputRef} onChange={handleImport} />
+        <input type="file" accept=".xlsx, .xls, .csv" className="hidden" ref={fileInputRef} onChange={handleImport} />
         <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isImporting}>
           <Upload className="h-4 w-4 mr-2" />
           {isImporting ? '匯入中...' : '匯入'}

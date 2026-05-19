@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useDeviceModels, DeviceModel } from '../hooks/useDeviceModels';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -89,7 +90,9 @@ export function DeviceModelManager() {
 
   const handleExport = () => {
     const exportData = models.map(m => ({
+      '型號ID': m.id,
       '型號名稱': m.name || '',
+      '別名': (m.aliases || []).join(', '),
       '廠牌': m.brand_id ? deviceBrands.find((b: any) => b.id === m.brand_id)?.name || '' : '',
       '系列': m.device_series || '',
       '設備類型': m.device_type || '',
@@ -99,14 +102,21 @@ export function DeviceModelManager() {
       '排序': m.sort_order || 0
     }));
 
-    const csvHtml = Papa.unparse(exportData);
-    const BOM = '\uFEFF';
-    const blob = new Blob([BOM + csvHtml], { type: 'text/csv;charset=utf-8;' });
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    // 隱藏第一欄 (型號ID)
+    worksheet['!cols'] = [{ hidden: true }];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, '型號標籤庫');
+
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = '型號標籤庫.csv';
+    link.download = '型號標籤庫.xlsx';
     link.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -118,79 +128,90 @@ export function DeviceModelManager() {
 
     reader.onload = async (event) => {
       try {
-        const result = event.target?.result as string;
-        Papa.parse(result, {
-          header: true,
-          skipEmptyLines: true,
-          complete: async (results) => {
-            try {
-              const rows = results.data as any[];
-              if (rows.length === 0) {
-                toast.error('檔案內無資料');
-                return;
-              }
+        const result = event.target?.result as ArrayBuffer;
+        const workbook = XLSX.read(result, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(worksheet) as any[];
 
-              // 1. 整理出現的廠牌並動態建檔
-              const uniqueBrands = Array.from(new Set(rows.map(r => (r['廠牌'] || '').trim()).filter(Boolean)));
-              const existingBrandNames = deviceBrands.map((b: any) => b.name.toLowerCase());
-              const newBrandsToCreate = uniqueBrands.filter(b => !existingBrandNames.includes(b.toLowerCase()));
+        if (rows.length === 0) {
+          toast.error('檔案內無資料');
+          setIsImporting(false);
+          e.target.value = '';
+          return;
+        }
 
-              if (newBrandsToCreate.length > 0) {
-                const { error: brandError } = await supabase.from('device_brands').insert(
-                  newBrandsToCreate.map(name => ({ name }))
-                );
-                if (brandError) throw brandError;
-              }
+        // 1. 整理出現的廠牌並動態建檔
+        const uniqueBrands = Array.from(new Set(rows.map(r => (r['廠牌'] || '').trim()).filter(Boolean)));
+        const existingBrandNames = deviceBrands.map((b: any) => b.name.toLowerCase());
+        const newBrandsToCreate = uniqueBrands.filter(b => !existingBrandNames.includes(b.toLowerCase()));
 
-              // 重新拉取一次廠牌表以獲得所有 ID
-              const { data: updatedBrands } = await supabase.from('device_brands').select('*');
-              const brandMap = new Map((updatedBrands || []).map((b: any) => [b.name.toLowerCase(), b.id]));
+        if (newBrandsToCreate.length > 0) {
+          const { error: brandError } = await supabase.from('device_brands').insert(
+            newBrandsToCreate.map(name => ({ name }))
+          );
+          if (brandError) throw brandError;
+        }
 
-              // 2. 整理模型準備 upsert
-              const modelsToInsert = rows.map(r => {
-                const name = (r['型號名稱'] || r['name'] || '').trim();
-                if (!name) return null;
-                const bName = (r['廠牌'] || r['brand'] || '').trim().toLowerCase();
-                return {
-                  name,
-                  brand_id: bName ? brandMap.get(bName) || null : null,
-                  device_type: (r['設備類型'] || r['device_type'] || '').trim() || null,
-                  device_series: (r['系列'] || r['device_series'] || '').trim() || null,
-                  screen_size: (r['螢幕尺寸'] || r['screen_size'] || '').trim() || null,
-                  release_date: (r['出廠年月'] || r['release_date'] || '').trim() || null,
-                  device_remarks: (r['備註'] || r['device_remarks'] || '').trim() || null,
-                  sort_order: parseInt(r['排序'] || r['sort_order']) || 0,
-                  is_active: true
-                };
-              }).filter(Boolean);
+        // 重新拉取一次廠牌表以獲得所有 ID
+        const { data: updatedBrands } = await supabase.from('device_brands').select('*');
+        const brandMap = new Map((updatedBrands || []).map((b: any) => [b.name.toLowerCase(), b.id]));
 
-              if (modelsToInsert.length > 0) {
-                const { error: modelsError } = await supabase.from('device_models').upsert(modelsToInsert as any, { onConflict: 'name' });
-                if (modelsError) throw modelsError;
-              }
+        // 2. 整理模型準備 upsert
+        const modelsToInsert = rows.map(r => {
+          const name = (r['型號名稱'] || r['name'] || '').trim();
+          if (!name) return null;
+          const bName = (r['廠牌'] || r['brand'] || '').trim().toLowerCase();
+          let modelId = r['型號ID'] || r['id'];
+          
+          const aliasesStr = r['別名'] || r['aliases'] || '';
+          const aliases = aliasesStr.split(',').map((a: string) => a.trim()).filter(Boolean);
 
-              toast.success(`成功匯入 ${modelsToInsert.length} 筆型號`);
-              queryClient.invalidateQueries({ queryKey: ['device_models'] });
-              queryClient.invalidateQueries({ queryKey: ['device_brands'] });
-            } catch (err: any) {
-              toast.error(`匯入處理失敗: ${err.message}`);
-            } finally {
-              setIsImporting(false);
-              e.target.value = '';
+          if (!modelId) {
+            const existing = models.find(m => m.name === name);
+            if (existing) {
+              modelId = existing.id;
             }
-          },
-          error: (error) => {
-            toast.error(`解析失敗：${error.message}`);
-            setIsImporting(false);
-            e.target.value = '';
           }
-        });
-      } catch (err) {
+
+          return {
+            ...(modelId ? { id: modelId } : {}),
+            name,
+            aliases: aliases.length > 0 ? aliases : null,
+            brand_id: bName ? brandMap.get(bName) || null : null,
+            device_type: (r['設備類型'] || r['device_type'] || '').trim() || null,
+            device_series: (r['系列'] || r['device_series'] || '').trim() || null,
+            screen_size: (r['螢幕尺寸'] || r['screen_size'] || '').trim() || null,
+            release_date: (r['出廠年月'] || r['release_date'] || '').trim() || null,
+            device_remarks: (r['備註'] || r['device_remarks'] || '').trim() || null,
+            sort_order: parseInt(r['排序'] || r['sort_order'] || '0', 10) || 0,
+            is_active: true
+          };
+        }).filter(Boolean);
+
+        if (modelsToInsert.length > 0) {
+          const { error: modelsError } = await supabase.from('device_models').upsert(modelsToInsert as any);
+          if (modelsError) throw modelsError;
+        }
+
+        toast.success(`成功匯入 ${modelsToInsert.length} 筆型號`);
+        queryClient.invalidateQueries({ queryKey: ['device_models'] });
+        queryClient.invalidateQueries({ queryKey: ['device_brands'] });
+      } catch (err: any) {
+        toast.error(`匯入處理失敗: ${err.message}`);
+      } finally {
         setIsImporting(false);
         e.target.value = '';
       }
     };
-    reader.readAsText(file);
+    
+    reader.onerror = (error) => {
+      toast.error('檔案讀取失敗');
+      setIsImporting(false);
+      e.target.value = '';
+    };
+
+    reader.readAsArrayBuffer(file);
   };
 
   // Calculate unique series for the currently selected brand

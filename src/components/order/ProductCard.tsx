@@ -18,15 +18,15 @@ export function ProductCard({ product, onClick, onInfoClick }: ProductCardProps)
   );
 
   return (
-    <Card 
+    <Card
       className="group flex flex-col overflow-hidden hover:shadow-lg transition-all duration-300 border-muted/60 hover:border-primary/50 cursor-pointer"
       onClick={onClick}
     >
       {/* 產品圖片區域 */}
       <div className="aspect-square bg-muted/30 relative flex items-center justify-center overflow-hidden">
         {product.image_url ? (
-          <img 
-            src={product.image_url} 
+          <img
+            src={product.image_url}
             alt={product.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
@@ -36,7 +36,7 @@ export function ProductCard({ product, onClick, onInfoClick }: ProductCardProps)
             <span className="text-xs font-medium uppercase tracking-wider">No Image</span>
           </div>
         )}
-        
+
         {/* 懸浮動作按鈕 */}
         <div className="absolute top-2 right-2 flex flex-col gap-2 translate-x-12 group-hover:translate-x-0 transition-transform duration-300">
           <Button
