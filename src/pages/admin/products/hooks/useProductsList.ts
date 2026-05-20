@@ -90,11 +90,27 @@ export function useProductsList() {
 
         const models: { name: string, aliases: string[] }[] = [];
 
-        // 1. 直連
-        product.device_models?.forEach(m => models.push({ name: m.name, aliases: (m as any).aliases || [] }));
+        // 1. 商品主體：直連型號物件（含別名）
+        product.device_models?.forEach(m => {
+            if (m?.name) models.push({ name: m.name, aliases: (m as any).aliases || [] });
+        });
 
-        // 2. 群組名稱也納入搜尋
-        product.device_model_groups?.forEach(g => models.push({ name: g.name, aliases: [] }));
+        // 2. 商品主體：群組名稱（快取中為 string[]，直接使用字串值）
+        (product.device_model_groups as any)?.forEach((g: any) => {
+            const name = typeof g === 'string' ? g : g?.name;
+            if (name) models.push({ name, aliases: [] });
+        });
+
+        // 3. 遍歷所有變體，將變體上綁定的型號與群組也納入搜尋範圍
+        (product as any).variants?.forEach((v: any) => {
+            v.device_models?.forEach((m: any) => {
+                if (m?.name) models.push({ name: m.name, aliases: m.aliases || [] });
+            });
+            v.device_model_groups?.forEach((g: any) => {
+                const name = typeof g === 'string' ? g : g?.name;
+                if (name) models.push({ name, aliases: [] });
+            });
+        });
 
         return models;
     }, [products]);
@@ -173,7 +189,7 @@ export function useProductsList() {
             return true;
         });
     }, [products, search, brandMap, selectedCategory, subCategoryIds, selectedBrands, selectedSpecs, getProductVariants]);
-
+    console.log("產品搜尋結果", filteredProducts);
     // --- Selection Logic ---
     const isAllSelected = filteredProducts && filteredProducts.length > 0 &&
         filteredProducts.every(p => selectedProductIds.has(p.id));

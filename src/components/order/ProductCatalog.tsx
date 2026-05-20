@@ -192,11 +192,16 @@ export default function ProductCatalog({
     .map((product) => {
       if (keywords.length === 0) return product;
 
+      // 商品主體比對：合併商品本體與所有變體的型號名稱
+      const allVariantModelNames = (product.variants || []).flatMap(
+        (v: any) => v.effective_model_names || []
+      );
       const productTexts = [
         product.name, 
         product.sku, 
         ...(product.category_names || []),
-        ...(product.effective_model_names || [])
+        ...(product.effective_model_names || []),
+        ...allVariantModelNames
       ]
         .filter(Boolean)
         .map((v) => v!.toLowerCase());
@@ -232,7 +237,17 @@ export default function ProductCatalog({
     .filter((product) => {
       if (keywords.length === 0) return true;
 
-      const productTexts = [product.name, product.sku, ...(product.category_names || [])]
+      // 最終過濾：合併商品本體型號與所有變體型號做比對
+      const allVariantModelNames = (product.variants || []).flatMap(
+        (v: any) => v.effective_model_names || []
+      );
+      const productTexts = [
+        product.name,
+        product.sku,
+        ...(product.category_names || []),
+        ...(product.effective_model_names || []),
+        ...allVariantModelNames
+      ]
         .filter(Boolean)
         .map((v) => v!.toLowerCase());
 

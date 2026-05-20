@@ -157,43 +157,71 @@ export function DeviceModelManager() {
         const { data: updatedBrands } = await supabase.from('device_brands').select('*');
         const brandMap = new Map((updatedBrands || []).map((b: any) => [b.name.toLowerCase(), b.id]));
 
-        // 2. 整理模型準備 upsert
+        // 2. 整理模型準備，按 UUID 判斷為更新或插入
         const modelsToInsert = rows.map(r => {
-          const name = (r['型號名稱'] || r['name'] || '').trim();
+          const name = String(r['型號名稱'] || r['name'] || '').trim();
           if (!name) return null;
-          const bName = (r['廠牌'] || r['brand'] || '').trim().toLowerCase();
-          let modelId = r['型號ID'] || r['id'];
+          const bName = String(r['廠牌'] || r['brand'] || '').trim().toLowerCase();
+          const modelId = r['型號ID'] || r['id']; // 直接取，不做預設查詢
           
-          const aliasesStr = r['別名'] || r['aliases'] || '';
+          const aliasesStr = String(r['別名'] || r['aliases'] || '');
           const aliases = aliasesStr.split(',').map((a: string) => a.trim()).filter(Boolean);
 
-          if (!modelId) {
-            const existing = models.find(m => m.name === name);
-            if (existing) {
-              modelId = existing.id;
-            }
-          }
-
           return {
-            ...(modelId ? { id: modelId } : {}),
+            ...(modelId ? { id: modelId } : {}), // 只有當有明確的 UUID 時才包含 id
             name,
             aliases: aliases.length > 0 ? aliases : null,
             brand_id: bName ? brandMap.get(bName) || null : null,
-            device_type: (r['設備類型'] || r['device_type'] || '').trim() || null,
-            device_series: (r['系列'] || r['device_series'] || '').trim() || null,
-            screen_size: (r['螢幕尺寸'] || r['screen_size'] || '').trim() || null,
-            release_date: (r['出廠年月'] || r['release_date'] || '').trim() || null,
-            device_remarks: (r['備註'] || r['device_remarks'] || '').trim() || null,
+            device_type: String(r['設備類型'] || r['device_type'] || '').trim() || null,
+            device_series: String(r['系列'] || r['device_series'] || '').trim() || null,
+            screen_size: String(r['螢幕尺寸'] || r['screen_size'] || '').trim() || null,
+            release_date: String(r['出廠年月'] || r['release_date'] || '').trim() || null,
+            device_remarks: String(r['備註'] || r['device_remarks'] || '').trim() || null,
             sort_order: parseInt(r['排序'] || r['sort_order'] || '0', 10) || 0,
             is_active: true
           };
         }).filter(Boolean);
 
-        if (modelsToInsert.length > 0) {
-          const { error: modelsError } = await supabase.from('device_models').upsert(modelsToInsert as any);
-          if (modelsError) throw modelsError;
+        // 二次驗證：無 UUID 的記錄檢查是否已存在相同名稱
+        const modelsWithoutId = modelsToInsert.filter(m => !m.id);
+        const duplicateNames = modelsWithoutId
+          .map(m => m.name)
+          .filter((name, index, self) => self.indexOf(name) !== index);
+
+        if (duplicateNames.length > 0) {
+          throw new Error(`匯入檔案中有重複的型號名稱（無 UUID）：${duplicateNames.join(', ')}`);
+        }
+        
+        const changedRecordsToUpdate = modelsToInsert.filter((m: any) => m.id);
+        const recordsToInsert = modelsToInsert.filter((m: any) => !m.id);
+
+        if (changedRecordsToUpdate.length > 0) {
+          const batchSize = 50;
+          for (let i = 0; i < changedRecordsToUpdate.length; i += batchSize) {
+            const batch = changedRecordsToUpdate.slice(i, i + batchSize);
+            const { error: updateError } = await supabase.from('device_models').upsert(batch);
+            if (updateError) {
+              console.error('批量更新失敗', updateError);
+              throw updateError;
+            }
+          }
         }
 
+        if (recordsToInsert.length > 0) {
+          const batchSize = 50;
+          for (let i = 0; i < recordsToInsert.length; i += batchSize) {
+            const batch = recordsToInsert.slice(i, i + batchSize).map((record: any) => {
+              const { id, ...rest } = record;
+              return rest;
+            });
+            const { error: insertError } = await supabase.from('device_models').insert(batch);
+            if (insertError) {
+              console.error(`批量新增失敗，範圍 ${i} - ${i + batchSize - 1}`, insertError);
+              throw insertError;
+            }
+          }
+        }
+        
         toast.success(`成功匯入 ${modelsToInsert.length} 筆型號`);
         queryClient.invalidateQueries({ queryKey: ['device_models'] });
         queryClient.invalidateQueries({ queryKey: ['device_brands'] });
