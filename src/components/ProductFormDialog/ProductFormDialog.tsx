@@ -171,7 +171,14 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
                 disabled={!initialData || !form.watch('has_variants')}
                 className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
               >
-                變體規格與型號
+                變體規格
+              </TabsTrigger>
+              <TabsTrigger
+                value="models"
+                disabled={!initialData || !form.watch('has_variants')}
+                className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
+              >
+                變體型號
               </TabsTrigger>
             </TabsList>
           </div>
@@ -207,6 +214,13 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
                     productId={initialData.id}
                     categoryIds={form.watch('category_ids')}
                   />
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="models" className="m-0 focus-visible:ring-0">
+              {initialData && (
+                <div className="space-y-8">
                   <VariantModelMatrix
                     productId={initialData.id}
                   />

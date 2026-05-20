@@ -165,7 +165,21 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
         return <div className="flex items-center gap-2 p-12 justify-center text-muted-foreground"><Loader2 className="animate-spin h-5 w-5" /> 正在構建規格矩陣樹...</div>;
     }
 
-    if (visiblePathRows.length === 0 || variants.length === 0) return null;
+    if (variants.length === 0) return null;
+
+    if (visiblePathRows.length === 0) {
+        return (
+            <div className="space-y-4 border rounded-xl bg-background shadow-sm p-12 text-center flex flex-col items-center justify-center min-h-[300px]">
+                <div className="bg-muted p-4 rounded-full mb-2">
+                    <ChevronsRight className="h-8 w-8 text-muted-foreground opacity-50" />
+                </div>
+                <h3 className="text-base font-bold text-foreground">尚未綁定分類規格</h3>
+                <p className="text-sm text-muted-foreground max-w-[400px] mt-1">
+                    這個商品所屬的分類目前沒有綁定任何規格欄位。如果您需要為變體設定規格，請先至「商品分類管理」設定該分類的規格結構。
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-4 border rounded-xl bg-background shadow-sm">

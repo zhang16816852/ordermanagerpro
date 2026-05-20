@@ -45,7 +45,7 @@ export function AppRoutes() {
                     key={route.path}
                     path={route.path}
                     element={
-                        <ProtectedRoute>
+                        <ProtectedRoute requireAdmin>
                             <AppLayout>{route.element}</AppLayout>
                         </ProtectedRoute>
                     }

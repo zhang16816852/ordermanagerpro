@@ -122,24 +122,29 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
                             return l.device_models;
                         });
 
-                    const groupNames: string[] = [];
+                    const groups: any[] = [];
                     const expandedFromGroups: any[] = [];
                     groupLinks.forEach(link => {
                         const group = link.device_model_groups;
                         if (group) {
-                            groupNames.push(group.name);
+                            const groupItems = (group.device_model_group_items || [])
+                                .map((item: any) => {
+                                    if (item.device_models && !exclusions.has(item.device_models.id)) {
+                                        expandedFromGroups.push(item.device_models);
+                                        return { id: item.device_models.id, name: item.device_models.name };
+                                    }
+                                    return null;
+                                })
+                                .filter(Boolean);
+
+                            groups.push({ id: group.id, name: group.name, items: groupItems });
                             rules.push(`group:${group.name}`);
-                            (group.device_model_group_items || []).forEach((item: any) => {
-                                if (item.device_models && !exclusions.has(item.device_models.id)) {
-                                    expandedFromGroups.push(item.device_models);
-                                }
-                            });
                         }
                     });
 
                     return {
                         device_models: directModels,
-                        device_model_groups: groupNames,
+                        device_model_groups: groups,
                         device_model_rules: rules,
                         _expanded_models: Array.from(new Set([...directModels, ...expandedFromGroups].map(m => m.name))),
                         device_model_exclusions: Array.from(exclusions)

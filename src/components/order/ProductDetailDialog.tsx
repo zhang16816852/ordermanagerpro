@@ -144,9 +144,9 @@ export function ProductDetailDialog({
             .order('sort_order', { ascending: true })
             .then(({ data }) => {
                 if (!data) return;
-                
+
                 const typedData = data as unknown as ProductImage[];
-                
+
                 const pImgs = typedData.filter(img => img.entity_id === product.id && img.entity_type === 'product');
                 setProductImages(pImgs);
 
@@ -202,16 +202,18 @@ export function ProductDetailDialog({
         const addModels = (target: any) => {
             // 直接關聯 (琥珀色)
             ((target as any).device_models || []).forEach((m: any) => {
-                if (!m || seenIds.has(m.id)) return;
-                seenIds.add(m.id);
-                results.push({ model_id: m.id, model_name: m.name, source: 'direct' });
+                const name = typeof m === 'string' ? m : m?.name;
+                if (!name || seenIds.has(name)) return;
+                seenIds.add(name);
+                results.push({ model_id: m?.id || name, model_name: name, source: 'direct' });
             });
 
             // 群組關聯 (藍色)
             ((target as any).device_model_groups || []).forEach((g: any) => {
-                if (!g || seenIds.has(g.id)) return;
-                seenIds.add(g.id);
-                results.push({ model_id: g.id, model_name: g.name, source: 'group' });
+                const name = typeof g === 'string' ? g : g?.name;
+                if (!name || seenIds.has(name)) return;
+                seenIds.add(name);
+                results.push({ model_id: g?.id || name, model_name: name, source: 'group', items: g?.items || [] });
             });
         };
 
@@ -411,20 +413,28 @@ export function ProductDetailDialog({
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">
                                     適用型號 {selectedVariantId && <Badge variant="outline" className="ml-2 text-[10px] font-normal py-0">規格專屬</Badge>}
                                 </h3>
-                                <div className="flex flex-wrap gap-1.5 mt-1">
+                                <div className="flex flex-wrap gap-2 mt-1">
                                     {effectiveModels.map((m: any) => (
-                                        <Badge
-                                            key={m.model_id}
-                                            variant="secondary"
-                                            className={cn(
-                                                "text-[11px] font-normal px-2 py-0.5",
-                                                m.source === 'direct'
-                                                    ? "bg-amber-50 text-amber-700 border-amber-100"
-                                                    : "bg-blue-50 text-blue-700 border-blue-100"
+                                        <div key={m.model_id} className={cn(
+                                            "flex items-center gap-1.5 border rounded-full px-2 py-0.5",
+                                            m.source === 'direct' ? "bg-amber-50/50 border-amber-200" : "bg-blue-50/50 border-blue-200"
+                                        )}>
+                                            <span className={cn("text-[11px] font-medium", m.source === 'direct' ? "text-amber-700" : "text-blue-700")}>
+                                                {m.model_name}
+                                            </span>
+                                            {m.source === 'group' && m.items && m.items.length > 0 && (
+                                                <>
+                                                    <span className="text-[10px] text-muted-foreground/40">|</span>
+                                                    <div className="flex items-center gap-1">
+                                                        {m.items.map((item: any, idx: number) => (
+                                                            <span key={item.id} className="text-[10px] text-muted-foreground">
+                                                                {item.name}{idx < m.items.length - 1 ? ',' : ''}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </>
                                             )}
-                                        >
-                                            {m.model_name}
-                                        </Badge>
+                                        </div>
                                     ))}
                                 </div>
                             </div>
@@ -499,9 +509,9 @@ export function ProductDetailDialog({
 
                 {product.has_variants && (
                     <div className="mt-6 border-t pt-4 space-y-6">
-                        <VariantOptionsPicker 
-                            product={product} 
-                            onVariantSelect={handleVariantSelect} 
+                        <VariantOptionsPicker
+                            product={product}
+                            onVariantSelect={handleVariantSelect}
                         />
                     </div>
                 )}
