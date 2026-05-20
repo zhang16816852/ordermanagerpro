@@ -22,6 +22,7 @@ import {
   Home,
   Store,
   ShoppingCart,
+  ShoppingBag,
   PackageSearch,
   Truck,
   FileText,
@@ -60,6 +61,7 @@ const adminNavItems: NavItem[] = [
   { title: '採購管理', href: '/admin/purchase-orders', icon: Truck },
   { title: '會計管理', href: '/admin/accounting', icon: FileText },
   { title: '人員管理', href: '/admin/users', icon: Users },
+  { title: '媒合市場', href: '/market', icon: ShoppingBag },
   { title: '操作日誌', href: '/admin/audit-logs', icon: HistoryIcon },
 ];
 // ← 新增這兩行：取得購物車總件數
@@ -126,12 +128,13 @@ export function AppLayout({ children }: AppLayoutProps) {
   useEffect(() => {
     performGlobalDataSync();
   }, []);
-  const storeId = storeRoles[0]?.store_id;
+  const storeId = storeRoles?.[0]?.store_id;
   const { totalItems: totalCartItems } = useStoreDraft(storeId);
   const baseStoreNavItems: NavItem[] = [
     { title: '儀表板', href: '/dashboard', icon: Home },
     { title: '商品目錄', href: '/catalog', icon: PackageSearch },
     { title: '我的訂單', href: '/orders', icon: ClipboardList },
+    { title: '媒合市場', href: '/market', icon: ShoppingBag },
     { title: '銷貨單', href: '/sales-notes', icon: FileText },
     { title: '會計報表', href: '/accounting', icon: FileText },
     { title: '團隊管理', href: '/team', icon: Users },
@@ -147,7 +150,12 @@ export function AppLayout({ children }: AppLayoutProps) {
     },
     ...baseStoreNavItems.slice(2),
   ];
-  const navItems = isAdmin ? adminNavItems : storeNavItems;
+  
+  const visitorNavItems: NavItem[] = [
+    { title: '媒合市場', href: '/market', icon: ShoppingBag },
+  ];
+  
+  const navItems = !user ? visitorNavItems : (isAdmin ? adminNavItems : storeNavItems);
   const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
 
   const handleSignOut = async () => {
@@ -172,39 +180,48 @@ export function AppLayout({ children }: AppLayoutProps) {
       </ScrollArea>
       {/* User section */}
       <div className="p-4 border-t border-sidebar-border">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className="w-full justify-start gap-3 h-auto py-2 px-3 text-sidebar-foreground hover:bg-sidebar-accent"
-            >
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-sm">
-                  {userInitial}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 text-left">
-                <p className="text-sm font-medium truncate">{user?.email}</p>
-                <p className="text-xs text-sidebar-foreground/60">
-                  {isAdmin ? '系統管理員' : storeRoles[0]?.role || 'Customer'}
-                </p>
-              </div>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>我的帳號</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {/*          <DropdownMenuItem onClick={() => navigate('/settings')}>
-              <Settings className="mr-2 h-4 w-4" />
-              設定
-            </DropdownMenuItem>*/}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-              <LogOut className="mr-2 h-4 w-4" />
-              登出
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {user ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="w-full justify-start gap-3 h-auto py-2 px-3 text-sidebar-foreground hover:bg-sidebar-accent"
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-sm">
+                    {userInitial}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium truncate">{user?.email}</p>
+                  <p className="text-xs text-sidebar-foreground/60">
+                    {isAdmin ? '系統管理員' : storeRoles?.[0]?.role || 'Customer'}
+                  </p>
+                </div>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>我的帳號</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {/*          <DropdownMenuItem onClick={() => navigate('/settings')}>
+                <Settings className="mr-2 h-4 w-4" />
+                設定
+              </DropdownMenuItem>*/}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                <LogOut className="mr-2 h-4 w-4" />
+                登出
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button
+            onClick={() => navigate('/auth')}
+            className="w-full h-10 rounded-xl font-semibold bg-primary hover:bg-primary/95 text-primary-foreground flex items-center justify-center gap-2"
+          >
+            登入系統
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -9,6 +9,8 @@ import StoreTeam from "@/pages/store/Team";
 import StoreAudit from "@/pages/store/Audit";
 import StoreNotifications from "@/pages/store/Notifications";
 import StoreAccounting from "@/pages/store/Accounting";
+import MarketCreatePage from "@/pages/market/create";
+import MyListingsPage from "@/pages/market/my-listings";
 
 export const storeRoutes = [
     { path: "/dashboard", element: <StoreDashboard /> },
@@ -22,4 +24,6 @@ export const storeRoutes = [
     { path: "/audit", element: <StoreAudit /> },
     { path: "/notifications", element: <StoreNotifications /> },
     { path: "/accounting", element: <StoreAccounting /> },
+    { path: "/market/create", element: <MarketCreatePage /> },
+    { path: "/market/my-listings", element: <MyListingsPage /> },
 ];

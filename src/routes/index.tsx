@@ -7,6 +7,8 @@ import { Loader2 } from "lucide-react";
 import { adminRoutes } from "./admin";
 import { storeRoutes } from "./store";
 import { sharedRoutes } from "./shared";
+import MarketPage from "@/pages/market/index";
+import MarketDetailPage from "@/pages/market/detail";
 
 function RootRedirect() {
     const { user, isAdmin, loading } = useAuth();
@@ -33,6 +35,24 @@ export function AppRoutes() {
         <Routes>
             {/* 根路徑與重定向 */}
             <Route path="/" element={<RootRedirect />} />
+
+            {/* 公開但使用 Layout 的路由 (如：媒合市場) */}
+            <Route
+                path="/market"
+                element={
+                    <AppLayout>
+                        <MarketPage />
+                    </AppLayout>
+                }
+            />
+            <Route
+                path="/market/:id"
+                element={
+                    <AppLayout>
+                        <MarketDetailPage />
+                    </AppLayout>
+                }
+            />
 
             {/* 公開與共享路由 (無需 Layout) */}
             {sharedRoutes.map((route) => (
