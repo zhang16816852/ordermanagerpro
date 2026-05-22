@@ -59,9 +59,9 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
                 { data: allSpecs },
                 { data: allCovers }   // 封面圖片
             ] = await Promise.all([
-                supabase.from('device_model_links').select('entity_id, model_id, device_models(id, name)'),
-                supabase.from('device_model_group_links').select('entity_id, group_id, device_model_groups(id, name, device_model_group_items(device_models(id, name)))'),
-                supabase.from('device_model_exclusions').select('entity_id, model_id, device_models(id, name)'),
+                supabase.from('device_model_links').select('entity_id, model_id, device_models(id, name, aliases)'),
+                supabase.from('device_model_group_links').select('entity_id, group_id, device_model_groups(id, name, device_model_group_items(device_models(id, name, aliases)))'),
+                supabase.from('device_model_exclusions').select('entity_id, model_id, device_models(id, name, aliases)'),
                 supabase.from('entity_spec_values').select('*').eq('lifecycle_state', 'active'),
                 supabase.from('product_images').select('entity_type, entity_id, url').eq('is_cover', true)
             ]);
@@ -147,6 +147,7 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
                         device_model_groups: groups,
                         device_model_rules: rules,
                         _expanded_models: Array.from(new Set([...directModels, ...expandedFromGroups].map(m => m.name))),
+                        _expanded_model_aliases: Array.from(new Set([...directModels, ...expandedFromGroups].flatMap(m => m.aliases || []))),
                         device_model_exclusions: Array.from(exclusions)
                     };
                 };
@@ -160,6 +161,7 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
                     category_ids: p.product_category_links?.map((l: any) => l.category_id) || [],
                     category_names: p.product_category_links?.map((l: any) => l.categories?.name).filter(Boolean) || [],
                     effective_model_names: modelDataP._expanded_models,
+                    effective_model_aliases: modelDataP._expanded_model_aliases,
                     spec_values: specsMap.get(p.id) || {},
                     variants: p.variants?.map((v: any) => {
                         const modelDataV = processModels(v.id);
@@ -168,6 +170,7 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
                             ...modelDataV,
                             image_url: coversMap.get(v.id) || null,   // 注入變體封面圖
                             effective_model_names: modelDataV._expanded_models,
+                            effective_model_aliases: modelDataV._expanded_model_aliases,
                             spec_values: specsMap.get(v.id) || {}
                         };
                     })
