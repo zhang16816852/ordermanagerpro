@@ -196,12 +196,17 @@ export default function ProductCatalog({
       const allVariantModelNames = (product.variants || []).flatMap(
         (v: any) => v.effective_model_names || []
       );
+      const allVariantModelAliases = (product.variants || []).flatMap(
+        (v: any) => v.effective_model_aliases || []
+      );
       const productTexts = [
         product.name, 
         product.sku, 
         ...(product.category_names || []),
         ...(product.effective_model_names || []),
-        ...allVariantModelNames
+        ...((product as any).effective_model_aliases || []),
+        ...allVariantModelNames,
+        ...allVariantModelAliases
       ]
         .filter(Boolean)
         .map((v) => v!.toLowerCase());
@@ -219,7 +224,8 @@ export default function ProductCatalog({
             variant.option_1,
             variant.option_2,
             variant.option_3,
-            ...((variant as any).effective_model_names || [])
+            ...((variant as any).effective_model_names || []),
+            ...((variant as any).effective_model_aliases || [])
           ]
             .filter(Boolean)
             .map((v) => v!.toLowerCase());
@@ -241,12 +247,17 @@ export default function ProductCatalog({
       const allVariantModelNames = (product.variants || []).flatMap(
         (v: any) => v.effective_model_names || []
       );
+      const allVariantModelAliases = (product.variants || []).flatMap(
+        (v: any) => v.effective_model_aliases || []
+      );
       const productTexts = [
         product.name,
         product.sku,
         ...(product.category_names || []),
         ...(product.effective_model_names || []),
-        ...allVariantModelNames
+        ...((product as any).effective_model_aliases || []),
+        ...allVariantModelNames,
+        ...allVariantModelAliases
       ]
         .filter(Boolean)
         .map((v) => v!.toLowerCase());
