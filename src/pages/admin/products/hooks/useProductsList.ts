@@ -264,13 +264,19 @@ export function useProductsList() {
                 if (specError) throw specError;
             }
 
+            // 5. 同步前台展示虛擬商品
+            await supabase.rpc('sync_storefront_items', { p_product_id: product.id });
+
             return product;
         },
-        onSuccess: (product) => {
-            forceRefresh();
+        onSuccess: async (product) => {
+            await forceRefresh();
             queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
             toast.success('產品已新增');
-            setEditingProduct(product as any);
+            // 從更新後的 cache 取得含 category_ids 的完整產品物件
+            const cache = (await import('@/hooks/useProductCache')).getProductCache();
+            const fullProduct = cache?.data?.find((p: any) => p.id === product.id);
+            setEditingProduct((fullProduct || product) as any);
         },
     });
 
@@ -316,9 +322,12 @@ export function useProductsList() {
                 });
                 if (specError) throw specError;
             }
+
+            // 5. 同步前台展示虛擬商品
+            await supabase.rpc('sync_storefront_items', { p_product_id: id });
         },
-        onSuccess: () => {
-            forceRefresh();
+        onSuccess: async () => {
+            await forceRefresh();
             queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
             queryClient.invalidateQueries({ queryKey: ['all-product-model-links'] });
             queryClient.invalidateQueries({ queryKey: ['all-product-variants'] });
@@ -333,7 +342,8 @@ export function useProductsList() {
             const { error } = await supabase.from('products').delete().eq('id', id);
             if (error) throw error;
         },
-        onSuccess: () => {
+        onSuccess: async () => {
+            await forceRefresh();
             queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
             toast.success('產品已刪除');
             setDeleteProduct(null);
@@ -361,6 +371,7 @@ export function useProductsList() {
                 new_sku: newSku,
             });
             if (error) throw error;
+            await forceRefresh();
             queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
             toast.success('產品及其變體已完整複製');
             if (newProductId) {

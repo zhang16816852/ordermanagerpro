@@ -186,10 +186,11 @@ export function useProductImport(onSuccess: () => void) {
 
         const checkModels = (modelStr: string | undefined, fieldName: string) => {
             if (!modelStr) return;
+            // 僅支援用逗號 (,) 區隔多個型號或型號群組，保留名稱內部的斜線（例如 "三星 S25+/S24+" 會被視為一整個群組名稱）
             const parts = modelStr.split(',').map(s => s.trim()).filter(Boolean);
             parts.forEach(part => {
                 let name = part;
-                let type: 'group' | 'model' | 'exclude' = 'model';
+                let type: 'group' | 'model' | 'exclude' | 'auto' = 'auto';
                 const lowerPart = part.toLowerCase();
 
                 if (lowerPart.startsWith('group:')) {
@@ -207,12 +208,30 @@ export function useProductImport(onSuccess: () => void) {
                     if (!allGroups.some(g => g.name.toLowerCase() === name.toLowerCase())) {
                         errors.push(`${fieldName}: 找不到型號群組 "${name}"`);
                     }
-                } else {
+                } else if (type === 'exclude') {
+                    if (!allDeviceModels.some(m =>
+                        (m.name?.trim().toLowerCase() === name.toLowerCase()) ||
+                        (Array.isArray(m.aliases) && m.aliases.some((a: string) => a?.trim().toLowerCase() === name.toLowerCase()))
+                    )) {
+                        errors.push(`${fieldName}: 找不到排除型號 "${name}"`);
+                    }
+                } else if (type === 'model') {
                     if (!allDeviceModels.some(m =>
                         (m.name?.trim().toLowerCase() === name.toLowerCase()) ||
                         (Array.isArray(m.aliases) && m.aliases.some((a: string) => a?.trim().toLowerCase() === name.toLowerCase()))
                     )) {
                         errors.push(`${fieldName}: 找不到型號 "${name}"`);
+                    }
+                } else {
+                    // type === 'auto'：自動判定。如果存在同名的型號群組則優先對應群組，否則對應一般型號
+                    const hasGroup = allGroups.some(g => g.name.toLowerCase() === name.toLowerCase());
+                    const hasModel = allDeviceModels.some(m =>
+                        (m.name?.trim().toLowerCase() === name.toLowerCase()) ||
+                        (Array.isArray(m.aliases) && m.aliases.some((a: string) => a?.trim().toLowerCase() === name.toLowerCase()))
+                    );
+
+                    if (!hasGroup && !hasModel) {
+                        errors.push(`${fieldName}: 找不到型號或型號群組 "${name}"`);
                     }
                 }
             });
@@ -578,7 +597,6 @@ export function useProductImport(onSuccess: () => void) {
                 if (vErr) throw vErr;
             }
 
-            // 6. 處理實體關聯 (Models, Groups, Exclusions)
             const parseModelString = (modelStr: string | undefined) => {
                 const result: { modelIds: string[]; groupIds: string[]; exclusions: { model_id: string }[] } = {
                     modelIds: [],
@@ -591,7 +609,7 @@ export function useProductImport(onSuccess: () => void) {
                 const parts = modelStr.split(',').map(s => s.trim()).filter(Boolean);
                 parts.forEach(part => {
                     let name = part;
-                    let type: 'group' | 'model' | 'exclude' = 'model';
+                    let type: 'group' | 'model' | 'exclude' | 'auto' = 'auto';
                     const lowerPart = part.toLowerCase();
 
                     if (lowerPart.startsWith('group:')) {
@@ -614,12 +632,24 @@ export function useProductImport(onSuccess: () => void) {
                             (m.aliases || []).some((a: string) => a.toLowerCase() === name.toLowerCase())
                         );
                         if (model) result.exclusions.push({ model_id: model.id });
-                    } else {
+                    } else if (type === 'model') {
                         const model = allDeviceModels.find(m => 
                             m.name.toLowerCase() === name.toLowerCase() || 
                             (m.aliases || []).some((a: string) => a.toLowerCase() === name.toLowerCase())
                         );
                         if (model) result.modelIds.push(model.id);
+                    } else {
+                        // 自動判定
+                        const group = allGroups.find(g => g.name.toLowerCase() === name.toLowerCase());
+                        if (group) {
+                            result.groupIds.push(group.id);
+                        } else {
+                            const model = allDeviceModels.find(m => 
+                                m.name.toLowerCase() === name.toLowerCase() || 
+                                (m.aliases || []).some((a: string) => a.toLowerCase() === name.toLowerCase())
+                            );
+                            if (model) result.modelIds.push(model.id);
+                        }
                     }
                 });
                 return result;
@@ -694,6 +724,16 @@ export function useProductImport(onSuccess: () => void) {
 
             for (let i = 0; i < variantSpecPromises.length; i += 5) {
                 await Promise.all(variantSpecPromises.slice(i, i + 5));
+            }
+
+            // 同步每個匯入商品的前台展示
+            const importedProductIds = Array.from(productIdMap.values());
+            for (let i = 0; i < importedProductIds.length; i += 5) {
+                await Promise.all(
+                    importedProductIds.slice(i, i + 5).map(pId => 
+                        supabase.rpc('sync_storefront_items', { p_product_id: pId })
+                    )
+                );
             }
 
             // 通知版本系統：產品資料有異動，觸發前台快取全量同步

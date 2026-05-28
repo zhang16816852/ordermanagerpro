@@ -25,6 +25,9 @@ export const setProductCache = (cache: ProductCacheData) => {
     localStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify(cache));
 };
 
+// 自訂事件名稱：當 syncProducts 完成後通知所有已掛載的 useProductCache 實例
+const PRODUCT_CACHE_UPDATED_EVENT = 'product-cache-updated';
+
 /**
  * [V7.5] 產品同步核心邏輯
  */
@@ -178,6 +181,8 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
             }) as unknown as ProductWithDetails[];
 
         setProductCache({ version: newSequenceId, data: products });
+        // 廣播通知所有已掛載的 useProductCache 實例重新讀取
+        window.dispatchEvent(new CustomEvent(PRODUCT_CACHE_UPDATED_EVENT));
         return products;
     } catch (error) {
         console.error('[ProductCache] 🔴 同步失敗:', error);
@@ -187,19 +192,33 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
 
 /**
  * [V7.5] React Hook: 提供 UI 元件訂閱產品快取
+ * 透過自訂事件監聽 syncProducts 的更新，確保跨頁面即時同步
  */
 export const useProductCache = (storeId?: string | null) => {
     const [products, setProducts] = useState<ProductWithDetails[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [version, setVersion] = useState(0);
 
-    useEffect(() => {
+    // 從 localStorage 讀取最新 cache 並更新 state
+    const readFromCache = () => {
         const cache = getProductCache();
         if (cache) {
             setProducts(cache.data);
             setVersion(cache.version);
         }
+    };
+
+    // 初次掛載 + 監聽來自 syncProducts 的廣播事件
+    useEffect(() => {
+        readFromCache();
         setIsLoading(false);
+
+        const handleCacheUpdated = () => {
+            console.log('[useProductCache] 📬 收到 cache 更新通知，重新讀取');
+            readFromCache();
+        };
+        window.addEventListener(PRODUCT_CACHE_UPDATED_EVENT, handleCacheUpdated);
+        return () => window.removeEventListener(PRODUCT_CACHE_UPDATED_EVENT, handleCacheUpdated);
     }, []);
 
     const refresh = async () => {

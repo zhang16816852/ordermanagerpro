@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { ProductWithPricing, VariantWithPricing } from "@/types/product";
-import { useStoreProductCache } from "@/hooks/useProductCache";
+import { useStorefrontCache } from "@/hooks/useStorefrontCache";
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +30,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Send, Copy, Check } from "lucide-react";
+import { useMemo } from "react";
 
 import ProductCatalog from "@/components/order/ProductCatalog";
 import CartPanel from "@/components/order/CartPanel";
@@ -41,6 +42,7 @@ export default function AdminOrderComposer() {
   const [selectedStoreId, setSelectedStoreId] = useState<string>("");
   const [createdOrder, setCreatedOrder] = useState<{ id: string; code?: string | null; access_token: string } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [search, setSearch] = useState("");
 
   const { data: stores = [], isLoading: storesLoading } = useQuery({
     queryKey: ["admin-stores-list"],
@@ -54,7 +56,36 @@ export default function AdminOrderComposer() {
     },
   });
 
-  const { products, isLoading: productsLoading } = useStoreProductCache(selectedStoreId || null);
+  const { items: storefrontItems, isLoading: productsLoading } = useStorefrontCache(selectedStoreId || null);
+
+  const products = useMemo(() => {
+    return storefrontItems.map(item => ({
+      id: item.id, // storefront_item.id (Unique UUID)
+      name: item.display_name,
+      sku: item.sku,
+      description: item.description,
+      base_wholesale_price: item.base_wholesale_price,
+      base_retail_price: item.base_retail_price,
+      wholesale_price: item.wholesale_price,
+      retail_price: item.retail_price,
+      has_store_price: item.has_store_price,
+      has_variants: false,
+      variants: [],
+      category_ids: item.category_ids,
+      category_names: item.category_names,
+      brand_id: item.brand_id,
+      color: item.color,
+      effective_model_names: [item.device_model_name],
+      effective_model_aliases: [],
+      spec_values: {},
+      
+      // Storefront-specific physical references
+      physical_product_id: item.product_id,
+      physical_variant_id: item.variant_id,
+      device_model_name: item.device_model_name,
+    }));
+  }, [storefrontItems]) as unknown as ProductWithPricing[];
+
   const { items, notes, totalAmount, updateNotes, clearDraft } = useStoreDraft(selectedStoreId);
 
   const createOrderMutation = useMutation({
@@ -78,9 +109,11 @@ export default function AdminOrderComposer() {
       const orderItems = items.map((item) => ({
         order_id: order.id,
         product_id: item.productId,
+        variant_id: item.variantId || null,
         store_id: selectedStoreId,
         quantity: item.quantity,
         unit_price: item.price,
+        selected_model_name: item.selectedModelName || null,
       }));
 
       const { error: itemsError } = await supabase
@@ -155,6 +188,8 @@ export default function AdminOrderComposer() {
               products={products}
               isLoading={productsLoading}
               storeId={selectedStoreId}
+              search={search}
+              onSearchChange={setSearch}
             />
           </div>
 
