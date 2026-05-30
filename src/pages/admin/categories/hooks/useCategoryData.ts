@@ -280,8 +280,8 @@ export function useCategoryData() {
                         const currentId = sessionMap.get(row.name?.trim()) || sessionMap.get(row.id?.toString().trim());
                         if (!currentId) return;
 
-                        // 父分類解析：支援 parent_names（新格式）或 parent_ids（舊格式）
-                        const parentsRaw = row.parent_names || row.parent_ids || row.parent_id;
+                        // 父分類解析：僅支援 parent_names（新格式）
+                        const parentsRaw = row.parent_names;
                         if (parentsRaw) {
                             const tokens = parentsRaw.split(',').map((s: string) => s.trim()).filter(Boolean);
                             tokens.forEach((token: string) => {
@@ -297,8 +297,8 @@ export function useCategoryData() {
                             });
                         }
 
-                        // 規格關聯解析：支援 linked_spec_names（新格式）或 linked_spec_ids（舊格式）
-                        const specsRaw = row.linked_spec_names || row.linked_spec_ids;
+                        // 規格關聯解析：僅支援 linked_spec_names（新格式）
+                        const specsRaw = row.linked_spec_names;
                         if (specsRaw) {
                             const tokens = specsRaw.split(',').map((s: string) => s.trim()).filter(Boolean);
                             tokens.forEach((token: string, idx: number) => {

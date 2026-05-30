@@ -237,35 +237,21 @@ export type Database = {
           created_at: string | null
           id: string
           name: string
-          parent_id: string | null
           sort_order: number | null
-          spec_schema: Json | null
         }
         Insert: {
           created_at?: string | null
           id?: string
           name: string
-          parent_id?: string | null
           sort_order?: number | null
-          spec_schema?: Json | null
         }
         Update: {
           created_at?: string | null
           id?: string
           name?: string
-          parent_id?: string | null
           sort_order?: number | null
-          spec_schema?: Json | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "categories_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "categories"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       category_hierarchy: {
         Row: {
@@ -340,6 +326,7 @@ export type Database = {
           id: number
           record_id: string
           table_name: string
+          version_tag: string | null
         }
         Insert: {
           action: string
@@ -347,6 +334,7 @@ export type Database = {
           id?: number
           record_id: string
           table_name: string
+          version_tag?: string | null
         }
         Update: {
           action?: string
@@ -354,25 +342,26 @@ export type Database = {
           id?: number
           record_id?: string
           table_name?: string
+          version_tag?: string | null
         }
         Relationships: []
       }
       data_snapshots: {
         Row: {
           data_json: Json
-          last_sequence_id: number
+          last_sequence_id: string
           table_name: string
           updated_at: string | null
         }
         Insert: {
           data_json: Json
-          last_sequence_id: number
+          last_sequence_id: string
           table_name: string
           updated_at?: string | null
         }
         Update: {
           data_json?: Json
-          last_sequence_id?: number
+          last_sequence_id?: string
           table_name?: string
           updated_at?: string | null
         }
@@ -383,19 +372,19 @@ export type Database = {
           last_triggered_by: string | null
           table_name: string
           updated_at: string
-          version: number
+          version: string
         }
         Insert: {
           last_triggered_by?: string | null
           table_name: string
           updated_at?: string
-          version?: number
+          version?: string
         }
         Update: {
           last_triggered_by?: string | null
           table_name?: string
           updated_at?: string
-          version?: number
+          version?: string
         }
         Relationships: []
       }
@@ -2058,6 +2047,14 @@ export type Database = {
       fn_create_consistent_snapshot: {
         Args: { p_table_name: string }
         Returns: undefined
+      }
+      fn_pack_data_version: {
+        Args: { p_date: string; p_seq: number }
+        Returns: string
+      }
+      fn_unpack_data_version: {
+        Args: { p_version: string }
+        Returns: Record<string, unknown>
       }
       get_shared_order_details: {
         Args: { p_identifier: string; p_token: string }

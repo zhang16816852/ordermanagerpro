@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -8,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { X, Plus } from 'lucide-react';
 import { UseFormReturn } from 'react-hook-form';
 import { supabase } from '@/integrations/supabase/client';
+import { useSpecStore } from '@/store/useSpecStore';
 
 interface CategorySelectFieldProps {
     form: UseFormReturn<any>;
@@ -16,26 +16,7 @@ interface CategorySelectFieldProps {
 export function CategorySelectField({ form }: CategorySelectFieldProps) {
     const selectedCategoryIds = form.watch('category_ids') || [];
 
-    const { data: categories = [] } = useQuery({
-        queryKey: ['categories'],
-        queryFn: async () => {
-            const { data, error } = await (supabase
-                .from('categories' as any) as any)
-                .select('*')
-                .order('sort_order', { ascending: true });
-            if (error) return [];
-            return data;
-        },
-    });
-
-    const { data: categoryHierarchy = [] } = useQuery({
-        queryKey: ['category_hierarchy'],
-        queryFn: async () => {
-            const { data, error } = await (supabase.from('category_hierarchy' as any) as any).select('*');
-            if (error) return [];
-            return data;
-        },
-    });
+    const { categories, categoryHierarchy } = useSpecStore();
 
     // Build flat tree for select using the hierarchy table
     const categoryOptions = useMemo(() => {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useProductCache } from '@/hooks/useProductCache';
+import { useBrands } from '@/hooks/useBrands';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -47,19 +48,7 @@ export default function AdminBrandPricing() {
   const [priceEntries, setPriceEntries] = useState<Record<string, PriceEntry>>({});
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
 
-  // 取得所有品牌
-  const { data: brands = [], isLoading: brandsLoading } = useQuery({
-    queryKey: ['all-brands'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('stores')
-        .select('brand')
-        .not('brand', 'is', null);
-      if (error) throw error;
-      const uniqueBrands = [...new Set(data.map(s => s.brand).filter(Boolean))] as string[];
-      return uniqueBrands.sort();
-    },
-  });
+  const { brands = [], isLoading: brandsLoading } = useBrands();
 
   // 取得選定品牌的現有價格（包含變體）
   const { data: existingPrices = [] } = useQuery({
@@ -281,14 +270,14 @@ export default function AdminBrandPricing() {
               </SelectTrigger>
               <SelectContent>
                 {brands.map(brand => (
-                  <SelectItem key={brand} value={brand}>{brand}</SelectItem>
+                  <SelectItem key={brand.id} value={brand.name}>{brand.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <span className="text-muted-foreground self-center">或</span>
             <Input
               placeholder="輸入新品牌名稱"
-              value={selectedBrand && !brands.includes(selectedBrand) ? selectedBrand : ''}
+              value={selectedBrand && !brands.some(b => b.name === selectedBrand) ? selectedBrand : ''}
               onChange={(e) => setSelectedBrand(e.target.value)}
               className="w-64"
             />

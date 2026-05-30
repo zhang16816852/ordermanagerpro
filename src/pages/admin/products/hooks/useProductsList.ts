@@ -40,15 +40,7 @@ export function useProductsList() {
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
 
-    // --- Queries ---
-    const { data: categoryHierarchy = [] } = useQuery({
-        queryKey: ['category_hierarchy'],
-        queryFn: async () => {
-            const { data, error } = await (supabase.from('category_hierarchy' as any) as any).select('*');
-            if (error) return [];
-            return data;
-        },
-    });
+    const { categories, categoryHierarchy } = useSpecStore();
 
     // Helper: Get all child category IDs (inclusive)
     const subCategoryIds = useMemo(() => {

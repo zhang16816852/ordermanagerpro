@@ -104,28 +104,8 @@ export function CatalogSidebar({
 }: CatalogSidebarProps) {
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
-    const { data: categories = [] } = useQuery<Category[]>({
-        queryKey: ['categories'],
-        queryFn: async () => {
-            const { data, error } = await supabase.from('categories')
-                .select('*')
-                .order('sort_order', { ascending: true });
-            if (error) return [];
-            return data as Category[];
-        },
-    });
-
-    const { data: categoryHierarchy = [] } = useQuery({
-        queryKey: ['category_hierarchy'],
-        queryFn: async () => {
-            const { data, error } = await (supabase.from('category_hierarchy' as any) as any).select('*');
-            if (error) return [];
-            return data;
-        },
-    });
-
     const { brands } = useBrands();
-    const { fetchSpecs, specDefinitions, categoryLinks } = useSpecStore();
+    const { fetchSpecs, specDefinitions, categoryLinks, categories, categoryHierarchy } = useSpecStore();
 
     useEffect(() => {
         if (specDefinitions.length === 0 || categoryLinks.length === 0) {
@@ -201,7 +181,6 @@ export function CatalogSidebar({
 
         // 從 specFields 取出可用的規格 ID 與名稱，用於過濾產品的 spec_values
         const definedSpecIds = specFields.map(f => f.id);
-        const definedSpecNames = specFields.map(f => f.name);
         console.log('✅ definedSpecIds:', definedSpecIds);
 
         let matchedProductCount = 0;
@@ -209,16 +188,10 @@ export function CatalogSidebar({
         products.forEach((p) => {
             // 步驟二：檢查產品是否屬於當前選擇的分類或其子分類
             const pCategoryIds = p.category_ids || [];
-            const pCategoryId = p.category_id;
 
             if (selectedCategory) {
                 const hasMatchInLinks = pCategoryIds.some((id: string) => subCategoryIds.has(id));
-                const hasMatchInLegacy = subCategoryIds.has(pCategoryId || '') || p.category_names?.some(name => {
-                    const matchedCat = categories.find(c => c.name === name);
-                    return matchedCat && subCategoryIds.has(matchedCat.id);
-                });
-
-                if (!hasMatchInLinks && !hasMatchInLegacy) return;
+                if (!hasMatchInLinks) return;
             }
 
             matchedProductCount++;
@@ -235,8 +208,8 @@ export function CatalogSidebar({
                 // key 格式為 parentId:specId:instanceUuid，取第二段作為 specId
                 const specId = parts.length === 3 ? parts[1] : (parts.length === 2 ? parts[1] : key);
 
-                // 若分類已設定規格定義，則只保留對應的規格（支援 ID 或名稱匹配）
-                if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId) && !definedSpecNames.includes(specId)) {
+                // 若分類已設定規格定義，則只保留對應的規格（支援 ID 匹配）
+                if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId)) {
                     console.log(`    ⛔ key="${key}" specId="${specId}" 不在 definedSpecIds 中，略過`);
                     return;
                 }
@@ -293,7 +266,7 @@ export function CatalogSidebar({
                     const parts = key.split(':');
                     const specId = parts.length === 3 ? parts[1] : (parts.length === 2 ? parts[1] : key);
 
-                    if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId) && !definedSpecNames.includes(specId)) return;
+                    if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId)) return;
 
                     if (!specs[key]) specs[key] = new Set();
 

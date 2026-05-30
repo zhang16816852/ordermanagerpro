@@ -8,10 +8,8 @@ export type ProductVariant = Tables<'product_variants'>;
 export interface Category {
     id: string;
     name: string;
-    parent_id: string | null;
     level?: number;
     sort_order?: number | null;
-    spec_schema?: any;
 }
 
 export interface CategoryHierarchy extends Category {

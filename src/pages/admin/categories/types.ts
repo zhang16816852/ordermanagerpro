@@ -3,9 +3,6 @@
 export interface Category {
     id: string;
     name: string;
-    // parent_id 保留相容性，實際以 category_hierarchy 資料表為主
-    parent_id: string | null;
-    spec_schema: any;
     sort_order: number;
 }
 
