@@ -796,6 +796,74 @@ export type Database = {
           },
         ]
       }
+      market_listings: {
+        Row: {
+          author_id: string
+          brand: string | null
+          condition: string | null
+          contact_method: Database["public"]["Enums"]["market_contact_method"]
+          created_at: string
+          description: string | null
+          id: string
+          images: string[] | null
+          listing_type: Database["public"]["Enums"]["market_listing_type"]
+          main_category: string
+          model: string | null
+          price: number | null
+          published_at: string | null
+          status: Database["public"]["Enums"]["market_listing_status"]
+          sub_category: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author_id: string
+          brand?: string | null
+          condition?: string | null
+          contact_method?: Database["public"]["Enums"]["market_contact_method"]
+          created_at?: string
+          description?: string | null
+          id?: string
+          images?: string[] | null
+          listing_type: Database["public"]["Enums"]["market_listing_type"]
+          main_category?: string
+          model?: string | null
+          price?: number | null
+          published_at?: string | null
+          status?: Database["public"]["Enums"]["market_listing_status"]
+          sub_category?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string
+          brand?: string | null
+          condition?: string | null
+          contact_method?: Database["public"]["Enums"]["market_contact_method"]
+          created_at?: string
+          description?: string | null
+          id?: string
+          images?: string[] | null
+          listing_type?: Database["public"]["Enums"]["market_listing_type"]
+          main_category?: string
+          model?: string | null
+          price?: number | null
+          published_at?: string | null
+          status?: Database["public"]["Enums"]["market_listing_status"]
+          sub_category?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_market_listings_author_profile"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string
@@ -844,6 +912,7 @@ export type Database = {
           order_id: string
           product_id: string
           quantity: number
+          selected_model_name: string | null
           shipped_quantity: number
           status: Database["public"]["Enums"]["order_item_status"]
           store_id: string
@@ -857,6 +926,7 @@ export type Database = {
           order_id: string
           product_id: string
           quantity?: number
+          selected_model_name?: string | null
           shipped_quantity?: number
           status?: Database["public"]["Enums"]["order_item_status"]
           store_id: string
@@ -870,6 +940,7 @@ export type Database = {
           order_id?: string
           product_id?: string
           quantity?: number
+          selected_model_name?: string | null
           shipped_quantity?: number
           status?: Database["public"]["Enums"]["order_item_status"]
           store_id?: string
@@ -1220,7 +1291,9 @@ export type Database = {
           email: string
           full_name: string | null
           id: string
+          line_id: string | null
           phone: string | null
+          telegram_id: string | null
           updated_at: string
         }
         Insert: {
@@ -1228,7 +1301,9 @@ export type Database = {
           email: string
           full_name?: string | null
           id: string
+          line_id?: string | null
           phone?: string | null
+          telegram_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -1236,7 +1311,9 @@ export type Database = {
           email?: string
           full_name?: string | null
           id?: string
+          line_id?: string | null
           phone?: string | null
+          telegram_id?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -1674,6 +1751,64 @@ export type Database = {
           },
         ]
       }
+      storefront_items: {
+        Row: {
+          created_at: string | null
+          display_name: string
+          id: string
+          model_id: string | null
+          product_id: string | null
+          slug: string
+          status: string | null
+          updated_at: string | null
+          variant_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          display_name: string
+          id?: string
+          model_id?: string | null
+          product_id?: string | null
+          slug: string
+          status?: string | null
+          updated_at?: string | null
+          variant_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          display_name?: string
+          id?: string
+          model_id?: string | null
+          product_id?: string | null
+          slug?: string
+          status?: string | null
+          updated_at?: string | null
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "storefront_items_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "device_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "storefront_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "storefront_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stores: {
         Row: {
           address: string | null
@@ -1919,6 +2054,7 @@ export type Database = {
         Args: { new_name: string; new_sku: string; target_product_id: string }
         Returns: string
       }
+      expire_market_listings: { Args: never; Returns: undefined }
       fn_create_consistent_snapshot: {
         Args: { p_table_name: string }
         Returns: undefined
@@ -1982,6 +2118,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      sync_storefront_items: {
+        Args: { p_product_id: string }
+        Returns: undefined
+      }
       upsert_brand_product_prices: {
         Args: { p_brand: string; p_products: Json }
         Returns: undefined
@@ -1993,6 +2133,9 @@ export type Database = {
     }
     Enums: {
       invitation_status: "pending" | "accepted" | "expired"
+      market_contact_method: "line" | "phone" | "telegram"
+      market_listing_status: "active" | "draft" | "completed" | "closed"
+      market_listing_type: "buy" | "sell" | "service"
       order_item_status:
         | "waiting"
         | "partial"
@@ -2144,6 +2287,9 @@ export const Constants = {
   public: {
     Enums: {
       invitation_status: ["pending", "accepted", "expired"],
+      market_contact_method: ["line", "phone", "telegram"],
+      market_listing_status: ["active", "draft", "completed", "closed"],
+      market_listing_type: ["buy", "sell", "service"],
       order_item_status: [
         "waiting",
         "partial",

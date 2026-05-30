@@ -67,6 +67,7 @@ export default function CheckoutForm({
         store_id: storeId,
         quantity: item.quantity,
         unit_price: item.price,
+        selected_model_name: item.selectedModelName || null,
       }));
 
       const { error: itemsError } = await supabase

@@ -186,10 +186,11 @@ export function useProductImport(onSuccess: () => void) {
 
         const checkModels = (modelStr: string | undefined, fieldName: string) => {
             if (!modelStr) return;
+            // 僅支援用逗號 (,) 區隔多個型號或型號群組，保留名稱內部的斜線（例如 "三星 S25+/S24+" 會被視為一整個群組名稱）
             const parts = modelStr.split(',').map(s => s.trim()).filter(Boolean);
             parts.forEach(part => {
                 let name = part;
-                let type: 'group' | 'model' | 'exclude' = 'model';
+                let type: 'group' | 'model' | 'exclude' | 'auto' = 'auto';
                 const lowerPart = part.toLowerCase();
 
                 if (lowerPart.startsWith('group:')) {
@@ -207,12 +208,30 @@ export function useProductImport(onSuccess: () => void) {
                     if (!allGroups.some(g => g.name.toLowerCase() === name.toLowerCase())) {
                         errors.push(`${fieldName}: 找不到型號群組 "${name}"`);
                     }
-                } else {
+                } else if (type === 'exclude') {
+                    if (!allDeviceModels.some(m =>
+                        (m.name?.trim().toLowerCase() === name.toLowerCase()) ||
+                        (Array.isArray(m.aliases) && m.aliases.some((a: string) => a?.trim().toLowerCase() === name.toLowerCase()))
+                    )) {
+                        errors.push(`${fieldName}: 找不到排除型號 "${name}"`);
+                    }
+                } else if (type === 'model') {
                     if (!allDeviceModels.some(m =>
                         (m.name?.trim().toLowerCase() === name.toLowerCase()) ||
                         (Array.isArray(m.aliases) && m.aliases.some((a: string) => a?.trim().toLowerCase() === name.toLowerCase()))
                     )) {
                         errors.push(`${fieldName}: 找不到型號 "${name}"`);
+                    }
+                } else {
+                    // type === 'auto'：自動判定。如果存在同名的型號群組則優先對應群組，否則對應一般型號
+                    const hasGroup = allGroups.some(g => g.name.toLowerCase() === name.toLowerCase());
+                    const hasModel = allDeviceModels.some(m =>
+                        (m.name?.trim().toLowerCase() === name.toLowerCase()) ||
+                        (Array.isArray(m.aliases) && m.aliases.some((a: string) => a?.trim().toLowerCase() === name.toLowerCase()))
+                    );
+
+                    if (!hasGroup && !hasModel) {
+                        errors.push(`${fieldName}: 找不到型號或型號群組 "${name}"`);
                     }
                 }
             });
@@ -610,14 +629,15 @@ export function useProductImport(onSuccess: () => void) {
                     if (vErr) throw vErr;
                 }
 
-                // 處理型號關聯與排除型號
+                // 6. 處理實體關聯 (Models, Groups, Exclusions)
                 const parseModelString = (modelStr: string | undefined) => {
                     const result: { modelIds: string[]; groupIds: string[]; exclusions: { model_id: string }[] } = {
                         modelIds: [],
                         groupIds: [],
                         exclusions: []
                     };
-                    if (modelStr === undefined || modelStr.trim() === '') return result;
+                    if (modelStr === undefined) return result; // 沒填或沒這欄
+                    if (modelStr.trim() === '') return result; // 故意清空
 
                     const parts = modelStr.split(',').map(s => s.trim()).filter(Boolean);
                     parts.forEach(part => {
@@ -736,6 +756,16 @@ export function useProductImport(onSuccess: () => void) {
 
             if (!batchResult.success) {
                 throw new Error(`批次匯入失敗！共有 ${batchResult.errors.length} 筆資料處理失敗。`);
+            }
+
+            // 同步每個匯入商品的前台展示
+            const importedProductIds = Array.from(productIdMap.values());
+            for (let i = 0; i < importedProductIds.length; i += 5) {
+                await Promise.all(
+                    importedProductIds.slice(i, i + 5).map(pId =>
+                        supabase.rpc('sync_storefront_items', { p_product_id: pId })
+                    )
+                );
             }
 
             // 通知版本系統：有異動，觸發前台快取全量同步

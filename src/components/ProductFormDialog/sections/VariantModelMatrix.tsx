@@ -170,6 +170,10 @@ export function VariantModelMatrix({ productId }: VariantModelMatrixProps) {
                 const { error } = await supabase.from('device_model_group_links').insert(newGroupLinks);
                 if (error) throw error;
             }
+
+            // 5. 同步前台展示虛擬商品
+            const { error: syncError } = await supabase.rpc('sync_storefront_items', { p_product_id: productId });
+            if (syncError) throw syncError;
         },
         onSuccess: () => {
             toast.success('變體型號關連已儲存');

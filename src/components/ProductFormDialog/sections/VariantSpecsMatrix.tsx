@@ -133,6 +133,10 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
             );
             const firstError = results.find(r => r.error);
             if (firstError) throw firstError.error;
+
+            // 同步前台展示虛擬商品
+            const { error: syncError } = await supabase.rpc('sync_storefront_items', { p_product_id: productId });
+            if (syncError) throw syncError;
         },
         onSuccess: () => {
             toast.success('變體規格矩陣已同步至雲端 (v6 Engine)');

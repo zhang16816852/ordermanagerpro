@@ -43,7 +43,7 @@ export function ValidationSummary({ data }: ValidationSummaryProps) {
                         {invalidRows.map((row, i) => (
                             <li key={i} className="flex gap-2">
                                 <span className="font-bold"># {safeData.indexOf(row) + 1}:</span>
-                                <span>{row.errors.join('、')}</span>
+                                <span>{Array.isArray(row.errors) ? row.errors.join('、') : String(row.errors || '')}</span>
                             </li>
                         ))}
                     </ul>

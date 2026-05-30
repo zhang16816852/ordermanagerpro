@@ -4,7 +4,7 @@ import { persist } from "zustand/middleware";
 import { ProductWithPricing, VariantWithPricing } from "@/types/product";
 
 export interface OrderDraftItem {
-  id: string; // unique key: `${productId}-${variantId || 'base'}`
+  id: string; // unique key: `${productId}-${variantId || 'base'}` or customItemId
   productId: string;
   variantId?: string;
   name: string;
@@ -14,6 +14,7 @@ export interface OrderDraftItem {
   productName: string;
   variantName?: string;
   options?: string[];
+  selectedModelName?: string;
 }
 
 export interface OrderDraft {
@@ -33,7 +34,9 @@ interface OrderDraftState {
   addItem: (
     storeId: string,
     product: ProductWithPricing,
-    variant?: VariantWithPricing
+    variant?: VariantWithPricing,
+    selectedModelName?: string,
+    customItemId?: string
   ) => void;
 
   // 更新數量
@@ -74,10 +77,15 @@ export const useOrderDraftStore = create<OrderDraftState>()(
         return get().drafts[storeId] || createEmptyDraft();
       },
 
-      addItem: (storeId, product, variant) => {
+      addItem: (storeId, product, variant, selectedModelName, customItemId) => {
         set((state) => {
           const draft = state.drafts[storeId] || createEmptyDraft();
-          const itemId = generateItemId(product.id, variant?.id);
+          
+          const isVirtual = 'physical_product_id' in product;
+          const realProductId = isVirtual ? (product as any).physical_product_id : product.id;
+          const realVariantId = isVirtual ? (product as any).physical_variant_id : variant?.id;
+          const realModelName = isVirtual ? (product as any).device_model_name : (selectedModelName || variant?.effective_model_names?.[0]);
+          const itemId = customItemId || (isVirtual ? product.id : generateItemId(product.id, variant?.id));
 
           const existingIndex = draft.items.findIndex((item) => item.id === itemId);
 
@@ -94,14 +102,11 @@ export const useOrderDraftStore = create<OrderDraftState>()(
             // 新增項目
             const newItem: OrderDraftItem = {
               id: itemId,
-              productId: product.id,
-              productName: product.name,
-              variantId: variant?.id,
-              // 如果變體名稱已經包含了產品名稱，則直接使用變體名稱，避免冗餘
-              name: variant 
-                ? (variant.name.includes(product.name) ? variant.name : `${product.name} - ${variant.name}`) 
-                : product.name,
-              variantName: variant?.name,
+              productId: realProductId,
+              productName: isVirtual ? (product as any).display_name || product.name : product.name,
+              variantId: realVariantId,
+              name: product.name,
+              variantName: variant?.name || (isVirtual ? product.name : undefined),
               sku: variant?.sku || product.sku,
               price: variant 
                 ? (variant.effective_wholesale_price ?? variant.wholesale_price) 
@@ -110,9 +115,11 @@ export const useOrderDraftStore = create<OrderDraftState>()(
               options: variant
                 ? [variant.option_1, variant.option_2, variant.option_3].filter((o): o is string => !!o)
                 : undefined,
+              selectedModelName: realModelName,
             };
             newItems = [...draft.items, newItem];
           }
+
 
           return {
             drafts: {
@@ -256,8 +263,8 @@ export function useStoreDraft(storeId: string | undefined) {
     notes: draft.notes,
     totalItems: store.getTotalItems(storeId),
     totalAmount: store.getTotalAmount(storeId),
-    addItem: (product: ProductWithPricing, variant?: VariantWithPricing) =>
-      store.addItem(storeId, product, variant),
+    addItem: (product: ProductWithPricing, variant?: VariantWithPricing, selectedModelName?: string, customItemId?: string) =>
+      store.addItem(storeId, product, variant, selectedModelName, customItemId),
     updateQuantity: (itemId: string, quantity: number) =>
       store.updateQuantity(storeId, itemId, quantity),
     removeItem: (itemId: string) => store.removeItem(storeId, itemId),
