@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '@/integrations/supabase/client';
 import { CategorySpec } from '@/hooks/useCategorySpecs';
+import { SyncManager, packVersion, formatTaipeiTime } from '@/services/syncManager';
 
 // 本地快取 Key (升級為 v2，強制清除可能損毀的舊快取)
 const SPEC_CACHE_KEY = 'specs_cache_v2';
@@ -17,13 +18,13 @@ interface SpecTrigger {
 }
 
 interface SpecCache {
-    version: number; // 儲存 lastSequenceId
+    version: string; // 儲存 lastSequenceId
     definitions: any[];
     triggers: SpecTrigger[];
     categoryLinks: any[];
     categories: any[];
     categoryHierarchy: any[];
-    categoryVersion: number; // 儲存 lastCategorySequenceId
+    categoryVersion: string; // 儲存 lastCategorySequenceId
 }
 
 function getLocalSpecCache(): SpecCache | null {
@@ -46,15 +47,15 @@ interface SpecStore {
     specMap: Map<string, CategorySpec>;
     specTriggers: SpecTrigger[];
     categoryLinks: any[];
-    specVersion: number;
+    specVersion: string;
     categories: any[];
     categoryHierarchy: any[];
-    categoryVersion: number;
+    categoryVersion: string;
     isLoading: boolean;
     invalidateCache: () => void;
     setDefinitions: (newDefs: any[]) => void;
-    fetchSpecs: (force?: boolean, incomingData?: any, version?: number) => Promise<void>;
-    fetchCategories: (force?: boolean, incomingData?: any, version?: number) => Promise<void>;
+    fetchSpecs: (force?: boolean, incomingData?: any, version?: string) => Promise<void>;
+    fetchCategories: (force?: boolean, incomingData?: any, version?: string) => Promise<void>;
 }
 
 /**
@@ -99,11 +100,11 @@ export const useSpecStore = create<SpecStore>((set, get) => {
         specMap: new Map(), // 將在下文由 buildSpecMap 初始化
         specTriggers: cache?.triggers || [],
         categoryLinks: cache?.categoryLinks || [],
-        specVersion: cache?.version || 0,
+        specVersion: cache?.version || '0',
         
         categories: cache?.categories || [],
         categoryHierarchy: cache?.categoryHierarchy || [],
-        categoryVersion: cache?.categoryVersion || 0,
+        categoryVersion: cache?.categoryVersion || '0',
 
         isLoading: false,
 
@@ -114,10 +115,10 @@ export const useSpecStore = create<SpecStore>((set, get) => {
                 specMap: new Map(),
                 specTriggers: [],
                 categoryLinks: [],
-                specVersion: 0,
+                specVersion: '0',
                 categories: [],
                 categoryHierarchy: [],
-                categoryVersion: 0
+                categoryVersion: '0'
             });
         },
 
@@ -126,7 +127,7 @@ export const useSpecStore = create<SpecStore>((set, get) => {
             set({ specDefinitions: newDefs, specMap });
         },
 
-        fetchSpecs: async (force = false, incomingData?: any, version?: number) => {
+        fetchSpecs: async (force = false, incomingData?: any, version?: string) => {
             if (get().isLoading) return;
             set({ isLoading: true });
             try {
@@ -135,14 +136,27 @@ export const useSpecStore = create<SpecStore>((set, get) => {
                 let categoryLinks = get().categoryLinks;
                 let newSequenceId = version ?? get().specVersion;
 
+                const isLocalEmpty = definitions.length === 0 || triggers.length === 0 || categoryLinks.length === 0;
+
                 if (incomingData) {
                     const { syncMode, snapshot, changes, deletedIds, serverSequenceId } = incomingData;
                     newSequenceId = serverSequenceId;
 
                     // 1. 全量快照模式 (Gap Recovery)
                     if (syncMode === 'full' && snapshot) {
-                        console.log(`[SpecStore] 📸 載入規格快照 (v${serverSequenceId})`);
+                        SyncManager.logTelemetry('📸 載入規格快照', '#e67e22', {
+                            '快照版本': serverSequenceId,
+                            '資料筆數': snapshot.length
+                        });
                         definitions = snapshot;
+
+                        // 必須同時抓取全量關聯表
+                        const [{ data: triggerData }, { data: catLinkData }] = await Promise.all([
+                            supabase.from('specification_triggers').select('*').order('priority', { ascending: false }),
+                            supabase.from('category_spec_links').select('*')
+                        ]);
+                        triggers = (triggerData || []) as unknown as SpecTrigger[];
+                        categoryLinks = catLinkData || [];
                     }
 
                     // 2. 建立 Map 進行 Smart Merge
@@ -164,10 +178,22 @@ export const useSpecStore = create<SpecStore>((set, get) => {
                         });
                     }
 
+                    // 防禦機制：如果本地為空，強補關聯資料
+                    if (categoryLinks.length === 0 || triggers.length === 0) {
+                        const [{ data: triggerData }, { data: catLinkData }] = await Promise.all([
+                            supabase.from('specification_triggers').select('*').order('priority', { ascending: false }),
+                            supabase.from('category_spec_links').select('*')
+                        ]);
+                        if (triggers.length === 0 && triggerData) triggers = triggerData as unknown as SpecTrigger[];
+                        if (categoryLinks.length === 0 && catLinkData) categoryLinks = catLinkData || [];
+                    }
+
                     const rawDefinitions = Array.from(defMap.values());
                     definitions = mergeTriggersToDefs(rawDefinitions, triggers);
-                } else if (force) {
-                    console.log(`[SpecStore] 📡 執行規格強制重整...`);
+                } else if (force || isLocalEmpty) {
+                    SyncManager.logTelemetry('📡 執行規格完整重整/修復', '#e67e22', { 
+                        '原因': force ? 'force=true' : '本地規格或關聯快取為空，啟動自我修復' 
+                    });
                     const [{ data: defData }, { data: triggerData }, { data: catLinkData }] = await Promise.all([
                         supabase.from('specification_definitions').select('*').order('sort_order', { ascending: true }),
                         supabase.from('specification_triggers').select('*').order('priority', { ascending: false }),
@@ -176,10 +202,16 @@ export const useSpecStore = create<SpecStore>((set, get) => {
                     triggers = (triggerData || []) as unknown as SpecTrigger[];
                     categoryLinks = catLinkData || [];
                     definitions = mergeTriggersToDefs(defData || [], triggers);
-                    newSequenceId = Date.now();
+                    
+                    if (isLocalEmpty && !version) {
+                        newSequenceId = get().specVersion !== '0' ? get().specVersion : packVersion(formatTaipeiTime().split(' ')[0].replace(/\//g, '').substring(2), 1);
+                    } else if (!version) {
+                        const today = formatTaipeiTime().split(' ')[0].replace(/\//g, '').substring(2);
+                        newSequenceId = packVersion(today, 1);
+                    }
                 }
 
-                const currentCache = getLocalSpecCache() || { version: 0, definitions: [], triggers: [], categoryLinks: [], categories: [], categoryHierarchy: [], categoryVersion: 0 };
+                const currentCache = getLocalSpecCache() || { version: '0', definitions: [], triggers: [], categoryLinks: [], categories: [], categoryHierarchy: [], categoryVersion: '0' };
                 setLocalSpecCache({ ...currentCache, version: newSequenceId, definitions, triggers, categoryLinks });
 
                 set({
@@ -192,7 +224,11 @@ export const useSpecStore = create<SpecStore>((set, get) => {
                 });
 
                 if (incomingData) {
-                    console.log(`%c[SpecStore] ✅ 規格同步完成 (Mode: ${incomingData.syncMode}, Seq: ${newSequenceId})`, 'color: #2ecc71; font-weight: bold');
+                    SyncManager.logTelemetry('✅ 規格同步完成', '#2ecc71', {
+                        '同步模式': incomingData.syncMode,
+                        '更新版本': newSequenceId,
+                        '定義筆數': definitions.length
+                    });
                 }
             } catch (error) {
                 console.error('[SpecStore] 🔴 規格同步失敗:', error);
@@ -200,7 +236,7 @@ export const useSpecStore = create<SpecStore>((set, get) => {
             }
         },
 
-        fetchCategories: async (force = false, incomingData?: any, version?: number) => {
+        fetchCategories: async (force = false, incomingData?: any, version?: string) => {
             if (get().isLoading) return;
             set({ isLoading: true });
             try {
@@ -208,13 +244,22 @@ export const useSpecStore = create<SpecStore>((set, get) => {
                 let categoryHierarchy = get().categoryHierarchy;
                 let newSequenceId = version ?? get().categoryVersion;
 
+                const isLocalEmpty = categories.length === 0 || categoryHierarchy.length === 0;
+
                 if (incomingData) {
                     const { syncMode, snapshot, changes, deletedIds, serverSequenceId } = incomingData;
                     newSequenceId = serverSequenceId;
 
                     if (syncMode === 'full' && snapshot) {
-                        console.log(`[SpecStore] 📸 載入分類快照 (v${serverSequenceId})`);
+                        SyncManager.logTelemetry('📸 載入分類快照', '#1abc9c', {
+                            '快照版本': serverSequenceId,
+                            '資料筆數': snapshot.length
+                        });
                         categories = snapshot;
+
+                        // 必須同時抓取全量層級表
+                        const { data: hierarchyData } = await supabase.from('category_hierarchy').select('*');
+                        categoryHierarchy = hierarchyData || [];
                     }
 
                     const catMap = new Map(categories.map(c => [c.id, c]));
@@ -230,18 +275,32 @@ export const useSpecStore = create<SpecStore>((set, get) => {
                         });
                     }
                     categories = Array.from(catMap.values());
-                } else if (force) {
-                    console.log(`[SpecStore] 📡 執行分類強制重整...`);
+
+                    // 防禦機制：若本地層級為空，強補層級資料
+                    if (categoryHierarchy.length === 0) {
+                        const { data: hierarchyData } = await supabase.from('category_hierarchy').select('*');
+                        categoryHierarchy = hierarchyData || [];
+                    }
+                } else if (force || isLocalEmpty) {
+                    SyncManager.logTelemetry('📡 執行分類完整重整/修復', '#1abc9c', { 
+                        '原因': force ? 'force=true' : '本地分類或層級快取為空，啟動自我修復' 
+                    });
                     const [{ data: catData }, { data: hierarchyData }] = await Promise.all([
                         supabase.from('categories').select('*').order('sort_order', { ascending: true }),
                         supabase.from('category_hierarchy').select('*')
                     ]);
                     categories = catData || [];
                     categoryHierarchy = hierarchyData || [];
-                    newSequenceId = Date.now();
+                    
+                    if (isLocalEmpty && !version) {
+                        newSequenceId = get().categoryVersion !== '0' ? get().categoryVersion : packVersion(formatTaipeiTime().split(' ')[0].replace(/\//g, '').substring(2), 1);
+                    } else if (!version) {
+                        const today = formatTaipeiTime().split(' ')[0].replace(/\//g, '').substring(2);
+                        newSequenceId = packVersion(today, 1);
+                    }
                 }
 
-                const currentCache = getLocalSpecCache() || { version: 0, definitions: [], triggers: [], categoryLinks: [], categories: [], categoryHierarchy: [], categoryVersion: 0 };
+                const currentCache = getLocalSpecCache() || { version: '0', definitions: [], triggers: [], categoryLinks: [], categories: [], categoryHierarchy: [], categoryVersion: '0' };
                 setLocalSpecCache({ ...currentCache, categories, categoryHierarchy, categoryVersion: newSequenceId });
 
                 set({
@@ -252,7 +311,11 @@ export const useSpecStore = create<SpecStore>((set, get) => {
                 });
 
                 if (incomingData) {
-                    console.log(`%c[SpecStore] 🏷️ 分類同步完成 (Mode: ${incomingData.syncMode}, Seq: ${newSequenceId})`, 'color: #1abc9c; font-weight: bold');
+                    SyncManager.logTelemetry('🏷️ 分類同步完成', '#1abc9c', {
+                        '同步模式': incomingData.syncMode,
+                        '更新版本': newSequenceId,
+                        '分類筆數': categories.length
+                    });
                 }
             } catch (error) {
                 console.error('[SpecStore] 🔴 分類同步失敗:', error);

@@ -93,7 +93,7 @@ export function useCategoryData() {
 
             // [關鍵修正] 手動觸發版號更新，確保 Edge Function 會通知客戶端刷新
             try {
-                const { error: rpcError } = await supabase.rpc('bump_data_version', { p_table_name: 'specs' });
+                const { error: rpcError } = await supabase.rpc('bump_data_version', { p_table_name: 'specs', p_source_table: 'category_spec_links' });
                 if (rpcError) {
                     await supabase.from('data_versions')
                         .update({ 
@@ -122,7 +122,7 @@ export function useCategoryData() {
             
             // 觸發版號更新，讓其他客戶端同步
             try {
-                await supabase.rpc('bump_data_version', { p_table_name: 'specs' });
+                await supabase.rpc('bump_data_version', { p_table_name: 'specs', p_source_table: 'categories' });
             } catch (err) {
                 console.warn('[useCategoryData] 排序版號更新失敗', err);
             }
@@ -331,7 +331,7 @@ export function useCategoryData() {
 
                     // [關鍵修正] 手動觸發版號更新
                     try {
-                        await supabase.rpc('bump_data_version', { p_table_name: 'specs' });
+                        await supabase.rpc('bump_data_version', { p_table_name: 'specs', p_source_table: 'categories' });
                     } catch (err) {
                         console.warn('[useCategoryData] 匯入版號更新失敗', err);
                     }

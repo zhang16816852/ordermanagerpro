@@ -94,7 +94,7 @@ export function useSpecData() {
             // [關鍵修正] 手動觸發版號更新，確保 Edge Function 會通知客戶端刷新
             try {
                 // 如果有設定 rpc 則優先使用，否則退回直接 update
-                const { error: rpcError } = await supabase.rpc('bump_data_version', { p_table_name: 'specs' });
+                const { error: rpcError } = await supabase.rpc('bump_data_version', { p_table_name: 'specs', p_source_table: 'specification_definitions' });
                 if (rpcError) {
                     await supabase.from('data_versions')
                         .update({ 

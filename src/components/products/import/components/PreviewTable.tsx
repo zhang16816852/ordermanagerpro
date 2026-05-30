@@ -202,6 +202,10 @@ export function PreviewTable({
                                             <div className="flex flex-col items-center gap-0.5">
                                                 {row.action === 'create' ? (
                                                     <Badge className="text-[9px] px-1 h-3.5 bg-emerald-500 hover:bg-emerald-600 scale-90">新增</Badge>
+                                                ) : (!row.diff || row.diff.length === 0) ? (
+                                                    <Badge variant="outline" className="text-[9px] px-1 h-3.5 border-slate-300 text-slate-400 bg-slate-50 scale-90">
+                                                        無變更 (跳過)
+                                                    </Badge>
                                                 ) : (
                                                     <Badge variant="outline" className="text-[9px] px-1 h-3.5 border-amber-500 text-amber-600 bg-amber-50 scale-90">
                                                         更新

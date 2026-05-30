@@ -14,21 +14,39 @@ interface DeviceModelStore {
     isLoading: boolean;
     isAdding: boolean;
     isInitialized: boolean;
-    fetchData: (force?: boolean) => Promise<void>;
+    fetchData: (force?: boolean, serverVersion?: string) => Promise<void>;
     addModel: (newModel: Partial<DeviceModel>) => Promise<DeviceModel | null>;
     getModelsByNames: (names: string[]) => DeviceModel[];
 }
 
+// Read cache helper
+const getCachedData = () => {
+    try {
+        const cache = localStorage.getItem('device_models_cache_v2');
+        if (cache) {
+            const parsed = JSON.parse(cache);
+            if (parsed && parsed.version && Array.isArray(parsed.models)) {
+                return parsed;
+            }
+        }
+    } catch (e) {
+        console.error('[DeviceModelStore] Read cache failed:', e);
+    }
+    return null;
+};
+
+const initialCache = getCachedData();
+
 export const useDeviceModelStore = create<DeviceModelStore>((set, get) => ({
-    models: [],
-    brands: [],
-    groups: [],
-    groupItems: [],
+    models: initialCache?.models || [],
+    brands: initialCache?.brands || [],
+    groups: initialCache?.groups || [],
+    groupItems: initialCache?.groupItems || [],
     isLoading: false,
     isAdding: false,
-    isInitialized: false,
+    isInitialized: !!initialCache,
 
-    fetchData: async (force = false) => {
+    fetchData: async (force = false, serverVersion?: string) => {
         if (!force && get().isInitialized) return;
 
         set({ isLoading: true });
@@ -47,11 +65,26 @@ export const useDeviceModelStore = create<DeviceModelStore>((set, get) => ({
             if (groupsRes.error) throw groupsRes.error;
             if (groupItemsRes.error) throw groupItemsRes.error;
 
+            const models = modelsRes.data || [];
+            const brands = brandsRes.data || [];
+            const groups = groupsRes.data || [];
+            const groupItems = groupItemsRes.data || [];
+
+            // Save to localStorage
+            const version = serverVersion || (initialCache?.version || '260529-0001');
+            localStorage.setItem('device_models_cache_v2', JSON.stringify({
+                version,
+                models,
+                brands,
+                groups,
+                groupItems
+            }));
+
             set({ 
-                models: modelsRes.data || [], 
-                brands: brandsRes.data || [], 
-                groups: groupsRes.data || [],
-                groupItems: groupItemsRes.data || [],
+                models, 
+                brands, 
+                groups,
+                groupItems,
                 isLoading: false, 
                 isInitialized: true 
             });
@@ -73,10 +106,23 @@ export const useDeviceModelStore = create<DeviceModelStore>((set, get) => ({
             if (error) throw error;
 
             const created = data as DeviceModel;
-            set(state => ({
-                models: [...state.models, created].sort((a, b) => a.name.localeCompare(b.name)),
-                isAdding: false
+            const updatedModels = [...get().models, created].sort((a, b) => a.name.localeCompare(b.name));
+            
+            // Also write updated models to localStorage to keep cache and state consistent
+            const currentCache = getCachedData();
+            const currentVersion = currentCache?.version || '260529-0001';
+            localStorage.setItem('device_models_cache_v2', JSON.stringify({
+                version: currentVersion,
+                models: updatedModels,
+                brands: get().brands,
+                groups: get().groups,
+                groupItems: get().groupItems
             }));
+
+            set({
+                models: updatedModels,
+                isAdding: false
+            });
             return created;
         } catch (err) {
             console.error('[DeviceModelStore] Add failed:', err);

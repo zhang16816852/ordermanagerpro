@@ -253,7 +253,7 @@ export function SpecLibraryTab() {
             // 不使用 await 阻塞 UI 渲染，讓它在背景執行
             Promise.all(promises).then(async () => {
                 // 觸發版號更新 (用於其他分頁同步)
-                const { error: rpcError } = await supabase.rpc('bump_data_version', { p_table_name: 'specs' });
+                const { error: rpcError } = await supabase.rpc('bump_data_version', { p_table_name: 'specs', p_source_table: 'specification_definitions' });
                 if (rpcError) {
                     await supabase.from('data_versions')
                         .update({ version: Date.now(), updated_at: new Date().toISOString() })

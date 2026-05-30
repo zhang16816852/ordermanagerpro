@@ -38,7 +38,10 @@ export function UnifiedProductImport({ open, onOpenChange, onSuccess }: UnifiedP
         importMutation,
         downloadTemplate,
         resetState,
-        allBrands
+        allBrands,
+        uploadProgress,
+        processedCount,
+        skippedCount
     } = useProductImport(() => {
         onSuccess?.();
         onOpenChange(false);
@@ -107,6 +110,21 @@ export function UnifiedProductImport({ open, onOpenChange, onSuccess }: UnifiedP
                         </Button>
                     )}
 
+                    {isLoading && (
+                        <div className="flex-1 max-w-md mx-6 flex flex-col justify-center">
+                            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                                <span>分批寫入資料庫中... ({processedCount}/{validRows.length})</span>
+                                <span className="font-semibold">{uploadProgress}%</span>
+                            </div>
+                            <div className="w-full bg-muted rounded-full h-2 overflow-hidden border">
+                                <div
+                                    className="bg-primary h-full transition-all duration-300 rounded-full"
+                                    style={{ width: `${uploadProgress}%` }}
+                                />
+                            </div>
+                        </div>
+                    )}
+
                     <div className="flex gap-2">
                         {step === 'preview' && (
                             <Button
@@ -114,7 +132,7 @@ export function UnifiedProductImport({ open, onOpenChange, onSuccess }: UnifiedP
                                 disabled={isLoading || validRows.length === 0}
                                 className="px-8 shadow-lg shadow-primary/20"
                             >
-                                {isLoading ? '寫入資料庫中...' : `確認匯入 ${validRows.length} 筆資料`}
+                                {isLoading ? '寫入中...' : `確認匯入 ${validRows.length} 筆資料`}
                             </Button>
                         )}
                     </div>

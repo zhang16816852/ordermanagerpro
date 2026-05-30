@@ -183,10 +183,10 @@ export function ProductDetailDialog({
     const { specDefinitions, specTriggers, categoryLinks, fetchSpecs } = useSpecStore();
 
     useEffect(() => {
-        if (open && specDefinitions.length === 0) {
+        if (open && (specDefinitions.length === 0 || categoryLinks.length === 0)) {
             fetchSpecs();
         }
-    }, [open, specDefinitions.length, fetchSpecs]);
+    }, [open, specDefinitions.length, categoryLinks.length, fetchSpecs]);
 
     const selectedVariant = useMemo(() => {
         if (!selectedVariantId || !product?.variants) return null;
@@ -481,7 +481,10 @@ export function ProductDetailDialog({
                                                         {spec.name}
                                                     </span>
                                                     <span className="font-semibold text-right text-slate-700">
-                                                        {formatSpecValue(spec.value, def, specDefinitions as any)}
+                                                        {spec.isMultiple && Array.isArray(spec.value)
+                                                            ? spec.value.map((v: any) => formatSpecValue(v, def, specDefinitions as any)).filter(Boolean).join(' / ')
+                                                            : formatSpecValue(spec.value, def, specDefinitions as any)
+                                                        }
                                                     </span>
                                                 </div>
                                             </div>

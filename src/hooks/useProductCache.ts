@@ -2,11 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Product, ProductWithDetails, ProductWithPricing, VariantWithPricing } from '@/types/product';
+import { SyncManager } from '@/services/syncManager';
 
-const PRODUCT_CACHE_KEY = 'products_cache_v2';
+const PRODUCT_CACHE_KEY = 'products_cache_v3';
 
 interface ProductCacheData {
-    version: number;
+    version: string;
     data: ProductWithDetails[];
 }
 
@@ -28,18 +29,20 @@ export const setProductCache = (cache: ProductCacheData) => {
 /**
  * [V7.5] 產品同步核心邏輯
  */
-export const syncProducts = async (incomingData?: any, version?: number): Promise<ProductWithDetails[]> => {
+export const syncProducts = async (incomingData?: any, version?: string): Promise<ProductWithDetails[]> => {
     try {
         const cache = getProductCache();
         let products = cache?.data || [];
-        let newSequenceId = version ?? (cache?.version || 0);
+        let newSequenceId = version ?? (cache?.version || '0');
 
         if (incomingData) {
-            console.log(`[ProductCache] 收到增量更新訊號 (SyncMode: ${incomingData.syncMode})，準備執行全量拉取以涵蓋關聯資料`);
+            SyncManager.logTelemetry('📡 產品快取收到增量更新訊號', '#3498db', {
+                '同步模式': incomingData.syncMode,
+                '伺服器版本': incomingData.serverSequenceId ?? newSequenceId,
+                '動作': '準備全量拉取以涵蓋關聯資料'
+            });
             newSequenceId = incomingData.serverSequenceId ?? newSequenceId;
         }
-
-        console.log(`[ProductCache] 📡 執行更新 (V8.0 統一關聯表)...`);
 
             // 1. 基本資料抓取 (Products + Variants)
             const { data: productsData, error: productsError } = await supabase.from('products')
@@ -62,7 +65,7 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
                 supabase.from('device_model_links').select('entity_id, model_id, device_models(id, name, aliases)'),
                 supabase.from('device_model_group_links').select('entity_id, group_id, device_model_groups(id, name, device_model_group_items(device_models(id, name, aliases)))'),
                 supabase.from('device_model_exclusions').select('entity_id, model_id, device_models(id, name, aliases)'),
-                supabase.from('entity_spec_values').select('*').eq('lifecycle_state', 'active'),
+                supabase.from('entity_spec_values').select('*'),
                 supabase.from('product_images').select('entity_type, entity_id, url').eq('is_cover', true)
             ]);
 
@@ -89,7 +92,8 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
             allSpecs?.forEach((sv: any) => {
                 if (!specsMap.has(sv.entity_id)) specsMap.set(sv.entity_id, {});
                 const entitySpecs = specsMap.get(sv.entity_id)!;
-                const pathKey = `${sv.instance_uuid}:${sv.spec_id}${sv.parent_id ? `:${sv.parent_id}` : ''}`;
+                const parentId = sv.parent_id || 'root';
+                const pathKey = `${parentId}:${sv.spec_id}:${sv.instance_uuid}`;
                 entitySpecs[pathKey] = sv.value;
             });
 
@@ -178,6 +182,10 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
             }) as unknown as ProductWithDetails[];
 
         setProductCache({ version: newSequenceId, data: products });
+        SyncManager.logTelemetry('✅ 產品快取同步完成', '#2ecc71', {
+            '快取版本': newSequenceId,
+            '產品筆數': products.length
+        });
         return products;
     } catch (error) {
         console.error('[ProductCache] 🔴 同步失敗:', error);
@@ -191,15 +199,51 @@ export const syncProducts = async (incomingData?: any, version?: number): Promis
 export const useProductCache = (storeId?: string | null) => {
     const [products, setProducts] = useState<ProductWithDetails[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [version, setVersion] = useState(0);
+    const [version, setVersion] = useState<string>('0');
 
     useEffect(() => {
+        // 監聽來自 SyncManager 的樂觀更新事件，實現即時反應
+        const handleOptimisticUpdate = (e: Event) => {
+            const customEvent = e as CustomEvent;
+            if (customEvent.detail) {
+                setProducts(customEvent.detail.data);
+                setVersion(customEvent.detail.version);
+            }
+        };
+        window.addEventListener('optimistic-product-cache-update', handleOptimisticUpdate);
+
         const cache = getProductCache();
         if (cache) {
             setProducts(cache.data);
             setVersion(cache.version);
+
+            // 如果快取中所有產品的 spec_values 都是空的，代表是舊版快取，強制重新 fetch
+            const allEmpty = cache.data.every((p: any) => !p.spec_values || Object.keys(p.spec_values).length === 0);
+            if (allEmpty && cache.data.length > 0) {
+                setIsLoading(true);
+                syncProducts().then(updated => {
+                    setProducts(updated);
+                    const newCache = getProductCache();
+                    if (newCache) setVersion(newCache.version);
+                    setIsLoading(false);
+                });
+            } else {
+                setIsLoading(false);
+            }
+        } else {
+            // 沒有快取，主動 fetch 一次
+            setIsLoading(true);
+            syncProducts().then(updated => {
+                setProducts(updated);
+                const newCache = getProductCache();
+                if (newCache) setVersion(newCache.version);
+                setIsLoading(false);
+            });
         }
-        setIsLoading(false);
+
+        return () => {
+            window.removeEventListener('optimistic-product-cache-update', handleOptimisticUpdate);
+        };
     }, []);
 
     const refresh = async () => {

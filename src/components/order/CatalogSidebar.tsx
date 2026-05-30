@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,6 +12,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { deserializeSpecs, formatSpecValue } from "@/utils/specLogic";
 import { useBrands } from "@/hooks/useBrands";
 import { Slider } from "@/components/ui/slider";
+import { useCategorySpecs } from "@/hooks/useCategorySpecs";
+import { useSpecStore } from "@/store/useSpecStore";
 
 // 解析字串中的所有數字
 const extractNumbers = (str: string) => {
@@ -71,6 +73,14 @@ function RangeSliderFilter({
 }
 
 
+function getFilterConfig(specDef: any) {
+    if (!specDef || !specDef.configuration) return undefined;
+    const config = Array.isArray(specDef.configuration)
+        ? specDef.configuration[0]
+        : specDef.configuration;
+    return config?.filter_config;
+}
+
 interface CatalogSidebarProps {
     products: ProductWithPricing[];
     selectedCategory: string | null; // This will now be category ID
@@ -115,6 +125,13 @@ export function CatalogSidebar({
     });
 
     const { brands } = useBrands();
+    const { fetchSpecs, specDefinitions, categoryLinks } = useSpecStore();
+
+    useEffect(() => {
+        if (specDefinitions.length === 0 || categoryLinks.length === 0) {
+            fetchSpecs();
+        }
+    }, [fetchSpecs, specDefinitions.length, categoryLinks.length]);
 
     //console.log("分類產品", products)
     const categoryTree = useMemo(() => {
@@ -151,92 +168,110 @@ export function CatalogSidebar({
         }));
     }, [categories, categoryHierarchy]);
 
-    // Fetch specs for the selected category
-    const { data: specFields = [] } = useQuery({
-        queryKey: ['category_specs', selectedCategory],
-        enabled: !!selectedCategory,
-        queryFn: async () => {
-            const { data, error } = await (supabase
-                .from('category_spec_links' as any) as any)
-                .select(`
-                    specification_definitions (
-                        id,
-                        name,
-                        type,
-                        options,
-                        configuration
-                    )
-                `)
-                .eq('category_id', selectedCategory);
+    // Fetch specs for the selected category from store/cache
+    const { data: specFields = [] } = useCategorySpecs(selectedCategory ? [selectedCategory] : []);
 
-            if (error) return [];
-            return (data || []).map((d: any) => ({
-                id: d.specification_definitions.id,
-                name: d.specification_definitions.name,
-                type: d.specification_definitions.type,
-                options: d.specification_definitions.options,
-                configuration: d.specification_definitions.configuration
-            }));
-        },
-    });
-
-    // Extract available specs for the selected category
+    // 根據選中分類，從產品資料中提取可用的規格篩選項
     const availableSpecs = useMemo(() => {
         const specs: Record<string, Set<string>> = {};
 
-        // Use the fetched spec IDs as the keys for filtering spec_values
+        // 步驟一：計算選中分類及其所有子分類的 ID 集合（包含自己）
+        const subCategoryIds = new Set<string>();
+        if (selectedCategory) {
+            subCategoryIds.add(selectedCategory);
+            const queue = [selectedCategory];
+            while (queue.length > 0) {
+                const parentId = queue.shift();
+                categoryHierarchy
+                    .filter((h: any) => h.parent_id === parentId)
+                    .forEach((h: any) => {
+                        const childId = h.child_id;
+                        if (!subCategoryIds.has(childId)) {
+                            subCategoryIds.add(childId);
+                            queue.push(childId);
+                        }
+                    });
+            }
+        }
+
+        console.group('🔍 [CatalogSidebar] availableSpecs 計算');
+        console.log('📂 選中分類 ID:', selectedCategory);
+        console.log('📂 子分類 IDs:', Array.from(subCategoryIds));
+        console.log('📋 分類規格定義 (specFields):', specFields.map(f => ({ id: f.id, name: f.name, type: f.type })));
+
+        // 從 specFields 取出可用的規格 ID 與名稱，用於過濾產品的 spec_values
         const definedSpecIds = specFields.map(f => f.id);
         const definedSpecNames = specFields.map(f => f.name);
-        const selectedCatDetails = categories.find(c => c.id === selectedCategory);
+        console.log('✅ definedSpecIds:', definedSpecIds);
+
+        let matchedProductCount = 0;
 
         products.forEach((p) => {
-            // 檢查產品是否屬於當前選擇的分類
+            // 步驟二：檢查產品是否屬於當前選擇的分類或其子分類
             const pCategoryIds = p.category_ids || [];
             const pCategoryId = p.category_id;
 
             if (selectedCategory) {
-                const hasMatchInLinks = pCategoryIds.includes(selectedCategory);
-                const hasMatchInLegacy = pCategoryId === selectedCategory || p.category_names?.includes(selectedCatDetails?.name || '');
+                const hasMatchInLinks = pCategoryIds.some((id: string) => subCategoryIds.has(id));
+                const hasMatchInLegacy = subCategoryIds.has(pCategoryId || '') || p.category_names?.some(name => {
+                    const matchedCat = categories.find(c => c.name === name);
+                    return matchedCat && subCategoryIds.has(matchedCat.id);
+                });
 
                 if (!hasMatchInLinks && !hasMatchInLegacy) return;
             }
 
-            // Scan product spec_values
-            const pSettings = deserializeSpecs(p.spec_values);
-            Object.entries(pSettings).forEach(([key, value]) => {
+            matchedProductCount++;
+
+            // 步驟三：掃描產品層級的 spec_values
+            // spec_values 在快取中已是 {pathKey: value} 格式，直接遍歷即可（不需 deserializeSpecs）
+            const pSpecValues: Record<string, any> = p.spec_values && typeof p.spec_values === 'object' && !Array.isArray(p.spec_values)
+                ? p.spec_values
+                : {};
+            console.log(`  📦 產品 "${p.name}"，spec_values:`, pSpecValues, '(筆數:', Object.keys(pSpecValues).length, ')');
+
+            Object.entries(pSpecValues).forEach(([key, value]) => {
                 const parts = key.split(':');
+                // key 格式為 parentId:specId:instanceUuid，取第二段作為 specId
                 const specId = parts.length === 3 ? parts[1] : (parts.length === 2 ? parts[1] : key);
 
-                // key could be ID or Name (for legacy data)
-                // We check if it matches either the defined IDs or Names
-                if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId) && !definedSpecNames.includes(specId)) return;
+                // 若分類已設定規格定義，則只保留對應的規格（支援 ID 或名稱匹配）
+                if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId) && !definedSpecNames.includes(specId)) {
+                    console.log(`    ⛔ key="${key}" specId="${specId}" 不在 definedSpecIds 中，略過`);
+                    return;
+                }
 
                 if (!specs[key]) specs[key] = new Set();
 
                 if (value !== null && value !== undefined) {
                     const specDef = specFields.find(f => f.id === specId || f.name === specId);
 
-                    // 1. 讀取 filter_config
-                    const filterConfig = (specDef as any)?.configuration?.filter_config;
-
-                    // 2. 如果有明確設定 enabled: false，直接略過
-                    if (filterConfig && filterConfig.enabled === false) return;
-
-                    // 3. 如果沒有設定 filter_config，則套用預設的「自動判斷隱藏」邏輯
-                    if (!filterConfig) {
-                        // 如果找不到規格定義，或是型態為文字/表格，則不顯示於篩選器
-                        if (!specDef || specDef.type === 'text' || specDef.type === 'table') return;
+                    // heading / text / table 類型不適合做篩選，直接跳過
+                    if (specDef && (specDef.type === 'heading' || specDef.type === 'text' || specDef.type === 'table')) {
+                        console.log(`    ⛔ key="${key}" type="${specDef.type}" 不適合篩選，略過`);
+                        return;
                     }
 
-                    specs[key].add(formatSpecValue(value, specDef as any, specFields as any));
+                    // 讀取 filter_config（相容 array 與 object 兩種 DB 格式）
+                    const filterConfig = getFilterConfig(specDef);
+
+                    // 只有明確設定 enabled: false 時才排除，未設定視為允許
+                    if (filterConfig && filterConfig.enabled === false) {
+                        console.log(`    ⛔ key="${key}" filter_config.enabled=false，略過`);
+                        return;
+                    }
+
+                    const formatted = formatSpecValue(value, specDef as any, specFields as any);
+                    console.log(`    ✅ key="${key}" specId="${specId}" value=${JSON.stringify(value)} → 格式化: "${formatted}"`);
+                    specs[key].add(formatted);
                 }
             });
 
-            // Scan variant spec_values and core options
+            // 步驟四：掃描變體的 core options 與 spec_values
             p.variants?.forEach(v => {
                 const vSettings = deserializeSpecs(v.spec_values);
 
-                // 1. Scan core options (option_1, option_2, option_3)
+                // 4-1. 收集核心規格選項 (option_1 / option_2 / option_3)
                 if (v.option_1) {
                     if (!specs['core:option_1']) specs['core:option_1'] = new Set();
                     specs['core:option_1'].add(v.option_1);
@@ -250,8 +285,11 @@ export function CatalogSidebar({
                     specs['core:option_3'].add(v.option_3);
                 }
 
-                // 2. Scan spec_values
-                Object.entries(vSettings).forEach(([key, value]) => {
+                // 4-2. 掃描變體的 spec_values（同樣已是 {pathKey: value} 格式）
+                const vSpecValues: Record<string, any> = v.spec_values && typeof v.spec_values === 'object' && !Array.isArray(v.spec_values)
+                    ? v.spec_values
+                    : {};
+                Object.entries(vSpecValues).forEach(([key, value]) => {
                     const parts = key.split(':');
                     const specId = parts.length === 3 ? parts[1] : (parts.length === 2 ? parts[1] : key);
 
@@ -262,11 +300,12 @@ export function CatalogSidebar({
                     if (value !== null && value !== undefined) {
                         const specDef = specFields.find(f => f.id === specId || f.name === specId);
 
-                        const filterConfig = (specDef as any)?.configuration?.filter_config;
+                        // heading / text / table 類型不適合做篩選
+                        if (specDef && (specDef.type === 'heading' || specDef.type === 'text' || specDef.type === 'table')) return;
+
+                        const filterConfig = getFilterConfig(specDef);
+                        // 只有明確設定 enabled: false 時才跳過
                         if (filterConfig && filterConfig.enabled === false) return;
-                        if (!filterConfig) {
-                            if (!specDef || specDef.type === 'text' || specDef.type === 'table') return;
-                        }
 
                         specs[key].add(formatSpecValue(value, specDef as any, specFields as any));
                     }
@@ -274,15 +313,20 @@ export function CatalogSidebar({
             });
         });
 
-        // Convert sets to sorted arrays
+        console.log(`📦 符合分類的產品數: ${matchedProductCount} / ${products.length}`);
+
+        // 步驟五：將 Set 轉為排序後的陣列
         const result: Record<string, string[]> = {};
         Object.entries(specs).forEach(([key, values]) => {
             if (values.size > 0) {
                 result[key] = Array.from(values).sort();
             }
         });
+
+        console.log('🎯 最終 availableSpecs:', result);
+        console.groupEnd();
         return result;
-    }, [products, selectedCategory, categories, specFields]);
+    }, [products, selectedCategory, categories, specFields, categoryHierarchy]);
 
     const hasActiveFilters = selectedCategory !== null || Object.keys(selectedSpecs).length > 0 || selectedBrands.length > 0;
 
@@ -334,7 +378,6 @@ export function CatalogSidebar({
             </div>
         );
     };
-
     return (
         <div className="flex flex-col h-full bg-card border rounded-xl overflow-hidden shadow-sm">
             <div className="p-4 border-b bg-muted/30 flex items-center justify-between">
@@ -411,13 +454,15 @@ export function CatalogSidebar({
                     <Separator />
 
                     {/* 進階規格：僅在選擇分類後才顯示 */}
+
                     {selectedCategory !== null && (
                         <div className="space-y-5">
                             <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">進階規格</h3>
                             {Object.entries(availableSpecs).length > 0 ? (
                                 Object.entries(availableSpecs).map(([key, values]) => {
                                     // 將 key（ID 或 Name）解析為顯示名稱
-                                    const specId = key.includes(':') ? key.split(':').pop()! : key;
+                                    const parts = key.split(':');
+                                    const specId = parts.length === 3 ? parts[1] : (parts.length === 2 ? parts[1] : key);
 
                                     // 處理核心選項 (Core Options)
                                     if (key.startsWith('core:')) {
@@ -460,16 +505,15 @@ export function CatalogSidebar({
 
                                     const specDef = specFields.find(f => f.id === specId || f.name === specId);
 
-                                    const filterConfig = (specDef as any)?.configuration?.filter_config;
-                                    // 如果找不到規格定義，或者明確設定不啟用篩選，則不渲染
+                                    const filterConfig = getFilterConfig(specDef);
+                                    // 找不到規格定義，或明確設定不啟用篩選，則不渲染
                                     if (!specDef || (filterConfig && filterConfig.enabled === false)) return null;
 
                                     let displayMode = filterConfig?.display_mode || 'auto';
 
                                     // 處理 auto 或 沒設定時的預設行為
                                     if (displayMode === 'auto') {
-                                        if (specDef.type === 'text' || specDef.type === 'table') return null;
-                                        // 如果是數值類型且值很多，預設切換為區間
+                                        // number_with_unit 且選項很多時，預設切換為區間
                                         if (specDef.type === 'number_with_unit' && values.length > 5) {
                                             displayMode = 'range';
                                         } else {

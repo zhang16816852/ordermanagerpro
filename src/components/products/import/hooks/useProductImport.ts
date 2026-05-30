@@ -157,7 +157,7 @@ export function useProductImport(onSuccess: () => void) {
         const errors: string[] = [];
         if (!row.product_sku) errors.push('產品 SKU 為必填');
         if (!row.product_name) errors.push('產品名稱為必填');
-        
+
         const is_variant = typeof (row as any).is_variant === 'boolean'
             ? (row as any).is_variant
             : !!(row.variant_sku || row.variant_name);
@@ -257,7 +257,7 @@ export function useProductImport(onSuccess: () => void) {
                 const rawParsed = parsedRows.map(row => {
                     const is_variant = !!row.is_variant;
                     const has_variant_sku = !!(row['變體 SKU'] || row.variant_sku);
-                    
+
                     const baseRow: ImportRow = {
                         product_sku: String(row.sku || row.product_sku || '').trim(),
                         product_name: String(row.name || row.product_name || '').trim(),
@@ -266,18 +266,18 @@ export function useProductImport(onSuccess: () => void) {
                         series: String(row.series || '').trim(),
                         description: String(row.description || '').trim(),
                         category: String(row.category || row._categoryName || '').trim(),
-                        
+
                         // 主商品欄位 (只有在非變體列時才有值)
                         base_wholesale_price: !is_variant ? (parseFloat(row.wholesale_price || row.base_wholesale_price) || 0) : 0,
                         base_retail_price: !is_variant ? (parseFloat(row.retail_price || row.base_retail_price) || 0) : 0,
                         product_status: !is_variant ? parseStatus(row.status || row.product_status) : 'active',
-                        
+
                         // 變體欄位
-                        variant_sku: is_variant 
-                            ? String(row['變體 SKU'] || row.variant_sku || '').trim() 
+                        variant_sku: is_variant
+                            ? String(row['變體 SKU'] || row.variant_sku || '').trim()
                             : (has_variant_sku ? '' : String(row.sku || row.product_sku || '').trim()),
-                        variant_name: is_variant 
-                            ? String(row['變體名稱'] || row.variant_name || '').trim() 
+                        variant_name: is_variant
+                            ? String(row['變體名稱'] || row.variant_name || '').trim()
                             : (has_variant_sku ? '' : String(row.name || row.product_name || '').trim()),
                         option_1: String(row['規格 1'] || row.option_1 || '').trim(),
                         option_2: String(row['規格 2'] || row.option_2 || '').trim(),
@@ -286,10 +286,10 @@ export function useProductImport(onSuccess: () => void) {
                         variant_retail_price: parseFloat(row.variant_retail_price || row.retail_price) || undefined,
                         variant_status: parseStatus(row.variant_status || row.status),
                         barcode: normalizeBarcode(row.barcode),
-                        
+
                         device_models: !is_variant ? String(row['適用型號'] || row.device_models || '').trim() : '',
                         variant_device_models: is_variant ? String(row['適用型號'] || row.device_models || row.variant_device_models || '').trim() : '',
-                        
+
                         is_variant,
                         product_id: !is_variant ? row.id : undefined,
                         variant_id: is_variant ? row.id : undefined,
@@ -320,7 +320,7 @@ export function useProductImport(onSuccess: () => void) {
 
                 const { data: existingProducts } = await supabase.from('products').select('*')
                     .or(`sku.in.(${allSkus.join(',')})${allIds.length > 0 ? `,id.in.(${allIds.join(',')})` : ''}`) as { data: any[] | null };
-                
+
                 const { data: existingVariants } = await supabase.from('product_variants').select('*')
                     .or(`sku.in.(${allVariantSkus.join(',')})${allIds.length > 0 ? `,id.in.(${allIds.join(',')})` : ''}`) as { data: any[] | null };
 
@@ -337,7 +337,7 @@ export function useProductImport(onSuccess: () => void) {
                         row.spec_values = product.spec_values;
                         if (product.name !== row.product_name) diff.push('產品名稱');
                         if (!row.is_variant && product.base_wholesale_price !== row.base_wholesale_price) diff.push('批發價');
-                        
+
                         const incomingSpecs = row._specs || {};
                         const currentSpecs = deserializeSpecs(product.spec_values);
                         const hasSpecDiff = Object.entries(incomingSpecs).some(([id, val]) => {
@@ -373,10 +373,10 @@ export function useProductImport(onSuccess: () => void) {
         setFilterCategory('all');
     }, []);
 
-    const updateRow = useCallback((index: number, updatedRow: ImportRow) => {
+    const updateRow = useCallback((index: number, field: keyof ImportRow, value: any) => {
         setImportData(prev => {
             const next = [...prev];
-            next[index] = { ...updatedRow };
+            next[index] = { ...next[index], [field]: value };
             return next;
         });
     }, []);
@@ -385,162 +385,66 @@ export function useProductImport(onSuccess: () => void) {
         setImportData(prev => prev.filter((_, i) => i !== index));
     }, []);
 
+    // 新增狀態用以追蹤批次上傳進度與狀態
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [processedCount, setProcessedCount] = useState(0);
+    const [skippedCount, setSkippedCount] = useState(0);
+
     const importMutation = useMutation({
         mutationFn: async () => {
+            setUploadProgress(0);
+            setProcessedCount(0);
+            setSkippedCount(0);
+
+            // A. 優先進行一次全域版本確認與強同步，確保本地快取為最新狀態
+            const { SyncManager } = await import('@/services/syncManager');
+            SyncManager.logTelemetry('📡 匯入前執行強制同步校驗', '#9b59b6', {
+                '觸發點': '匯入作業啟動',
+                '動作': '強制全量刷新所有快取'
+            });
+            await SyncManager.performGlobalDataSync(true);
+
             const validRows = importData.filter(r => r.isValid);
-            
-            // 1. 建立產品 Map
-            const uniqueProductsMap = new Map<string, ImportRow>();
-            validRows.forEach(row => {
-                const sku = row.product_sku;
-                const existing = uniqueProductsMap.get(sku);
-                
-                // 取得分類 ID (從明確的 category_id，或是從 _categoryName / category 對應名稱)
-                const getCatId = (cName: string | undefined) => categories.find(c => c.name === cName?.split(',')[0].trim())?.id;
-                const catId = row.category_id || getCatId((row as any)._categoryName) || getCatId(row.category);
 
-                if (!existing) {
-                    const newRow = { ...row, has_variants: false, _categoryIds: [], _multiSpecs: {} };
-                    if (catId) {
-                        newRow._categoryIds.push(catId);
-                        if (row._specs) newRow._multiSpecs![catId] = { ...row._specs };
-                    }
-                    uniqueProductsMap.set(sku, newRow);
-                } else {
-                    const merged = { ...existing };
-                    if (!row.is_variant) {
-                        Object.assign(merged, row);
-                    }
-                    merged.has_variants = existing.has_variants || row.is_variant;
-                    merged._categoryIds = [...(existing._categoryIds || [])];
-                    if (catId && !merged._categoryIds.includes(catId)) {
-                        merged._categoryIds.push(catId);
-                    }
-                    merged._multiSpecs = { ...(existing._multiSpecs || {}) };
-                    if (catId && row._specs) {
-                        merged._multiSpecs[catId] = { ...(merged._multiSpecs[catId] || {}), ...row._specs };
-                    }
-                    uniqueProductsMap.set(sku, merged);
-                }
-            });
+            // B. 零異動比對過濾器定義
+            const isRowChanged = (row: ImportRow) => {
+                // 如果是新增，必定有異動
+                if (row.action === 'create') return true;
+                // 如果 diff 陣列有長度，代表有異動
+                if (row.diff && row.diff.length > 0) return true;
+                return false;
+            };
 
-            // 標註是否有變體
-            validRows.forEach(row => {
-                if (row.is_variant || (row.variant_sku && row.variant_sku !== row.product_sku)) {
-                    const p = uniqueProductsMap.get(row.product_sku);
-                    if (p) p.has_variants = true;
-                }
-            });
+            // 呼叫全域的 BatchProcessor 進行分批寫入
+            const { BatchProcessor } = await import('@/services/batchProcessor');
 
-            // 2. 準備規格字典
+            // 1. 準備規格與分類字典
             const { data: specDefsData } = await supabase.from('specification_definitions').select('*');
             const specMap = new Map(specDefsData?.map(s => [s.id, s]) || []);
 
-            // 3. 處理產品寫入
-            const productsToInsert = Array.from(uniqueProductsMap.values()).map(row => {
-                const data: any = {
-                    sku: row.product_sku,
-                    name: row.product_name,
-                    description: row.description || null,
-                    brand_id: row.brand_id || null,
-                    model: row.model || null,
-                    series: row.series || null,
-                    base_wholesale_price: row.base_wholesale_price,
-                    base_retail_price: row.base_retail_price,
-                    status: row.product_status,
-                    has_variants: row.has_variants
-                };
-                if (row.product_id) data.id = row.product_id;
+            const uploader = async (chunk: ImportRow[]) => {
+                // 建立該 chunk 的產品與變體 map
+                const chunkProductsMap = new Map<string, ImportRow>();
+                chunk.forEach(row => {
+                    const sku = row.product_sku;
+                    const existing = chunkProductsMap.get(sku);
 
-                return { 
-                    data, 
-                    row 
-                };
-            });
-
-            // 過濾掉 category 欄位（因為資料表不存在此欄位）
-            const productsUpsertData = productsToInsert.map(p => {
-                const { category, ...rest } = (p.data as any);
-                return rest;
-            });
-
-            const { error: pErr } = await supabase.from('products').upsert(productsUpsertData, { onConflict: 'sku' });
-            if (pErr) throw pErr;
-
-            const { data: products } = await supabase.from('products').select('id, sku').in('sku', Array.from(uniqueProductsMap.keys()));
-            const productIdMap = new Map(products?.map(p => [p.sku, p.id]) || []);
-
-            // 4. 同步產品規格與分類關聯
-            await Promise.all(productsToInsert.map(async p => {
-                const pId = productIdMap.get(p.data.sku);
-                if (!pId) return;
-
-                const categoryIds = p.row._categoryIds || [];
-
-                // 更新分類關聯表
-                if (categoryIds.length > 0) {
-                    await supabase.from('product_category_links').upsert(
-                        categoryIds.map(cid => ({
-                            product_id: pId,
-                            category_id: cid
-                        })), 
-                        { onConflict: 'product_id,category_id' }
-                    );
-                }
-
-                // 同步規格
-                for (const catId of categoryIds) {
-                    const specsForCat = p.row._multiSpecs?.[catId] || {};
-                    let pathMap = new Map();
-                    if (p.row.spec_values) {
-                        const existingSpecs = deserializeSpecs(p.row.spec_values);
-                        Object.entries(existingSpecs).forEach(([p, v]) => pathMap.set(p, v));
-                    }
-                    Object.entries(specsForCat).forEach(([id, val]) => pathMap.set(`root:${id}`, val));
-                    const serialized = serializeSpecs(Object.fromEntries(pathMap), specMap as any);
-
-                    if (serialized && serialized.length > 0) {
-                        await supabase.rpc('sync_product_specs_v6', {
-                            p_entity_id: pId,
-                            p_entity_type: 'product',
-                            p_category_id: catId,
-                            p_new_data: serialized
-                        });
-                    }
-                }
-            }));
-
-            // 5. 處理變體寫入
-            const uniqueVariantsMap = new Map<string, ImportRow>();
-            const skuGroups = new Map<string, ImportRow[]>();
-            validRows.forEach(r => {
-                const g = skuGroups.get(r.product_sku) || [];
-                g.push(r);
-                skuGroups.set(r.product_sku, g);
-            });
-
-            skuGroups.forEach((rows, pSku) => {
-                // 如果有變體列，就處理變體列；如果沒有，但有填寫 variant_sku，則視為主商品當變體
-                const targetRows = rows.filter(r => r.is_variant);
-                const processRows = targetRows.length > 0 ? targetRows : (rows[0].variant_sku ? [rows[0]] : []);
-
-                processRows.forEach(row => {
-                    if (!row.variant_sku) return;
-                    
                     const getCatId = (cName: string | undefined) => categories.find(c => c.name === cName?.split(',')[0].trim())?.id;
                     const catId = row.category_id || getCatId((row as any)._categoryName) || getCatId(row.category);
-                    
-                    const existing = uniqueVariantsMap.get(row.variant_sku);
+
                     if (!existing) {
-                        const newRow = { ...row, _categoryIds: [], _multiSpecs: {} };
+                        const newRow = { ...row, has_variants: false, _categoryIds: [], _multiSpecs: {} };
                         if (catId) {
                             newRow._categoryIds.push(catId);
                             if (row._specs) newRow._multiSpecs![catId] = { ...row._specs };
                         }
-                        uniqueVariantsMap.set(row.variant_sku, newRow);
+                        chunkProductsMap.set(sku, newRow);
                     } else {
                         const merged = { ...existing };
-                        Object.assign(merged, row);
+                        if (!row.is_variant) {
+                            Object.assign(merged, row);
+                        }
+                        merged.has_variants = existing.has_variants || row.is_variant;
                         merged._categoryIds = [...(existing._categoryIds || [])];
                         if (catId && !merged._categoryIds.includes(catId)) {
                             merged._categoryIds.push(catId);
@@ -549,161 +453,299 @@ export function useProductImport(onSuccess: () => void) {
                         if (catId && row._specs) {
                             merged._multiSpecs[catId] = { ...(merged._multiSpecs[catId] || {}), ...row._specs };
                         }
-                        uniqueVariantsMap.set(row.variant_sku, merged);
+                        chunkProductsMap.set(sku, merged);
                     }
                 });
-            });
 
-            const variantsToInsert = Array.from(uniqueVariantsMap.values())
-                .filter(r => !!r.variant_sku)
-                .map(row => {
+                chunk.forEach(row => {
+                    if (row.is_variant || (row.variant_sku && row.variant_sku !== row.product_sku)) {
+                        const p = chunkProductsMap.get(row.product_sku);
+                        if (p) p.has_variants = true;
+                    }
+                });
+
+                // 批次寫入主商品
+                const productsToInsert = Array.from(chunkProductsMap.values()).map(row => {
                     const data: any = {
-                        product_id: productIdMap.get(row.product_sku),
-                        sku: row.variant_sku,
-                        name: row.variant_name || row.product_name,
-                        option_1: row.option_1 || null,
-                        option_2: row.option_2 || null,
-                        option_3: row.option_3 || null,
-                        wholesale_price: row.variant_wholesale_price || row.base_wholesale_price,
-                        retail_price: row.variant_retail_price || row.base_retail_price,
-                        status: row.variant_status || row.product_status,
-                        barcode: row.barcode || null
+                        sku: row.product_sku,
+                        name: row.product_name,
+                        description: row.description || null,
+                        brand_id: row.brand_id || null,
+                        model: row.model || null,
+                        series: row.series || null,
+                        base_wholesale_price: row.base_wholesale_price,
+                        base_retail_price: row.base_retail_price,
+                        status: row.product_status,
+                        has_variants: row.has_variants
                     };
-                    if (row.variant_id) data.id = row.variant_id;
-                    return data;
+                    if (row.product_id) data.id = row.product_id;
+                    return { data, row };
                 });
 
-            if (variantsToInsert.length > 0) {
-                const { error: vErr } = await supabase.from('product_variants').upsert(variantsToInsert, { onConflict: 'sku' });
-                if (vErr) throw vErr;
-            }
-
-            // 6. 處理實體關聯 (Models, Groups, Exclusions)
-            const parseModelString = (modelStr: string | undefined) => {
-                const result: { modelIds: string[]; groupIds: string[]; exclusions: { model_id: string }[] } = {
-                    modelIds: [],
-                    groupIds: [],
-                    exclusions: []
-                };
-                if (modelStr === undefined) return result; // 沒填或沒這欄
-                if (modelStr.trim() === '') return result; // 故意清空
-
-                const parts = modelStr.split(',').map(s => s.trim()).filter(Boolean);
-                parts.forEach(part => {
-                    let name = part;
-                    let type: 'group' | 'model' | 'exclude' = 'model';
-                    const lowerPart = part.toLowerCase();
-
-                    if (lowerPart.startsWith('group:')) {
-                        type = 'group';
-                        name = part.substring(6).trim();
-                    } else if (lowerPart.startsWith('exclude:')) {
-                        type = 'exclude';
-                        name = part.substring(8).trim();
-                    } else if (lowerPart.startsWith('model:')) {
-                        type = 'model';
-                        name = part.substring(6).trim();
-                    }
-
-                    if (type === 'group') {
-                        const group = allGroups.find(g => g.name.toLowerCase() === name.toLowerCase());
-                        if (group) result.groupIds.push(group.id);
-                    } else if (type === 'exclude') {
-                        const model = allDeviceModels.find(m => 
-                            m.name.toLowerCase() === name.toLowerCase() || 
-                            (m.aliases || []).some((a: string) => a.toLowerCase() === name.toLowerCase())
-                        );
-                        if (model) result.exclusions.push({ model_id: model.id });
-                    } else {
-                        const model = allDeviceModels.find(m => 
-                            m.name.toLowerCase() === name.toLowerCase() || 
-                            (m.aliases || []).some((a: string) => a.toLowerCase() === name.toLowerCase())
-                        );
-                        if (model) result.modelIds.push(model.id);
-                    }
+                const productsUpsertData = productsToInsert.map(p => {
+                    const { category, ...rest } = (p.data as any);
+                    return rest;
                 });
-                return result;
-            };
 
-            const relationPromises: Promise<void>[] = [];
-
-            // 處理主商品關聯
-            for (const row of Array.from(uniqueProductsMap.values())) {
-                const pId = productIdMap.get(row.product_sku);
-                if (!pId || row.device_models === undefined) continue;
-                
-                const relations = parseModelString(row.device_models);
-                relationPromises.push(entityRelationService.updateRelations('product', pId, relations));
-            }
-
-            // 取得剛匯入的 variants IDs
-            const { data: insertedVariants } = await supabase.from('product_variants').select('id, sku').in('sku', variantsToInsert.map(v => v.sku));
-            const variantIdMap = new Map(insertedVariants?.map(v => [v.sku, v.id]) || []);
-
-            // 處理變體關聯與規格
-            const variantSpecPromises: PromiseLike<any>[] = [];
-
-            for (const row of Array.from(uniqueVariantsMap.values())) {
-                if (!row.variant_sku) continue;
-                const vId = variantIdMap.get(row.variant_sku);
-                if (!vId) continue;
-
-                // 處理型號關聯
-                if (row.variant_device_models !== undefined) {
-                    const relations = parseModelString(row.variant_device_models);
-                    relationPromises.push(entityRelationService.updateRelations('variant', vId, relations));
+                if (productsUpsertData.length > 0) {
+                    const { error: pErr } = await supabase.from('products').upsert(productsUpsertData, { onConflict: 'sku' });
+                    if (pErr) throw pErr;
                 }
 
-                // 處理變體規格
-                const categoryIds = row._categoryIds || [];
-                
-                for (const catId of categoryIds) {
-                    const specsForCat = row._multiSpecs?.[catId] || {};
-                    const hasSpecs = Object.keys(specsForCat).length > 0 || (row.spec_values && Object.keys(row.spec_values).length > 0);
-                    
-                    if (hasSpecs) {
+                // 重新獲取剛插入的產品 ID
+                const { data: insertedProducts } = await supabase.from('products').select('id, sku').in('sku', Array.from(chunkProductsMap.keys()));
+                const productIdMap = new Map(insertedProducts?.map(p => [p.sku, p.id]) || []);
+
+                // 批次寫入規格與分類
+                const relationPromises: Promise<any>[] = [];
+                const variantSpecPromises: Promise<any>[] = [];
+
+                for (const p of productsToInsert) {
+                    const pId = productIdMap.get(p.data.sku);
+                    if (!pId) continue;
+
+                    const categoryIds = p.row._categoryIds || [];
+                    if (categoryIds.length > 0) {
+                        relationPromises.push(
+                            Promise.resolve(
+                                supabase.from('product_category_links').upsert(
+                                    categoryIds.map(cid => ({
+                                        product_id: pId,
+                                        category_id: cid
+                                    })),
+                                    { onConflict: 'product_id,category_id' }
+                                )
+                            )
+                        );
+                    }
+
+                    for (const catId of categoryIds) {
+                        const specsForCat = p.row._multiSpecs?.[catId] || {};
                         let pathMap = new Map();
-                        // 1. 保留原本可能已經存在的規格
-                        if (row.spec_values) {
-                            const existingSpecs = deserializeSpecs(row.spec_values);
+                        if (p.row.spec_values) {
+                            const existingSpecs = deserializeSpecs(p.row.spec_values);
                             Object.entries(existingSpecs).forEach(([p, v]) => pathMap.set(p, v));
                         }
-                        // 2. 覆蓋該分類下的新規格
                         Object.entries(specsForCat).forEach(([id, val]) => pathMap.set(`root:${id}`, val));
-                        
                         const serialized = serializeSpecs(Object.fromEntries(pathMap), specMap as any);
-                        
-                        if (serialized.length > 0) {
+
+                        if (serialized && serialized.length > 0) {
                             variantSpecPromises.push(
-                                supabase.rpc('sync_product_specs_v6', {
-                                    p_entity_id: vId,
-                                    p_entity_type: 'variant',
-                                    p_category_id: catId,
-                                    p_new_data: serialized
-                                })
+                                Promise.resolve(
+                                    supabase.rpc('sync_product_specs_v6', {
+                                        p_entity_id: pId,
+                                        p_entity_type: 'product',
+                                        p_category_id: catId,
+                                        p_new_data: serialized
+                                    })
+                                )
                             );
                         }
                     }
                 }
+
+                // 批次寫入變體
+                const uniqueVariantsMap = new Map<string, ImportRow>();
+                const skuGroups = new Map<string, ImportRow[]>();
+                chunk.forEach(r => {
+                    const g = skuGroups.get(r.product_sku) || [];
+                    g.push(r);
+                    skuGroups.set(r.product_sku, g);
+                });
+
+                skuGroups.forEach((rows, pSku) => {
+                    const targetRows = rows.filter(r => r.is_variant);
+                    const processRows = targetRows.length > 0 ? targetRows : (rows[0].variant_sku ? [rows[0]] : []);
+
+                    processRows.forEach(row => {
+                        if (!row.variant_sku) return;
+                        const getCatId = (cName: string | undefined) => categories.find(c => c.name === cName?.split(',')[0].trim())?.id;
+                        const catId = row.category_id || getCatId((row as any)._categoryName) || getCatId(row.category);
+
+                        const existing = uniqueVariantsMap.get(row.variant_sku);
+                        if (!existing) {
+                            const newRow = { ...row, _categoryIds: [], _multiSpecs: {} };
+                            if (catId) {
+                                newRow._categoryIds.push(catId);
+                                if (row._specs) newRow._multiSpecs![catId] = { ...row._specs };
+                            }
+                            uniqueVariantsMap.set(row.variant_sku, newRow);
+                        } else {
+                            const merged = { ...existing };
+                            Object.assign(merged, row);
+                            merged._categoryIds = [...(existing._categoryIds || [])];
+                            if (catId && !merged._categoryIds.includes(catId)) {
+                                merged._categoryIds.push(catId);
+                            }
+                            merged._multiSpecs = { ...(existing._multiSpecs || {}) };
+                            if (catId && row._specs) {
+                                merged._multiSpecs[catId] = { ...(merged._multiSpecs[catId] || {}), ...row._specs };
+                            }
+                            uniqueVariantsMap.set(row.variant_sku, merged);
+                        }
+                    });
+                });
+
+                const variantsToInsert = Array.from(uniqueVariantsMap.values())
+                    .filter(r => !!r.variant_sku)
+                    .map(row => {
+                        const data: any = {
+                            product_id: productIdMap.get(row.product_sku),
+                            sku: row.variant_sku,
+                            name: row.variant_name || row.product_name,
+                            option_1: row.option_1 || null,
+                            option_2: row.option_2 || null,
+                            option_3: row.option_3 || null,
+                            wholesale_price: row.variant_wholesale_price || row.base_wholesale_price,
+                            retail_price: row.variant_retail_price || row.base_retail_price,
+                            status: row.variant_status || row.product_status,
+                            barcode: row.barcode || null
+                        };
+                        if (row.variant_id) data.id = row.variant_id;
+                        return data;
+                    });
+
+                if (variantsToInsert.length > 0) {
+                    const { error: vErr } = await supabase.from('product_variants').upsert(variantsToInsert, { onConflict: 'sku' });
+                    if (vErr) throw vErr;
+                }
+
+                // 處理型號關聯與排除型號
+                const parseModelString = (modelStr: string | undefined) => {
+                    const result: { modelIds: string[]; groupIds: string[]; exclusions: { model_id: string }[] } = {
+                        modelIds: [],
+                        groupIds: [],
+                        exclusions: []
+                    };
+                    if (modelStr === undefined || modelStr.trim() === '') return result;
+
+                    const parts = modelStr.split(',').map(s => s.trim()).filter(Boolean);
+                    parts.forEach(part => {
+                        let name = part;
+                        let type: 'group' | 'model' | 'exclude' = 'model';
+                        const lowerPart = part.toLowerCase();
+
+                        if (lowerPart.startsWith('group:')) {
+                            type = 'group';
+                            name = part.substring(6).trim();
+                        } else if (lowerPart.startsWith('exclude:')) {
+                            type = 'exclude';
+                            name = part.substring(8).trim();
+                        } else if (lowerPart.startsWith('model:')) {
+                            type = 'model';
+                            name = part.substring(6).trim();
+                        }
+
+                        if (type === 'group') {
+                            const group = allGroups.find(g => g.name.toLowerCase() === name.toLowerCase());
+                            if (group) result.groupIds.push(group.id);
+                        } else if (type === 'exclude') {
+                            const model = allDeviceModels.find(m =>
+                                m.name.toLowerCase() === name.toLowerCase() ||
+                                (m.aliases || []).some((a: string) => a.toLowerCase() === name.toLowerCase())
+                            );
+                            if (model) result.exclusions.push({ model_id: model.id });
+                        } else {
+                            const model = allDeviceModels.find(m =>
+                                m.name.toLowerCase() === name.toLowerCase() ||
+                                (m.aliases || []).some((a: string) => a.toLowerCase() === name.toLowerCase())
+                            );
+                            if (model) result.modelIds.push(model.id);
+                        }
+                    });
+                    return result;
+                };
+
+                for (const row of Array.from(chunkProductsMap.values())) {
+                    const pId = productIdMap.get(row.product_sku);
+                    if (!pId || row.device_models === undefined) continue;
+
+                    const relations = parseModelString(row.device_models);
+                    relationPromises.push(entityRelationService.updateRelations('product', pId, relations));
+                }
+
+                const { data: insertedVariants } = await supabase.from('product_variants').select('id, sku').in('sku', variantsToInsert.map(v => v.sku));
+                const variantIdMap = new Map(insertedVariants?.map(v => [v.sku, v.id]) || []);
+
+                for (const row of Array.from(uniqueVariantsMap.values())) {
+                    if (!row.variant_sku) continue;
+                    const vId = variantIdMap.get(row.variant_sku);
+                    if (!vId) continue;
+
+                    if (row.variant_device_models !== undefined) {
+                        const relations = parseModelString(row.variant_device_models);
+                        relationPromises.push(entityRelationService.updateRelations('variant', vId, relations));
+                    }
+
+                    const categoryIds = row._categoryIds || [];
+                    for (const catId of categoryIds) {
+                        const specsForCat = row._multiSpecs?.[catId] || {};
+                        const hasSpecs = Object.keys(specsForCat).length > 0 || (row.spec_values && Object.keys(row.spec_values).length > 0);
+
+                        if (hasSpecs) {
+                            let pathMap = new Map();
+                            if (row.spec_values) {
+                                const existingSpecs = deserializeSpecs(row.spec_values);
+                                Object.entries(existingSpecs).forEach(([p, v]) => pathMap.set(p, v));
+                            }
+                            Object.entries(specsForCat).forEach(([id, val]) => pathMap.set(`root:${id}`, val));
+                            const serialized = serializeSpecs(Object.fromEntries(pathMap), specMap as any);
+
+                            if (serialized.length > 0) {
+                                variantSpecPromises.push(
+                                    Promise.resolve(
+                                        supabase.rpc('sync_product_specs_v6', {
+                                            p_entity_id: vId,
+                                            p_entity_type: 'variant',
+                                            p_category_id: catId,
+                                            p_new_data: serialized
+                                        })
+                                    )
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // 批次執行所有關聯更新與規格更新
+                for (let i = 0; i < relationPromises.length; i += 5) {
+                    await Promise.all(relationPromises.slice(i, i + 5));
+                }
+
+                for (let i = 0; i < variantSpecPromises.length; i += 5) {
+                    await Promise.all(variantSpecPromises.slice(i, i + 5));
+                }
+            };
+
+            // 呼叫 BatchProcessor 分批執行，並監聽進度與過濾零異動資料
+            const batchResult = await BatchProcessor.processBatch(
+                'products_import',
+                validRows,
+                uploader,
+                {
+                    batchSize: 200,
+                    filterUnchanged: isRowChanged,
+                    onProgress: (progress, processed, total) => {
+                        setUploadProgress(progress);
+                        setProcessedCount(processed);
+                    }
+                }
+            );
+
+            setSkippedCount(batchResult.skippedCount);
+
+            if (!batchResult.success) {
+                throw new Error(`批次匯入失敗！共有 ${batchResult.errors.length} 筆資料處理失敗。`);
             }
 
-            // 批次執行所有關聯更新與規格更新，避免一次發出太多請求
-            for (let i = 0; i < relationPromises.length; i += 5) {
-                await Promise.all(relationPromises.slice(i, i + 5));
-            }
+            // 通知版本系統：有異動，觸發前台快取全量同步
+            await supabase.rpc('bump_data_version', { p_table_name: 'products', p_source_table: 'products' });
 
-            for (let i = 0; i < variantSpecPromises.length; i += 5) {
-                await Promise.all(variantSpecPromises.slice(i, i + 5));
-            }
-
-            // 通知版本系統：產品資料有異動，觸發前台快取全量同步
-            await supabase.rpc('bump_data_version', { p_table_name: 'products' });
-
-            return { success: true };
+            return batchResult;
         },
-        onSuccess: () => {
+        onSuccess: (res: any) => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
-            toast.success('匯入成功');
+            toast.success(`匯入成功！已上傳變更: ${res.processedCount} 筆，跳過零異動: ${res.skippedCount} 筆。`);
             onSuccess();
             resetState();
         },
@@ -715,7 +757,7 @@ export function useProductImport(onSuccess: () => void) {
 
     const filteredData = importData.filter(row => {
         const categoryMatch = filterCategory === 'all' || row.category === filterCategory;
-        const statusMatch = filterStatus === 'all' || 
+        const statusMatch = filterStatus === 'all' ||
             (filterStatus === 'changed' && row.diff && row.diff.length > 0) ||
             (filterStatus === 'new' && row.action === 'create') ||
             (filterStatus === 'error' && !row.isValid);
@@ -726,11 +768,11 @@ export function useProductImport(onSuccess: () => void) {
         const { categoryLinks } = useSpecStore.getState();
         const brandMap = Object.fromEntries(allBrands.map(b => [b.id, b.name]));
         const blob = generateProductExcel([], categories, specDefs, categoryLinks, brandMap);
-        
+
         // generateProductExcel returns a workbook, we need to convert it to a blob
         const excelBuffer = XLSX.write(blob, { bookType: 'xlsx', type: 'array' });
         const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        
+
         const url = URL.createObjectURL(data);
         const a = document.createElement('a');
         a.href = url;
@@ -755,6 +797,9 @@ export function useProductImport(onSuccess: () => void) {
         importMutation,
         downloadTemplate,
         resetState,
-        allBrands
+        allBrands,
+        uploadProgress,
+        processedCount,
+        skippedCount
     };
 }

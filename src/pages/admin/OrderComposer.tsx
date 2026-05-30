@@ -41,6 +41,7 @@ export default function AdminOrderComposer() {
   const [selectedStoreId, setSelectedStoreId] = useState<string>("");
   const [createdOrder, setCreatedOrder] = useState<{ id: string; code?: string | null; access_token: string } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [search, setSearch] = useState("");
 
   const { data: stores = [], isLoading: storesLoading } = useQuery({
     queryKey: ["admin-stores-list"],
@@ -155,6 +156,8 @@ export default function AdminOrderComposer() {
               products={products}
               isLoading={productsLoading}
               storeId={selectedStoreId}
+              search={search}
+              onSearchChange={setSearch}
             />
           </div>
 
