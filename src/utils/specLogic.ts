@@ -52,7 +52,10 @@ export function deserializeSpecs(data: any): Record<string, any> {
             obj[key] = entry.value;
         });
     } else if (typeof data === 'object') {
-        // 向後相容舊 JSONB 格式
+        // 若 key 已包含 ':' 表示已是 pathKey 格式 (parentId:specId:instanceUuid)
+        const keys = Object.keys(data);
+        if (keys.length > 0 && keys[0].includes(':')) return { ...data };
+        // 向後相容舊 JSONB 格式 (key 為純 specId)
         Object.entries(data).forEach(([id, val]) => {
             if (id === '_metadata') return;
             obj[`root:${id}:${id}`] = val;

@@ -5,6 +5,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { AppRoutes } from "./routes";
+import { CacheService } from "@/services/cacheService";
+
+// 初始化統一快取層：清理舊有快取鍵、啟用 schema 版本檢查
+CacheService.init();
 
 const queryClient = new QueryClient();
 

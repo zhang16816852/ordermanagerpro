@@ -1,60 +1,30 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { useStorefrontCache } from "@/hooks/useStorefrontCache";
+import { useStoreProductCache } from "@/hooks/useProductCache";
 import ProductCatalog from "@/components/order/ProductCatalog";
 import CartPanel from "@/components/order/CartPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ShoppingCart, Filter } from "lucide-react";
-import { toast } from 'sonner';
 import {
   Sheet,
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Category } from "@/types/product";
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
 import { CatalogSidebar } from "@/components/order/CatalogSidebar";
-import { ProductWithPricing } from "@/types/product";
-import { useQuery } from "@tanstack/react-query";
 import { useDeviceModelStore } from "@/store/useDeviceModelStore";
+import { Category } from "@/types/product";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function StoreCatalog() {
   const { storeId } = useAuth();
   const { totalItems } = useStoreDraft(storeId || '');
-  const { items, isLoading } = useStorefrontCache(storeId ?? null);
-
-  const products = useMemo(() => {
-    return items.map(item => ({
-      id: item.id, // storefront_item.id (Unique UUID)
-      name: item.display_name,
-      sku: item.sku,
-      description: item.description,
-      base_wholesale_price: item.base_wholesale_price,
-      base_retail_price: item.base_retail_price,
-      wholesale_price: item.wholesale_price,
-      retail_price: item.retail_price,
-      has_store_price: item.has_store_price,
-      has_variants: false,
-      variants: [],
-      category_ids: item.category_ids,
-      category_names: item.category_names,
-      brand_id: item.brand_id,
-      color: item.color,
-      effective_model_names: [item.device_model_name],
-      effective_model_aliases: [],
-      spec_values: {},
-      
-      // Storefront-specific physical references
-      physical_product_id: item.product_id,
-      physical_variant_id: item.variant_id,
-      device_model_name: item.device_model_name,
-    }));
-  }, [items]) as unknown as ProductWithPricing[];
+  const { products, isLoading } = useStoreProductCache(storeId ?? null);
   const { fetchData: fetchDeviceData } = useDeviceModelStore();
-
+  console.log("Fetched products:", products);
   useEffect(() => {
     fetchDeviceData();
   }, [fetchDeviceData]);

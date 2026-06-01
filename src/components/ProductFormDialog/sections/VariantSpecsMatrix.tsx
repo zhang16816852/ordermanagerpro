@@ -21,6 +21,16 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
     const { data: specFields = [], isLoading: specsLoading } = useCategorySpecs(categoryIds);
     const [localData, setLocalData] = useState<Record<string, Record<string, any>>>({});
 
+    // 內部 Debug 輔助：將 UUID 路徑轉為可讀名稱 (例如 "手機規格 > 顏色")
+    const getReadablePath = (path: string) => {
+        if (!path) return 'N/A';
+        const parts = path.split(':');
+        if (parts.length < 2) return path;
+        const pName = parts[0] === 'root' ? 'Root' : (specMap.get(parts[0])?.name || '未知父級');
+        const sName = specMap.get(parts[1])?.name || '未知規格';
+        return `${pName} ➔ ${sName}`;
+    };
+
     // 確保規格定義已載入
     useEffect(() => {
         fetchSpecs();
@@ -95,7 +105,13 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
             variantVisible.forEach((info, path) => aggregatedVisible.set(path, info));
         });
 
-        console.log('[VariantMatrix] 聚合後的可見路徑:', Array.from(aggregatedVisible.keys()));
+        // 💡 改進：打印可讀的路徑名稱，方便判定哪個規格被觸發了
+        const debugPaths = Array.from(aggregatedVisible.keys()).map(p => ({
+            name: getReadablePath(p),
+            key: p
+        }));
+        console.log('[VariantMatrix] 矩陣展開路徑:', debugPaths);
+
         const sortedPaths = getTreeSortedVisiblePaths(specFields, aggregatedVisible);
 
         return sortedPaths.map(({ pathKey, level }) => {
@@ -229,7 +245,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                                     {row.name}
                                                 </div>
                                             ) : (
-                                                <>
+                                                <div title={`Internal Key: ${row.pathKey}`} className="flex items-center gap-2 cursor-help">
                                                     {row.level > 0 && <ChevronsRight className="h-3 w-3 text-primary/40 shrink-0" />}
                                                     <div className="flex flex-col min-w-0">
                                                         <span className="text-xs font-bold text-primary truncate">{row.name}</span>
@@ -241,7 +257,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                                             </span>
                                                         )}
                                                     </div>
-                                                </>
+                                                </div>
                                             )}
                                         </div>
                                     </TableCell>

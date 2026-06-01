@@ -1,12 +1,12 @@
 // src/pages/admin/OrderComposer.tsx
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
-import { ProductWithPricing, VariantWithPricing } from "@/types/product";
-import { useStorefrontCache } from "@/hooks/useStorefrontCache";
+import { ProductWithPricing } from "@/types/product";
+import { useStoreProductCache } from "@/hooks/useProductCache";
 import { useStoreDraft } from "@/stores/useOrderDraftStore";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,8 +30,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Send, Copy, Check } from "lucide-react";
-import { useMemo } from "react";
-
 import ProductCatalog from "@/components/order/ProductCatalog";
 import CartPanel from "@/components/order/CartPanel";
 
@@ -56,33 +54,14 @@ export default function AdminOrderComposer() {
     },
   });
 
-  const { items: storefrontItems, isLoading: productsLoading } = useStorefrontCache(selectedStoreId || null);
+  const { products: storefrontItems, isLoading: productsLoading } = useStoreProductCache(selectedStoreId || null);
 
   const products = useMemo(() => {
-    return storefrontItems.map(item => ({
-      id: item.id, // storefront_item.id (Unique UUID)
-      name: item.display_name,
-      sku: item.sku,
-      description: item.description,
-      base_wholesale_price: item.base_wholesale_price,
-      base_retail_price: item.base_retail_price,
-      wholesale_price: item.wholesale_price,
-      retail_price: item.retail_price,
-      has_store_price: item.has_store_price,
-      has_variants: false,
-      variants: [],
-      category_ids: item.category_ids,
-      category_names: item.category_names,
-      brand_id: item.brand_id,
-      color: item.color,
-      effective_model_names: [item.device_model_name],
-      effective_model_aliases: [],
-      spec_values: {},
-      
-      // Storefront-specific physical references
-      physical_product_id: item.product_id,
-      physical_variant_id: item.variant_id,
-      device_model_name: item.device_model_name,
+    return (storefrontItems || []).map(item => ({
+      ...item,
+      device_model_name: (item.effective_model_names || [])[0] || '',
+      physical_product_id: item.id,
+      physical_variant_id: undefined,
     }));
   }, [storefrontItems]) as unknown as ProductWithPricing[];
 

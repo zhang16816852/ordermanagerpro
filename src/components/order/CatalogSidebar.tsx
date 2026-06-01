@@ -11,67 +11,9 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { deserializeSpecs, formatSpecValue } from "@/utils/specLogic";
 import { useBrands } from "@/hooks/useBrands";
-import { Slider } from "@/components/ui/slider";
 import { useCategorySpecs } from "@/hooks/useCategorySpecs";
 import { useSpecStore } from "@/store/useSpecStore";
-
-// 解析字串中的所有數字
-const extractNumbers = (str: string) => {
-    const matches = str.match(/\d+(\.\d+)?/g);
-    return matches ? matches.map(Number) : [];
-};
-
-// 內部區間篩選拉桿組件
-function RangeSliderFilter({
-    values,
-    specKey,
-    selectedRange,
-    onChange
-}: {
-    values: string[];
-    specKey: string;
-    selectedRange?: string; // 格式如 'MIN-MAX'
-    onChange: (range: string | null) => void;
-}) {
-    // 找出所有可能數值的極值
-    const allNumbers = values.flatMap(extractNumbers).filter(n => !isNaN(n));
-    const minBound = allNumbers.length > 0 ? Math.floor(Math.min(...allNumbers)) : 0;
-    const maxBound = allNumbers.length > 0 ? Math.ceil(Math.max(...allNumbers)) : 100;
-
-    // 解析目前設定
-    const currentMin = selectedRange ? Number(selectedRange.split('-')[0]) : minBound;
-    const currentMax = selectedRange ? Number(selectedRange.split('-')[1]) : maxBound;
-
-    // 如果沒有任何數字，不顯示
-    if (allNumbers.length === 0) return <p className="text-xs text-muted-foreground italic">無有效數值可供篩選</p>;
-
-    return (
-        <div className="px-2 pb-2 pt-4 space-y-4">
-            <Slider
-                defaultValue={[minBound, maxBound]}
-                value={[currentMin, currentMax]}
-                min={minBound}
-                max={maxBound}
-                step={maxBound - minBound > 100 ? 10 : 1}
-                onValueChange={(val) => {
-                    onChange(`${val[0]}-${val[1]}`);
-                }}
-            />
-            <div className="flex justify-between items-center text-xs text-muted-foreground font-mono">
-                <span>{currentMin}</span>
-                <span>{currentMax}</span>
-            </div>
-            {selectedRange && (
-                <div className="flex justify-end">
-                    <Button variant="ghost" size="sm" className="h-5 text-[10px] text-muted-foreground" onClick={() => onChange(null)}>
-                        清除區間
-                    </Button>
-                </div>
-            )}
-        </div>
-    );
-}
-
+import { AdvancedSpecFilters } from "./AdvancedSpecFilters";
 
 function getFilterConfig(specDef: any) {
     if (!specDef || !specDef.configuration) return undefined;
@@ -174,15 +116,13 @@ export function CatalogSidebar({
             }
         }
 
-        console.group('🔍 [CatalogSidebar] availableSpecs 計算');
-        console.log('📂 選中分類 ID:', selectedCategory);
-        console.log('📂 子分類 IDs:', Array.from(subCategoryIds));
-        console.log('📋 分類規格定義 (specFields):', specFields.map(f => ({ id: f.id, name: f.name, type: f.type })));
-
+        /* console.group('🔍 [CatalogSidebar] availableSpecs 計算');
+         console.log('📂 選中分類 ID:', selectedCategory);
+         console.log('📂 子分類 IDs:', Array.from(subCategoryIds));
+         console.log('📋 分類規格定義 (specFields):', specFields.map(f => ({ id: f.id, name: f.name, type: f.type })));
+ */
         // 從 specFields 取出可用的規格 ID 與名稱，用於過濾產品的 spec_values
         const definedSpecIds = specFields.map(f => f.id);
-        console.log('✅ definedSpecIds:', definedSpecIds);
-
         let matchedProductCount = 0;
 
         products.forEach((p) => {
@@ -201,7 +141,7 @@ export function CatalogSidebar({
             const pSpecValues: Record<string, any> = p.spec_values && typeof p.spec_values === 'object' && !Array.isArray(p.spec_values)
                 ? p.spec_values
                 : {};
-            console.log(`  📦 產品 "${p.name}"，spec_values:`, pSpecValues, '(筆數:', Object.keys(pSpecValues).length, ')');
+            // console.log(`  📦 產品 "${p.name}"，spec_values:`, pSpecValues, '(筆數:', Object.keys(pSpecValues).length, ')');
 
             Object.entries(pSpecValues).forEach(([key, value]) => {
                 const parts = key.split(':');
@@ -210,7 +150,7 @@ export function CatalogSidebar({
 
                 // 若分類已設定規格定義，則只保留對應的規格（支援 ID 匹配）
                 if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId)) {
-                    console.log(`    ⛔ key="${key}" specId="${specId}" 不在 definedSpecIds 中，略過`);
+                    // console.log(`    ⛔ key="${key}" specId="${specId}" 不在 definedSpecIds 中，略過`);
                     return;
                 }
 
@@ -221,7 +161,7 @@ export function CatalogSidebar({
 
                     // heading / text / table 類型不適合做篩選，直接跳過
                     if (specDef && (specDef.type === 'heading' || specDef.type === 'text' || specDef.type === 'table')) {
-                        console.log(`    ⛔ key="${key}" type="${specDef.type}" 不適合篩選，略過`);
+                        // console.log(`    ⛔ key="${key}" type="${specDef.type}" 不適合篩選，略過`);
                         return;
                     }
 
@@ -230,12 +170,12 @@ export function CatalogSidebar({
 
                     // 只有明確設定 enabled: false 時才排除，未設定視為允許
                     if (filterConfig && filterConfig.enabled === false) {
-                        console.log(`    ⛔ key="${key}" filter_config.enabled=false，略過`);
+                        // console.log(`    ⛔ key="${key}" filter_config.enabled=false，略過`);
                         return;
                     }
 
                     const formatted = formatSpecValue(value, specDef as any, specFields as any);
-                    console.log(`    ✅ key="${key}" specId="${specId}" value=${JSON.stringify(value)} → 格式化: "${formatted}"`);
+                    // console.log(`    ✅ key="${key}" specId="${specId}" value=${JSON.stringify(value)} → 格式化: "${formatted}"`);
                     specs[key].add(formatted);
                 }
             });
@@ -286,7 +226,7 @@ export function CatalogSidebar({
             });
         });
 
-        console.log(`📦 符合分類的產品數: ${matchedProductCount} / ${products.length}`);
+        // console.log(`📦 符合分類的產品數: ${matchedProductCount} / ${products.length}`);
 
         // 步驟五：將 Set 轉為排序後的陣列
         const result: Record<string, string[]> = {};
@@ -296,7 +236,7 @@ export function CatalogSidebar({
             }
         });
 
-        console.log('🎯 最終 availableSpecs:', result);
+        // console.log('🎯 最終 availableSpecs:', result);
         console.groupEnd();
         return result;
     }, [products, selectedCategory, categories, specFields, categoryHierarchy]);
@@ -431,141 +371,12 @@ export function CatalogSidebar({
                     {selectedCategory !== null && (
                         <div className="space-y-5">
                             <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">進階規格</h3>
-                            {Object.entries(availableSpecs).length > 0 ? (
-                                Object.entries(availableSpecs).map(([key, values]) => {
-                                    // 將 key（ID 或 Name）解析為顯示名稱
-                                    const parts = key.split(':');
-                                    const specId = parts.length === 3 ? parts[1] : (parts.length === 2 ? parts[1] : key);
-
-                                    // 處理核心選項 (Core Options)
-                                    if (key.startsWith('core:')) {
-                                        const coreLabelMap: Record<string, string> = {
-                                            'option_1': '規格選項 1',
-                                            'option_2': '規格選項 2',
-                                            'option_3': '顏色'
-                                        };
-                                        const displayName = coreLabelMap[specId] || specId;
-                                        return (
-                                            <div key={key} className="space-y-3">
-                                                <h4 className="text-xs font-semibold text-foreground/80">{displayName}</h4>
-                                                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                                                    {values.map((val) => (
-                                                        <div key={val} className="flex items-center space-x-2">
-                                                            <Checkbox
-                                                                id={`spec-${key}-${val}`}
-                                                                checked={(selectedSpecs[key] || []).includes(val)}
-                                                                onCheckedChange={(checked) => {
-                                                                    const current = selectedSpecs[key] || [];
-                                                                    if (checked) {
-                                                                        onSpecChange(key, [...current, val]);
-                                                                    } else {
-                                                                        onSpecChange(key, current.filter((v) => v !== val));
-                                                                    }
-                                                                }}
-                                                            />
-                                                            <Label
-                                                                htmlFor={`spec-${key}-${val}`}
-                                                                className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground"
-                                                            >
-                                                                {val}
-                                                            </Label>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        );
-                                    }
-
-                                    const specDef = specFields.find(f => f.id === specId || f.name === specId);
-
-                                    const filterConfig = getFilterConfig(specDef);
-                                    // 找不到規格定義，或明確設定不啟用篩選，則不渲染
-                                    if (!specDef || (filterConfig && filterConfig.enabled === false)) return null;
-
-                                    let displayMode = filterConfig?.display_mode || 'auto';
-
-                                    // 處理 auto 或 沒設定時的預設行為
-                                    if (displayMode === 'auto') {
-                                        // number_with_unit 且選項很多時，預設切換為區間
-                                        if (specDef.type === 'number_with_unit' && values.length > 5) {
-                                            displayMode = 'range';
-                                        } else {
-                                            displayMode = 'checkbox';
-                                        }
-                                    }
-
-                                    const displayName = specDef ? specDef.name : key;
-                                    return (
-                                        <div key={key} className="space-y-3">
-                                            <div className="flex items-center justify-between">
-                                                <h4 className="text-xs font-semibold text-foreground/80">{displayName}</h4>
-                                                {displayMode === 'range' && selectedSpecs[key]?.[0] && (
-                                                    <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono">
-                                                        {selectedSpecs[key][0]}
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            {displayMode === 'range' ? (
-                                                <RangeSliderFilter
-                                                    values={values}
-                                                    specKey={key}
-                                                    selectedRange={selectedSpecs[key]?.[0]}
-                                                    onChange={(range) => {
-                                                        if (range) {
-                                                            onSpecChange(key, [range]);
-                                                        } else {
-                                                            onSpecChange(key, []);
-                                                        }
-                                                    }}
-                                                />
-                                            ) : (
-                                                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                                                    {values
-                                                        .filter((val) => {
-                                                            if (specDef?.type === "boolean") {
-                                                                return val === "true" || val === "支援";
-                                                            }
-                                                            return true;
-                                                        })
-                                                        .map((val) => {
-                                                            const displayVal = val;
-
-                                                            return (
-                                                                <div key={val} className="flex items-center space-x-2">
-                                                                    <Checkbox
-                                                                        id={`spec-${key}-${val}`}
-                                                                        checked={(selectedSpecs[key] || []).includes(val)}
-                                                                        onCheckedChange={(checked) => {
-                                                                            const current = selectedSpecs[key] || [];
-                                                                            // 清除區間設定的格式以防萬一
-                                                                            const cleanedCurrent = current.filter(c => !c.includes('-'));
-                                                                            if (checked) {
-                                                                                onSpecChange(key, [...cleanedCurrent, val]);
-                                                                            } else {
-                                                                                onSpecChange(key, cleanedCurrent.filter((v) => v !== val));
-                                                                            }
-                                                                        }}
-                                                                    />
-                                                                    <Label
-                                                                        htmlFor={`spec-${key}-${val}`}
-                                                                        className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground"
-                                                                    >
-                                                                        {displayVal}
-                                                                    </Label>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })
-                            ) : (
-                                <div className="text-center py-4 bg-muted/20 rounded-lg border border-dashed">
-                                    <p className="text-[10px] text-muted-foreground italic">目前此分類無可用的規格篩選</p>
-                                </div>
-                            )}
+                            <AdvancedSpecFilters 
+                                availableSpecs={availableSpecs}
+                                specFields={specFields}
+                                selectedSpecs={selectedSpecs}
+                                onSpecChange={onSpecChange}
+                            />
                         </div>
                     )}
                 </div>

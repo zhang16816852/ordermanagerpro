@@ -1,58 +1,61 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useQuery } from '@tanstack/react-query';
+import { CacheService } from '@/services/cacheService';
 
-const DICTIONARY_CACHE_KEY = 'dictionary_cache_v1';
+const CACHE_KEY = 'ac_dictionary_v1';
+const SCHEMA_VERSION = 1;
 
 export interface DictionaryCacheData {
-  categoriesVersion: number;
-  categoriesUpdatedAt: string;
+  categoriesVersion: string;
   categories: any[];
-  
-  specsVersion: number;
-  specsUpdatedAt: string;
+  specsVersion: string;
   specs: any[];
-  
-  deviceModelsVersion: number;
-  deviceModelsUpdatedAt: string;
+  deviceModelsVersion: string;
   deviceModels: any[];
-  
-  brandsVersion: number;
-  brandsUpdatedAt: string;
+  brandsVersion: string;
   brands: any[];
 }
 
 const defaultCache: DictionaryCacheData = {
-  categoriesVersion: 0,
-  categoriesUpdatedAt: '',
+  categoriesVersion: '0',
   categories: [],
-  
-  specsVersion: 0,
-  specsUpdatedAt: '',
+  specsVersion: '0',
   specs: [],
-  
-  deviceModelsVersion: 0,
-  deviceModelsUpdatedAt: '',
+  deviceModelsVersion: '0',
   deviceModels: [],
-  
-  brandsVersion: 0,
-  brandsUpdatedAt: '',
+  brandsVersion: '0',
   brands: [],
 };
 
 export const getDictionaryCache = (): DictionaryCacheData => {
+  const result = CacheService.get<DictionaryCacheData>(CACHE_KEY, SCHEMA_VERSION);
+  if (result.exists && result.data) return result.data;
+
+  // Migrate from old cache
   try {
-    const cached = localStorage.getItem(DICTIONARY_CACHE_KEY);
-    if (!cached) return defaultCache;
-    return { ...defaultCache, ...JSON.parse(cached) };
-  } catch {
-    localStorage.removeItem(DICTIONARY_CACHE_KEY);
-    return defaultCache;
-  }
+    const old = localStorage.getItem('dictionary_cache_v1');
+    if (old) {
+      const parsed = JSON.parse(old);
+      const migrated: DictionaryCacheData = {
+        categoriesVersion: String(parsed.categoriesVersion || '0'),
+        categories: parsed.categories || [],
+        specsVersion: String(parsed.specsVersion || '0'),
+        specs: parsed.specs || [],
+        deviceModelsVersion: String(parsed.deviceModelsVersion || '0'),
+        deviceModels: parsed.deviceModels || [],
+        brandsVersion: String(parsed.brandsVersion || '0'),
+        brands: parsed.brands || [],
+      };
+      CacheService.set(CACHE_KEY, migrated, '0', SCHEMA_VERSION);
+      localStorage.removeItem('dictionary_cache_v1');
+      return migrated;
+    }
+  } catch { /* ignore */ }
+  return defaultCache;
 };
 
 export const setDictionaryCache = (cache: DictionaryCacheData) => {
-  localStorage.setItem(DICTIONARY_CACHE_KEY, JSON.stringify(cache));
+  CacheService.set(CACHE_KEY, cache, '0', SCHEMA_VERSION);
 };
 
 export const useDictionaryCache = () => {
@@ -65,33 +68,26 @@ export const useDictionaryCache = () => {
       const local = getDictionaryCache();
       let updated = false;
 
-      // 1. 取得伺服器最新版號
       const { data: serverVersions, error: versionError } = await supabase
         .from('data_versions')
         .select('*');
 
       if (versionError) throw versionError;
 
-      const serverVerMap = new Map<string, { version: number; updated_at: string }>();
+      const serverVerMap = new Map<string, { version: string; updated_at: string }>();
       serverVersions?.forEach((v: any) => {
-        serverVerMap.set(v.table_name, { version: v.version, updated_at: v.updated_at });
+        serverVerMap.set(v.table_name, { version: String(v.version), updated_at: v.updated_at });
       });
 
-      const catVer = serverVerMap.get('categories') || { version: 1, updated_at: '' };
-      const specVer = serverVerMap.get('specs') || { version: 1, updated_at: '' };
-      // 若資料表沒有設定獨立的版號觸發器，則以 products / categories 變體版號為參考，或者預設以 date 為準
-      const modelVer = serverVerMap.get('device_models') || { version: 1, updated_at: '' };
-      const brandVer = serverVerMap.get('brands') || { version: 1, updated_at: '' };
+      const catVer = serverVerMap.get('categories') || { version: '1', updated_at: '' };
+      const specVer = serverVerMap.get('specs') || { version: '1', updated_at: '' };
+      const modelVer = serverVerMap.get('device_models') || { version: '1', updated_at: '' };
+      const brandVer = serverVerMap.get('brands') || { version: '1', updated_at: '' };
 
-      const formatVerLog = (tableName: string, typeName: string, localVer: number, serverVer: number, localTime: string, serverTime: string) => {
-        const localTimeStr = localTime ? new Date(localTime).toISOString().slice(0, 10).replace(/-/g, '') : '無';
-        const serverTimeStr = serverTime ? new Date(serverTime).toISOString().slice(0, 10).replace(/-/g, '') : '最新';
-        return `[商品基礎快取] 發現【${typeName}變化】 (目前版本: ${localTimeStr}-v${localVer} -> 最新版本: ${serverTimeStr}-v${serverVer})，正在拉取更新...`;
-      };
+      const needsUpdate = (localVer: string, serverVer: string, items: any[]) =>
+        force || serverVer > localVer || items.length === 0;
 
-      // --- categories 同步 ---
-      if (force || local.categoriesVersion < catVer.version || local.categories.length === 0) {
-        console.log(formatVerLog('categories', '分類', local.categoriesVersion, catVer.version, local.categoriesUpdatedAt, catVer.updated_at));
+      if (needsUpdate(local.categoriesVersion, catVer.version, local.categories)) {
         const { data: catData, error } = await supabase
           .from('categories')
           .select('*')
@@ -100,13 +96,10 @@ export const useDictionaryCache = () => {
         if (error) throw error;
         local.categories = catData || [];
         local.categoriesVersion = catVer.version;
-        local.categoriesUpdatedAt = catVer.updated_at || new Date().toISOString();
         updated = true;
       }
 
-      // --- specs 同步 ---
-      if (force || local.specsVersion < specVer.version || local.specs.length === 0) {
-        console.log(formatVerLog('specs', '規格', local.specsVersion, specVer.version, local.specsUpdatedAt, specVer.updated_at));
+      if (needsUpdate(local.specsVersion, specVer.version, local.specs)) {
         const { data: specData, error } = await supabase
           .from('specification_definitions')
           .select('*')
@@ -115,13 +108,10 @@ export const useDictionaryCache = () => {
         if (error) throw error;
         local.specs = specData || [];
         local.specsVersion = specVer.version;
-        local.specsUpdatedAt = specVer.updated_at || new Date().toISOString();
         updated = true;
       }
 
-      // --- device_models 同步 ---
-      if (force || local.deviceModelsVersion < modelVer.version || local.deviceModels.length === 0) {
-        console.log(formatVerLog('device_models', '型號', local.deviceModelsVersion, modelVer.version, local.deviceModelsUpdatedAt, modelVer.updated_at));
+      if (needsUpdate(local.deviceModelsVersion, modelVer.version, local.deviceModels)) {
         const { data: modelData, error } = await supabase
           .from('device_models')
           .select('*')
@@ -131,13 +121,10 @@ export const useDictionaryCache = () => {
         if (error) throw error;
         local.deviceModels = modelData || [];
         local.deviceModelsVersion = modelVer.version;
-        local.deviceModelsUpdatedAt = modelVer.updated_at || new Date().toISOString();
         updated = true;
       }
 
-      // --- brands 同步 ---
-      if (force || local.brandsVersion < brandVer.version || local.brands.length === 0) {
-        console.log(formatVerLog('brands', '品牌', local.brandsVersion, brandVer.version, local.brandsUpdatedAt, brandVer.updated_at));
+      if (needsUpdate(local.brandsVersion, brandVer.version, local.brands)) {
         const { data: brandData, error } = await supabase
           .from('brands')
           .select('*')
@@ -146,15 +133,12 @@ export const useDictionaryCache = () => {
         if (error) throw error;
         local.brands = brandData || [];
         local.brandsVersion = brandVer.version;
-        local.brandsUpdatedAt = brandVer.updated_at || new Date().toISOString();
         updated = true;
       }
 
       if (updated) {
         setDictionaryCache(local);
         setData(local);
-      } else {
-        console.log(`[商品基礎快取] 檢查完畢，各項字典 (分類/規格/型號/品牌) 皆為最新狀態。`);
       }
     } catch (error) {
       console.error('[DictionaryCache] 🔴 同步失敗:', error);
