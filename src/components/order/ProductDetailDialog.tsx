@@ -10,7 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ProductWithPricing, VariantWithPricing } from "@/types/product";
-import { useStoreDraft } from "@/stores/useOrderDraftStore";
+import { useStoreDraft } from "@/store/useOrderDraftStore";
 import { toast } from "sonner";
 import { ShoppingCart, ImageIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { useSpecStore } from "@/store/useSpecStore";

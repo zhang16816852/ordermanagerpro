@@ -1,14 +1,11 @@
 // src/components/order/CheckoutForm.tsx
 import { useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Send } from "lucide-react";
-import { useStoreDraft } from "@/stores/useOrderDraftStore";
+import { useCreateOrder } from "@/hooks/useCreateOrder";
 import CartPanel from "./CartPanel";
 
 interface CheckoutFormProps {
@@ -38,54 +35,14 @@ export default function CheckoutForm({
   description = "請再次確認品項與數量，並填寫備註（如有需要）",
 }: CheckoutFormProps) {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
-  const { items, notes, totalAmount, updateNotes, clearDraft } = useStoreDraft(storeId);
-
-  const createOrderMutation = useMutation({
-    mutationFn: async () => {
-      if (items.length === 0) throw new Error("購物車是空的");
-      if (!storeId || !userId) throw new Error("無法取得店鋪或使用者資訊");
-
-      const { data: order, error: orderError } = await supabase
-        .from("orders")
-        .insert({
-          store_id: storeId,
-          created_by: userId,
-          notes: notes.trim() || null,
-          source_type: sourceType,
-        })
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
-
-      const orderItems = items.map((item) => ({
-        order_id: order.id,
-        product_id: item.productId,
-        variant_id: item.variantId || null,
-        store_id: storeId,
-        quantity: item.quantity,
-        unit_price: item.price,
-        selected_model_name: item.selectedModelName || null,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from("order_items")
-        .insert(orderItems);
-
-      if (itemsError) throw itemsError;
-
-      return order;
-    },
+  const { createOrder, isPending, items, totalAmount, notes, updateNotes } = useCreateOrder({
+    storeId,
+    userId,
+    sourceType,
+    queryKeyToInvalidate: [queryKeyToInvalidate],
     onSuccess: () => {
-      toast.success("訂單已成功建立！");
-      clearDraft();
-      queryClient.invalidateQueries({ queryKey: [queryKeyToInvalidate] });
       navigate(successRedirect);
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "建立訂單失敗，請再試一次");
     },
   });
 
@@ -142,11 +99,11 @@ export default function CheckoutForm({
           <Button
             size="lg"
             className="w-full"
-            onClick={() => createOrderMutation.mutate()}
-            disabled={createOrderMutation.isPending}
+            onClick={() => createOrder()}
+            disabled={isPending}
           >
             <Send className="h-5 w-5 mr-2" />
-            {createOrderMutation.isPending ? "提交中..." : "確認送出訂單"}
+            {isPending ? "提交中..." : "確認送出訂單"}
           </Button>
 
           <Button

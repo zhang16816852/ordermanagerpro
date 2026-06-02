@@ -14,8 +14,9 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { ProductWithPricing, VariantWithPricing } from "@/types/product";
-import { useStoreDraft } from "@/stores/useOrderDraftStore";
-import { getSpecValue, formatSpecValue, deserializeSpecs } from "@/utils/specLogic";
+import { useStoreDraft } from "@/store/useOrderDraftStore";
+import { getSpecValue, formatSpecValue } from "@/utils/specLogic";
+import { getSubCategoryIds, productMatchesSpecFilters } from "@/utils/treeUtils";
 import { StatusBadge } from "../ProductStatusBadge";
 import { toast } from 'sonner';
 import { ProductDetailDialog } from "./ProductDetailDialog";
@@ -90,25 +91,8 @@ export default function ProductCatalog({
     },
   });
 
-  // Calculate all child category IDs (inclusive) for filtering
   const subCategoryIds = useMemo(() => {
-    if (!categoryFilter) return new Set<string>();
-
-    const ids = new Set<string>([categoryFilter]);
-    const queue = [categoryFilter];
-
-    while (queue.length > 0) {
-      const parentId = queue.shift();
-      categoryHierarchy
-        .filter((h: any) => h.parent_id === parentId)
-        .forEach((h: any) => {
-          if (!ids.has(h.child_id)) {
-            ids.add(h.child_id);
-            queue.push(h.child_id);
-          }
-        });
-    }
-    return ids;
+    return getSubCategoryIds(categoryFilter, categoryHierarchy);
   }, [categoryFilter, categoryHierarchy]);
 
 
@@ -129,55 +113,7 @@ export default function ProductCatalog({
         }
       }
 
-      // 2. Spec Filters (AND between keys, OR between values in same key)
-      const specKeys = Object.keys(specFilters);
-      if (specKeys.length > 0) {
-        const matchesSpec = (target: any) => {
-          if (!target) return false;
-          
-          // 如果 target 是變體，它會有 option_1, option_2, option_3
-          // 如果 target 是產品，則主要看 spec_values
-          const isVariant = 'product_id' in target;
-          const flatSettings = deserializeSpecs(target.spec_values);
-
-          return specKeys.every((key) => {
-            const allowedValues = specFilters[key];
-            if (!allowedValues || allowedValues.length === 0) return true;
-
-            let actualValue = "";
-            
-            // 處理核心選項 (Core Options)
-            if (key.startsWith('core:')) {
-              if (!isVariant) return false; // 產品層級通常不帶核心選項
-              const optionKey = key.replace('core:', '');
-              actualValue = target[optionKey] || "";
-            } else {
-              // 處理一般規格
-              const val = flatSettings[key];
-              actualValue = formatSpecValue(val);
-            }
-            
-            if (!actualValue) return false;
-
-            // 檢查是否為區間篩選 (格式為 "MIN-MAX")
-            const isRangeFilter = allowedValues.length === 1 && allowedValues[0].includes('-');
-            
-            if (isRangeFilter) {
-                const [min, max] = allowedValues[0].split('-').map(Number);
-                const productNumbers = actualValue.match(/\d+(\.\d+)?/g)?.map(Number) || [];
-                if (productNumbers.length === 0) return false;
-                return productNumbers.some(n => n >= min && n <= max);
-            }
-
-            return allowedValues.includes(actualValue);
-          });
-        };
-
-        const productMatches = matchesSpec(product);
-        const anyVariantMatches = product.variants?.some((v) => matchesSpec(v));
-
-        if (!productMatches && !anyVariantMatches) return false;
-      }
+      if (!productMatchesSpecFilters(product, specFilters, (id: string) => product.variants || [])) return false;
 
       // 3. Brand Filter
       if (brandFilter.length > 0) {

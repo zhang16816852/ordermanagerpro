@@ -12,7 +12,7 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { useStoreDraft } from "@/stores/useOrderDraftStore";
+import { useStoreDraft } from "@/store/useOrderDraftStore";
 import { CatalogSidebar } from "@/components/order/CatalogSidebar";
 import { useDeviceModelStore } from "@/store/useDeviceModelStore";
 import { Category } from "@/types/product";
@@ -24,7 +24,7 @@ export default function StoreCatalog() {
   const { totalItems } = useStoreDraft(storeId || '');
   const { products, isLoading } = useStoreProductCache(storeId ?? null);
   const { fetchData: fetchDeviceData } = useDeviceModelStore();
-  console.log("Fetched products:", products);
+  
   useEffect(() => {
     fetchDeviceData();
   }, [fetchDeviceData]);

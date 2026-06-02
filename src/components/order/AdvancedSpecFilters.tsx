@@ -120,7 +120,7 @@ export function AdvancedSpecFilters({
         }, {} as Record<string, string[]>);
 
         if (Object.keys(selectedSpecs).length > 0) {
-            console.log("🔍 [AdvancedSpecFilters] 當前選取的規格篩選 (中文路徑):", readableLogs);
+            
         }
     }, [selectedSpecs, specFields, specMap]); // 當 specMap 載入後，Console 也會更新
 

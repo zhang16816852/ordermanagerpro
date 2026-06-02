@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { ShoppingCart, Plus, Minus, Trash2, ArrowRight } from "lucide-react";
-import { useStoreDraft } from "@/stores/useOrderDraftStore";
+import { useStoreDraft } from "@/store/useOrderDraftStore";
 import {
   Table,
   TableBody,
@@ -31,7 +31,6 @@ export default function CartPanel({
 }: CartPanelProps) {
   const navigate = useNavigate();
   const { items, totalItems, totalAmount, updateQuantity, removeItem } = useStoreDraft(storeId);
-  console.log(items);
   if (items.length === 0) {
     return (
       <Card className="sticky top-4">

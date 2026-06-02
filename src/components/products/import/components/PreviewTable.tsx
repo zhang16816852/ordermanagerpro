@@ -59,7 +59,7 @@ export function PreviewTable({
     const [newModelForm, setNewModelForm] = useState({ name: '', brand_id: '', device_series: '', device_type: 'smartphone' });
     
     const safeData = data || [];
-    console.log("匯入產品資料", safeData)
+    
     
     React.useEffect(() => {
         fetchColors();

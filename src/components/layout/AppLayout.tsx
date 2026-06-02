@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { useStoreDraft } from '@/stores/useOrderDraftStore';
+import { useStoreDraft } from '@/store/useOrderDraftStore';
 import { Badge } from "@/components/ui/badge"; // ← 新增這行
 import {
   DropdownMenu,
@@ -120,7 +120,7 @@ function SideNavLink({
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const { user, isAdmin, signOut, storeRoles } = useAuth();
+  const { user, isAdmin, signOut, storeRoles, currentStoreId } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -128,7 +128,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   useEffect(() => {
     performGlobalDataSync();
   }, []);
-  const storeId = storeRoles?.[0]?.store_id;
+  const storeId = currentStoreId || storeRoles?.[0]?.store_id;
   const { totalItems: totalCartItems } = useStoreDraft(storeId);
   const baseStoreNavItems: NavItem[] = [
     { title: '儀表板', href: '/dashboard', icon: Home },

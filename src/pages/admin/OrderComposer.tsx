@@ -1,13 +1,12 @@
 // src/pages/admin/OrderComposer.tsx
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { useCreateOrder } from "@/hooks/useCreateOrder";
 import { ProductWithPricing } from "@/types/product";
 import { useStoreProductCache } from "@/hooks/useProductCache";
-import { useStoreDraft } from "@/stores/useOrderDraftStore";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -29,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import { Send, Copy, Check } from "lucide-react";
 import ProductCatalog from "@/components/order/ProductCatalog";
 import CartPanel from "@/components/order/CartPanel";
@@ -36,7 +36,6 @@ import CartPanel from "@/components/order/CartPanel";
 export default function AdminOrderComposer() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [selectedStoreId, setSelectedStoreId] = useState<string>("");
   const [createdOrder, setCreatedOrder] = useState<{ id: string; code?: string | null; access_token: string } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
@@ -65,52 +64,13 @@ export default function AdminOrderComposer() {
     }));
   }, [storefrontItems]) as unknown as ProductWithPricing[];
 
-  const { items, notes, totalAmount, updateNotes, clearDraft } = useStoreDraft(selectedStoreId);
-
-  const createOrderMutation = useMutation({
-    mutationFn: async () => {
-      if (items.length === 0) throw new Error("購物車是空的");
-      if (!selectedStoreId || !user) throw new Error("無法取得店鋪或使用者資訊");
-
-      const { data: order, error: orderError } = await supabase
-        .from("orders")
-        .insert({
-          store_id: selectedStoreId,
-          created_by: user.id,
-          notes: notes.trim() || null,
-          source_type: "admin_proxy",
-        })
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
-
-      const orderItems = items.map((item) => ({
-        order_id: order.id,
-        product_id: item.productId,
-        variant_id: item.variantId || null,
-        store_id: selectedStoreId,
-        quantity: item.quantity,
-        unit_price: item.price,
-        selected_model_name: item.selectedModelName || null,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from("order_items")
-        .insert(orderItems);
-
-      if (itemsError) throw itemsError;
-
-      return order;
-    },
+  const { createOrder, isPending, items, notes, totalAmount, updateNotes } = useCreateOrder({
+    storeId: selectedStoreId,
+    userId: user?.id ?? "",
+    sourceType: "admin_proxy",
+    queryKeyToInvalidate: ["admin-orders"],
     onSuccess: (data) => {
-      toast.success("訂單已成功建立！");
-      clearDraft();
-      queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
       setCreatedOrder({ id: data.id, code: data.code, access_token: data.access_token });
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "建立訂單失敗");
     },
   });
 
@@ -197,11 +157,11 @@ export default function AdminOrderComposer() {
                   <Button
                     size="lg"
                     className="w-full"
-                    onClick={() => createOrderMutation.mutate()}
-                    disabled={createOrderMutation.isPending}
+                    onClick={() => createOrder()}
+                    disabled={isPending}
                   >
                     <Send className="h-4 w-4 mr-2" />
-                    {createOrderMutation.isPending ? "處理中..." : "送出訂單"}
+                    {isPending ? "處理中..." : "送出訂單"}
                   </Button>
                 </CardContent>
               </Card>

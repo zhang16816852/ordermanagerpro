@@ -1,12 +1,12 @@
 import { useState, useCallback, useMemo } from 'react';
-import { deserializeSpecs, formatSpecValue } from '@/utils/specLogic';
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
 import { useProductCache } from '@/hooks/useProductCache';
 import { useSpecStore } from '@/store/useSpecStore';
 import { toast } from 'sonner';
 import { formatSpecsToCondensedString } from '@/utils/specLogic';
+import { getSubCategoryIds, productMatchesSpecFilters } from '@/utils/treeUtils';
 import { useBrands } from '@/hooks/useBrands';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
@@ -42,23 +42,8 @@ export function useProductsList() {
 
     const { categories, categoryHierarchy } = useSpecStore();
 
-    // Helper: Get all child category IDs (inclusive)
     const subCategoryIds = useMemo(() => {
-        if (!selectedCategory) return new Set<string>();
-        const ids = new Set<string>([selectedCategory]);
-        const queue = [selectedCategory];
-        while (queue.length > 0) {
-            const parentId = queue.shift();
-            categoryHierarchy
-                .filter((h: any) => h.parent_id === parentId)
-                .forEach((h: any) => {
-                    if (!ids.has(h.child_id)) {
-                        ids.add(h.child_id);
-                        queue.push(h.child_id);
-                    }
-                });
-        }
-        return ids;
+        return getSubCategoryIds(selectedCategory, categoryHierarchy);
     }, [selectedCategory, categoryHierarchy]);
 
     // --- Helpers ---
@@ -155,33 +140,11 @@ export function useProductsList() {
                 }
             }
 
-            // 4. Spec Filters
-            const specKeys = Object.keys(selectedSpecs);
-            if (specKeys.length > 0) {
-                const matchesSpec = (settingsRaw: any) => {
-                    if (!settingsRaw) return false;
-                    // 若 settingsRaw 已經是物件（快取結構），則直接使用
-                    const flatSettings = typeof settingsRaw === 'object' ? settingsRaw : deserializeSpecs(settingsRaw);
-                    return specKeys.every((key) => {
-                        const allowedValues = selectedSpecs[key];
-                        if (!allowedValues || allowedValues.length === 0) return true;
-                        const val = flatSettings[key];
-                        const actualValue = formatSpecValue(val);
-                        return allowedValues.includes(actualValue);
-                    });
-                };
-
-                const productMatches = matchesSpec((p as any).spec_values);
-                const variants = getProductVariants(p.id);
-                const anyVariantMatches = variants.some((v) => matchesSpec((v as any).spec_values));
-
-                if (!productMatches && !anyVariantMatches) return false;
-            }
+            if (!productMatchesSpecFilters(p, selectedSpecs, getProductVariants)) return false;
 
             return true;
         });
     }, [products, search, brandMap, selectedCategory, subCategoryIds, selectedBrands, selectedSpecs, getProductVariants]);
-    console.log("產品搜尋結果", filteredProducts);
     // --- Selection Logic ---
     const isAllSelected = filteredProducts && filteredProducts.length > 0 &&
         filteredProducts.every(p => selectedProductIds.has(p.id));
@@ -381,7 +344,7 @@ export function useProductsList() {
             ...p,
             variants: getProductVariants(p.id)
         }));
-        console.log(selected);
+        
         if (selected.length === 0) {
             toast.error('請先選取要匯出的產品');
             return;

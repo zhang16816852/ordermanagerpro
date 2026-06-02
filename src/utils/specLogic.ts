@@ -11,26 +11,23 @@ export interface SpecEntry {
 }
 
 /**
- * 產生穩定且合法的 UUID (基於種子字串)
- * 用於數量連動時產生符合資料庫 UUID 型別約束的識別碼
+ * 產生穩定且合法的 UUID v4 (基於種子字串)
+ * 使用 FNV-1a hash + UUID v4 格式，確保唯一性與格式正確
  */
 export function generateStableUUID(seed: string): string {
-    // 簡單的哈希處理，將字串轉為固定長度的 16 進制
-    let hash = 0;
+    let hash = 2166136261;
     for (let i = 0; i < seed.length; i++) {
-        hash = ((hash << 5) - hash) + seed.charCodeAt(i);
-        hash |= 0;
+        hash ^= seed.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
     }
-
-    // 將 hash 轉為 8 位 16 進制，並重複/填充以湊足 UUID 的 32 位
-    const hex = Math.abs(hash).toString(16).padStart(8, '0');
-    const part2 = (Math.abs(hash * 31) % 0xFFFF).toString(16).padStart(4, '0');
-    const part3 = (Math.abs(hash * 37) % 0xFFFF).toString(16).padStart(4, '0');
-    const part4 = (Math.abs(hash * 41) % 0xFFFF).toString(16).padStart(4, '0');
-    const part5 = (Math.abs(hash * 43)).toString(16).padEnd(12, '0').substring(0, 12);
-
-    // 輸出格式: 8-4-4-4-12
-    return `${hex}-${part2}-${part3}-${part4}-${part5}`;
+    const h = (hash >>> 0).toString(16).padStart(8, '0');
+    return (
+        h.substring(0, 8) + '-' +
+        h.substring(0, 4) + '-4' +
+        h.substring(1, 4) + '-a' +
+        h.substring(2, 5) + '-' +
+        (Math.abs(hash) * 9301 + 49297).toString(16).padStart(12, '0').substring(0, 12)
+    );
 }
 
 /**
@@ -246,12 +243,8 @@ export function getVisibleSpecsTree(
 
             // --- 處理 B: 數量連動 (Quantity Source) ---
             const quantityTargets = specFields.filter(f => f.quantity_source_id === specId);
-            if (quantityTargets.length > 0) {
-                console.log(`[SpecLogic] 發現數量連動: ${spec.name} (值: ${val}) 觸發了 ${quantityTargets.length} 個目標`, quantityTargets.map(t => t.name));
-            }
             quantityTargets.forEach(qTarget => {
                 const count = parseInt(String(val)) || 0;
-                console.log(`[SpecLogic] ${qTarget.name} 將產生 ${count} 個實例`);
                 if (count > 0) {
                     for (let i = 1; i <= count; i++) {
                         // [正規化] 根據規格ID和序號產生穩定且合法的 UUID
@@ -290,11 +283,6 @@ export function getVisibleSpecsTree(
     }
 
     const sortedVisible = getTreeSortedVisiblePaths(specFields, visible);
-    /*
-    console.log('[DynamicSpecs] 當前 spec_values:', tableSettings);
-    console.log('[DynamicSpecs] 排序後的可見路徑:', sortedVisible.map(s => s.pathKey));
-    console.log('[DynamicSpecs] visibleInfo 內容:', Object.fromEntries(visible.entries()));
-*/
     return visible;
 }
 
