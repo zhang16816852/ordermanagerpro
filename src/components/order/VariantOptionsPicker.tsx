@@ -7,13 +7,14 @@ import { useProductColors } from "@/hooks/useProductColors";
 interface VariantOptionsPickerProps {
     product: any;
     onVariantSelect: (variant: any | null) => void;
+    onSelectionChange?: (selectedOptions: Record<string, string | null>) => void;
 }
 
 /**
  * [V7.5] 多層級規格選擇器組件
  * 封裝了自動選取、可用性檢查與多維度標籤渲染邏輯
  */
-export function VariantOptionsPicker({ product, onVariantSelect }: VariantOptionsPickerProps) {
+export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChange }: VariantOptionsPickerProps) {
     const { colors } = useProductColors();
     const [selectedOptions, setSelectedOptions] = useState<{ [key: string]: string | null }>({
         option_1: null,
@@ -26,8 +27,8 @@ export function VariantOptionsPicker({ product, onVariantSelect }: VariantOption
     const variants = useMemo(() => {
         if (!product?.variants) return [];
         return product.variants.map((v: any) => {
-            const groupNames = (v as any).device_model_group_links?.map((l: any) => l.device_model_groups?.name).filter(Boolean) || [];
-            const modelNames = (v as any).device_model_links?.map((l: any) => l.device_models?.name).filter(Boolean) || [];
+            const groupNames = ((v as any).device_model_groups || []).map((g: any) => g?.name).filter(Boolean) as string[];
+            const modelNames = ((v as any).device_models || []).map((m: any) => m?.name).filter(Boolean) as string[];
 
             let modelDisplay = '';
             if (groupNames.length > 0) modelDisplay = groupNames.join(', ');
@@ -101,8 +102,9 @@ export function VariantOptionsPicker({ product, onVariantSelect }: VariantOption
         }
     }, [optionDimensions, selectedOptions, isOptionAvailable]);
 
-    // 5. 匹配變體並回傳
+    // 5. 匹配變體並回傳 + 通知外部當前選項
     useEffect(() => {
+        onSelectionChange?.(selectedOptions);
         const match = variants.find((v: any) => {
             const vModel = v.modelDisplay || null;
             const sModel = selectedOptions.modelDisplay || null;
@@ -112,7 +114,7 @@ export function VariantOptionsPicker({ product, onVariantSelect }: VariantOption
                 v.option_3 === selectedOptions.option_3;
         });
         onVariantSelect(match || null);
-    }, [selectedOptions, variants, onVariantSelect]);
+    }, [selectedOptions, variants, onVariantSelect, onSelectionChange]);
 
     const handleOptionClick = (dimKey: string, value: string) => {
         setSelectedOptions(prev => ({

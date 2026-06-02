@@ -124,6 +124,7 @@ export function ProductDetailDialog({
     const { getBrandName } = useBrands();
     const { colors } = useProductColors();
     const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+    const [pickerOptions, setPickerOptions] = useState<Record<string, string | null> | null>(null);
 
     // 抓取圖片
     const [productImages, setProductImages] = useState<ProductImage[]>([]);
@@ -174,9 +175,14 @@ export function ProductDetailDialog({
         setSelectedVariantId(v?.id || null);
     }, []);
 
+    const handleOptionsChange = useCallback((options: Record<string, string | null>) => {
+        setPickerOptions(options);
+    }, []);
+
     useEffect(() => {
         if (!open) {
             setSelectedVariantId(null);
+            setPickerOptions(null);
         }
     }, [open, product?.id]);
 
@@ -187,7 +193,7 @@ export function ProductDetailDialog({
             fetchSpecs();
         }
     }, [open, specDefinitions.length, categoryLinks.length, fetchSpecs]);
-
+    console.log("產品", product);
     const selectedVariant = useMemo(() => {
         if (!selectedVariantId || !product?.variants) return null;
         return product.variants.find(v => v.id === selectedVariantId) || null;
@@ -220,6 +226,17 @@ export function ProductDetailDialog({
         if (selectedVariant) {
             // 已選取變體 → 只顯示該變體的型號
             addModels(selectedVariant);
+        } else if (pickerOptions && Object.values(pickerOptions).some(v => v !== null)) {
+            // 部分選取（如只選型號）→ 只從符合選項的變體收集
+            const opts = pickerOptions;
+            const matchedVariants = (product.variants || []).filter((v: any) => {
+                const mModel = !opts.modelDisplay || v.modelDisplay === opts.modelDisplay;
+                const mO1 = !opts.option_1 || v.option_1 === opts.option_1;
+                const mO2 = !opts.option_2 || v.option_2 === opts.option_2;
+                const mO3 = !opts.option_3 || v.option_3 === opts.option_3;
+                return mModel && mO1 && mO2 && mO3;
+            });
+            matchedVariants.forEach((v: any) => addModels(v));
         } else {
             // 未選取變體 → 先從主商品收集，再從所有變體收集聯集
             addModels(product);
@@ -227,7 +244,7 @@ export function ProductDetailDialog({
         }
 
         return results;
-    }, [product, selectedVariant]);
+    }, [product, selectedVariant, pickerOptions]);
 
     const variants = product?.variants || [];
 
@@ -515,6 +532,7 @@ export function ProductDetailDialog({
                         <VariantOptionsPicker
                             product={product}
                             onVariantSelect={handleVariantSelect}
+                            onSelectionChange={handleOptionsChange}
                         />
                     </div>
                 )}

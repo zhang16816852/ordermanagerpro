@@ -48,38 +48,49 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
 
     if (productsError) throw productsError;
 
-    // 2. 關聯資料全量抓取 (優化效能：不再使用嵌套 Select)
+    // 2. 關聯資料全量抓取 (不使用 PostgREST embed，避免 schema cache 問題)
     const [
-      { data: allLinks },
-      { data: allGroupLinks },
-      { data: allExclusions },
+      { data: allRelations },
+      { data: allModels },
+      { data: allGroupsWithItems },
       { data: allSpecs },
       { data: allCovers }
     ] = await Promise.all([
-      supabase.from('device_model_links').select('entity_id, model_id, device_models(id, name, aliases)'),
-      supabase.from('device_model_group_links').select('entity_id, group_id, device_model_groups(id, name, device_model_group_items(device_models(id, name, aliases)))'),
-      supabase.from('device_model_exclusions').select('entity_id, model_id, device_models(id, name, aliases)'),
+      supabase.from('entity_model_relations').select('product_id, variant_id, model_id, group_id, relation_type, reason'),
+      supabase.from('device_models').select('id, name, aliases'),
+      supabase.from('device_model_groups').select('id, name, device_model_group_items(device_models(id, name, aliases))'),
       supabase.from('entity_spec_values').select('*'),
       supabase.from('product_images').select('entity_type, entity_id, url').eq('is_cover', true)
     ]);
 
-    // 3. 建立索引 Map
+    // 預先建立 device_models 查找 Map
+    const devModelsMap = new Map<string, any>();
+    allModels?.forEach(m => devModelsMap.set(m.id, m));
+
+    // 預先建立 device_model_groups 查找 Map (含展開的 items)
+    const devGroupsMap = new Map<string, any>();
+    allGroupsWithItems?.forEach(g => devGroupsMap.set(g.id, g));
+
+    // 3. 建立索引 Map (從 entity_model_relations 資料 + 預載的 device_models/device_model_groups 組合)
     const linksMap = new Map<string, any[]>();
-    allLinks?.forEach(l => {
-      if (!linksMap.has(l.entity_id)) linksMap.set(l.entity_id, []);
-      linksMap.get(l.entity_id)!.push(l);
-    });
-
     const groupsMap = new Map<string, any[]>();
-    allGroupLinks?.forEach(l => {
-      if (!groupsMap.has(l.entity_id)) groupsMap.set(l.entity_id, []);
-      groupsMap.get(l.entity_id)!.push(l);
-    });
-
     const exclusionsMap = new Map<string, any[]>();
-    allExclusions?.forEach(l => {
-      if (!exclusionsMap.has(l.entity_id)) exclusionsMap.set(l.entity_id, []);
-      exclusionsMap.get(l.entity_id)!.push(l);
+    allRelations?.forEach(r => {
+      const entityId = r.product_id || r.variant_id;
+      if (!entityId) return;
+      if (r.relation_type === 'include') {
+        if (r.model_id) {
+          if (!linksMap.has(entityId)) linksMap.set(entityId, []);
+          linksMap.get(entityId)!.push({ entity_id: entityId, model_id: r.model_id, device_models: devModelsMap.get(r.model_id) });
+        }
+        if (r.group_id) {
+          if (!groupsMap.has(entityId)) groupsMap.set(entityId, []);
+          groupsMap.get(entityId)!.push({ entity_id: entityId, group_id: r.group_id, device_model_groups: devGroupsMap.get(r.group_id) });
+        }
+      } else if (r.relation_type === 'exclude') {
+        if (!exclusionsMap.has(entityId)) exclusionsMap.set(entityId, []);
+        exclusionsMap.get(entityId)!.push({ entity_id: entityId, model_id: r.model_id, device_models: devModelsMap.get(r.model_id) });
+      }
     });
 
     const specsMap = new Map<string, Record<string, any>>();

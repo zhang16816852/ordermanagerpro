@@ -251,11 +251,11 @@ export function ProductRowItem({
                                                                 <SpecFormatBadge specValues={v.spec_values} />
                                                             </TooltipProvider>
                                                         </div>
-                                                        {v.device_model_links && v.device_model_links.length > 0 && (
+                                                        {v.device_models && v.device_models.length > 0 && (
                                                             <div className="flex flex-wrap gap-1 mt-1">
-                                                                {v.device_model_links.map((link: any, idx: number) => (
-                                                                    <Badge key={link.model_id || idx} variant="secondary" className="text-[8px] px-1 h-3.5 bg-amber-50 text-amber-900 border-amber-200">
-                                                                        {link.device_models?.name}
+                                                                {v.device_models.map((m: any, idx: number) => (
+                                                                    <Badge key={m.id || idx} variant="secondary" className="text-[8px] px-1 h-3.5 bg-amber-50 text-amber-900 border-amber-200">
+                                                                        {m.name}
                                                                     </Badge>
                                                                 ))}
                                                             </div>

@@ -43,36 +43,18 @@ export function VariantModelMatrix({ productId }: VariantModelMatrixProps) {
         enabled: !!productId
     });
 
-    // --- 個別型號現有關聯 ---
+    // --- 現有關聯 (從合併後的 entity_model_relations 讀取) ---
     const { data: existingLinks = [], isLoading: linksLoading } = useQuery({
         queryKey: ['variant-model-links-batch', productId],
         queryFn: async () => {
             const variantIds = variants.map(v => v.id);
             if (variantIds.length === 0) return [];
             const { data, error } = await supabase
-                .from('device_model_links')
-                .select('entity_id, model_id')
-                .in('entity_id', variantIds)
-                .eq('entity_type', 'variant');
+                .from('entity_model_relations')
+                .select('variant_id, model_id, group_id, relation_type')
+                .in('variant_id', variantIds);
             if (error) throw error;
-            return data as unknown as { entity_id: string, model_id: string }[];
-        },
-        enabled: variants.length > 0
-    });
-
-    // --- 群組現有關聯 ---
-    const { data: existingGroupLinks = [], isLoading: groupLinksLoading } = useQuery({
-        queryKey: ['variant-group-links-batch', productId],
-        queryFn: async () => {
-            const variantIds = variants.map(v => v.id);
-            if (variantIds.length === 0) return [];
-            const { data, error } = await supabase
-                .from('device_model_group_links')
-                .select('entity_id, group_id')
-                .in('entity_id', variantIds)
-                .eq('entity_type', 'variant');
-            if (error) throw error;
-            return data as unknown as { entity_id: string, group_id: string }[];
+            return data as { variant_id: string; model_id: string | null; group_id: string | null; relation_type: string }[];
         },
         enabled: variants.length > 0
     });
@@ -80,7 +62,7 @@ export function VariantModelMatrix({ productId }: VariantModelMatrixProps) {
     // --- 同步遠端資料到本地 state ---
     useEffect(() => {
         if (
-            !variantsLoading && !linksLoading && !groupLinksLoading &&
+            !variantsLoading && !linksLoading &&
             variants.length > 0 &&
             initializedProductId.current !== productId
         ) {
@@ -91,16 +73,18 @@ export function VariantModelMatrix({ productId }: VariantModelMatrixProps) {
                 initialGroups[v.id] = new Set();
             });
             existingLinks.forEach(link => {
-                if (initialModels[link.entity_id]) initialModels[link.entity_id].add(link.model_id);
-            });
-            existingGroupLinks.forEach(link => {
-                if (initialGroups[link.entity_id]) initialGroups[link.entity_id].add(link.group_id);
+                if (link.relation_type === 'include' && link.model_id && initialModels[link.variant_id]) {
+                    initialModels[link.variant_id].add(link.model_id);
+                }
+                if (link.relation_type === 'include' && link.group_id && initialGroups[link.variant_id]) {
+                    initialGroups[link.variant_id].add(link.group_id);
+                }
             });
             setLocalLinks(initialModels);
             setLocalGroupLinks(initialGroups);
             initializedProductId.current = productId;
         }
-    }, [existingLinks, existingGroupLinks, variants, variantsLoading, linksLoading, groupLinksLoading, productId]);
+    }, [existingLinks, variants, variantsLoading, linksLoading, productId]);
 
     // --- 篩選型號 ---
     const filteredModels = useMemo(() => {
@@ -125,60 +109,44 @@ export function VariantModelMatrix({ productId }: VariantModelMatrixProps) {
         });
     }, [groups, search, localGroupLinks]);
 
-    // --- 儲存 Mutation (同時處理個別型號與群組) ---
+    // --- 儲存 Mutation (使用 entity_model_relations) ---
     const saveMutation = useMutation({
         mutationFn: async () => {
             const variantIds = variants.map(v => v.id);
             if (variantIds.length === 0) return;
 
-            // 1. 刪除所有現有個別型號關聯
-            const { error: deleteModelErr } = await supabase
-                .from('device_model_links')
+            // 1. 刪除此產品所有變體的現有關聯
+            const { error: deleteErr } = await supabase
+                .from('entity_model_relations')
                 .delete()
-                .in('entity_id', variantIds)
-                .eq('entity_type', 'variant');
-            if (deleteModelErr) throw deleteModelErr;
+                .in('variant_id', variantIds)
+                .eq('relation_type', 'include');
+            if (deleteErr) throw deleteErr;
 
-            // 2. 刪除所有現有群組關聯
-            const { error: deleteGroupErr } = await supabase
-                .from('device_model_group_links')
-                .delete()
-                .in('entity_id', variantIds)
-                .eq('entity_type', 'variant');
-            if (deleteGroupErr) throw deleteGroupErr;
-
-            // 3. 插入新的個別型號關聯
-            const newModelLinks: any[] = [];
+            // 2. 插入新的關聯 (個別型號 + 群組一次寫入)
+            const newLinks: any[] = [];
             Object.entries(localLinks).forEach(([vId, modelIds]) => {
                 modelIds.forEach(mId => {
-                    newModelLinks.push({ entity_id: vId, model_id: mId, entity_type: 'variant' });
+                    newLinks.push({ variant_id: vId, model_id: mId, relation_type: 'include' });
                 });
             });
-            if (newModelLinks.length > 0) {
-                const { error } = await supabase.from('device_model_links').insert(newModelLinks);
-                if (error) throw error;
-            }
-
-            // 4. 插入新的群組關聯
-            const newGroupLinks: any[] = [];
             Object.entries(localGroupLinks).forEach(([vId, groupIds]) => {
                 groupIds.forEach(gId => {
-                    newGroupLinks.push({ entity_id: vId, group_id: gId, entity_type: 'variant' });
+                    newLinks.push({ variant_id: vId, group_id: gId, relation_type: 'include' });
                 });
             });
-            if (newGroupLinks.length > 0) {
-                const { error } = await supabase.from('device_model_group_links').insert(newGroupLinks);
+            if (newLinks.length > 0) {
+                const { error } = await supabase.from('entity_model_relations').insert(newLinks);
                 if (error) throw error;
             }
 
-            // 5. 同步前台展示虛擬商品
+            // 3. 同步前台展示虛擬商品
             const { error: syncError } = await supabase.rpc('sync_storefront_items', { p_product_id: productId });
             if (syncError) throw syncError;
         },
         onSuccess: () => {
             toast.success('變體型號關連已儲存');
             queryClient.invalidateQueries({ queryKey: ['variant-model-links-batch', productId] });
-            queryClient.invalidateQueries({ queryKey: ['variant-group-links-batch', productId] });
         },
         onError: (err: any) => {
             toast.error('儲存失敗：' + err.message);
@@ -229,7 +197,7 @@ export function VariantModelMatrix({ productId }: VariantModelMatrixProps) {
         });
     };
 
-    const isLoading = modelsLoading || groupsLoading || variantsLoading || linksLoading || groupLinksLoading;
+    const isLoading = modelsLoading || groupsLoading || variantsLoading || linksLoading;
 
     if (isLoading) {
         return <div className="flex items-center gap-2 p-8 justify-center text-muted-foreground"><Loader2 className="animate-spin" /> 讀取型號矩陣中...</div>;
