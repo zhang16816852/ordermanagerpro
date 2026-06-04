@@ -39,6 +39,7 @@ export function UnifiedProductImport({ open, onOpenChange, onSuccess }: UnifiedP
         downloadTemplate,
         resetState,
         allBrands,
+        specDefs,
         uploadProgress,
         processedCount,
         skippedCount
@@ -94,6 +95,7 @@ export function UnifiedProductImport({ open, onOpenChange, onSuccess }: UnifiedP
                                 onUpdate={updateRow}
                                 onRemove={removeRow}
                                 allBrands={allBrands}
+                                specDefs={specDefs}
                             />
                         </div>
                     )}

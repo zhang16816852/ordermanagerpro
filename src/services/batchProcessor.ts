@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 export interface BatchOptions<T> {
     batchSize?: number;
+    maxRetries?: number;
     onProgress?: (progress: number, processed: number, total: number) => void;
     onBatchComplete?: (batchIndex: number, successCount: number, errorCount: number) => void;
     filterUnchanged?: (item: T) => boolean;
@@ -63,25 +64,40 @@ export class BatchProcessor {
             chunks.push(itemsToProcess.slice(i, i + batchSize));
         }
 
+        const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
         for (let batchIndex = 0; batchIndex < chunks.length; batchIndex++) {
             const chunk = chunks[batchIndex];
-            try {
-                // 執行特定上傳程序
-                await uploader(chunk);
-                result.processedCount += chunk.length;
+            const maxRetries = options.maxRetries ?? 3;
+            let lastError: any;
 
-                // 觸發單批完成回呼
-                options.onBatchComplete?.(batchIndex, chunk.length, 0);
-            } catch (err: any) {
-                console.error(`[BatchProcessor] 🔴 批次 ${batchIndex + 1} 失敗:`, err);
-                result.success = false;
-                chunk.forEach(item => {
-                    result.errors.push({ item, error: err });
-                });
-                options.onBatchComplete?.(batchIndex, 0, chunk.length);
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    await uploader(chunk);
+                    result.processedCount += chunk.length;
+                    lastError = undefined;
+                    break;
+                } catch (err: any) {
+                    lastError = err;
+                    if (attempt < maxRetries) {
+                        const backoff = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+                        console.warn(`[BatchProcessor] ⚠️ 批次 ${batchIndex + 1} 第 ${attempt} 次重試 (${backoff}ms):`, err.message || err);
+                        await delay(backoff);
+                    }
+                }
             }
 
-            // 計算並更新進度
+            if (lastError) {
+                console.error(`[BatchProcessor] 🔴 批次 ${batchIndex + 1} 失敗 (已重試 ${maxRetries} 次):`, lastError);
+                result.success = false;
+                chunk.forEach(item => {
+                    result.errors.push({ item, error: lastError });
+                });
+                options.onBatchComplete?.(batchIndex, 0, chunk.length);
+            } else {
+                options.onBatchComplete?.(batchIndex, chunk.length, 0);
+            }
+
             const currentProcessed = result.processedCount + result.skippedCount;
             const progress = Math.round((currentProcessed / items.length) * 100);
             options.onProgress?.(progress, currentProcessed, items.length);

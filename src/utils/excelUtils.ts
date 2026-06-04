@@ -173,7 +173,7 @@ export function generateProductExcel(
                 }
             });
         }
-
+        console.log(collectSpecs);
         // 構建 Headers (四列)
         // Row 1: 顯示名稱
         // Row 2: 填寫說明 (顯示)
@@ -331,12 +331,10 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
             const spec = specMap.get(specId); 
             let val = undefined;
             
-            // 在物件中尋找匹配的規格值
-            // 快取的 Key 格式為 instance_uuid:specId[:parentId]
             const matchingKey = Object.keys(settings).find(k => {
                 const parts = k.split(':');
                 const kSpecId = parts[1];
-                const kParentId = parts[2] || 'root';
+                const kParentId = parts[0];
                 return kSpecId === specId && kParentId === parentId;
             });
 

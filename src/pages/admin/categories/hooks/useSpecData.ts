@@ -15,9 +15,9 @@ export function useSpecData() {
     const queryClient = useQueryClient();
     const { specDefinitions, isLoading: isLoadingSpecs, fetchSpecs } = useSpecStore();
 
-    // 進入時確保資料已載入
+    // 進入時確保資料已載入（強制重整，避免使用舊快取）
     useEffect(() => {
-        fetchSpecs();
+        fetchSpecs(true);
     }, [fetchSpecs]);
 
     // --- Mutation ---

@@ -99,7 +99,8 @@ export function DeviceModelManager() {
       '螢幕尺寸': m.screen_size || '',
       '出廠年月': m.release_date || '',
       '備註': m.device_remarks || '',
-      '排序': m.sort_order || 0
+      '排序': m.sort_order || 0,
+      '啟用': m.is_active !== false ? '是' : '否'
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
@@ -178,7 +179,7 @@ export function DeviceModelManager() {
             release_date: String(r['出廠年月'] || r['release_date'] || '').trim() || null,
             device_remarks: String(r['備註'] || r['device_remarks'] || '').trim() || null,
             sort_order: parseInt(r['排序'] || r['sort_order'] || '0', 10) || 0,
-            is_active: true
+            is_active: r['啟用'] !== '否'
           };
         }).filter(Boolean);
 

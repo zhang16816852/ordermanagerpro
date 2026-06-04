@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { ShoppingCart, ImageIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { useSpecStore } from "@/store/useSpecStore";
 import { supabase } from "@/integrations/supabase/client";
+import { CacheService, CACHE, ONE_YEAR_MS } from "@/services/cacheService";
 import { formatSpecValue, deserializeSpecs, getTreeSortedVisiblePaths, getVisibleSpecsTree } from "@/utils/specLogic";
 import { useBrands } from "@/hooks/useBrands";
 import { calculatePriceRange } from "@/utils/priceUtils";
@@ -136,7 +137,19 @@ export function ProductDetailDialog({
             setVariantImageMap(new Map());
             return;
         }
-        // 抓取此主商品 + 所有變體的圖片
+
+        const cacheKey = `product_images_${product.id}`;
+        const cached = CacheService.get<{
+            productImages: ProductImage[];
+            variantEntries: [string, ProductImage[]][];
+        }>(cacheKey, CACHE.productImages.schema, ONE_YEAR_MS);
+
+        if (cached.exists && cached.data) {
+            setProductImages(cached.data.productImages);
+            setVariantImageMap(new Map(cached.data.variantEntries));
+            return;
+        }
+
         const entityIds = [product.id, ...(product.variants?.map(v => v.id) || [])];
         supabase
             .from('product_images')
@@ -159,6 +172,11 @@ export function ProductDetailDialog({
                         vMap.get(img.entity_id)!.push(img);
                     });
                 setVariantImageMap(vMap);
+
+                CacheService.set(cacheKey, {
+                    productImages: pImgs,
+                    variantEntries: Array.from(vMap.entries()),
+                }, '1', CACHE.productImages.schema);
             });
     }, [open, product]);
 

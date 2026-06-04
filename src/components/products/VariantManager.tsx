@@ -87,16 +87,17 @@ export function VariantManager({ products, search }: VariantManagerProps) {
 
       const variantIds = variants.map(v => v.id);
       const { data: linksData, error: linksError } = await supabase
-        .from('device_model_links')
-        .select('entity_id, model_id, device_models(name)')
-        .eq('entity_type', 'variant')
-        .in('entity_id', variantIds);
+        .from('entity_model_relations')
+        .select('variant_id, model_id, device_models(name)')
+        .eq('relation_type', 'include')
+        .not('model_id', 'is', null)
+        .in('variant_id', variantIds);
       
       if (linksError) throw linksError;
 
       return variants.map(v => ({
         ...v,
-        device_model_links: linksData?.filter(link => link.entity_id === v.id) || []
+        device_model_links: linksData?.filter(link => link.variant_id === v.id) || []
       }));
     },
     enabled: !!selectedProductId,

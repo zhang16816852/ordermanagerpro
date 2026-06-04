@@ -340,6 +340,13 @@ export function useProductsList() {
         const { data: categoriesData } = await supabase.from('categories').select('*');
         const { data: specLinks } = await supabase.from('category_spec_links').select('*');
 
+        const { specDefinitions: storeSpecDefs, fetchSpecs } = useSpecStore.getState();
+        let defs = storeSpecDefs;
+        if (defs.length === 0) {
+            await fetchSpecs();
+            defs = useSpecStore.getState().specDefinitions;
+        }
+
         const selected = (products || []).filter(p => selectedProductIds.has(p.id)).map(p => ({
             ...p,
             variants: getProductVariants(p.id)
@@ -351,7 +358,7 @@ export function useProductsList() {
         }
 
         try {
-            const workbook = generateProductExcel(selected, categoriesData || [], specDefs || [], specLinks || [], brandMap);
+            const workbook = generateProductExcel(selected, categoriesData || [], defs, specLinks || [], brandMap);
             const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
             const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 

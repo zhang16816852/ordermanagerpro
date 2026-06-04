@@ -3,12 +3,15 @@ import { supabase } from '@/integrations/supabase/client';
 // =============================================
 // Cache configuration (keys + schema versions)
 // =============================================
+export const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
 export const CACHE = {
   products: { key: 'ac_products_v1', schema: 1, versionKey: 'products' },
   specs: { key: 'ac_specs_v1', schema: 1, versionKey: 'specs' },
   categories: { key: 'ac_categories_v1', schema: 1, versionKey: 'categories' },
   deviceModels: { key: 'ac_device_models_v1', schema: 1, versionKey: 'device_models' },
   storefront: { key: 'ac_storefront_v1', schema: 1, versionKey: 'storefront_items' },
+  productImages: { key: 'ac_product_images_v1', schema: 1, versionKey: 'product_images' },
 } as const;
 
 const LEGACY_KEYS = [
@@ -59,7 +62,7 @@ export class CacheService {
     this.initialized = true;
   }
 
-  static get<T>(key: string, schemaVersion: number): CacheGetResult<T> {
+  static get<T>(key: string, schemaVersion: number, ttlMs?: number): CacheGetResult<T> {
     this.init();
     try {
       const raw = localStorage.getItem(key);
@@ -67,6 +70,11 @@ export class CacheService {
 
       const envelope = JSON.parse(raw) as CacheEnvelope<T>;
       if (envelope.schemaVersion !== schemaVersion) {
+        localStorage.removeItem(key);
+        return { data: null, dataVersion: '0', exists: false };
+      }
+
+      if (ttlMs !== undefined && Date.now() - envelope.cachedAt > ttlMs) {
         localStorage.removeItem(key);
         return { data: null, dataVersion: '0', exists: false };
       }

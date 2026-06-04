@@ -141,8 +141,8 @@ export function useDeviceModelGroups() {
       queryFn: async () => {
         if (!groupId) return { products: 0, variants: 0 };
         const [prodCount, varCount] = await Promise.all([
-          supabase.from('device_model_group_links').select('*', { count: 'exact', head: true }).eq('group_id', groupId).eq('entity_type', 'product'),
-          supabase.from('device_model_group_links').select('*', { count: 'exact', head: true }).eq('group_id', groupId).eq('entity_type', 'variant'),
+          supabase.from('entity_model_relations').select('*', { count: 'exact', head: true }).eq('group_id', groupId).eq('relation_type', 'include').not('group_id', 'is', null).not('product_id', 'is', null),
+          supabase.from('entity_model_relations').select('*', { count: 'exact', head: true }).eq('group_id', groupId).eq('relation_type', 'include').not('group_id', 'is', null).not('variant_id', 'is', null),
         ]);
         return {
           products: prodCount.count || 0,

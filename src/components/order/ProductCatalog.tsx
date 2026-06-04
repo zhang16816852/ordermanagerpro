@@ -173,7 +173,7 @@ export default function ProductCatalog({
 
       return {
         ...product,
-        variants: productMatched ? product.variants : matchedVariants,
+        variants: (productMatched && viewMode !== 'variants') ? product.variants : matchedVariants,
       };
     })
     .filter((product) => {
@@ -201,6 +201,11 @@ export default function ProductCatalog({
       const productMatched = keywords.every((keyword) =>
         productTexts.some((text) => text.includes(keyword))
       );
+
+      if (viewMode === 'variants') {
+        // 單品模式：只保留有符合變體的產品
+        return (product.variants?.length ?? 0) > 0;
+      }
 
       if (productMatched) return true;
 

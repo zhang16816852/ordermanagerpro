@@ -91,9 +91,9 @@ export function VariantEditDialog({
                 if (variant) {
                     // 取得設備型號連結與群組連結與排除
                     const [links, groupLinks, exclusions, specValues] = await Promise.all([
-                        supabase.from('device_model_links').select('model_id').eq('entity_id', variant.id).eq('entity_type', 'variant'),
-                        supabase.from('device_model_group_links').select('group_id').eq('entity_id', variant.id).eq('entity_type', 'variant'),
-                        supabase.from('device_model_exclusions').select('model_id').eq('entity_id', variant.id).eq('entity_type', 'variant'),
+                        supabase.from('entity_model_relations').select('model_id').eq('variant_id', variant.id).eq('relation_type', 'include').not('model_id', 'is', null),
+                        supabase.from('entity_model_relations').select('group_id').eq('variant_id', variant.id).eq('relation_type', 'include').not('group_id', 'is', null),
+                        supabase.from('entity_model_relations').select('model_id').eq('variant_id', variant.id).eq('relation_type', 'exclude').not('model_id', 'is', null),
                         supabase.from('entity_spec_values').select('*').eq('entity_id', variant.id).eq('entity_type', 'variant').is('deleted_at', null)
                     ]);
 

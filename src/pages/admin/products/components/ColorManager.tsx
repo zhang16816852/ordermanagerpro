@@ -73,7 +73,8 @@ export function ColorManager() {
         '顏色名稱': c.name,
         'SKU代碼': c.code,
         'HEX色碼': c.hex_code,
-        '排序': c.sort_order
+        '排序': c.sort_order,
+        '啟用': c.is_active !== false ? '是' : '否'
       }));
       
       const ws = XLSX.utils.json_to_sheet(data);
@@ -103,7 +104,8 @@ export function ColorManager() {
           name: row['顏色名稱'] || row['name'],
           code: (row['SKU代碼'] || row['code'] || '').toString().toUpperCase(),
           hex_code: row['HEX色碼'] || row['hex_code'] || '#808080',
-          sort_order: parseInt(row['排序'] || row['sort_order']) || 0
+          sort_order: parseInt(row['排序'] || row['sort_order']) || 0,
+          is_active: row['啟用'] !== '否'
         })).filter(c => c.name && c.code);
 
         if (formattedColors.length === 0) {
