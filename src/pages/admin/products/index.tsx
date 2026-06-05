@@ -7,9 +7,9 @@ import { VariantManager } from '@/components/products/VariantManager';
 import { useProductsList } from './hooks/useProductsList';
 import { ProductsTable } from './components/ProductsTable';
 import { ProductDialogs } from './components/ProductDialogs';
-import { DeviceModelManager } from './components/DeviceModelManager';
-import { ColorManager } from './components/ColorManager';
-import { CatalogSidebar } from '@/components/order/CatalogSidebar';
+import { DeviceModelManager } from '../libraries/device-models/DeviceModelManager';
+import { ColorManager } from '../libraries/colors/ColorManager';
+import { CatalogSidebar } from '@/components/products/catalog/CatalogSidebar';
 import { ProductWithPricing } from '@/types/product';
 
 export default function AdminProducts() {

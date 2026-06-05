@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useStoreProductCache } from "@/hooks/useProductCache";
-import ProductCatalog from "@/components/order/ProductCatalog";
+import ProductCatalog from "@/components/products/catalog/ProductCatalog";
 import CartPanel from "@/components/order/CartPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useStoreDraft } from "@/store/useOrderDraftStore";
-import { CatalogSidebar } from "@/components/order/CatalogSidebar";
+import { CatalogSidebar } from "@/components/products/catalog/CatalogSidebar";
 import { useDeviceModelStore } from "@/store/useDeviceModelStore";
 import { Category } from "@/types/product";
 import { useQuery } from "@tanstack/react-query";

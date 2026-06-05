@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '@/integrations/supabase/client';
-import { ProductColor } from '@/hooks/useProductColors';
+import { ProductColor } from '@/types/colors';
 
 interface ColorStore {
     colors: ProductColor[];
@@ -81,11 +81,11 @@ export const useColorStore = create<ColorStore>((set, get) => ({
     importColors: async (newColors) => {
         set({ isAdding: true });
         try {
-            // Upsert based on name
+            // Upsert: 有 id 時以 id 配對更新，無 id 時新增
             const { error } = await supabase
                 .from('product_colors' as any)
                 .upsert(newColors, { 
-                    onConflict: 'name',
+                    onConflict: 'id',
                     ignoreDuplicates: false 
                 });
                 

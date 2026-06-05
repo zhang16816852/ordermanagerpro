@@ -1,6 +1,6 @@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { ProductFormDialog } from '@/components/ProductFormDialog/ProductFormDialog';
-import { UnifiedProductImport } from '@/components/products/UnifiedProductImport';
+import { ProductFormDialog } from '@/components/products/form/ProductFormDialog';
+import { UnifiedProductImport } from '@/components/products/import';
 import { Tables } from '@/integrations/supabase/types';
 
 type Product = Tables<'products'>;

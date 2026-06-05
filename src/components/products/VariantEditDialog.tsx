@@ -30,9 +30,9 @@ import {
 } from "@/components/ui/form";
 import { toast } from 'sonner';
 import { StandaloneDeviceModelSelectField } from './StandaloneDeviceModelSelectField';
-import { ColorSelectField } from '../ProductFormDialog/ColorSelectField';
+import { ColorSelectField } from './form/ColorSelectField';
 import { useColorStore } from '@/store/useColorStore';
-import { DynamicSpecsFields } from '../ProductFormDialog/sections/DynamicSpecsFields';
+import { DynamicSpecsFields } from './form/sections/DynamicSpecsFields';
 import { serializeSpecs, deserializeSpecs } from '@/utils/specLogic';
 import { useSpecStore } from '@/store/useSpecStore';
 import { entityRelationService } from '@/services/entityRelationService';

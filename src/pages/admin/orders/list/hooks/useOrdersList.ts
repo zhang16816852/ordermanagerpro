@@ -46,6 +46,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
         .select(`
           id,
           code,
+          access_token,
           created_at,
           source_type,
           status,

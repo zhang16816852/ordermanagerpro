@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useProductCache } from '@/hooks/useProductCache';
-import { useBrands } from '@/hooks/useBrands';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -39,30 +38,41 @@ interface PriceEntry {
   wholesalePrice: string;
 }
 
-export default function AdminBrandPricing() {
+export default function AdminStorePricing() {
   const queryClient = useQueryClient();
   const { products, isLoading: productsLoading, forceRefresh } = useProductCache();
   const [search, setSearch] = useState('');
-  const [selectedBrand, setSelectedBrand] = useState<string>('');
+  const [selectedStore, setSelectedStore] = useState<string>('');
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [priceEntries, setPriceEntries] = useState<Record<string, PriceEntry>>({});
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
 
-  const { brands = [], isLoading: brandsLoading } = useBrands();
-
-  // 取得選定品牌的現有價格（包含變體）
-  const { data: existingPrices = [] } = useQuery({
-    queryKey: ['brand-prices', selectedBrand],
+  const { data: stores = [], isLoading: storesLoading } = useQuery({
+    queryKey: ['chain-stores'],
     queryFn: async () => {
-      if (!selectedBrand) return [];
       const { data, error } = await supabase
-        .from('store_products')
-        .select('product_id, variant_id, wholesale_price')
-        .eq('brand', selectedBrand);
+        .from('stores')
+        .select('id, name, brand')
+        .not('brand', 'is', null)
+        .order('name');
       if (error) throw error;
       return data;
     },
-    enabled: !!selectedBrand,
+  });
+
+  // 取得選定連鎖客戶的現有價格（包含變體）
+  const { data: existingPrices = [] } = useQuery({
+    queryKey: ['store-prices', selectedStore],
+    queryFn: async () => {
+      if (!selectedStore) return [];
+      const { data, error } = await supabase
+        .from('store_products')
+        .select('product_id, variant_id, wholesale_price')
+        .eq('brand', selectedStore);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedStore,
   });
 
   // 取得所有變體
@@ -78,7 +88,7 @@ export default function AdminBrandPricing() {
     },
   });
 
-  // 當選擇品牌時，載入現有價格
+  // 當選擇連鎖客戶時，載入現有價格
   useEffect(() => {
     if (!existingPrices) return;
 
@@ -118,7 +128,7 @@ export default function AdminBrandPricing() {
   // 儲存價格的 mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedBrand) throw new Error('請先選擇品牌');
+      if (!selectedStore) throw new Error('請先選擇連鎖客戶');
       if (selectedProducts.size === 0) throw new Error('請選擇至少一個產品');
 
       // 整理資料格式
@@ -143,7 +153,7 @@ export default function AdminBrandPricing() {
 
       // 呼叫 RPC 函數
       const { error } = await supabase.rpc('upsert_brand_product_prices', {
-        p_brand: selectedBrand, // 根據你的定義，這是一個單獨的參數
+        p_brand: selectedStore, // 根據你的定義，這是一個單獨的參數
         p_products: itemsToSave
       });
 
@@ -151,7 +161,7 @@ export default function AdminBrandPricing() {
     },
     onSuccess: () => {
       toast.success(`已成功更新價格`);
-      queryClient.invalidateQueries({ queryKey: ['brand-prices', selectedBrand] });
+      queryClient.invalidateQueries({ queryKey: ['store-prices', selectedStore] });
       setSelectedProducts(new Set());
     },
     onError: (error: Error) => {
@@ -226,7 +236,7 @@ export default function AdminBrandPricing() {
     setPriceEntries(newEntries);
   };
 
-  const isLoading = productsLoading || brandsLoading || variantsLoading;
+  const isLoading = productsLoading || storesLoading || variantsLoading;
 
   // 計算總選擇數
   const getTotalSelectableCount = () => {
@@ -242,8 +252,8 @@ export default function AdminBrandPricing() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">品牌批發價設定</h1>
-          <p className="text-muted-foreground">批次設定各品牌的產品與變體批發價</p>
+          <h1 className="text-2xl font-bold tracking-tight">連鎖客戶批發價設定</h1>
+          <p className="text-muted-foreground">批次設定各連鎖客戶的產品與變體批發價</p>
         </div>
         <Button variant="outline" onClick={forceRefresh}>
           <RefreshCw className="mr-2 h-4 w-4" />
@@ -251,40 +261,40 @@ export default function AdminBrandPricing() {
         </Button>
       </div>
                                                                                                                                                                                                                                                                                                                                                                                                                                           
-      {/* 選擇品牌 */}
+      {/* 選擇連鎖客戶 */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Tags className="h-5 w-5" />
-            選擇品牌
+            選擇連鎖客戶
           </CardTitle>
           <CardDescription>
-            選擇要設定批發價的品牌，或輸入新品牌名稱
+            選擇要設定批發價的連鎖客戶，或輸入新連鎖客戶名稱
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-4">
-            <Select value={selectedBrand} onValueChange={setSelectedBrand}>
+            <Select value={selectedStore} onValueChange={setSelectedStore}>
               <SelectTrigger className="w-64">
-                <SelectValue placeholder="選擇現有品牌" />
+                <SelectValue placeholder="選擇現有連鎖客戶" />
               </SelectTrigger>
               <SelectContent>
-                {brands.map(brand => (
-                  <SelectItem key={brand.id} value={brand.name}>{brand.name}</SelectItem>
+                {stores.map(store => (
+                  <SelectItem key={store.id} value={store.brand}>{store.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <span className="text-muted-foreground self-center">或</span>
             <Input
-              placeholder="輸入新品牌名稱"
-              value={selectedBrand && !brands.some(b => b.name === selectedBrand) ? selectedBrand : ''}
-              onChange={(e) => setSelectedBrand(e.target.value)}
+              placeholder="輸入新連鎖客戶名稱"
+              value={selectedStore && !stores.some(s => s.brand === selectedStore) ? selectedStore : ''}
+              onChange={(e) => setSelectedStore(e.target.value)}
               className="w-64"
             />
           </div>
-          {selectedBrand && (
+          {selectedStore && (
             <Badge variant="secondary" className="text-base px-3 py-1">
-              目前品牌：{selectedBrand}
+              目前連鎖客戶：{selectedStore}
             </Badge>
           )}
         </CardContent>
@@ -312,7 +322,7 @@ export default function AdminBrandPricing() {
               </div>
               <Button
                 onClick={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending || !selectedBrand}
+                disabled={saveMutation.isPending || !selectedStore}
               >
                 <Save className="mr-2 h-4 w-4" />
                 {saveMutation.isPending ? '儲存中...' : '儲存選定項目'}
@@ -354,7 +364,7 @@ export default function AdminBrandPricing() {
               <TableHead>產品名稱</TableHead>
               <TableHead className="text-right">基礎批發價</TableHead>
               <TableHead className="text-right">基礎零售價</TableHead>
-              <TableHead className="text-right">品牌批發價</TableHead>
+              <TableHead className="text-right">連鎖客戶批發價</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

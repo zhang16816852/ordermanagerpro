@@ -54,7 +54,7 @@ const adminNavItems: NavItem[] = [
   { title: '產品管理', href: '/admin/products', icon: PackageSearch },
   { title: '庫存管理', href: '/admin/inventory', icon: Package },
   { title: '分類管理', href: '/admin/categories', icon: Layers },
-  { title: '品牌價格', href: '/admin/brand-pricing', icon: ShoppingCart },
+  { title: '連鎖客戶價格', href: '/admin/brand-pricing', icon: ShoppingCart },
   { title: '所有訂單', href: '/admin/orders', icon: ClipboardList },
   { title: '出貨池', href: '/admin/shipping-pool', icon: Truck },
   { title: '銷售單', href: '/admin/sales-notes', icon: FileText },

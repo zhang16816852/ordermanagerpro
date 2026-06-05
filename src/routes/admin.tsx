@@ -7,7 +7,7 @@ import AdminOrderEdit from "@/pages/admin/AdminOrderEdit";
 import AdminSalesNotes from "@/pages/admin/SalesNotes";
 import AdminShippingPool from "@/pages/admin/ShippingPool";
 import AdminUsers from "@/pages/admin/Users";
-import AdminBrandPricing from "@/pages/admin/BrandPricing";
+import AdminStorePricing from "@/pages/admin/BrandPricing";
 import AdminAccounting from "@/pages/admin/accounting/index";
 import AdminPurchaseOrders from "@/pages/admin/purchase-orders/index";
 import AdminCategories from "@/pages/admin/categories/index";
@@ -26,7 +26,7 @@ export const adminRoutes = [
     { path: "/admin/sales-notes", element: <AdminSalesNotes /> },
     { path: "/admin/shipping-pool", element: <AdminShippingPool /> },
     { path: "/admin/users", element: <AdminUsers /> },
-    { path: "/admin/brand-pricing", element: <AdminBrandPricing /> },
+    { path: "/admin/brand-pricing", element: <AdminStorePricing /> },
     { path: "/admin/accounting", element: <AdminAccounting /> },
     { path: "/admin/purchase-orders", element: <AdminPurchaseOrders /> },
     { path: "/admin/audit-logs", element: <AdminAuditLogs /> },

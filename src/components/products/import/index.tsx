@@ -10,10 +10,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FileSpreadsheet } from 'lucide-react';
 
-import { useProductImport } from './hooks/useProductImport';
-import { UploadStep } from './components/UploadStep';
-import { PreviewTable } from './components/PreviewTable';
-import { ValidationSummary } from './components/ValidationSummary';
+import { useProductImport } from './useProductImport';
+import { UploadStep } from './UploadStep';
+import { PreviewTable } from './PreviewTable';
+import { ValidationSummary } from './ValidationSummary';
 
 interface UnifiedProductImportProps {
     open: boolean;

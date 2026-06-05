@@ -31,7 +31,7 @@ import { Label } from '@/components/ui/label';
 import { Plus, Pencil, Trash2, Layers, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
-import { VariantBatchCreator } from '../ProductFormDialog/VariantBatchCreator';
+import { VariantBatchCreator } from './form/VariantBatchCreator';
 import { VariantEditDialog } from './VariantEditDialog';
 import { useProductColors } from '@/hooks/useProductColors';
 import { getContrastColor } from '@/utils/colorUtils';

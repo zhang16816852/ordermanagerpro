@@ -18,6 +18,7 @@ interface SharedOrderData {
   order: {
     id: string;
     code?: string;
+    store_id: string;
     created_at: string;
     status: string;
     store_name: string;
@@ -35,7 +36,7 @@ export default function SharedOrder() {
   const { orderId } = useParams();
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
-  const { user } = useAuth();
+  const { user, isAdmin, storeRoles } = useAuth();
   const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
   const isPrintingMode = searchParams.get("print") === "true";
   const printSize = searchParams.get("size") || "a4";
@@ -43,7 +44,7 @@ export default function SharedOrder() {
   const printRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["shared-order", orderId, token, user?.id],
+    queryKey: ["shared-order", orderId, token, user?.id, storeRoles],
     queryFn: async () => {
       if (!orderId || !token) throw new Error("連結無效");
 
@@ -139,7 +140,8 @@ export default function SharedOrder() {
   }
 
   const { order, items } = data;
-  const showPrice = items.length > 0 && items[0].unit_price !== null;
+  const canViewPrice = user ? (isAdmin || storeRoles.some(r => r.store_id === order.store_id)) : false;
+  const showPrice = items.length > 0 && items[0].unit_price !== null && canViewPrice;
 
   return (
     <div
@@ -235,10 +237,10 @@ export default function SharedOrder() {
         </CardContent>
       </Card>
 
-      {!isPrintingMode && !user && (
+      {!isPrintingMode && !canViewPrice && (
         <div className="text-center text-sm text-muted-foreground bg-muted/30 p-4 rounded-lg border border-dashed print:hidden">
-          您目前處於訪客模式，僅顯示商品數量。
-          <a href="/login" className="underline ml-1 hover:text-primary">登入</a> 以查看價格資訊。
+          {user ? "您不是此店鋪的人員，僅顯示商品數量。" : "您目前處於訪客模式，僅顯示商品數量。"}
+          {!user && <a href="/login" className="underline ml-1 hover:text-primary">登入</a>}
         </div>
       )}
     </div>

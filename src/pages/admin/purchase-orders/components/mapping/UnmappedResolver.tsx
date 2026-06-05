@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { PlusCircle, Link as LinkIcon, CheckCircle2 } from 'lucide-react';
 import { InternalProductSelector } from './InternalProductSelector';
-import { ProductFormDialog } from '@/components/ProductFormDialog/ProductFormDialog';
+import { ProductFormDialog } from '@/components/products/form/ProductFormDialog';
 
 export interface UnmappedItem {
   vendor_product_id: string;
