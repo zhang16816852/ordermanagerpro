@@ -47,7 +47,7 @@ export function useStoreCatalogProducts({
       }
 
       // 1. 查詢商品（含規格與分類關聯），伺服端過濾 + 分頁
-      let productQuery = supabase
+      let productQuery: any = supabase
         .from("products")
         .select(
           `
@@ -88,12 +88,18 @@ export function useStoreCatalogProducts({
       const variantIds = products.flatMap((p: any) => (p.variants || []).map((v: any) => v.id));
       const allEntityIds = [...productIds, ...variantIds];
 
+      let relationsQuery = supabase.from("entity_model_relations").select("*");
+      const orParts: string[] = [];
+      if (productIds.length > 0) orParts.push(`product_id.in.(${productIds.join(",")})`);
+      if (variantIds.length > 0) orParts.push(`variant_id.in.(${variantIds.join(",")})`);
+      if (orParts.length > 0) {
+        relationsQuery = relationsQuery.or(orParts.join(","));
+      } else {
+        relationsQuery = relationsQuery.in("product_id", ["__none__"]);
+      }
       const [relationResult, modelResult, groupResult, specResult, coverResult, priceResult] =
         await Promise.all([
-          supabase
-            .from("entity_model_relations")
-            .select("*")
-            .in("product_id", productIds.length > 0 ? productIds : ["__none__"]),
+          relationsQuery,
           supabase.from("device_models").select("id, name, aliases"),
           supabase
             .from("device_model_groups")
@@ -242,15 +248,18 @@ export function useStoreCatalogProducts({
           has_store_price: !!mainStoreProduct,
           variants: (p.variants || []).map((v: any) => {
             const modelDataV = processModels(v.id);
+            // 若變體沒有自己的型號資料，繼承自商品本體
+            const inheritedModelData = (modelDataV.device_models?.length > 0 || modelDataV.device_model_groups?.length > 0)
+              ? modelDataV : modelDataP;
             const variantStoreProduct = storeSettings.find(
               (sp: any) => sp.variant_id === v.id
             );
             return {
               ...v,
-              ...modelDataV,
+              ...inheritedModelData,
               image_url: coversMap.get(v.id) || null,
-              effective_model_names: modelDataV._expanded_models,
-              effective_model_aliases: modelDataV._expanded_model_aliases,
+              effective_model_names: inheritedModelData._expanded_models,
+              effective_model_aliases: inheritedModelData._expanded_model_aliases,
               spec_values: specsMap.get(v.id) || {},
               effective_wholesale_price:
                 variantStoreProduct?.wholesale_price ||
