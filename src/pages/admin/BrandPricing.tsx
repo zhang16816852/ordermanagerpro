@@ -8,26 +8,13 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { calculatePriceRange } from '@/utils/priceUtils';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { StorePicker } from '@/components/ui/StorePicker';
 import { Search, Save, Tags, RefreshCw, ChevronRight, ChevronDown, Layers } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
@@ -88,7 +75,7 @@ export default function AdminStorePricing() {
     },
   });
 
-  // 當選擇連鎖客戶時，載入現有價格
+  // 當選擇連鎖客戶時，載入現有價格（合併更新，不清除已選項目）
   useEffect(() => {
     if (!existingPrices) return;
 
@@ -103,9 +90,7 @@ export default function AdminStorePricing() {
           wholesalePrice: p.wholesale_price?.toString() || '',
         };
       });
-      setPriceEntries(entries);
-    } else {
-      setPriceEntries({});
+      setPriceEntries(prev => ({ ...prev, ...entries }));
     }
   }, [existingPrices]);
 
@@ -162,7 +147,6 @@ export default function AdminStorePricing() {
     onSuccess: () => {
       toast.success(`已成功更新價格`);
       queryClient.invalidateQueries({ queryKey: ['store-prices', selectedStore] });
-      setSelectedProducts(new Set());
     },
     onError: (error: Error) => {
       toast.error(`儲存失敗: ${error.message}`);
@@ -269,31 +253,20 @@ export default function AdminStorePricing() {
             選擇連鎖客戶
           </CardTitle>
           <CardDescription>
-            選擇要設定批發價的連鎖客戶，或輸入新連鎖客戶名稱
+            選擇要設定批發價的連鎖客戶
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-4">
-            <Select value={selectedStore} onValueChange={setSelectedStore}>
-              <SelectTrigger className="w-64">
-                <SelectValue placeholder="選擇現有連鎖客戶" />
-              </SelectTrigger>
-              <SelectContent>
-                {stores.map(store => (
-                  <SelectItem key={store.id} value={store.brand}>{store.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <span className="text-muted-foreground self-center">或</span>
-            <Input
-              placeholder="輸入新連鎖客戶名稱"
-              value={selectedStore && !stores.some(s => s.brand === selectedStore) ? selectedStore : ''}
-              onChange={(e) => setSelectedStore(e.target.value)}
-              className="w-64"
-            />
-          </div>
+        <CardContent>
+          <StorePicker
+            stores={stores}
+            value={selectedStore}
+            onChange={(v) => setSelectedStore(v as string)}
+            valueField="brand"
+            placeholder="選擇連鎖客戶..."
+            searchPlaceholder="搜尋連鎖客戶..."
+          />
           {selectedStore && (
-            <Badge variant="secondary" className="text-base px-3 py-1">
+            <Badge variant="secondary" className="mt-3 text-base px-3 py-1">
               目前連鎖客戶：{selectedStore}
             </Badge>
           )}

@@ -2,11 +2,12 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useStoreProductCache } from "@/hooks/useProductCache";
+import { useStoreCatalogProducts } from "@/hooks/useStoreCatalogProducts";
 import ProductCatalog from "@/components/products/catalog/ProductCatalog";
 import CartPanel from "@/components/order/CartPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ShoppingCart, Filter } from "lucide-react";
+import { ShoppingCart, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -22,13 +23,13 @@ import { supabase } from "@/integrations/supabase/client";
 export default function StoreCatalog() {
   const { storeId } = useAuth();
   const { totalItems } = useStoreDraft(storeId || '');
-  const { products, isLoading } = useStoreProductCache(storeId ?? null);
+  const { products: allProducts, isLoading: isSidebarLoading } = useStoreProductCache(storeId ?? null);
   const { fetchData: fetchDeviceData } = useDeviceModelStore();
-  
+
   useEffect(() => {
     fetchDeviceData();
   }, [fetchDeviceData]);
-  
+
   // Fetch categories for ID <-> Name mapping
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ['categories'],
@@ -43,6 +44,7 @@ export default function StoreCatalog() {
 
   const [viewMode, setViewMode] = useState<'products' | 'variants' | 'gallery'>('products');
   const [searchParams, setSearchParams] = useSearchParams();
+  const [page, setPage] = useState(1);
 
   // URL States
   const search = searchParams.get("search") || "";
@@ -62,6 +64,15 @@ export default function StoreCatalog() {
     } catch { return {}; }
   }, [searchParams]);
 
+  // 分頁商品資料（伺服端過濾 + 分頁）
+  const { products, totalCount, totalPages, isLoading: isCatalogLoading } = useStoreCatalogProducts({
+    storeId: storeId || '',
+    categoryId: selectedCategory,
+    search,
+    brands: selectedBrands,
+    page,
+  });
+
   const updateParams = useCallback((updates: Record<string, string | null>) => {
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
@@ -73,24 +84,41 @@ export default function StoreCatalog() {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const handleSearchChange = (val: string) => updateParams({ search: val });
-  
-  const setSelectedCategory = (id: string | null) => {
-    const cat = categories.find(c => c.id === id);
-    updateParams({ category: cat ? cat.name : null, specs: null }); // Use name in URL, reset specs
+  const handleSearchChange = (val: string) => {
+    updateParams({ search: val });
+    setPage(1);
   };
 
-  const setSelectedBrands = (val: string[]) => updateParams({ brands: val.join(",") });
+  const setSelectedCategory = (id: string | null) => {
+    const cat = categories.find(c => c.id === id);
+    updateParams({ category: cat ? cat.name : null, specs: null });
+    setPage(1);
+  };
+
+  const setSelectedBrands = (val: string[]) => {
+    updateParams({ brands: val.join(",") });
+    setPage(1);
+  };
+
   const handleSpecChange = useCallback((key: string, values: string[]) => {
     const nextSpecs = { ...selectedSpecs };
     if (values.length === 0) delete nextSpecs[key];
     else nextSpecs[key] = values;
     updateParams({ specs: Object.keys(nextSpecs).length > 0 ? JSON.stringify(nextSpecs) : null });
+    setPage(1);
   }, [selectedSpecs, updateParams]);
 
   const clearFilters = useCallback(() => {
     setSearchParams(new URLSearchParams(), { replace: true });
+    setPage(1);
   }, [setSearchParams]);
+
+  // 切換分類或篩選時回到第一頁
+  useEffect(() => { setPage(1); }, [selectedCategory, search, selectedBrands, selectedSpecs]);
+
+  const goToPage = (p: number) => {
+    if (p >= 1 && p <= totalPages) setPage(p);
+  };
 
   if (!storeId) {
     return (
@@ -105,7 +133,7 @@ export default function StoreCatalog() {
       {/* Desktop Sidebar */}
       <aside className="hidden md:block w-64 flex-shrink-0">
         <CatalogSidebar
-          products={products}
+          products={allProducts}
           selectedCategory={selectedCategory}
           onCategoryChange={setSelectedCategory}
           selectedSpecs={selectedSpecs}
@@ -134,7 +162,7 @@ export default function StoreCatalog() {
               </SheetTrigger>
               <SheetContent side="left" className="p-0 w-72">
                 <CatalogSidebar
-                  products={products}
+                  products={allProducts}
                   selectedCategory={selectedCategory}
                   onCategoryChange={setSelectedCategory}
                   selectedSpecs={selectedSpecs}
@@ -201,7 +229,7 @@ export default function StoreCatalog() {
 
         <ProductCatalog
           products={products}
-          isLoading={isLoading}
+          isLoading={isCatalogLoading}
           storeId={storeId}
           viewMode={viewMode}
           search={search}
@@ -210,6 +238,50 @@ export default function StoreCatalog() {
           specFilters={selectedSpecs}
           brandFilter={selectedBrands}
         />
+
+        {/* 分頁控制 */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 py-4">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => goToPage(page - 1)}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              上一頁
+            </Button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+              .map((p, idx, arr) => (
+                <span key={p} className="flex items-center gap-1">
+                  {idx > 0 && arr[idx - 1] !== p - 1 && (
+                    <span className="text-muted-foreground px-1">...</span>
+                  )}
+                  <Button
+                    variant={p === page ? "default" : "outline"}
+                    size="sm"
+                    className="min-w-9"
+                    onClick={() => goToPage(p)}
+                  >
+                    {p}
+                  </Button>
+                </span>
+              ))}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => goToPage(page + 1)}
+            >
+              下一頁
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <span className="text-sm text-muted-foreground ml-2">
+              共 {totalCount} 項
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

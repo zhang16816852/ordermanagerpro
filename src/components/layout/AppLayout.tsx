@@ -60,7 +60,6 @@ const adminNavItems: NavItem[] = [
   { title: '銷售單', href: '/admin/sales-notes', icon: FileText },
   { title: '採購管理', href: '/admin/purchase-orders', icon: Truck },
   { title: '會計管理', href: '/admin/accounting', icon: FileText },
-  { title: '人員管理', href: '/admin/users', icon: Users },
   { title: '媒合市場', href: '/market', icon: ShoppingBag },
   { title: '操作日誌', href: '/admin/audit-logs', icon: HistoryIcon },
 ];

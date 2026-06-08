@@ -15,13 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { StorePicker } from "@/components/ui/StorePicker";
 import {
   Dialog,
   DialogContent,
@@ -189,18 +183,14 @@ export default function AdminOrderComposer() {
         <CardContent>
           <div className="max-w-sm">
             <Label>店鋪</Label>
-            <Select value={selectedStoreId} onValueChange={handleStoreChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="請選擇店鋪" />
-              </SelectTrigger>
-              <SelectContent>
-                {stores.map((store) => (
-                  <SelectItem key={store.id} value={store.id}>
-                    {store.code ? `${store.code} - ${store.name}` : store.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <StorePicker
+              stores={stores}
+              value={selectedStoreId}
+              onChange={(v) => handleStoreChange(v as string)}
+              valueField="id"
+              placeholder="請選擇店鋪"
+              searchPlaceholder="搜尋店鋪..."
+            />
           </div>
         </CardContent>
       </Card>

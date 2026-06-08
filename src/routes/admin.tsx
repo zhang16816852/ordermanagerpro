@@ -6,7 +6,6 @@ import AdminOrderComposer from "@/pages/admin/OrderComposer";
 import AdminOrderEdit from "@/pages/admin/AdminOrderEdit";
 import AdminSalesNotes from "@/pages/admin/SalesNotes";
 import AdminShippingPool from "@/pages/admin/ShippingPool";
-import AdminUsers from "@/pages/admin/Users";
 import AdminStorePricing from "@/pages/admin/BrandPricing";
 import AdminAccounting from "@/pages/admin/accounting/index";
 import AdminPurchaseOrders from "@/pages/admin/purchase-orders/index";
@@ -25,7 +24,6 @@ export const adminRoutes = [
     { path: "/admin/orders/:orderId/edit", element: <AdminOrderEdit /> },
     { path: "/admin/sales-notes", element: <AdminSalesNotes /> },
     { path: "/admin/shipping-pool", element: <AdminShippingPool /> },
-    { path: "/admin/users", element: <AdminUsers /> },
     { path: "/admin/brand-pricing", element: <AdminStorePricing /> },
     { path: "/admin/accounting", element: <AdminAccounting /> },
     { path: "/admin/purchase-orders", element: <AdminPurchaseOrders /> },

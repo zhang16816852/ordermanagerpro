@@ -2068,6 +2068,10 @@ export type Database = {
         Args: { p_sales_note_id: string }
         Returns: undefined
       }
+      ship_from_pool: {
+        Args: { p_store_ids: string[]; p_created_by: string; p_notes?: string | null }
+        Returns: unknown
+      }
       duplicate_product_with_variants: {
         Args: { new_name: string; new_sku: string; target_product_id: string }
         Returns: string

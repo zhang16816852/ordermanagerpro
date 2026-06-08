@@ -143,15 +143,45 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
   const addToShippingPoolMutation = useMutation({
     mutationFn: async (items: any[]) => {
       if (!user) throw new Error('未登入');
-      const poolItems = items.map(item => ({
-        order_item_id: item.itemId,
-        quantity: item.quantity,
-        store_id: item.storeId,
-        created_by: user.id,
-      }));
 
-      const { error } = await supabase.from('shipping_pool').insert(poolItems);
-      if (error) throw error;
+      // 分批處理：已存在出貨池的累加數量，不存在的則新增
+      const orderItemIds = items.map(i => i.itemId);
+      const { data: existingItems } = await supabase
+        .from('shipping_pool')
+        .select('id, order_item_id, quantity')
+        .in('order_item_id', orderItemIds);
+
+      const existingMap = new Map(existingItems?.map(e => [e.order_item_id, e]) || []);
+
+      const toInsert: any[] = [];
+      const toUpdate: { id: string; quantity: number }[] = [];
+
+      for (const item of items) {
+        const existing = existingMap.get(item.itemId);
+        if (existing) {
+          toUpdate.push({ id: existing.id, quantity: existing.quantity + item.quantity });
+        } else {
+          toInsert.push({
+            order_item_id: item.itemId,
+            quantity: item.quantity,
+            store_id: item.storeId,
+            created_by: user.id,
+          });
+        }
+      }
+
+      if (toInsert.length > 0) {
+        const { error } = await supabase.from('shipping_pool').insert(toInsert);
+        if (error) throw error;
+      }
+
+      for (const update of toUpdate) {
+        const { error } = await supabase
+          .from('shipping_pool')
+          .update({ quantity: update.quantity })
+          .eq('id', update.id);
+        if (error) throw error;
+      }
     },
     onSuccess: (_, variables) => {
       toast.success(`已加入出貨池，共 ${variables.length} 個項目`);

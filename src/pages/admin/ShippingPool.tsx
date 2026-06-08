@@ -152,105 +152,27 @@ export default function AdminShippingPool() {
       toast.success("已從出貨池移除");
       queryClient.invalidateQueries({ queryKey: ["shipping-pool"] });
       queryClient.invalidateQueries({ queryKey: ["shipping-pool-items"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
     },
     onError: (error: Error) => {
       toast.error(error.message);
     },
   });
 
-  // 確認出貨：將選中店家的出貨池項目合併為銷售單
+  // 確認出貨：透過 RPC 原子化處理（單一交易）
   const shipMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("未登入");
       if (selectedStores.size === 0) throw new Error("請選擇至少一個店家");
 
-      for (const storeId of selectedStores) {
-        const group = groupedByStore.find(g => g.storeId === storeId);
-        if (!group) continue;
+      const { data, error } = await supabase.rpc("ship_from_pool", {
+        p_store_ids: Array.from(selectedStores),
+        p_created_by: user.id,
+        p_notes: notes || null,
+      });
 
-        // 建立銷售單
-        const { data: salesNote, error: noteError } = await supabase
-          .from("sales_notes")
-          .insert({
-            store_id: storeId,
-            created_by: user.id,
-            status: "shipped",
-            shipped_at: new Date().toISOString(),
-            notes: notes || null,
-          })
-          .select()
-          .single();
-
-        if (noteError) throw noteError;
-
-        // 建立銷售單項目
-        const noteItems = group.items.map(item => ({
-          sales_note_id: salesNote.id,
-          order_item_id: item.order_item_id,
-          quantity: item.quantity,
-        }));
-
-        const { error: itemsError } = await supabase
-          .from("sales_note_items")
-          .insert(noteItems);
-
-        if (itemsError) throw itemsError;
-
-        // 更新訂單項目的已出貨數量
-        for (const item of group.items) {
-          const newShippedQty = (item.order_item?.shipped_quantity || 0) + item.quantity;
-          const newStatus = newShippedQty >= (item.order_item?.quantity || 0) ? 'shipped' : 'partial';
-
-          const { error: updateError } = await supabase
-            .from("order_items")
-            .update({
-              shipped_quantity: newShippedQty,
-              status: newStatus,
-            })
-            .eq("id", item.order_item_id);
-
-          if (updateError) throw updateError;
-        }
-
-        // 刪除出貨池項目
-        const poolItemIds = group.items.map(i => i.id);
-        const { error: deleteError } = await supabase
-          .from("shipping_pool")
-          .delete()
-          .in("id", poolItemIds);
-
-        if (deleteError) throw deleteError;
-      }
-
-      // Check and update order status for affected orders
-      const affectedOrderIds = new Set<string>();
-      for (const storeId of selectedStores) {
-        const group = groupedByStore.find(g => g.storeId === storeId);
-        if (group) {
-          group.items.forEach(item => {
-            if (item.order_item?.order_id) {
-              affectedOrderIds.add(item.order_item.order_id);
-            }
-          });
-        }
-      }
-
-      for (const orderId of affectedOrderIds) {
-        const { data: items } = await supabase
-          .from('order_items')
-          .select('quantity, shipped_quantity')
-          .eq('order_id', orderId);
-
-        if (items && items.length > 0) {
-          const allShipped = items.every(i => i.shipped_quantity >= i.quantity);
-          if (allShipped) {
-            await supabase
-              .from('orders')
-              .update({ status: 'shipped' })
-              .eq('id', orderId);
-          }
-        }
-      }
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       toast.success(`已建立 ${selectedStores.size} 個銷售單並出貨`);
