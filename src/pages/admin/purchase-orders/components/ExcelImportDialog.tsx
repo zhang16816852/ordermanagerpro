@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { useSupplierMappings } from '../hooks/useSupplierMappings';
 import { SupplierMappingManager } from './mapping/SupplierMappingManager';
 import { Upload, AlertTriangle } from 'lucide-react';
+import { ImportPreviewDialog, ImportColumn } from '@/components/shared/ImportPreviewDialog';
 
 interface ExcelImportDialogProps {
   supplierId: string;
@@ -18,7 +19,17 @@ export function ExcelImportDialog({ supplierId, onImport, isLoading }: ExcelImpo
   const [parsedData, setParsedData] = useState<any[]>([]);
   const [unmappedItems, setUnmappedItems] = useState<any[]>([]);
   const [isResolving, setIsResolving] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const previewColumns: ImportColumn[] = [
+    { key: 'vendor_product_id', header: '外部代號', width: '150px' },
+    { key: 'vendor_product_name', header: '品名', width: '200px' },
+    { key: 'quantity', header: '數量', width: '80px', align: 'right' },
+    { key: 'unit_cost', header: '單價', width: '100px', align: 'right' },
+  ];
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -107,16 +118,34 @@ export function ExcelImportDialog({ supplierId, onImport, isLoading }: ExcelImpo
     }
   };
 
+  const handleShowPreview = () => {
+    const hasUnmapped = parsedData.some(i => !i.internal_product_id);
+    if (hasUnmapped) {
+      setPreviewError('尚有未對應的廠商產品，請先完成對應後再匯入。');
+      return;
+    }
+    setPreviewError(null);
+    setPreviewOpen(true);
+  };
+
   const handleConfirmImport = () => {
     const validItems = parsedData.filter(i => i.internal_product_id);
     const finalItems = validItems.map(i => ({
       product_id: i.internal_product_id,
-      variant_id: i.internal_variant_id || null, // Optional payload
+      variant_id: i.internal_variant_id || null,
       quantity: i.quantity,
       unit_cost: i.unit_cost,
     }));
     
-    onImport(finalItems);
+    setIsConfirming(true);
+    try {
+      onImport(finalItems);
+      setPreviewOpen(false);
+    } catch (err: any) {
+      setPreviewError(err.message);
+    } finally {
+      setIsConfirming(false);
+    }
   };
 
   if (isLoadingConfig || isLoadingMappings) {
@@ -167,31 +196,29 @@ export function ExcelImportDialog({ supplierId, onImport, isLoading }: ExcelImpo
             </div>
           ) : parsedData.length > 0 ? (
             <div className="space-y-4 pt-4 border-t">
-              <p className="text-sm font-medium">成功解析且無未對應項目 ({parsedData.length} 筆)</p>
-              <div className="max-h-[300px] overflow-y-auto border rounded-md p-2">
-                 <table className="w-full text-sm">
-                   <thead>
-                     <tr className="border-b"><th className="text-left p-1">外部代號</th><th className="text-left p-1">品名</th><th className="text-right p-1">數量</th><th className="text-right p-1">單價</th></tr>
-                   </thead>
-                   <tbody>
-                     {parsedData.map((row, i) => (
-                       <tr key={i} className="border-b last:border-0 hover:bg-muted/50">
-                         <td className="p-1">{row.vendor_product_id}</td>
-                         <td className="p-1">{row.vendor_product_name}</td>
-                         <td className="p-1 text-right">{row.quantity}</td>
-                         <td className="p-1 text-right">{row.unit_cost}</td>
-                       </tr>
-                     ))}
-                   </tbody>
-                 </table>
-              </div>
-              <div className="flex justify-end pt-4">
-                <Button onClick={handleConfirmImport} disabled={isLoading}>
-                  確定寫入採購清單 ({parsedData.length} 筆)
+              <p className="text-sm font-medium text-green-600">
+                成功解析 {parsedData.length} 筆（已全數對應）
+              </p>
+              <div className="flex justify-end pt-2">
+                <Button onClick={handleShowPreview} variant="default">
+                  預覽匯入資料 ({parsedData.length} 筆)
                 </Button>
               </div>
             </div>
           ) : null}
+
+          <ImportPreviewDialog
+            open={previewOpen}
+            onOpenChange={(open) => { if (!isConfirming) { setPreviewOpen(open); if (!open) setPreviewError(null); } }}
+            title="採購單匯入預覽"
+            description="請確認以下解析結果，確認無誤後按「確認匯入」寫入採購清單。"
+            data={parsedData}
+            columns={previewColumns}
+            onConfirm={handleConfirmImport}
+            isLoading={isConfirming || !!isLoading}
+            error={previewError}
+            confirmText="確認寫入採購清單"
+          />
         </>
       )}
     </div>

@@ -91,21 +91,6 @@ export function useCategoryData() {
                 await (supabase.from('category_spec_links' as any) as any).insert(links);
             }
 
-            // [關鍵修正] 手動觸發版號更新，確保 Edge Function 會通知客戶端刷新
-            try {
-                const { error: rpcError } = await supabase.rpc('bump_data_version', { p_table_name: 'specs', p_source_table: 'category_spec_links' });
-                if (rpcError) {
-                    await supabase.from('data_versions')
-                        .update({ 
-                            version: Date.now(),
-                            updated_at: new Date().toISOString(),
-                            last_triggered_by: 'admin_category_mutation'
-                        })
-                        .eq('table_name', 'specs');
-                }
-            } catch (err) {
-                console.warn('[useCategoryData] 版號更新失敗', err);
-            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['categories'] });
@@ -119,13 +104,7 @@ export function useCategoryData() {
         mutationFn: async (updates: { id: string, sort_order: number, name: string }[]) => {
             const { error } = await supabase.from('categories').upsert(updates);
             if (error) throw error;
-            
-            // 觸發版號更新，讓其他客戶端同步
-            try {
-                await supabase.rpc('bump_data_version', { p_table_name: 'specs', p_source_table: 'categories' });
-            } catch (err) {
-                console.warn('[useCategoryData] 排序版號更新失敗', err);
-            }
+
         },
         onMutate: async (newOrder) => {
             // 1. 取消正在進行的查詢
@@ -159,6 +138,108 @@ export function useCategoryData() {
             queryClient.invalidateQueries({ queryKey: ['categories'] });
         },
     });
+
+    // --- CSV 解析（預覽用，不做 DB 寫入）---
+
+    const parseCategoryFile = async (file: File): Promise<{ rows: any[]; categoriesToUpsert: any[]; newHierarchy: any[]; newSpecLinks: any[] }> => {
+        return new Promise((resolve, reject) => {
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: async (results) => {
+                    const rows = results.data as any[];
+                    try {
+                        const { data: existingCats } = await supabase
+                            .from('categories')
+                            .select('id, name');
+                        const { data: specDefs } = await supabase
+                            .from('specification_definitions')
+                            .select('id, name');
+
+                        const nameToExistingId = new Map(existingCats?.map(c => [c.name.trim(), c.id]) || []);
+                        const idToExistingId = new Map(existingCats?.map(c => [c.id, c.id]) || []);
+                        const specNameToId = new Map(specDefs?.map(s => [s.name.trim(), s.id]) || []);
+                        const specIdToId = new Map(specDefs?.map(s => [s.id, s.id]) || []);
+                        const sessionMap = new Map<string, string>();
+
+                        const categoriesToUpsert = rows.map(row => {
+                            const name = row.name?.trim();
+                            const rawId = row.id?.toString().trim();
+                            let targetId: string | null = null;
+
+                            if (rawId && idToExistingId.has(rawId)) targetId = rawId;
+                            else if (name && nameToExistingId.has(name)) targetId = nameToExistingId.get(name)!;
+                            else if (rawId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId)) targetId = rawId;
+                            else targetId = crypto.randomUUID();
+
+                            if (name) sessionMap.set(name, targetId!);
+                            if (rawId) sessionMap.set(rawId, targetId!);
+
+                            return { id: targetId, name, sort_order: parseInt(row.sort_order) || 0 };
+                        });
+
+                        const newHierarchy: any[] = [];
+                        const newSpecLinks: any[] = [];
+
+                        rows.forEach(row => {
+                            const currentId = sessionMap.get(row.name?.trim()) || sessionMap.get(row.id?.toString().trim());
+                            if (!currentId) return;
+
+                            const parentsRaw = row.parent_names;
+                            if (parentsRaw) {
+                                parentsRaw.split(',').map((s: string) => s.trim()).filter(Boolean).forEach((token: string) => {
+                                    const resolvedPid = sessionMap.get(token) || nameToExistingId.get(token) || idToExistingId.get(token);
+                                    if (resolvedPid && resolvedPid !== currentId) {
+                                        newHierarchy.push({ parent_id: resolvedPid, child_id: currentId });
+                                    }
+                                });
+                            }
+
+                            const specsRaw = row.linked_spec_names;
+                            if (specsRaw) {
+                                specsRaw.split(',').map((s: string) => s.trim()).filter(Boolean).forEach((token: string, idx: number) => {
+                                    const resolvedSid = specNameToId.get(token) || specIdToId.get(token);
+                                    if (resolvedSid) {
+                                        newSpecLinks.push({ category_id: currentId, spec_id: resolvedSid, sort_order: idx });
+                                    }
+                                });
+                            }
+                        });
+
+                        resolve({ rows, categoriesToUpsert, newHierarchy, newSpecLinks });
+                    } catch (err: any) {
+                        reject(err);
+                    }
+                },
+                error: (err) => reject(err),
+            });
+        });
+    };
+
+    const confirmCategoryImport = async (categoriesToUpsert: any[], newHierarchy: any[], newSpecLinks: any[]) => {
+        const importedIds = categoriesToUpsert.map(c => c.id);
+
+        const { error: upsertError } = await supabase.from('categories').upsert(categoriesToUpsert);
+        if (upsertError) throw upsertError;
+
+        if (importedIds.length > 0) {
+            await (supabase.from('category_hierarchy' as any) as any).delete().in('child_id', importedIds);
+            if (newHierarchy.length > 0) {
+                const { error: hError } = await (supabase.from('category_hierarchy' as any) as any).insert(newHierarchy);
+                if (hError) throw hError;
+            }
+
+            await (supabase.from('category_spec_links' as any) as any).delete().in('category_id', importedIds);
+            if (newSpecLinks.length > 0) {
+                const { error: sError } = await (supabase.from('category_spec_links' as any) as any).insert(newSpecLinks);
+                if (sError) throw sError;
+            }
+        }
+
+        queryClient.invalidateQueries({ queryKey: ['categories'] });
+        queryClient.invalidateQueries({ queryKey: ['category_hierarchy'] });
+        queryClient.invalidateQueries({ queryKey: ['category_spec_links'] });
+    };
 
     // --- 匯出 CSV（以名稱為主，輔以 ID 備查）---
 
@@ -329,13 +410,6 @@ export function useCategoryData() {
                         }
                     }
 
-                    // [關鍵修正] 手動觸發版號更新
-                    try {
-                        await supabase.rpc('bump_data_version', { p_table_name: 'specs', p_source_table: 'categories' });
-                    } catch (err) {
-                        console.warn('[useCategoryData] 匯入版號更新失敗', err);
-                    }
-
                     queryClient.invalidateQueries({ queryKey: ['categories'] });
                     queryClient.invalidateQueries({ queryKey: ['category_hierarchy'] });
                     queryClient.invalidateQueries({ queryKey: ['category_spec_links'] });
@@ -358,5 +432,7 @@ export function useCategoryData() {
         reorderMutation,
         handleCategoryExport,
         handleCategoryImport,
+        parseCategoryFile,
+        confirmCategoryImport,
     };
 }

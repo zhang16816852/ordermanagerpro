@@ -10,6 +10,7 @@ import { useSpecStore } from '@/store/useSpecStore';
 import { Toolbar } from './spec-library/SpecLibraryToolbar';
 import { GridView } from './spec-library/SpecLibraryGridView';
 import { TreeView, SpecTreeNode } from './spec-library/SpecLibraryTreeView';
+import { ImportPreviewDialog, ImportColumn } from '@/components/shared/ImportPreviewDialog';
 
 // 規格屬性庫面板 (v4.12 支援自訂排序與智慧連動移除)
 export function SpecLibraryTab() {
@@ -21,8 +22,74 @@ export function SpecLibraryTab() {
         handleSpecExport,
         handleSpecImport,
         handleSpecExportJSON,
-        handleSpecImportJSON
+        handleSpecImportJSON,
+        parseSpecCSV,
+        parseSpecJSON,
+        confirmSpecImport,
+        confirmSpecImportJSON,
     } = useSpecData();
+
+    // 匯入預覽狀態
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [previewData, setPreviewData] = useState<any[]>([]);
+    const [previewMode, setPreviewMode] = useState<'csv' | 'json'>('csv');
+    const [previewError, setPreviewError] = useState<string | null>(null);
+    const [isConfirming, setIsConfirming] = useState(false);
+
+    const handleImportCSVWithPreview = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            setPreviewError(null);
+            setPreviewMode('csv');
+            const items = await parseSpecCSV(file);
+            setPreviewData(items);
+            setPreviewOpen(true);
+        } catch (err: any) {
+            toast.error(`CSV 解析失敗：${err.message}`);
+        }
+        e.target.value = '';
+    };
+
+    const handleImportJSONWithPreview = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            setPreviewError(null);
+            setPreviewMode('json');
+            const items = await parseSpecJSON(file);
+            setPreviewData(items);
+            setPreviewOpen(true);
+        } catch (err: any) {
+            toast.error(`JSON 解析失敗：${err.message}`);
+        }
+        e.target.value = '';
+    };
+
+    const handleConfirmSpecImport = async () => {
+        setIsConfirming(true);
+        try {
+            if (previewMode === 'csv') {
+                await confirmSpecImport(previewData);
+            } else {
+                await confirmSpecImportJSON(previewData);
+            }
+            toast.success(`成功匯入 ${previewData.length} 筆規格`);
+            setPreviewOpen(false);
+        } catch (err: any) {
+            setPreviewError(err.message);
+        } finally {
+            setIsConfirming(false);
+        }
+    };
+
+    const specImportColumns: ImportColumn[] = [
+        { key: 'name', header: '名稱', width: '180px' },
+        { key: 'type', header: '類型', width: '120px' },
+        { key: 'options', header: '選項', render: (val) => Array.isArray(val) ? val.join(', ') : val || '-' },
+        { key: 'default_value', header: '預設值', width: '120px' },
+        { key: 'sort_order', header: '排序', width: '80px', align: 'right' },
+    ];
 
     const [isSpecDialogOpen, setIsSpecDialogOpen] = useState(false);
     const [editingSpec, setEditingSpec] = useState<SpecDefinition | null>(null);
@@ -282,9 +349,9 @@ export function SpecLibraryTab() {
                     onSearchChange={setSearchQuery}
                     onAdd={() => openSpecDialog()}
                     onExportJSON={handleSpecExportJSON}
-                    onImportJSON={handleSpecImportJSON}
+                    onImportJSON={handleImportJSONWithPreview}
                     onExportCSV={handleSpecExport}
-                    onImportCSV={handleSpecImport}
+                    onImportCSV={handleImportCSVWithPreview}
                 />
 
                 {isLoadingSpecs ? (
@@ -308,6 +375,20 @@ export function SpecLibraryTab() {
                         )}
                     </>
                 )}
+
+                {/* 匯入預覽 Dialog */}
+                <ImportPreviewDialog
+                    open={previewOpen}
+                    onOpenChange={(open) => { if (!isConfirming) { setPreviewOpen(open); if (!open) setPreviewError(null); } }}
+                    title={previewMode === 'csv' ? '規格 CSV 匯入預覽' : '規格 JSON 匯入預覽'}
+                    description="請確認以下解析結果，確認無誤後按「確認匯入」寫入資料庫。"
+                    data={previewData}
+                    columns={specImportColumns}
+                    onConfirm={handleConfirmSpecImport}
+                    isLoading={isConfirming}
+                    error={previewError}
+                    confirmText="確認匯入"
+                />
 
                 <SpecDialog
                     open={isSpecDialogOpen}

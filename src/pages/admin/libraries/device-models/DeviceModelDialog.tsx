@@ -111,9 +111,8 @@ export function DeviceModelDialog({
               <div className="space-y-2">
                 <Label>出廠年月</Label>
                 <Input
-                  type="text"
-                  placeholder="如: 2024-01"
-                  value={editingData?.release_date || ''}
+                  type="month"
+                  value={editingData?.release_date ? editingData.release_date.substring(0, 7) : ''}
                   onChange={(e) => setEditingData(prev => ({ ...prev!, release_date: e.target.value }))}
                 />
               </div>

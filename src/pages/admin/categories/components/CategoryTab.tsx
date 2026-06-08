@@ -4,12 +4,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Plus, FolderTree, Download, Upload } from 'lucide-react';
+import { toast } from 'sonner';
 import { CategoryTreeNode } from './CategoryTreeNode';
 import CategoryDialog from './CategoryDialog';
 import { useCategoryData } from '../hooks/useCategoryData';
 import { useSpecData } from '../hooks/useSpecData';
 import { useSpecEngine } from '../hooks/useSpecEngine';
 import { Category, CategoryHierarchy } from '../types';
+import { ImportPreviewDialog, ImportColumn } from '@/components/shared/ImportPreviewDialog';
 import {
     DndContext,
     closestCenter,
@@ -82,7 +84,56 @@ export function CategoryTab() {
         reorderMutation,
         handleCategoryExport,
         handleCategoryImport,
+        parseCategoryFile,
+        confirmCategoryImport,
     } = useCategoryData();
+
+    // 匯入預覽狀態
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [previewData, setPreviewData] = useState<any[]>([]);
+    const [previewParseResult, setPreviewParseResult] = useState<{ categoriesToUpsert: any[]; newHierarchy: any[]; newSpecLinks: any[] } | null>(null);
+    const [previewError, setPreviewError] = useState<string | null>(null);
+    const [isConfirming, setIsConfirming] = useState(false);
+
+    const handleCategoryImportWithPreview = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            setPreviewError(null);
+            const result = await parseCategoryFile(file);
+            setPreviewData(result.rows);
+            setPreviewParseResult({ categoriesToUpsert: result.categoriesToUpsert, newHierarchy: result.newHierarchy, newSpecLinks: result.newSpecLinks });
+            setPreviewOpen(true);
+        } catch (err: any) {
+            setPreviewError(err.message);
+        }
+        e.target.value = '';
+    };
+
+    const handleConfirmImport = async () => {
+        if (!previewParseResult) return;
+        setIsConfirming(true);
+        try {
+            await confirmCategoryImport(
+                previewParseResult.categoriesToUpsert,
+                previewParseResult.newHierarchy,
+                previewParseResult.newSpecLinks
+            );
+            toast.success(`成功匯入 ${previewParseResult.categoriesToUpsert.length} 筆分類`);
+            setPreviewOpen(false);
+        } catch (err: any) {
+            setPreviewError(err.message);
+        } finally {
+            setIsConfirming(false);
+        }
+    };
+
+    const importColumns: ImportColumn[] = [
+        { key: 'name', header: '名稱', width: '200px' },
+        { key: 'parent_names', header: '父分類', width: '200px' },
+        { key: 'linked_spec_names', header: '關聯規格', width: '200px' },
+        { key: 'sort_order', header: '排序', width: '80px', align: 'right' },
+    ];
 
     const { specDefinitions } = useSpecData();
     // 門面模式：一切規格邏輯交由此 Hook
@@ -226,7 +277,7 @@ export function CategoryTab() {
                     <Label htmlFor="category-import" className="cursor-pointer">
                         <Input
                             id="category-import" type="file" accept=".csv"
-                            className="hidden" onChange={handleCategoryImport}
+                            className="hidden" onChange={handleCategoryImportWithPreview}
                         />
                         <Button variant="outline" size="sm" asChild>
                             <span>
@@ -287,6 +338,20 @@ export function CategoryTab() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* 匯入預覽 Dialog */}
+            <ImportPreviewDialog
+                open={previewOpen}
+                onOpenChange={(open) => { if (!isConfirming) { setPreviewOpen(open); if (!open) setPreviewError(null); } }}
+                title="分類匯入預覽"
+                description="請確認以下解析結果，確認無誤後按「確認匯入」寫入資料庫。"
+                data={previewData}
+                columns={importColumns}
+                onConfirm={handleConfirmImport}
+                isLoading={isConfirming}
+                error={previewError}
+                confirmText="確認匯入"
+            />
 
             {/* 新增/編輯 Dialog */}
             <CategoryDialog

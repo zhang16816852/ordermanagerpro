@@ -65,7 +65,7 @@ export function DeviceModelListView({
                 <TableCell className="text-muted-foreground">{model.brand_id ? deviceBrands.find((b: any) => b.id === model.brand_id)?.name || '-' : '-'}</TableCell>
                 <TableCell className="text-muted-foreground">
                   <div>{model.device_type || '-'}</div>
-                  {model.release_date && <div className="text-[10px] bg-muted/50 px-1 inline-block rounded">{model.release_date}</div>}
+                  {model.release_date && <div className="text-[10px] bg-muted/50 px-1 inline-block rounded">{model.release_date.substring(0, 7)}</div>}
                 </TableCell>
                 <TableCell className="text-muted-foreground">{model.screen_size || '-'}</TableCell>
                 <TableCell className="text-center">{model.sort_order}</TableCell>

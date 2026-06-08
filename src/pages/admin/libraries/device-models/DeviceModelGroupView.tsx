@@ -135,7 +135,7 @@ export function DeviceModelGroupView({
                                     <div className="flex flex-col max-w-[80%]">
                                       <div className="font-bold text-sm truncate" title={model.name}>{model.name}</div>
                                       {model.release_date && (
-                                        <div className="text-[10px] text-muted-foreground">{model.release_date}</div>
+                                        <div className="text-[10px] text-muted-foreground">{model.release_date.substring(0, 7)}</div>
                                       )}
                                     </div>
                                     <Switch

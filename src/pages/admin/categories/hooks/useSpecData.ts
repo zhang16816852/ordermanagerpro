@@ -115,6 +115,90 @@ export function useSpecData() {
         },
     });
 
+    // --- 解析 CSV（預覽用）---
+    const parseSpecCSV = async (file: File): Promise<any[]> => {
+        return new Promise((resolve, reject) => {
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: async (results) => {
+                    const rows = results.data as any[];
+                    try {
+                        const { data: existingSpecs } = await supabase
+                            .from('specification_definitions')
+                            .select('id, name');
+
+                        const finalItems = rows.map(row => {
+                            const name = row.name?.trim();
+                            if (!name) return null;
+
+                            let targetId = (row.id && row.id !== 'null' && row.id !== '') ? row.id : null;
+                            if (!targetId && existingSpecs) {
+                                targetId = existingSpecs.find(s => s.name === name)?.id || null;
+                            }
+
+                            return {
+                                id: targetId || undefined,
+                                name,
+                                type: row.type || 'text',
+                                options: row.options ? row.options.split(',').map((s: any) => s.trim()) : [],
+                                default_value: row.default_value || null,
+                                sort_order: parseInt(row.sort_order) || 0,
+                            };
+                        }).filter(Boolean);
+
+                        resolve(finalItems);
+                    } catch (err: any) {
+                        reject(err);
+                    }
+                },
+                error: (err) => reject(err),
+            });
+        });
+    };
+
+    // --- 解析 JSON（預覽用）---
+    const parseSpecJSON = async (file: File): Promise<any[]> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const json = JSON.parse(event.target?.result as string);
+                    const items = Array.isArray(json) ? json : [json];
+                    const cleanedItems = items.map(({ logic_config, created_at, updated_at, ...rest }: any) => ({
+                        ...rest,
+                        quantity_source_id: rest.quantity_source_id || null
+                    }));
+                    resolve(cleanedItems);
+                } catch (err: any) {
+                    reject(err);
+                }
+            };
+            reader.onerror = () => reject(new Error('讀取檔案失敗'));
+            reader.readAsText(file);
+        });
+    };
+
+    // --- 確認匯入（CSV）---
+    const confirmSpecImport = async (items: any[]) => {
+        const { error } = await supabase
+            .from('specification_definitions')
+            .upsert(items, { onConflict: 'id' });
+        if (error) throw error;
+        queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
+        useSpecStore.getState().fetchSpecs(true);
+    };
+
+    // --- 確認匯入（JSON）---
+    const confirmSpecImportJSON = async (items: any[]) => {
+        const { error } = await supabase
+            .from('specification_definitions')
+            .upsert(items, { onConflict: 'id' });
+        if (error) throw error;
+        queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
+        useSpecStore.getState().fetchSpecs(true);
+    };
+
     // --- JSON 匯出 (100% 保真) ---
     const handleSpecExportJSON = () => {
         const dataStr = JSON.stringify(specDefinitions, null, 2);
@@ -249,6 +333,10 @@ export function useSpecData() {
         handleSpecExport,
         handleSpecImport,
         handleSpecExportJSON,
-        handleSpecImportJSON
+        handleSpecImportJSON,
+        parseSpecCSV,
+        parseSpecJSON,
+        confirmSpecImport,
+        confirmSpecImportJSON,
     };
 }
