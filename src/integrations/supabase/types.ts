@@ -1943,105 +1943,7 @@ export type Database = {
       }
     }
     Views: {
-      device_model_exclusions: {
-        Row: {
-          created_at: string | null
-          entity_id: string | null
-          entity_type: string | null
-          id: string | null
-          model_id: string | null
-          reason: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          entity_id?: never
-          entity_type?: never
-          id?: string | null
-          model_id?: string | null
-          reason?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          entity_id?: never
-          entity_type?: never
-          id?: string | null
-          model_id?: string | null
-          reason?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "entity_model_relations_model_id_fkey"
-            columns: ["model_id"]
-            isOneToOne: false
-            referencedRelation: "device_models"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      device_model_group_links: {
-        Row: {
-          created_at: string | null
-          entity_id: string | null
-          entity_type: string | null
-          group_id: string | null
-          id: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          entity_id?: never
-          entity_type?: never
-          group_id?: string | null
-          id?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          entity_id?: never
-          entity_type?: never
-          group_id?: string | null
-          id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "entity_model_relations_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "device_model_groups"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      device_model_links: {
-        Row: {
-          created_at: string | null
-          entity_id: string | null
-          entity_type: string | null
-          id: string | null
-          model_id: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          entity_id?: never
-          entity_type?: never
-          id?: string | null
-          model_id?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          entity_id?: never
-          entity_type?: never
-          id?: string | null
-          model_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "entity_model_relations_model_id_fkey"
-            columns: ["model_id"]
-            isOneToOne: false
-            referencedRelation: "device_models"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+      [_ in never]: never
     }
     Functions: {
       accept_invitation: {
@@ -2067,10 +1969,6 @@ export type Database = {
       delete_sales_note: {
         Args: { p_sales_note_id: string }
         Returns: undefined
-      }
-      ship_from_pool: {
-        Args: { p_store_ids: string[]; p_created_by: string; p_notes?: string | null }
-        Returns: unknown
       }
       duplicate_product_with_variants: {
         Args: { new_name: string; new_sku: string; target_product_id: string }
