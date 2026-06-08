@@ -8,6 +8,7 @@ const PAGE_SIZE = 24;
 interface CatalogOptions {
   storeId: string;
   categoryId?: string | null;
+  subCategoryIds?: string[];
   search?: string;
   brands?: string[];
   page?: number;
@@ -24,6 +25,7 @@ interface CatalogResult {
 export function useStoreCatalogProducts({
   storeId,
   categoryId,
+  subCategoryIds,
   search,
   brands,
   page = 1,
@@ -32,8 +34,18 @@ export function useStoreCatalogProducts({
   const to = from + PAGE_SIZE - 1;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["store-catalog", storeId, categoryId, search, brands, page],
+    queryKey: ["store-catalog", storeId, categoryId, subCategoryIds, search, brands, page],
     queryFn: async () => {
+      // 0. 先取得符合子分類的商品 ID（避開 PostgREST nested .in() 問題）
+      let categoryProductIds: string[] | null = null;
+      if (subCategoryIds && subCategoryIds.length > 0) {
+        const { data: links } = await supabase
+          .from("product_category_links")
+          .select("product_id")
+          .in("category_id", subCategoryIds);
+        categoryProductIds = [...new Set((links || []).map((l: any) => l.product_id))];
+      }
+
       // 1. 查詢商品（含規格與分類關聯），伺服端過濾 + 分頁
       let productQuery = supabase
         .from("products")
@@ -47,7 +59,13 @@ export function useStoreCatalogProducts({
         )
         .range(from, to);
 
-      if (categoryId) {
+      if (categoryProductIds !== null) {
+        if (categoryProductIds.length > 0) {
+          productQuery = productQuery.in("id", categoryProductIds);
+        } else {
+          productQuery = productQuery.in("id", ["__none__"]);
+        }
+      } else if (categoryId) {
         productQuery = productQuery.eq("product_category_links.category_id", categoryId);
       }
       if (search) {

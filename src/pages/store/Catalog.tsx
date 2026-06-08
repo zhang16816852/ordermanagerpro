@@ -19,6 +19,7 @@ import { useDeviceModelStore } from "@/store/useDeviceModelStore";
 import { Category } from "@/types/product";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getSubCategoryIds } from "@/utils/treeUtils";
 
 export default function StoreCatalog() {
   const { storeId } = useAuth();
@@ -42,11 +43,17 @@ export default function StoreCatalog() {
     },
   });
 
-  const [viewMode, setViewMode] = useState<'products' | 'variants' | 'gallery'>('products');
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [page, setPage] = useState(1);
+  const { data: categoryHierarchy = [] } = useQuery({
+    queryKey: ['category_hierarchy'],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from('category_hierarchy' as any) as any).select('*');
+      if (error) return [];
+      return data;
+    },
+  });
 
   // URL States
+  const [searchParams, setSearchParams] = useSearchParams();
   const search = searchParams.get("search") || "";
   const categoryNameInUrl = searchParams.get("category");
   const selectedBrands = searchParams.get("brands")?.split(",").filter(Boolean) || [];
@@ -55,6 +62,15 @@ export default function StoreCatalog() {
     if (!categoryNameInUrl || categories.length === 0) return null;
     return categories.find(c => c.name === categoryNameInUrl)?.id || null;
   }, [categoryNameInUrl, categories]);
+
+  const subCategoryIds = useMemo(() => {
+    return getSubCategoryIds(selectedCategory, categoryHierarchy);
+  }, [selectedCategory, categoryHierarchy]);
+
+  const page = parseInt(searchParams.get("page") || "1", 10);
+  const [viewMode, setViewMode] = useState<'products' | 'variants' | 'gallery'>('products');
+
+
 
   // Specs are a bit more complex, stored as JSON in URL for simplicity
   const selectedSpecs = useMemo(() => {
@@ -65,9 +81,11 @@ export default function StoreCatalog() {
   }, [searchParams]);
 
   // 分頁商品資料（伺服端過濾 + 分頁）
+  const subCategoryIdsArray = useMemo(() => Array.from(subCategoryIds), [subCategoryIds]);
   const { products, totalCount, totalPages, isLoading: isCatalogLoading } = useStoreCatalogProducts({
     storeId: storeId || '',
     categoryId: selectedCategory,
+    subCategoryIds: subCategoryIdsArray,
     search,
     brands: selectedBrands,
     page,
@@ -85,39 +103,31 @@ export default function StoreCatalog() {
   }, [setSearchParams]);
 
   const handleSearchChange = (val: string) => {
-    updateParams({ search: val });
-    setPage(1);
+    updateParams({ search: val, page: "1" });
   };
 
   const setSelectedCategory = (id: string | null) => {
     const cat = categories.find(c => c.id === id);
-    updateParams({ category: cat ? cat.name : null, specs: null });
-    setPage(1);
+    updateParams({ category: cat ? cat.name : null, specs: null, page: "1" });
   };
 
   const setSelectedBrands = (val: string[]) => {
-    updateParams({ brands: val.join(",") });
-    setPage(1);
+    updateParams({ brands: val.join(","), page: "1" });
   };
 
   const handleSpecChange = useCallback((key: string, values: string[]) => {
     const nextSpecs = { ...selectedSpecs };
     if (values.length === 0) delete nextSpecs[key];
     else nextSpecs[key] = values;
-    updateParams({ specs: Object.keys(nextSpecs).length > 0 ? JSON.stringify(nextSpecs) : null });
-    setPage(1);
+    updateParams({ specs: Object.keys(nextSpecs).length > 0 ? JSON.stringify(nextSpecs) : null, page: "1" });
   }, [selectedSpecs, updateParams]);
 
   const clearFilters = useCallback(() => {
     setSearchParams(new URLSearchParams(), { replace: true });
-    setPage(1);
   }, [setSearchParams]);
 
-  // 切換分類或篩選時回到第一頁
-  useEffect(() => { setPage(1); }, [selectedCategory, search, selectedBrands, selectedSpecs]);
-
   const goToPage = (p: number) => {
-    if (p >= 1 && p <= totalPages) setPage(p);
+    if (p >= 1 && p <= totalPages) updateParams({ page: String(p) });
   };
 
   if (!storeId) {
@@ -235,6 +245,7 @@ export default function StoreCatalog() {
           search={search}
           onSearchChange={handleSearchChange}
           categoryFilter={selectedCategory}
+          subCategoryIds={subCategoryIds}
           specFilters={selectedSpecs}
           brandFilter={selectedBrands}
         />

@@ -1,7 +1,7 @@
 // src/components/products/catalog/ProductCatalog.tsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, ChevronRight } from "lucide-react";
+import { Search, ChevronRight, Info } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,14 +16,11 @@ import {
 import { ProductWithPricing, VariantWithPricing } from "@/types/product";
 import { useStoreDraft } from "@/store/useOrderDraftStore";
 import { getSpecValue, formatSpecValue } from "@/utils/specLogic";
-import { getSubCategoryIds, productMatchesSpecFilters } from "@/utils/treeUtils";
+import { productMatchesSpecFilters } from "@/utils/treeUtils";
 import { StatusBadge } from "../../ProductStatusBadge";
 import { toast } from 'sonner';
 import { ProductDetailDialog } from "@/components/products/catalog/ProductDetailDialog";
-import { Info, LayoutGrid, List } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from '@/integrations/supabase/client';
-import { useMemo } from "react";
+
 import { calculatePriceRange } from "@/utils/priceUtils";
 import { useProductColors } from "@/hooks/useProductColors";
 import { getContrastColor } from "@/utils/colorUtils";
@@ -37,6 +34,7 @@ interface ProductCatalogProps {
   search: string;
   onSearchChange: (val: string) => void;
   categoryFilter?: string | null;
+  subCategoryIds?: Set<string>;
   specFilters?: Record<string, string[]>;
   brandFilter?: string[];
 }
@@ -49,6 +47,7 @@ export default function ProductCatalog({
   search,
   onSearchChange,
   categoryFilter = null,
+  subCategoryIds,
   specFilters = {},
   brandFilter = [],
 }: ProductCatalogProps) {
@@ -82,19 +81,9 @@ export default function ProductCatalog({
     }, { replace: true });
   };
 
-  const { data: categoryHierarchy = [] } = useQuery({
-    queryKey: ['category_hierarchy'],
-    queryFn: async () => {
-      const { data, error } = await (supabase.from('category_hierarchy' as any) as any).select('*');
-      if (error) return [];
-      return data;
-    },
-  });
-
-  const subCategoryIds = useMemo(() => {
-    return getSubCategoryIds(categoryFilter, categoryHierarchy);
-  }, [categoryFilter, categoryHierarchy]);
-
+  const effectiveSubCategoryIds = useMemo(() => {
+    return subCategoryIds ?? (categoryFilter ? new Set([categoryFilter]) : new Set<string>());
+  }, [subCategoryIds, categoryFilter]);
 
   const keywords = search
     .toLowerCase()
@@ -105,10 +94,9 @@ export default function ProductCatalog({
   const filteredProducts = products
     .filter((product) => {
       // 1. Category Filter (Recursive)
-      if (categoryFilter) {
+      if (categoryFilter && effectiveSubCategoryIds.size > 0) {
         const pCategoryIds = (product as any).category_ids || [];
-        // 僅檢查多分類關聯
-        if (!pCategoryIds.some((id: string) => subCategoryIds.has(id))) {
+        if (!pCategoryIds.some((id: string) => effectiveSubCategoryIds.has(id))) {
           return false;
         }
       }
