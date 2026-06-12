@@ -156,7 +156,7 @@ export function useProductImportUploader(
                         status: row.variant_status || row.product_status,
                         barcode: row.barcode || null
                     };
-                    if (row.variant_id) data.id = row.variant_id;
+                    data.id = row.variant_id || crypto.randomUUID();
                     return data;
                 });
 
@@ -209,7 +209,8 @@ export function useProductImportUploader(
                 const { data: insertedVariants } = await supabase.from('product_variants').select('id, sku').in('sku', variantsToInsert.map(v => v.sku));
                 const variantIdMap = new Map(insertedVariants?.map(v => [v.sku, v.id]) || []);
 
-                for (const row of chunk.filter(r => r.is_variant)) {
+                const uniqueVariants = Array.from(new Map(chunk.filter((r: ImportRow) => r.is_variant && r.variant_sku).map((r: ImportRow) => [r.variant_sku, r])).values());
+                for (const row of uniqueVariants) {
                     if (!row.variant_sku) continue;
                     const vId = variantIdMap.get(row.variant_sku);
                     if (!vId) continue;

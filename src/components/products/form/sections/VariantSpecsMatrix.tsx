@@ -3,8 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useCategorySpecs } from '@/hooks/useCategorySpecs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Save, Copy, Loader2, ChevronsRight } from 'lucide-react';
+import { Save, Copy, Loader2, ChevronsRight, Wand2, PenLine, Table2 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { SpecValueEditor } from './SpecValueEditor';
 import { deserializeSpecs, serializeSpecs, getVisibleSpecsTree, getTreeSortedVisiblePaths } from '@/utils/specLogic';
@@ -20,6 +21,9 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
     const { specMap, specTriggers, fetchSpecs } = useSpecStore();
     const { data: specFields = [], isLoading: specsLoading } = useCategorySpecs(categoryIds);
     const [localData, setLocalData] = useState<Record<string, Record<string, any>>>({});
+    const [editMode, setEditMode] = useState<'table' | 'single'>('table');
+    const [batchDialogOpen, setBatchDialogOpen] = useState(false);
+    const [batchValues, setBatchValues] = useState<Record<string, any>>({});
 
     // 內部 Debug 輔助：將 UUID 路徑轉為可讀名稱 (例如 "手機規格 > 顏色")
     const getReadablePath = (path: string) => {
@@ -204,9 +208,31 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
     return (
         <div className="space-y-4 border rounded-xl bg-background shadow-sm">
             <div className="bg-muted/30 p-4 border-b flex justify-between items-center">
-                <div>
-                    <h3 className="text-sm font-bold tracking-tight">變體規格矩陣 (v4.7 Registry)</h3>
-                    <p className="text-xs text-muted-foreground">DFS 樹狀排序與動態可見性聯動</p>
+                <div className="flex items-center gap-3">
+                    <div>
+                        <h3 className="text-sm font-bold tracking-tight">變體規格矩陣 (v4.7 Registry)</h3>
+                        <p className="text-xs text-muted-foreground">DFS 樹狀排序與動態可見性聯動</p>
+                    </div>
+                    <div className="flex items-center gap-1 bg-background border rounded-lg p-0.5 shadow-sm">
+                        <Button
+                            variant={editMode === 'table' ? 'default' : 'ghost'}
+                            size="sm"
+                            className="h-7 px-2 text-[11px] gap-1"
+                            onClick={() => setEditMode('table')}
+                        >
+                            <Table2 className="h-3.5 w-3.5" />
+                            表格
+                        </Button>
+                        <Button
+                            variant={editMode === 'single' ? 'default' : 'ghost'}
+                            size="sm"
+                            className="h-7 px-2 text-[11px] gap-1"
+                            onClick={() => setEditMode('single')}
+                        >
+                            <PenLine className="h-3.5 w-3.5" />
+                            單一
+                        </Button>
+                    </div>
                 </div>
                 <Button size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="shadow-sm">
                     {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
@@ -218,7 +244,59 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                 <Table className="border-separate border-spacing-0">
                     <TableHeader>
                         <TableRow className="bg-muted/10 hover:bg-muted/10">
-                            <TableHead className="w-[220px] font-bold bg-slate-50 dark:bg-slate-900 sticky top-0 left-0 z-20 border-r border-b text-foreground shadow-[1px_1px_0_0_rgba(0,0,0,0.1)]">規格分層項目</TableHead>
+                            <TableHead className="w-[220px] font-bold bg-slate-50 dark:bg-slate-900 sticky top-0 left-0 z-20 border-r border-b text-foreground shadow-[1px_1px_0_0_rgba(0,0,0,0.1)]">
+                                <div className="flex items-center justify-between gap-1">
+                                    <span className="text-[11px]">規格分層項目</span>
+                                    <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
+                                        <DialogTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-primary hover:text-primary hover:bg-primary/10" title="全部統一批次編輯">
+                                                <Wand2 className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+                                            <DialogHeader>
+                                                <DialogTitle className="text-base flex items-center gap-2">
+                                                    <Wand2 className="h-4 w-4 text-primary" />
+                                                    全部統一 — 批次設定所有變體規格
+                                                </DialogTitle>
+                                            </DialogHeader>
+                                            <div className="space-y-4 py-2">
+                                                <p className="text-xs text-muted-foreground">以下數值將套用至「所有變體」的對應規格欄位。</p>
+                                                {visiblePathRows.filter(r => !r.spec || r.spec.type !== 'heading').map(row => (
+                                                    <div key={row.pathKey} className="flex items-center gap-3">
+                                                        <span className="text-xs font-medium min-w-[120px] truncate" title={row.name}>{row.name}</span>
+                                                        <div className="flex-1 max-w-[250px]">
+                                                            {row.spec && (
+                                                                <SpecValueEditor
+                                                                    spec={row.spec}
+                                                                    value={batchValues[row.pathKey] ?? localData[variants[0]?.id]?.[row.pathKey] ?? ''}
+                                                                    onChange={(val) => setBatchValues(prev => ({ ...prev, [row.pathKey]: val }))}
+                                                                />
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                <div className="flex justify-end gap-2 pt-2 border-t">
+                                                    <DialogClose asChild>
+                                                        <Button variant="outline" size="sm">取消</Button>
+                                                    </DialogClose>
+                                                    <Button size="sm" onClick={() => {
+                                                        Object.entries(batchValues).forEach(([pathKey, value]) => {
+                                                            applyToAll(pathKey, value);
+                                                        });
+                                                        setBatchValues({});
+                                                        setBatchDialogOpen(false);
+                                                        toast.success('已將所有規格值同步至所有變體');
+                                                    }}>
+                                                        <Copy className="h-3.5 w-3.5 mr-1" />
+                                                        套用至全部
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </DialogContent>
+                                    </Dialog>
+                                </div>
+                            </TableHead>
                             {variants.map(v => (
                                 <TableHead key={v.id} className="min-w-[160px] text-center px-4 font-semibold border-r border-b last:border-r-0 text-foreground/80 bg-slate-50 dark:bg-slate-900 sticky top-0 z-10 shadow-[0_1px_0_0_rgba(0,0,0,0.1)]">
                                     <div className="whitespace-normal break-words leading-tight px-1" title={v.name}>{v.name}</div>
@@ -261,7 +339,39 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                             )}
                                         </div>
                                     </TableCell>
-                                    {!isHeading && (
+                                    {!isHeading && editMode === 'single' && (
+                                        <>
+                                            <TableCell colSpan={variants.length} className="p-2 border-r last:border-r-0">
+                                                <div className="flex justify-center w-full">
+                                                    {row.spec && (
+                                                        <div className="w-full max-w-[300px]">
+                                                            <SpecValueEditor
+                                                                spec={row.spec}
+                                                                value={localData[variants[0]?.id]?.[row.pathKey] ?? ''}
+                                                                onChange={(val) => applyToAll(row.pathKey, val)}
+                                                                variantMode={false}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-center bg-primary/5 group-hover:bg-primary/10 transition-colors">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
+                                                    onClick={() => {
+                                                        const firstVData = localData[variants[0].id] || {};
+                                                        const firstValue = firstVData[row.pathKey] || '';
+                                                        applyToAll(row.pathKey, firstValue);
+                                                    }}
+                                                >
+                                                    <Copy className="h-4 w-4" />
+                                                </Button>
+                                            </TableCell>
+                                        </>
+                                    )}
+                                    {!isHeading && editMode === 'table' && (
                                         <>
                                             {variants.map(v => {
                                                 const vSettings = localData[v.id] || {};

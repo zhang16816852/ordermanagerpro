@@ -256,39 +256,43 @@ export const CategorySelectedConfigTab = ({
 
     if (activeConfiguration.length === 0) {
         return (
-            <div className="p-12 text-center text-muted-foreground space-y-2">
-                <Settings2 className="h-12 w-12 mx-auto opacity-20" />
-                <p>尚未選擇任何規格</p>
+            <div className="flex-1 flex items-center justify-center p-12 text-center text-muted-foreground space-y-2">
+                <div>
+                    <Settings2 className="h-12 w-12 mx-auto opacity-20" />
+                    <p>尚未選擇任何規格</p>
+                </div>
             </div>
         );
     }
 
     return (
-        <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-        >
-            <div className="max-h-[400px] overflow-y-auto">
-                <SortableContext
-                    items={selectedTree.map(n => n.config.id)}
-                    strategy={verticalListSortingStrategy}
-                >
-                    <div className="flex flex-col">
-                        {selectedTree.map((node, index) => (
-                            <SortableConfigItem
-                                key={node.config.id}
-                                node={node}
-                                specDefinitions={specDefinitions}
-                                index={index}
-                                onToggle={engine.toggle}
-                                onSortOrderChange={engine.setSortOrder}
-                                isRoot={true}
-                            />
-                        ))}
-                    </div>
-                </SortableContext>
-            </div>
-        </DndContext>
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+            >
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                    <SortableContext
+                        items={selectedTree.map(n => n.config.id)}
+                        strategy={verticalListSortingStrategy}
+                    >
+                        <div className="flex flex-col">
+                            {selectedTree.map((node, index) => (
+                                <SortableConfigItem
+                                    key={node.config.id}
+                                    node={node}
+                                    specDefinitions={specDefinitions}
+                                    index={index}
+                                    onToggle={engine.toggle}
+                                    onSortOrderChange={engine.setSortOrder}
+                                    isRoot={true}
+                                />
+                            ))}
+                        </div>
+                    </SortableContext>
+                </div>
+            </DndContext>
+        </div>
     );
 };

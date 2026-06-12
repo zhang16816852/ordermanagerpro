@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { useDeviceModelGroups } from '@/pages/admin/products/hooks/useDeviceModelGroups';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { toast } from 'sonner';
 
 interface StandaloneDeviceModelSelectFieldProps {
     modelIds?: string[];
@@ -26,6 +27,51 @@ export function StandaloneDeviceModelSelectField({
     onChange 
 }: StandaloneDeviceModelSelectFieldProps) {
     const [search, setSearch] = useState('');
+    const [showAddModel, setShowAddModel] = useState(false);
+    const [newModelName, setNewModelName] = useState('');
+    const [showAddGroup, setShowAddGroup] = useState(false);
+    const [newGroupName, setNewGroupName] = useState('');
+    const queryClient = useQueryClient();
+
+    const addModelMutation = useMutation({
+        mutationFn: async (name: string) => {
+            const { data, error } = await supabase
+                .from('device_models')
+                .insert([{ name, is_active: true }])
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: ['device_models_active'] });
+            toggleModel(data.id);
+            setNewModelName('');
+            setShowAddModel(false);
+            toast.success(`已新增型號「${data.name}」`);
+        },
+        onError: (err) => toast.error('新增型號失敗: ' + err.message),
+    });
+
+    const addGroupMutation = useMutation({
+        mutationFn: async (name: string) => {
+            const { data, error } = await supabase
+                .from('device_model_groups')
+                .insert([{ name }])
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: ['device_model_groups'] });
+            toggleGroup(data.id);
+            setNewGroupName('');
+            setShowAddGroup(false);
+            toast.success(`已新增群組「${data.name}」`);
+        },
+        onError: (err) => toast.error('新增群組失敗: ' + err.message),
+    });
 
     const { data: models = [] } = useQuery({
         queryKey: ['device_models_active'],
@@ -77,16 +123,12 @@ export function StandaloneDeviceModelSelectField({
     };
 
     return (
-        <div className="space-y-2 col-span-full">
-            <Label className="flex items-center gap-2">
-                變體專屬型號與群組 (選填)
-                <Badge variant="outline" className="text-[10px] font-normal">繼承模式</Badge>
-            </Label>
+        <div className="space-y-2">
             
             <div className="flex flex-wrap gap-2 mb-2 p-3 min-h-[50px] border rounded-lg bg-muted/5 shadow-inner">
                 {modelIds.length === 0 && groupIds.length === 0 ? (
                     <span className="text-sm text-muted-foreground italic flex items-center gap-2">
-                        <Info className="h-4 w-4 opacity-30" /> 尚未選擇專屬設定 (將完全繼承產品主設定)
+                        <Info className="h-4 w-4 opacity-30" /> 尚未選擇型號或群組
                     </span>
                 ) : (
                     <>
@@ -140,7 +182,7 @@ export function StandaloneDeviceModelSelectField({
                         className="w-full justify-start text-muted-foreground font-normal h-9 border-dashed"
                     >
                         <Plus className="mr-2 h-4 w-4" />
-                        新增專屬型號或群組...
+                        選擇型號或群組...
                     </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[350px] p-0" align="start">
@@ -162,7 +204,7 @@ export function StandaloneDeviceModelSelectField({
                         </div>
 
                         <TabsContent value="models" className="m-0">
-                            <ScrollArea className="h-[300px]">
+                            <ScrollArea className="h-[260px]">
                                 <div className="p-2 space-y-1">
                                     {filteredModels.map((model) => {
                                         const isSelected = modelIds.includes(model.id);
@@ -182,10 +224,41 @@ export function StandaloneDeviceModelSelectField({
                                     })}
                                 </div>
                             </ScrollArea>
+                            <div className="border-t p-2">
+                                {showAddModel ? (
+                                    <div className="flex gap-1">
+                                        <Input
+                                            placeholder="輸入型號名稱..."
+                                            value={newModelName}
+                                            onChange={(e) => setNewModelName(e.target.value)}
+                                            className="h-7 text-xs flex-1"
+                                            autoFocus
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    if (newModelName.trim()) addModelMutation.mutate(newModelName.trim());
+                                                }
+                                            }}
+                                        />
+                                        <Button
+                                            size="sm"
+                                            className="h-7 text-xs"
+                                            onClick={() => newModelName.trim() && addModelMutation.mutate(newModelName.trim())}
+                                            disabled={!newModelName.trim() || addModelMutation.isPending}
+                                        >
+                                            新增
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground" onClick={() => setShowAddModel(true)}>
+                                        <Plus className="h-3 w-3 mr-1" />快速新增型號
+                                    </Button>
+                                )}
+                            </div>
                         </TabsContent>
 
                         <TabsContent value="groups" className="m-0">
-                            <ScrollArea className="h-[300px]">
+                            <ScrollArea className="h-[260px]">
                                 <div className="p-2 space-y-1">
                                     {groups.filter(g => g.name.toLowerCase().includes(search.toLowerCase())).map((group) => {
                                         const isSelected = groupIds.includes(group.id);
@@ -208,6 +281,37 @@ export function StandaloneDeviceModelSelectField({
                                     })}
                                 </div>
                             </ScrollArea>
+                            <div className="border-t p-2">
+                                {showAddGroup ? (
+                                    <div className="flex gap-1">
+                                        <Input
+                                            placeholder="輸入群組名稱..."
+                                            value={newGroupName}
+                                            onChange={(e) => setNewGroupName(e.target.value)}
+                                            className="h-7 text-xs flex-1"
+                                            autoFocus
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    if (newGroupName.trim()) addGroupMutation.mutate(newGroupName.trim());
+                                                }
+                                            }}
+                                        />
+                                        <Button
+                                            size="sm"
+                                            className="h-7 text-xs"
+                                            onClick={() => newGroupName.trim() && addGroupMutation.mutate(newGroupName.trim())}
+                                            disabled={!newGroupName.trim() || addGroupMutation.isPending}
+                                        >
+                                            新增
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground" onClick={() => setShowAddGroup(true)}>
+                                        <Plus className="h-3 w-3 mr-1" />快速新增群組
+                                    </Button>
+                                )}
+                            </div>
                         </TabsContent>
                     </Tabs>
                 </PopoverContent>

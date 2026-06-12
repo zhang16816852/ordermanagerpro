@@ -203,16 +203,24 @@ export function SpecLibraryTab() {
             return node;
         };
 
+        const matchesQuery = (node: any): boolean =>
+            node.spec.name.toLowerCase().includes(query) ||
+            node.spec.type.toLowerCase().includes(query) ||
+            node.spec.options?.some((o: string) => o.toLowerCase().includes(query));
+
         const filterTree = (node: any): any | null => {
-            const isMatch = node.spec.name.toLowerCase().includes(query) ||
-                node.spec.type.toLowerCase().includes(query) ||
-                node.spec.options?.some((o: string) => o.toLowerCase().includes(query));
+            const isMatch = matchesQuery(node);
+
+            if (isMatch) {
+                // 如果本身符合搜尋，保留所有下層
+                return node;
+            }
 
             const filteredChildren = node.children
                 .map((child: any) => filterTree(child))
                 .filter(Boolean);
 
-            if (isMatch || filteredChildren.length > 0) {
+            if (filteredChildren.length > 0) {
                 return { ...node, children: filteredChildren };
             }
             return null;

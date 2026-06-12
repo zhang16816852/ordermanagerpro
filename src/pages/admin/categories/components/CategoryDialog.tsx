@@ -54,14 +54,14 @@ const CategoryDialog = ({
     console.log("已選規格", activeConfiguration)
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+            <DialogContent className="max-w-4xl max-h-[90vh] min-h-[520px] flex flex-col p-0 gap-0 overflow-hidden">
                 <DialogHeader className="p-6 pb-2">
                     <DialogTitle>管理分類</DialogTitle>
                 </DialogHeader>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="flex-1 flex flex-col p-6 space-y-6 overflow-hidden min-h-0">
                     {/* 基本資訊 */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 shrink-0">
                         <div className="space-y-2">
                             <Label htmlFor="name">分類名稱</Label>
                             <Input
@@ -105,11 +105,11 @@ const CategoryDialog = ({
                         </div>
                     </div>
 
-                    <Separator />
+                    <Separator className="shrink-0" />
 
-                    {/* 規格關聯區 */}
-                    <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="w-full">
-                        <div className="flex items-center justify-between mb-4">
+                    {/* 規格關聯區 - 填滿剩餘空間 */}
+                    <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="w-full flex-1 flex flex-col min-h-0">
+                        <div className="flex items-center justify-between mb-4 shrink-0">
                             <TabsList>
                                 <TabsTrigger value="library" className="gap-2">
                                     <Database className="h-4 w-4" />
@@ -135,14 +135,14 @@ const CategoryDialog = ({
                             </div>
                         </div>
 
-                        <TabsContent value="library" className="mt-0 border rounded-xl overflow-hidden bg-white shadow-sm">
+                        <TabsContent value="library" className="mt-0 border rounded-xl bg-white shadow-sm flex-1 flex flex-col min-h-0 overflow-hidden">
                             <CategorySpecLibraryTab
                                 specDefinitions={specDefinitions}
                                 engine={engine}
                             />
                         </TabsContent>
 
-                        <TabsContent value="config" className="mt-0 border rounded-xl bg-white shadow-inner overflow-hidden">
+                        <TabsContent value="config" className="mt-0 border rounded-xl bg-white shadow-inner flex-1 flex flex-col min-h-0 overflow-hidden">
                             <CategorySelectedConfigTab
                                 activeConfiguration={activeConfiguration}
                                 specDefinitions={specDefinitions}

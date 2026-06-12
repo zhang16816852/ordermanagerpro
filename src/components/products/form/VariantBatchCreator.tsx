@@ -19,6 +19,8 @@ import { Layers, Sparkles, AlertCircle, Palette, X } from 'lucide-react';
 import { ColorSelectField } from './ColorSelectField';
 import { ColorManagementDialog } from './ColorManagementDialog';
 import { useColorStore } from '@/store/useColorStore';
+import { StandaloneDeviceModelSelectField } from '../StandaloneDeviceModelSelectField';
+import { useDeviceModelStore } from '@/store/useDeviceModelStore';
 
 type Product = Tables<'products'>;
 
@@ -50,17 +52,24 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
   const [retailPrice, setRetailPrice] = useState(product.base_retail_price.toString());
   const [generatedVariants, setGeneratedVariants] = useState<GeneratedVariant[]>([]);
 
+  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+
   const { colors, fetchColors } = useColorStore();
+  const { models: deviceModels, groups: deviceGroups, fetchData: fetchDeviceData } = useDeviceModelStore();
 
   useEffect(() => {
     const init = async () => {
       if (open) {
-        const latestColors = await fetchColors();
+        const [latestColors] = await Promise.all([
+          fetchColors(),
+          fetchDeviceData(),
+        ]);
         await loadExistingVariants(latestColors);
       }
     };
     init();
-  }, [open, fetchColors]);
+  }, [open, fetchColors, fetchDeviceData]);
 
   const loadExistingVariants = async (currentColors = colors) => {
     try {
@@ -86,6 +95,23 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
         .map(name => currentColors.find(c => c.name === name)?.id)
         .filter(Boolean) as string[];
       setSelectedColorIds(colorIds);
+
+      // 載入既有 entity_model_relations 取得已關聯的型號/群組
+      const variantIds = variants.map(v => v.id);
+      const { data: relations } = await supabase
+        .from('entity_model_relations')
+        .select('model_id, group_id')
+        .in('variant_id', variantIds)
+        .eq('relation_type', 'include');
+
+      const modelIdSet = new Set<string>();
+      const groupIdSet = new Set<string>();
+      relations?.forEach(r => {
+        if (r.model_id) modelIdSet.add(r.model_id);
+        if (r.group_id) groupIdSet.add(r.group_id);
+      });
+      setSelectedModelIds(Array.from(modelIdSet));
+      setSelectedGroupIds(Array.from(groupIdSet));
 
       // 填入預覽表格
       setGeneratedVariants(variants.map(v => ({
@@ -117,21 +143,9 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     const opt1 = parseOptions(option1Values);
     const opt2 = parseOptions(option2Values);
 
-    // 取得已選取的顏色對象
-    console.log("[Debug] Option 1 Values:", opt1);
-    console.log("[Debug] Option 2 Values:", opt2);
-    console.log("[Debug] Selected Color IDs:", selectedColorIds);
-    console.log("[Debug] Available Colors in Store:", colors.map(c => ({ id: c.id, name: c.name, code: c.code })));
-
     const selectedColors = selectedColorIds
-      .map(id => {
-        const found = colors.find(c => c.id === id);
-        if (!found) console.warn(`[Debug] Could not find color with ID: ${id}`);
-        return found;
-      })
+      .map(id => colors.find(c => c.id === id))
       .filter(Boolean);
-
-    console.log("[Debug] Resolved Selected Colors:", selectedColors);
 
     if (opt1.length === 0 && opt2.length === 0 && selectedColors.length === 0) {
       toast.error('請至少輸入或選擇一個選項維度 (選項1、選項2 或 顏色)');
@@ -142,7 +156,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     const price = parseFloat(wholesalePrice) || product.base_wholesale_price;
     const retail = parseFloat(retailPrice) || product.base_retail_price;
 
-    // 準備三個維度的資料，如果為空則視為只有一個 null 元素
+    // 準備三個維度的資料 (型號/群組不參與笛卡爾積，於儲存時批次關聯)
     const dim1 = opt1.length > 0 ? opt1 : [null];
     const dim2 = opt2.length > 0 ? opt2 : [null];
     const dim3 = selectedColors.length > 0 ? selectedColors : [null];
@@ -151,17 +165,16 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     for (const v1 of dim1) {
       for (const v2 of dim2) {
         for (const v3 of dim3) {
-          // 如果三個維度都是 null，跳過 (這不應該發生，因為前面有 check)
           if (!v1 && !v2 && !v3) continue;
 
-          // 構建 SKU 部分
+          // 構建 SKU
           const skuParts = [product.sku];
           if (v1) skuParts.push(v1);
           if (v2) skuParts.push(v2);
           if (v3) skuParts.push((v3 as any).code || (v3 as any).name);
           const sku = skuParts.join('-').toUpperCase().replace(/\s+/g, '-');
 
-          // 構建名稱部分
+          // 構建名稱
           const nameParts = [];
           if (v1) nameParts.push(v1);
           if (v2) nameParts.push(v2);
@@ -177,7 +190,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
             option_3: v3 ? (v3 as any).name : null,
             wholesale_price: price,
             retail_price: retail,
-            spec_values: {}, // 預設空規格
+            spec_values: {},
           });
         }
       }
@@ -188,15 +201,13 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
       return;
     }
 
-    console.log(`[Debug] Calculated ${variants.length} base combinations.`);
-
-    // 智慧合併：如果生成的 SKU 已經存在於目前的預覽中，保留其現有資料 (例如手動改過的價格)
+    // 智慧合併：保留既有變體的手動編輯資料
     const mergedVariants = variants.map(newV => {
       const existing = generatedVariants.find(ev => ev.sku === newV.sku);
       if (existing) {
-        return { ...existing }; // 保留現有資料
+        return { ...existing };
       }
-      return newV; // 使用新生成資料
+      return newV;
     });
 
     setGeneratedVariants(mergedVariants);
@@ -219,10 +230,41 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
         status: 'active' as const,
       }));
 
-      const { error } = await supabase
+      // 1. Upsert 變體並取回 ID
+      const { data: upsertedVariants, error } = await supabase
         .from('product_variants')
-        .upsert(variantsToInsert, { onConflict: 'sku' });
+        .upsert(variantsToInsert, { onConflict: 'sku' })
+        .select('id, sku');
+
       if (error) throw error;
+      if (!upsertedVariants || upsertedVariants.length === 0) return;
+
+      // 2. 建立 SKU → ID 映射
+      const skuToId = new Map(upsertedVariants.map(v => [v.sku, v.id]));
+      const upsertedIds = upsertedVariants.map(v => v.id);
+
+      // 3. 刪除此批變體的現有 model relations (include)
+      const { error: delErr } = await supabase
+        .from('entity_model_relations')
+        .delete()
+        .in('variant_id', upsertedIds)
+        .eq('relation_type', 'include');
+      if (delErr) throw delErr;
+
+      // 4. 批次關聯型號/群組到所有變體
+      if (selectedModelIds.length > 0 || selectedGroupIds.length > 0) {
+        const relations: any[] = [];
+        upsertedIds.forEach(vId => {
+          selectedModelIds.forEach(mId => relations.push({ variant_id: vId, model_id: mId, relation_type: 'include' }));
+          selectedGroupIds.forEach(gId => relations.push({ variant_id: vId, group_id: gId, relation_type: 'include' }));
+        });
+        const { error: relErr } = await supabase.from('entity_model_relations').insert(relations);
+        if (relErr) throw relErr;
+      }
+
+      // 5. 同步前台展示
+      const { error: syncErr } = await supabase.rpc('sync_storefront_items', { p_product_id: product.id });
+      if (syncErr) throw syncErr;
     },
     onSuccess: () => {
       toast.success(`成功建立 ${generatedVariants.length} 個變體`);
@@ -239,6 +281,8 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     setOption1Values('');
     setOption2Values('');
     setSelectedColorIds([]);
+    setSelectedModelIds([]);
+    setSelectedGroupIds([]);
     setWholesalePrice(product.base_wholesale_price.toString());
     setRetailPrice(product.base_retail_price.toString());
     setGeneratedVariants([]);
@@ -271,7 +315,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
 
         <div className="space-y-6">
           {/* 選項輸入 */}
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-2">
               <Label htmlFor="option1">選項1（必填）</Label>
               <Textarea
@@ -307,6 +351,17 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
               <ColorSelectField
                 selectedColorIds={selectedColorIds}
                 onChange={setSelectedColorIds}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>型號 / 群組（選填）</Label>
+              <StandaloneDeviceModelSelectField
+                modelIds={selectedModelIds}
+                groupIds={selectedGroupIds}
+                onChange={({ modelIds, groupIds }) => {
+                  setSelectedModelIds(modelIds);
+                  setSelectedGroupIds(groupIds);
+                }}
               />
             </div>
           </div>
@@ -352,6 +407,20 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                 <h4 className="font-medium">預覽（{generatedVariants.length} 個變體）</h4>
                 <Badge variant="outline">點擊可編輯價格</Badge>
               </div>
+
+              {/* 型號/群組關聯提示 */}
+              {(selectedModelIds.length > 0 || selectedGroupIds.length > 0) && (
+                <div className="flex items-center gap-2 p-2.5 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg text-sm">
+                  <Layers className="h-4 w-4 text-blue-600 shrink-0" />
+                  <span>
+                    型號/群組將關聯至所有 {generatedVariants.length} 個變體：
+                    {[
+                      ...selectedModelIds.map(id => deviceModels.find(m => m.id === id)?.name).filter(Boolean),
+                      ...selectedGroupIds.map(id => deviceGroups.find(g => g.id === id)?.name).filter(Boolean),
+                    ].join('、')}
+                  </span>
+                </div>
+              )}
 
               <div className="border rounded-lg max-h-[300px] overflow-y-auto">
                 <table className="w-full text-sm">

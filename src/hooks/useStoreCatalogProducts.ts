@@ -46,6 +46,27 @@ export function useStoreCatalogProducts({
         categoryProductIds = [...new Set((links || []).map((l: any) => l.product_id))];
       }
 
+      // 0.5. 若搜尋，同時比對型號名稱（device_models + device_model_groups）
+      let searchModelProductIds: string[] | null = null;
+      if (search) {
+        const [modelRes, groupRes] = await Promise.all([
+          supabase.from("device_models").select("id").ilike("name", `%${search}%`),
+          supabase.from("device_model_groups").select("id").ilike("name", `%${search}%`),
+        ]);
+        const modelIds = (modelRes.data || []).map((m: any) => m.id);
+        const groupIds = (groupRes.data || []).map((g: any) => g.id);
+        if (modelIds.length > 0 || groupIds.length > 0) {
+          const orRels: string[] = [];
+          if (modelIds.length > 0) orRels.push(`model_id.in.(${modelIds.join(",")})`);
+          if (groupIds.length > 0) orRels.push(`group_id.in.(${groupIds.join(",")})`);
+          const { data: rels } = await supabase
+            .from("entity_model_relations")
+            .select("product_id")
+            .or(orRels.join(","));
+          searchModelProductIds = [...new Set((rels || []).map((r: any) => r.product_id).filter(Boolean))];
+        }
+      }
+
       // 1. 查詢商品（含規格與分類關聯），伺服端過濾 + 分頁
       let productQuery: any = supabase
         .from("products")
@@ -69,7 +90,11 @@ export function useStoreCatalogProducts({
         productQuery = productQuery.eq("product_category_links.category_id", categoryId);
       }
       if (search) {
-        productQuery = productQuery.or(`name.ilike.%${search}%,sku.ilike.%${search}%`);
+        const searchOr: string[] = [`name.ilike.%${search}%`, `sku.ilike.%${search}%`];
+        if (searchModelProductIds && searchModelProductIds.length > 0) {
+          searchOr.push(`id.in.(${searchModelProductIds.join(",")})`);
+        }
+        productQuery = productQuery.or(searchOr.join(","));
       }
       // brands filter: only exact match on brand column
       if (brands && brands.length > 0) {
