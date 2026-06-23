@@ -11,6 +11,7 @@ import { VariantSection } from './VariantSection';
 import { VariantSpecsMatrix } from './sections/VariantSpecsMatrix';
 import { VariantModelMatrix } from './sections/VariantModelMatrix';
 import { ProductImageManager } from '@/components/products/images/ProductImageManager';
+import { EntityBindingManager } from './sections/EntityBindingManager';
 
 // 統一定義 Schema
 const productSchema = z.object({
@@ -180,6 +181,13 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
               >
                 變體型號
               </TabsTrigger>
+              <TabsTrigger
+                value="bindings"
+                disabled={!initialData}
+                className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
+              >
+                綁定
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -225,6 +233,11 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
                     productId={initialData.id}
                   />
                 </div>
+              )}
+            </TabsContent>
+            <TabsContent value="bindings" className="m-0 focus-visible:ring-0">
+              {initialData && (
+                <EntityBindingManager productId={initialData.id} />
               )}
             </TabsContent>
           </div>

@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import Papa from 'papaparse';
 import { Category, CategoryHierarchy } from '../types';
+import { useSpecStore } from '@/store/useSpecStore';
 
 // 分類資料層：包含 Query、Mutation、以及 CSV 匯出/匯入（以名稱為主）
 
@@ -91,11 +92,23 @@ export function useCategoryData() {
                 await (supabase.from('category_spec_links' as any) as any).insert(links);
             }
 
+            // 清理分類下已移除規格的殘留值
+            try {
+                const activeIds = (specs || []).map(s => s.id);
+                await supabase.rpc('cleanup_category_spec_values', {
+                    p_category_id: catId,
+                    p_active_spec_ids: activeIds.length > 0 ? activeIds : null as any
+                });
+            } catch (err) {
+                console.warn('清理殘留規格值失敗，不影響主要操作:', err);
+            }
+
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['categories'] });
             queryClient.invalidateQueries({ queryKey: ['category_spec_links'] });
             queryClient.invalidateQueries({ queryKey: ['category_hierarchy'] });
+            useSpecStore.getState().fetchSpecs(true);
             toast.success('分類已儲存');
         },
     });
@@ -236,9 +249,27 @@ export function useCategoryData() {
             }
         }
 
+        // 清理各分類下已移除規格的殘留值
+        try {
+            const catSpecMap = new Map<string, string[]>();
+            newSpecLinks.forEach((link: any) => {
+                if (!catSpecMap.has(link.category_id)) catSpecMap.set(link.category_id, []);
+                catSpecMap.get(link.category_id)!.push(link.spec_id);
+            });
+            for (const [catId, specIds] of catSpecMap) {
+                await supabase.rpc('cleanup_category_spec_values', {
+                    p_category_id: catId,
+                    p_active_spec_ids: specIds
+                });
+            }
+        } catch (err) {
+            console.warn('清理殘留規格值失敗，不影響主要操作:', err);
+        }
+
         queryClient.invalidateQueries({ queryKey: ['categories'] });
         queryClient.invalidateQueries({ queryKey: ['category_hierarchy'] });
         queryClient.invalidateQueries({ queryKey: ['category_spec_links'] });
+        useSpecStore.getState().fetchSpecs(true);
     };
 
     // --- 匯出 CSV（以名稱為主，輔以 ID 備查）---

@@ -162,9 +162,17 @@ export default function AdminProducts() {
                 editingProduct={editingProduct}
                 deleteProduct={deleteProduct}
                 setDeleteProduct={setDeleteProduct as any}
-                onFormSubmit={(values) => {
-                    if (editingProduct?.id) updateMutation.mutate({ id: editingProduct.id, values });
-                    else createMutation.mutate(values);
+                onFormSubmit={async (values) => {
+                    if (editingProduct?.id) {
+                        updateMutation.mutate({ id: editingProduct.id, values });
+                    } else {
+                        try {
+                            const newProduct = await createMutation.mutateAsync(values);
+                            setEditingProduct(newProduct as any);
+                        } catch {
+                            // 錯誤已由 mutation 的 toast 處理
+                        }
+                    }
                 }}
                 onDeleteConfirm={(id) => deleteMutation.mutate(id)}
                 onImportSuccess={handleImportSuccess}

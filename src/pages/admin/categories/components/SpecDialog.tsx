@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { X } from 'lucide-react';
+import { X, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
     DndContext,
@@ -46,6 +46,7 @@ export function SpecDialog({
     isPending,
     allSpecs = []
 }: SpecDialogProps) {
+    const [targetSearch, setTargetSearch] = useState('');
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
     );
@@ -267,8 +268,19 @@ export function SpecDialog({
                                     </select>
                                     <Input className="h-7 text-xs flex-1" value={trigger.on_value} onChange={(e) => updateTrigger(idx, 'on_value', e.target.value)} placeholder="觸發值 (如: true, *)" />
                                 </div>
-                                <div className="p-1 border rounded bg-slate-50 max-h-48 overflow-y-auto space-y-1">
-                                    {allSpecs.filter(s => s.id !== editingSpec?.id).map(s => {
+                                <div className="p-1 border rounded bg-slate-50 max-h-56 overflow-y-auto space-y-1">
+                                    <div className="relative">
+                                        <Search className="absolute left-2 top-2 h-3 w-3 text-slate-400" />
+                                        <Input
+                                            className="h-7 pl-6 text-[11px] mb-1"
+                                            placeholder="搜尋規格..."
+                                            value={targetSearch}
+                                            onChange={(e) => setTargetSearch(e.target.value)}
+                                        />
+                                    </div>
+                                    {allSpecs
+                                        .filter(s => s.id !== editingSpec?.id && (!targetSearch || s.name.toLowerCase().includes(targetSearch.toLowerCase())))
+                                        .map(s => {
                                         const targetObj = (trigger.targets || []).find((t: any) => t.id === s.id);
                                         const isChecked = !!targetObj;
                                         return (

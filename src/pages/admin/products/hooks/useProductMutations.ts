@@ -52,13 +52,9 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
 
             return product;
         },
-        onSuccess: async (product) => {
+        onSuccess: async () => {
             await forceRefresh();
-            queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
             toast.success('產品已新增');
-            const cache = (await import('@/hooks/useProductCache')).getProductCache();
-            const fullProduct = cache?.data?.find((p: any) => p.id === product.id);
-            return (fullProduct || product) as any;
         },
     });
 
@@ -105,7 +101,6 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
         },
         onSuccess: async () => {
             await forceRefresh();
-            queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
             queryClient.invalidateQueries({ queryKey: ['all-product-model-links'] });
             queryClient.invalidateQueries({ queryKey: ['all-product-variants'] });
             toast.success('產品已更新');
@@ -119,7 +114,6 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
         },
         onSuccess: async () => {
             await forceRefresh();
-            queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
             toast.success('產品已刪除');
         },
     });
@@ -146,7 +140,6 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
             });
             if (error) throw error;
             await forceRefresh();
-            queryClient.invalidateQueries({ queryKey: ['products-with-cache'] });
             toast.success('產品及其變體已完整複製');
             if (newProductId) {
                 const { data: newProduct } = await supabase.from('products').select('*').eq('id', newProductId).single();

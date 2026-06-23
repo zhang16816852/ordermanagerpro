@@ -33,7 +33,28 @@ export function BrandSelectField({ form }: BrandSelectFieldProps) {
             render={({ field }) => (
                 <FormItem>
                     <FormLabel>品牌</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""} disabled={isLoadingBrands}>
+                    <Select
+                        onValueChange={(newBrandId: string) => {
+                            const currentName = form.getValues('name') || '';
+                            const oldBrandId = form.getValues('brand_id');
+                            const oldBrandName = brands.find((b: any) => b.id === oldBrandId)?.name || '';
+                            const newBrandName = brands.find((b: any) => b.id === newBrandId)?.name || '';
+
+                            let nameWithoutBrand = currentName;
+                            if (oldBrandName && currentName === oldBrandName) {
+                                nameWithoutBrand = '';
+                            } else if (oldBrandName && currentName.startsWith(oldBrandName + ' ')) {
+                                nameWithoutBrand = currentName.substring(oldBrandName.length + 1);
+                            }
+
+                            const newName = newBrandName ? `${newBrandName} ${nameWithoutBrand}` : nameWithoutBrand;
+
+                            field.onChange(newBrandId);
+                            form.setValue('name', newName);
+                        }}
+                        value={field.value || ""}
+                        disabled={isLoadingBrands}
+                    >
                         <FormControl>
                             <SelectTrigger>
                                 <SelectValue placeholder={isLoadingBrands ? "載入中..." : "選擇品牌"} />

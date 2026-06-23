@@ -185,7 +185,7 @@ export function StandaloneDeviceModelSelectField({
                         選擇型號或群組...
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[350px] p-0" align="start">
+                <PopoverContent className="w-[350px] p-0 overflow-y-auto max-h-[min(400px,var(--radix-popover-content-available-height))]" align="start">
                     <Tabs defaultValue="models">
                         <div className="p-2 border-b flex justify-between items-center bg-muted/20">
                             <TabsList className="h-8">
@@ -204,7 +204,7 @@ export function StandaloneDeviceModelSelectField({
                         </div>
 
                         <TabsContent value="models" className="m-0">
-                            <ScrollArea className="h-[260px]">
+                            <ScrollArea className="max-h-[200px]">
                                 <div className="p-2 space-y-1">
                                     {filteredModels.map((model) => {
                                         const isSelected = modelIds.includes(model.id);
@@ -258,7 +258,7 @@ export function StandaloneDeviceModelSelectField({
                         </TabsContent>
 
                         <TabsContent value="groups" className="m-0">
-                            <ScrollArea className="h-[260px]">
+                            <ScrollArea className="max-h-[200px]">
                                 <div className="p-2 space-y-1">
                                     {groups.filter(g => g.name.toLowerCase().includes(search.toLowerCase())).map((group) => {
                                         const isSelected = groupIds.includes(group.id);

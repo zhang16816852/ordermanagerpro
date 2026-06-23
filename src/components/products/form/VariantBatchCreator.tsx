@@ -41,11 +41,15 @@ interface GeneratedVariant {
   wholesale_price: number;
   retail_price: number;
   spec_values: any;
+  /** 批次對話內部用，不進資料庫 */
+  _modelGroupId?: string;
+  _modelGroupType?: 'model' | 'group';
 }
 
 export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: VariantBatchCreatorProps) {
   const [option1Values, setOption1Values] = useState('');
   const [option2Values, setOption2Values] = useState('');
+  const [barcodeList, setBarcodeList] = useState('');
   const [selectedColorIds, setSelectedColorIds] = useState<string[]>([]);
   const [isColorManageOpen, setIsColorManageOpen] = useState(false);
   const [wholesalePrice, setWholesalePrice] = useState(product.base_wholesale_price.toString());
@@ -147,51 +151,93 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
       .map(id => colors.find(c => c.id === id))
       .filter(Boolean);
 
-    if (opt1.length === 0 && opt2.length === 0 && selectedColors.length === 0) {
-      toast.error('請至少輸入或選擇一個選項維度 (選項1、選項2 或 顏色)');
-      return;
-    }
+    const hasOptions = opt1.length > 0 || opt2.length > 0 || selectedColors.length > 0;
+    const hasModelsOrGroups = selectedModelIds.length > 0 || selectedGroupIds.length > 0;
 
-    const variants: GeneratedVariant[] = [];
     const price = parseFloat(wholesalePrice) || product.base_wholesale_price;
     const retail = parseFloat(retailPrice) || product.base_retail_price;
 
-    // 準備三個維度的資料 (型號/群組不參與笛卡爾積，於儲存時批次關聯)
-    const dim1 = opt1.length > 0 ? opt1 : [null];
-    const dim2 = opt2.length > 0 ? opt2 : [null];
-    const dim3 = selectedColors.length > 0 ? selectedColors : [null];
+    // 解析條碼列表（按行）
+    const barcodeLines = barcodeList
+      .split('\n')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
 
-    // 生成所有維度的組合
-    for (const v1 of dim1) {
-      for (const v2 of dim2) {
-        for (const v3 of dim3) {
-          if (!v1 && !v2 && !v3) continue;
+    let variants: GeneratedVariant[];
 
-          // 構建 SKU
-          const skuParts = [product.sku];
-          if (v1) skuParts.push(v1);
-          if (v2) skuParts.push(v2);
-          if (v3) skuParts.push((v3 as any).code || (v3 as any).name);
-          const sku = skuParts.join('-').toUpperCase().replace(/\s+/g, '-');
+    if (!hasOptions && hasModelsOrGroups) {
+      // 純型號/群組生成路徑：每個型號/群組一個變體，option 全為 null
+      const modelGroupNames: { name: string; id: string; type: 'model' | 'group' }[] = [
+        ...selectedModelIds.map(id => {
+          const m = deviceModels.find(m => m.id === id);
+          return m ? { name: m.name, id: m.id, type: 'model' as const } : null;
+        }).filter(Boolean),
+        ...selectedGroupIds.map(id => {
+          const g = deviceGroups.find(g => g.id === id);
+          return g ? { name: g.name, id: g.id, type: 'group' as const } : null;
+        }).filter(Boolean),
+      ];
 
-          // 構建名稱
-          const nameParts = [];
-          if (v1) nameParts.push(v1);
-          if (v2) nameParts.push(v2);
-          if (v3) nameParts.push((v3 as any).name);
-          const variantName = `${product.name}${nameParts.length > 0 ? ' - ' + nameParts.join(' / ') : ''}`;
+      variants = modelGroupNames.map((item, idx) => ({
+        sku: `${product.sku}-${item.name}`.toUpperCase().replace(/\s+/g, '-'),
+        name: `${product.name} - ${item.name}`,
+        barcode: barcodeLines[idx] || '',
+        option_1: null,
+        option_2: null,
+        option_3: null,
+        wholesale_price: price,
+        retail_price: retail,
+        spec_values: {},
+        _modelGroupId: item.id,
+        _modelGroupType: item.type,
+      }));
+    } else {
+      if (!hasOptions) {
+        toast.error('請至少輸入或選擇一個選項維度 (選項1、選項2 或 顏色)');
+        return;
+      }
 
-          variants.push({
-            sku,
-            name: variantName,
-            barcode: '',
-            option_1: v1,
-            option_2: v2,
-            option_3: v3 ? (v3 as any).name : null,
-            wholesale_price: price,
-            retail_price: retail,
-            spec_values: {},
-          });
+      variants = [];
+
+      // 準備三個維度的資料
+      const dim1 = opt1.length > 0 ? opt1 : [null];
+      const dim2 = opt2.length > 0 ? opt2 : [null];
+      const dim3 = selectedColors.length > 0 ? selectedColors : [null];
+
+      // 生成所有維度的組合
+      let variantIndex = 0;
+      for (const v1 of dim1) {
+        for (const v2 of dim2) {
+          for (const v3 of dim3) {
+            if (!v1 && !v2 && !v3) continue;
+
+            const skuParts = [product.sku];
+            if (v1) skuParts.push(v1);
+            if (v2) skuParts.push(v2);
+            if (v3) skuParts.push((v3 as any).code || (v3 as any).name);
+            const sku = skuParts.join('-').toUpperCase().replace(/\s+/g, '-');
+
+            const nameParts = [];
+            if (v1) nameParts.push(v1);
+            if (v2) nameParts.push(v2);
+            if (v3) nameParts.push((v3 as any).name);
+            const variantName = `${product.name}${nameParts.length > 0 ? ' - ' + nameParts.join(' / ') : ''}`;
+
+            const barcode = variantIndex < barcodeLines.length ? barcodeLines[variantIndex] : '';
+
+            variants.push({
+              sku,
+              name: variantName,
+              barcode,
+              option_1: v1,
+              option_2: v2,
+              option_3: v3 ? (v3 as any).name : null,
+              wholesale_price: price,
+              retail_price: retail,
+              spec_values: {},
+            });
+            variantIndex++;
+          }
         }
       }
     }
@@ -201,11 +247,11 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
       return;
     }
 
-    // 智慧合併：保留既有變體的手動編輯資料
+    // 智慧合併：保留既有的手動編輯（價格、條碼），內部追蹤欄位以新值為準
     const mergedVariants = variants.map(newV => {
       const existing = generatedVariants.find(ev => ev.sku === newV.sku);
       if (existing) {
-        return { ...existing };
+        return { ...existing, _modelGroupId: newV._modelGroupId, _modelGroupType: newV._modelGroupType };
       }
       return newV;
     });
@@ -251,13 +297,30 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
         .eq('relation_type', 'include');
       if (delErr) throw delErr;
 
-      // 4. 批次關聯型號/群組到所有變體
+      // 4. 批次關聯型號/群組
       if (selectedModelIds.length > 0 || selectedGroupIds.length > 0) {
         const relations: any[] = [];
-        upsertedIds.forEach(vId => {
-          selectedModelIds.forEach(mId => relations.push({ variant_id: vId, model_id: mId, relation_type: 'include' }));
-          selectedGroupIds.forEach(gId => relations.push({ variant_id: vId, group_id: gId, relation_type: 'include' }));
-        });
+        const hasPerVariantMapping = generatedVariants.some(v => v._modelGroupId && v._modelGroupType);
+
+        if (hasPerVariantMapping) {
+          // 逐一關聯：每個變體只關聯對應的型號或群組
+          upsertedVariants.forEach(({ id, sku }) => {
+            const v = generatedVariants.find(v => v.sku === sku);
+            if (!v?._modelGroupId || !v._modelGroupType) return;
+            if (v._modelGroupType === 'model') {
+              relations.push({ variant_id: id, model_id: v._modelGroupId, relation_type: 'include' });
+            } else {
+              relations.push({ variant_id: id, group_id: v._modelGroupId, relation_type: 'include' });
+            }
+          });
+        } else {
+          // 共用關聯：所有型號/群組關聯到所有變體
+          upsertedIds.forEach(vId => {
+            selectedModelIds.forEach(mId => relations.push({ variant_id: vId, model_id: mId, relation_type: 'include' }));
+            selectedGroupIds.forEach(gId => relations.push({ variant_id: vId, group_id: gId, relation_type: 'include' }));
+          });
+        }
+
         const { error: relErr } = await supabase.from('entity_model_relations').insert(relations);
         if (relErr) throw relErr;
       }
@@ -285,6 +348,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     setSelectedGroupIds([]);
     setWholesalePrice(product.base_wholesale_price.toString());
     setRetailPrice(product.base_retail_price.toString());
+    setBarcodeList('');
     setGeneratedVariants([]);
   };
 
@@ -366,6 +430,18 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
             </div>
           </div>
 
+          {/* 條碼列表 */}
+          <div className="space-y-2">
+            <Label htmlFor="barcodeList">條碼列表（選填）</Label>
+            <Textarea
+              id="barcodeList"
+              placeholder="依生成順序貼上條碼，每行一個。&#10;例如產生 6 個變體就貼 6 行，第 n 行對應第 n 個變體"
+              value={barcodeList}
+              onChange={(e) => setBarcodeList(e.target.value)}
+              className="min-h-[80px]"
+            />
+          </div>
+
           <ColorManagementDialog
             open={isColorManageOpen}
             onOpenChange={setIsColorManageOpen}
@@ -413,7 +489,10 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                 <div className="flex items-center gap-2 p-2.5 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg text-sm">
                   <Layers className="h-4 w-4 text-blue-600 shrink-0" />
                   <span>
-                    型號/群組將關聯至所有 {generatedVariants.length} 個變體：
+                    {generatedVariants.some(v => v._modelGroupId && v._modelGroupType)
+                      ? '變體將逐一關聯對應的型號/群組'
+                      : `型號/群組將關聯至所有 ${generatedVariants.length} 個變體`}
+                    ：
                     {[
                       ...selectedModelIds.map(id => deviceModels.find(m => m.id === id)?.name).filter(Boolean),
                       ...selectedGroupIds.map(id => deviceGroups.find(g => g.id === id)?.name).filter(Boolean),

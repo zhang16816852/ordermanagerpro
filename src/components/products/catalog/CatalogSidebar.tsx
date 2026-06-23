@@ -2,10 +2,9 @@ import { useMemo, useState, useEffect } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { ProductWithPricing } from "@/types/product";
 import { Category } from "@/types/product";
-import { ChevronRight, Filter, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronRight, Filter, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -45,6 +44,11 @@ export function CatalogSidebar({
     onClearFilters,
 }: CatalogSidebarProps) {
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+    const [activeSection, setActiveSection] = useState<string>('categories');
+
+    const toggleSection = (section: string) => {
+        setActiveSection(prev => prev === section ? '' : section);
+    };
 
     const { brands } = useBrands();
     const { fetchSpecs, specDefinitions, categoryLinks, categories, categoryHierarchy } = useSpecStore();
@@ -311,72 +315,94 @@ export function CatalogSidebar({
             </div>
 
             <ScrollArea className="flex-1">
-                <div className="p-4 space-y-6">
+                <div className="p-4 space-y-4">
                     {/* Categories */}
-                    <div className="space-y-3">
-                        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">產品分類</h3>
-                        <div className="space-y-1">
-                            <button
-                                onClick={() => onCategoryChange(null)}
-                                className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors mb-2 ${selectedCategory === null
-                                    ? "bg-primary text-primary-foreground font-medium"
-                                    : "hover:bg-muted text-muted-foreground hover:text-foreground border border-transparent"
-                                    }`}
-                            >
-                                <span>全部產品</span>
-                                {selectedCategory === null && <ChevronRight className="h-3 w-3" />}
-                            </button>
-                            {categoryTree.map((node) => renderCategoryNode(node))}
-                            {categories.length === 0 && (
-                                <p className="text-xs text-muted-foreground italic px-2">尚未建立分類</p>
-                            )}
-                        </div>
+                    <div className="border-b pb-3">
+                        <button
+                            onClick={() => toggleSection('categories')}
+                            className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors"
+                        >
+                            <span>產品分類</span>
+                            {activeSection === 'categories' ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                        </button>
+                        {activeSection === 'categories' && (
+                            <div className="space-y-1">
+                                <button
+                                    onClick={() => onCategoryChange(null)}
+                                    className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors mb-2 ${selectedCategory === null
+                                        ? "bg-primary text-primary-foreground font-medium"
+                                        : "hover:bg-muted text-muted-foreground hover:text-foreground border border-transparent"
+                                        }`}
+                                >
+                                    <span>全部產品</span>
+                                    {selectedCategory === null && <ChevronRight className="h-3 w-3" />}
+                                </button>
+                                {categoryTree.map((node) => renderCategoryNode(node))}
+                                {categories.length === 0 && (
+                                    <p className="text-xs text-muted-foreground italic px-2">尚未建立分類</p>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {/* Brands */}
                     {brands.length > 0 && (
-                        <div className="space-y-3">
-                            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">品牌</h3>
-                            <div className="space-y-2">
-                                {brands.map((brand: any) => (
-                                    <div key={brand.id} className="flex items-center space-x-2">
-                                        <Checkbox
-                                            id={`brand-${brand.id}`}
-                                            checked={selectedBrands.includes(brand.id)}
-                                            onCheckedChange={(checked) => {
-                                                if (onBrandChange) {
-                                                    if (checked) {
-                                                        onBrandChange([...selectedBrands, brand.id]);
-                                                    } else {
-                                                        onBrandChange(selectedBrands.filter((id) => id !== brand.id));
+                        <div className="border-b pb-3">
+                            <button
+                                onClick={() => toggleSection('brands')}
+                                className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors"
+                            >
+                                <span>品牌</span>
+                                {activeSection === 'brands' ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                            </button>
+                            {activeSection === 'brands' && (
+                                <div className="space-y-2">
+                                    {brands.map((brand: any) => (
+                                        <div key={brand.id} className="flex items-center space-x-2">
+                                            <Checkbox
+                                                id={`brand-${brand.id}`}
+                                                checked={selectedBrands.includes(brand.id)}
+                                                onCheckedChange={(checked) => {
+                                                    if (onBrandChange) {
+                                                        if (checked) {
+                                                            onBrandChange([...selectedBrands, brand.id]);
+                                                        } else {
+                                                            onBrandChange(selectedBrands.filter((id) => id !== brand.id));
+                                                        }
                                                     }
-                                                }
-                                            }}
-                                        />
-                                        <Label
-                                            htmlFor={`brand-${brand.id}`}
-                                            className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground"
-                                        >
-                                            {brand.name}
-                                        </Label>
-                                    </div>
-                                ))}
-                            </div>
+                                                }}
+                                            />
+                                            <Label
+                                                htmlFor={`brand-${brand.id}`}
+                                                className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground"
+                                            >
+                                                {brand.name}
+                                            </Label>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
-                    <Separator />
 
                     {/* 進階規格：僅在選擇分類後才顯示 */}
-
                     {selectedCategory !== null && (
-                        <div className="space-y-5">
-                            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">進階規格</h3>
-                            <AdvancedSpecFilters 
-                                availableSpecs={availableSpecs}
-                                specFields={specFields}
-                                selectedSpecs={selectedSpecs}
-                                onSpecChange={onSpecChange}
-                            />
+                        <div>
+                            <button
+                                onClick={() => toggleSection('specs')}
+                                className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors"
+                            >
+                                <span>進階規格</span>
+                                {activeSection === 'specs' ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                            </button>
+                            {activeSection === 'specs' && (
+                                <AdvancedSpecFilters 
+                                    availableSpecs={availableSpecs}
+                                    specFields={specFields}
+                                    selectedSpecs={selectedSpecs}
+                                    onSpecChange={onSpecChange}
+                                />
+                            )}
                         </div>
                     )}
                 </div>
