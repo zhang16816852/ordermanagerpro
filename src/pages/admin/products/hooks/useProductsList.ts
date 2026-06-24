@@ -93,6 +93,18 @@ export function useProductsList() {
         return Array.from(new Set([...pModels, ...vModels])).filter(Boolean) as string[];
     }, [products]);
 
+    const getProductModelGroups = useCallback((productId: string) => {
+        const product = products?.find(p => p.id === productId);
+        if (!product) return [];
+
+        const pGroups = (product.device_model_groups || []).map((g: any) => g.name).filter(Boolean);
+        const vGroups = (product as any).variants?.flatMap((v: any) =>
+            (v.device_model_groups || []).map((g: any) => g.name).filter(Boolean)
+        ) || [];
+
+        return Array.from(new Set([...pGroups, ...vGroups])) as string[];
+    }, [products]);
+
     // --- Filter Logic ---
     const filteredProducts = useMemo(() => {
         if (!products) return [];
@@ -189,7 +201,7 @@ export function useProductsList() {
         expandedProducts, toggleExpanded, filteredProducts,
         isDialogOpen, setIsDialogOpen, isImportOpen, setIsImportOpen,
         editingProduct, setEditingProduct, deleteProduct, setDeleteProduct,
-        handleCopy, handleBatchExport: handleBatchExportWrapper, handleImportSuccess, getProductVariants, getProductModels,
+        handleCopy, handleBatchExport: handleBatchExportWrapper, handleImportSuccess, getProductVariants, getProductModels, getProductModelGroups,
         createMutation: mutations.createMutation, updateMutation: mutations.updateMutation,
         deleteMutation: mutations.deleteMutation, updateVariantPriceMutation: mutations.updateVariantPriceMutation,
         selectedCategory, setSelectedCategory,

@@ -74,6 +74,7 @@ interface ProductRowItemProps {
     brandMap: Record<string, string>;
     variants: any[];
     models: string[];
+    modelGroups: string[];
     isExpanded: boolean;
     isSelected: boolean;
     onToggleExpand: () => void;
@@ -103,6 +104,7 @@ export function ProductRowItem({
     brandMap,
     variants,
     models,
+    modelGroups,
     isExpanded,
     isSelected,
     onToggleExpand,
@@ -180,6 +182,15 @@ export function ProductRowItem({
                                     {models.map((model, idx) => (
                                         <Badge key={`${product.id}-model-${idx}`} variant="secondary" className="text-[9px] px-1 h-4 bg-amber-100 text-amber-800 hover:bg-amber-100/80 border-transparent">
                                             {model}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            )}
+                            {modelGroups.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                    {modelGroups.map((name, idx) => (
+                                        <Badge key={`${product.id}-group-${idx}`} variant="secondary" className="text-[9px] px-1 h-4 bg-blue-100 text-blue-800 hover:bg-blue-100/80 border-transparent">
+                                            {name}
                                         </Badge>
                                     ))}
                                 </div>

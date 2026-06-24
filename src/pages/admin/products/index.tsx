@@ -21,7 +21,7 @@ export default function AdminProducts() {
         expandedProducts, toggleExpanded, filteredProducts,
         isDialogOpen, setIsDialogOpen, isImportOpen, setIsImportOpen,
         editingProduct, setEditingProduct, deleteProduct, setDeleteProduct,
-        handleCopy, handleBatchExport, handleImportSuccess, getProductVariants, getProductModels,
+        handleCopy, handleBatchExport, handleImportSuccess, getProductVariants, getProductModels, getProductModelGroups,
         createMutation, updateMutation, deleteMutation, updateVariantPriceMutation,
         selectedCategory, setSelectedCategory,
         selectedSpecs, setSelectedSpecs,
@@ -125,6 +125,7 @@ export default function AdminProducts() {
                                 onToggleExpand={toggleExpanded}
                                 getVariants={getProductVariants}
                                 getModels={getProductModels}
+                                getModelGroups={getProductModelGroups}
                                 onEdit={(p) => { setEditingProduct(p as any); setIsDialogOpen(true); }}
                                 onCopy={handleCopy}
                                 onDelete={(p) => setDeleteProduct(p as any)}

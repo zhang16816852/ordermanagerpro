@@ -18,6 +18,7 @@ interface ProductsTableProps {
     onToggleExpand: (id: string) => void;
     getVariants: (id: string) => any[];
     getModels?: (id: string) => string[];
+    getModelGroups?: (id: string) => string[];
     onEdit: (p: Product) => void;
     onCopy: (p: Product) => void;
     onDelete: (p: Product) => void;
@@ -36,6 +37,7 @@ export function ProductsTable({
     onToggleExpand,
     getVariants,
     getModels,
+    getModelGroups,
     onEdit,
     onCopy,
     onDelete,
@@ -105,6 +107,7 @@ export function ProductsTable({
                                 brandMap={brandMap}
                                 variants={getVariants(product.id)}
                                 models={getModels ? getModels(product.id) : []}
+                                modelGroups={getModelGroups ? getModelGroups(product.id) : []}
                                 isSelected={selectedIds.has(product.id)}
                                 isExpanded={expandedIds.has(product.id)}
                                 onToggleSelect={() => onToggleSelect(product.id)}

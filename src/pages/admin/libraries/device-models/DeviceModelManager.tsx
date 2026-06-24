@@ -72,7 +72,7 @@ export function DeviceModelManager() {
       screen_size: editingData.screen_size || null,
       device_series: editingData.device_series || null,
       device_remarks: editingData.device_remarks || null,
-      release_date: editingData.release_date ? editingData.release_date.substring(0, 7) + '-01' : null,
+      release_date: editingData.release_date || null,
       aliases: editingData.aliases || null
     };
     console.log("發送", payload)
@@ -106,7 +106,7 @@ export function DeviceModelManager() {
       '系列': m.device_series || '',
       '設備類型': m.device_type || '',
       '螢幕尺寸': m.screen_size || '',
-      '出廠年月': m.release_date ? m.release_date.substring(0, 7) : '',
+      '出廠日期': m.release_date || '',
       '備註': m.device_remarks || '',
       '排序': m.sort_order || 0,
       '啟用': m.is_active !== false ? '是' : '否'
@@ -210,7 +210,7 @@ export function DeviceModelManager() {
           device_series: String(r['系列'] || r['device_series'] || '').trim() || null,
           screen_size: String(r['螢幕尺寸'] || r['screen_size'] || '').trim() || null,
           release_date: (() => {
-            const val = r['出廠年月'] ?? r['release_date'];
+            const val = r['出廠日期'] ?? r['出廠年月'] ?? r['release_date'];
             if (val == null || val === '') return null;
             // Excel serial date number (days since 1899-12-30)
             if (typeof val === 'number' && val > 1) {
@@ -272,7 +272,7 @@ export function DeviceModelManager() {
           device_type: modelData.device_type || '',
           device_series: modelData.device_series || '',
           screen_size: modelData.screen_size || '',
-          release_date: modelData.release_date ? modelData.release_date.substring(0, 7) : '',
+          release_date: modelData.release_date || '',
           device_remarks: modelData.device_remarks || '',
           sort_order: modelData.sort_order,
           is_active: modelData.is_active,
@@ -345,7 +345,7 @@ export function DeviceModelManager() {
     { key: 'device_type', header: '設備類型', width: '110px' },
     { key: 'device_series', header: '系列', width: '110px' },
     { key: 'screen_size', header: '螢幕尺寸', width: '100px' },
-    { key: 'release_date', header: '出廠年月', width: '110px' },
+    { key: 'release_date', header: '出廠日期', width: '110px' },
     { key: 'device_remarks', header: '備註', width: '150px' },
     { key: 'sort_order', header: '排序', width: '60px', align: 'right' },
     { key: 'is_active', header: '啟用', width: '60px', render: (val: boolean) => val ? '是' : '否' },

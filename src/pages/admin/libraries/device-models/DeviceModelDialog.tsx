@@ -109,10 +109,10 @@ export function DeviceModelDialog({
               </div>
 
               <div className="space-y-2">
-                <Label>出廠年月</Label>
+                <Label>出廠日期</Label>
                 <Input
-                  type="month"
-                  value={editingData?.release_date ? editingData.release_date.substring(0, 7) : ''}
+                  type="date"
+                  value={editingData?.release_date || ''}
                   onChange={(e) => setEditingData(prev => ({ ...prev!, release_date: e.target.value }))}
                 />
               </div>
