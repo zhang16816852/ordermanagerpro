@@ -46,9 +46,118 @@ interface GeneratedVariant {
   _modelGroupType?: 'model' | 'group';
 }
 
+interface OptionValueRow {
+  id: string;
+  name: string;
+  skuValue: string;
+  wholesalePrice: string;
+  retailPrice: string;
+}
+
+function createOptionRow(name = '', skuValue = '', wholesalePrice = '', retailPrice = ''): OptionValueRow {
+  return { id: crypto.randomUUID(), name, skuValue, wholesalePrice, retailPrice };
+}
+
+interface OptionsTableProps {
+  rows: OptionValueRow[];
+  onUpdate: (id: string, field: keyof OptionValueRow, value: string) => void;
+  onRemove: (id: string) => void;
+  onAdd: () => void;
+  onBulkPaste: () => void;
+  placeholder: string;
+}
+
+function OptionsTable({ rows, onUpdate, onRemove, onAdd, onBulkPaste, placeholder }: OptionsTableProps) {
+  return (
+    <div className="space-y-2">
+      <div className="border rounded-lg overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-muted">
+            <tr>
+              <th className="px-3 py-1.5 text-left">名稱</th>
+              <th className="px-3 py-1.5 text-left w-[100px]">SKU 值</th>
+              <th className="px-3 py-1.5 text-right w-[100px]">批發價</th>
+              <th className="px-3 py-1.5 text-right w-[100px]">零售價</th>
+              <th className="px-3 py-1.5 w-10"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr className="border-t">
+                <td colSpan={5} className="px-3 py-4 text-center text-muted-foreground text-sm">
+                  尚無選項值，請按下方按鈕新增，或使用批量貼上
+                </td>
+              </tr>
+            ) : rows.map(row => (
+              <tr key={row.id} className="border-t">
+                <td className="px-3 py-1">
+                  <Input
+                    value={row.name}
+                    onChange={e => onUpdate(row.id, 'name', e.target.value)}
+                    className="h-8"
+                    placeholder={placeholder}
+                  />
+                </td>
+                <td className="px-3 py-1">
+                  <Input
+                    value={row.skuValue}
+                    onChange={e => onUpdate(row.id, 'skuValue', e.target.value)}
+                    className="h-8"
+                    placeholder="留空=名稱"
+                  />
+                </td>
+                <td className="px-3 py-1">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={row.wholesalePrice}
+                    onChange={e => onUpdate(row.id, 'wholesalePrice', e.target.value)}
+                    className="h-8 text-right"
+                    placeholder="選填"
+                  />
+                </td>
+                <td className="px-3 py-1">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={row.retailPrice}
+                    onChange={e => onUpdate(row.id, 'retailPrice', e.target.value)}
+                    className="h-8 text-right"
+                    placeholder="選填"
+                  />
+                </td>
+                <td className="px-3 py-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-destructive"
+                    onClick={() => onRemove(row.id)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={onAdd}>
+          + 新增項目
+        </Button>
+        <Button variant="outline" size="sm" onClick={onBulkPaste}>
+          批量貼上
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: VariantBatchCreatorProps) {
-  const [option1Values, setOption1Values] = useState('');
-  const [option2Values, setOption2Values] = useState('');
+  const [option1Rows, setOption1Rows] = useState<OptionValueRow[]>([]);
+  const [option2Rows, setOption2Rows] = useState<OptionValueRow[]>([]);
+  const [bulkPasteTarget, setBulkPasteTarget] = useState<'option1' | 'option2' | null>(null);
+  const [bulkPasteText, setBulkPasteText] = useState('');
   const [barcodeList, setBarcodeList] = useState('');
   const [selectedColorIds, setSelectedColorIds] = useState<string[]>([]);
   const [isColorManageOpen, setIsColorManageOpen] = useState(false);
@@ -85,13 +194,64 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
       if (error) throw error;
       if (!variants || variants.length === 0) return;
 
-      // 提取選項 1 的唯一值
-      const opt1Set = new Set(variants.map(v => v.option_1).filter(Boolean));
-      setOption1Values(Array.from(opt1Set).join('\n'));
+      // 反解析輔助函式
+      const groupVariants = (field: string) => {
+        const map = new Map<string, typeof variants>();
+        (variants as any[]).forEach((v: any) => {
+          const val = v[field];
+          if (val) {
+            const group = map.get(val) || [];
+            group.push(v);
+            map.set(val, group);
+          }
+        });
+        return map;
+      };
 
-      // 提取選項 2 的唯一值
-      const opt2Set = new Set(variants.map(v => v.option_2).filter(Boolean));
-      setOption2Values(Array.from(opt2Set).join('\n'));
+      const getCommonPrice = (group: any[], getPrice: (v: any) => number): number | undefined => {
+        if (group.length === 0) return undefined;
+        const first = getPrice(group[0]);
+        return group.every(v => getPrice(v) === first) ? first : undefined;
+      };
+
+      const extractSkuValue = (group: any[], precedingFields: string[]): string => {
+        const v = group[0];
+        if (!v?.sku) return '';
+        let suffix: string = v.sku;
+        if (suffix.startsWith(product.sku + '-')) {
+          suffix = suffix.slice(product.sku.length + 1);
+        } else {
+          return '';
+        }
+        const segments = suffix.split('-');
+        let offset = 0;
+        for (const field of precedingFields) {
+          if (v[field]) offset++;
+        }
+        return segments[offset] || '';
+      };
+
+      // 提取選項 1 的唯一值（反解析 SKU 值 & 價格）
+      const opt1Groups = groupVariants('option_1');
+      const parsedOpt1: OptionValueRow[] = [];
+      for (const [name, group] of opt1Groups) {
+        const wp = getCommonPrice(group, v => v.wholesale_price);
+        const rp = getCommonPrice(group, v => v.retail_price);
+        const skuVal = extractSkuValue(group, []);
+        parsedOpt1.push(createOptionRow(name, skuVal, wp !== undefined ? wp.toString() : '', rp !== undefined ? rp.toString() : ''));
+      }
+      setOption1Rows(parsedOpt1);
+
+      // 提取選項 2 的唯一值（反解析 SKU 值 & 價格）
+      const opt2Groups = groupVariants('option_2');
+      const parsedOpt2: OptionValueRow[] = [];
+      for (const [name, group] of opt2Groups) {
+        const wp = getCommonPrice(group, v => v.wholesale_price);
+        const rp = getCommonPrice(group, v => v.retail_price);
+        const skuVal = extractSkuValue(group, ['option_1']);
+        parsedOpt2.push(createOptionRow(name, skuVal, wp !== undefined ? wp.toString() : '', rp !== undefined ? rp.toString() : ''));
+      }
+      setOption2Rows(parsedOpt2);
 
       // 提取顏色的唯一 ID (透過名稱匹配)
       const colorNames = new Set(variants.map(v => v.option_3).filter(Boolean));
@@ -104,31 +264,57 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
       const variantIds = variants.map(v => v.id);
       const { data: relations } = await supabase
         .from('entity_model_relations')
-        .select('model_id, group_id')
+        .select('variant_id, model_id, group_id')
         .in('variant_id', variantIds)
         .eq('relation_type', 'include');
 
       const modelIdSet = new Set<string>();
       const groupIdSet = new Set<string>();
+      const variantModelMap = new Map<string, { id: string; type: 'model' | 'group' }[]>();
       relations?.forEach(r => {
-        if (r.model_id) modelIdSet.add(r.model_id);
-        if (r.group_id) groupIdSet.add(r.group_id);
+        if (r.model_id) {
+          modelIdSet.add(r.model_id);
+          if (r.variant_id) {
+            const list = variantModelMap.get(r.variant_id) || [];
+            list.push({ id: r.model_id, type: 'model' });
+            variantModelMap.set(r.variant_id, list);
+          }
+        }
+        if (r.group_id) {
+          groupIdSet.add(r.group_id);
+          if (r.variant_id) {
+            const list = variantModelMap.get(r.variant_id) || [];
+            list.push({ id: r.group_id, type: 'group' });
+            variantModelMap.set(r.variant_id, list);
+          }
+        }
       });
       setSelectedModelIds(Array.from(modelIdSet));
       setSelectedGroupIds(Array.from(groupIdSet));
 
-      // 填入預覽表格
-      setGeneratedVariants(variants.map(v => ({
-        sku: v.sku,
-        name: v.name,
-        barcode: v.barcode || '',
-        option_1: v.option_1,
-        option_2: v.option_2,
-        option_3: v.option_3,
-        wholesale_price: v.wholesale_price,
-        retail_price: v.retail_price,
-        spec_values: (v as any).spec_values || {},
-      })));
+      // 判斷是否為逐一關聯（每個變體剛好一個關聯）
+      const isPerVariant = relations && relations.length > 0 &&
+        relations.length === variantIds.length &&
+        Array.from(variantModelMap.values()).every(list => list.length === 1);
+
+      // 填入預覽表格（含型號/群組對應）
+      setGeneratedVariants(variants.map(v => {
+        const mappings = variantModelMap.get(v.id);
+        const singleMapping = isPerVariant && mappings?.length === 1 ? mappings[0] : undefined;
+        return {
+          sku: v.sku,
+          name: v.name,
+          barcode: v.barcode || '',
+          option_1: v.option_1,
+          option_2: v.option_2,
+          option_3: v.option_3,
+          wholesale_price: v.wholesale_price,
+          retail_price: v.retail_price,
+          spec_values: (v as any).spec_values || {},
+          _modelGroupId: singleMapping?.id,
+          _modelGroupType: singleMapping?.type,
+        };
+      }));
 
       toast.success(`已載入 ${variants.length} 個現有變體`);
     } catch (err) {
@@ -136,16 +322,9 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     }
   };
 
-  const parseOptions = (text: string): string[] => {
-    return text
-      .split(/[,，\n]/)
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
-  };
-
   const generateVariants = () => {
-    const opt1 = parseOptions(option1Values);
-    const opt2 = parseOptions(option2Values);
+    const opt1 = option1Rows.filter(r => r.name.trim()).map(r => r.name.trim());
+    const opt2 = option2Rows.filter(r => r.name.trim()).map(r => r.name.trim());
 
     const selectedColors = selectedColorIds
       .map(id => colors.find(c => c.id === id))
@@ -154,8 +333,37 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     const hasOptions = opt1.length > 0 || opt2.length > 0 || selectedColors.length > 0;
     const hasModelsOrGroups = selectedModelIds.length > 0 || selectedGroupIds.length > 0;
 
-    const price = parseFloat(wholesalePrice) || product.base_wholesale_price;
-    const retail = parseFloat(retailPrice) || product.base_retail_price;
+    const defaultPrice = parseFloat(wholesalePrice) || product.base_wholesale_price;
+    const defaultRetail = parseFloat(retailPrice) || product.base_retail_price;
+
+    // 建立各維度價格查詢表（值名稱 → { wholesale, retail }）
+    const buildPriceMap = (rows: OptionValueRow[]) => {
+      const map = new Map<string, { wholesale: number; retail: number }>();
+      rows.forEach(r => {
+        const name = r.name.trim();
+        if (name && r.wholesalePrice) {
+          const wp = parseFloat(r.wholesalePrice);
+          const rp = parseFloat(r.retailPrice) || wp;
+          if (!isNaN(wp)) map.set(name, { wholesale: wp, retail: rp });
+        }
+      });
+      return map;
+    };
+    const opt1PriceMap = buildPriceMap(option1Rows);
+    const opt2PriceMap = buildPriceMap(option2Rows);
+
+    // 依維度優先順序決定價格：選項1 → 選項2 → 預設
+    const resolvePrice = (v1: string | null, v2: string | null): { wholesale: number; retail: number } => {
+      if (v1 && opt1PriceMap.has(v1)) return opt1PriceMap.get(v1)!;
+      if (v2 && opt2PriceMap.has(v2)) return opt2PriceMap.get(v2)!;
+      return { wholesale: defaultPrice, retail: defaultRetail };
+    };
+
+    // 取得選項值在 SKU 中使用的代碼（若無 skuValue 則回退到名稱）
+    const getSkuPart = (rows: OptionValueRow[], name: string): string => {
+      const row = rows.find(r => r.name.trim() === name);
+      return row?.skuValue?.trim() || name;
+    };
 
     // 解析條碼列表（按行）
     const barcodeLines = barcodeList
@@ -185,8 +393,8 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
         option_1: null,
         option_2: null,
         option_3: null,
-        wholesale_price: price,
-        retail_price: retail,
+        wholesale_price: defaultPrice,
+        retail_price: defaultRetail,
         spec_values: {},
         _modelGroupId: item.id,
         _modelGroupType: item.type,
@@ -204,39 +412,60 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
       const dim2 = opt2.length > 0 ? opt2 : [null];
       const dim3 = selectedColors.length > 0 ? selectedColors : [null];
 
+      // 準備型號/群組維度（交叉生成）
+      const modelGroupItems: { name: string; id: string; type: 'model' | 'group' }[] = [
+        ...selectedModelIds.map(id => {
+          const m = deviceModels.find(m => m.id === id);
+          return m ? { name: m.name, id: m.id, type: 'model' as const } : null;
+        }).filter(Boolean),
+        ...selectedGroupIds.map(id => {
+          const g = deviceGroups.find(g => g.id === id);
+          return g ? { name: g.name, id: g.id, type: 'group' as const } : null;
+        }).filter(Boolean),
+      ];
+      const dim4 = modelGroupItems.length > 0 ? modelGroupItems : [null];
+
       // 生成所有維度的組合
       let variantIndex = 0;
       for (const v1 of dim1) {
         for (const v2 of dim2) {
           for (const v3 of dim3) {
-            if (!v1 && !v2 && !v3) continue;
+            for (const v4 of dim4) {
+              if (!v1 && !v2 && !v3 && !v4) continue;
 
-            const skuParts = [product.sku];
-            if (v1) skuParts.push(v1);
-            if (v2) skuParts.push(v2);
-            if (v3) skuParts.push((v3 as any).code || (v3 as any).name);
-            const sku = skuParts.join('-').toUpperCase().replace(/\s+/g, '-');
+              const { wholesale: finalWholesale, retail: finalRetail } = resolvePrice(v1, v2);
 
-            const nameParts = [];
-            if (v1) nameParts.push(v1);
-            if (v2) nameParts.push(v2);
-            if (v3) nameParts.push((v3 as any).name);
-            const variantName = `${product.name}${nameParts.length > 0 ? ' - ' + nameParts.join(' / ') : ''}`;
+              const skuParts = [product.sku];
+              if (v1) skuParts.push(getSkuPart(option1Rows, v1));
+              if (v2) skuParts.push(getSkuPart(option2Rows, v2));
+              if (v3) skuParts.push((v3 as any).code || (v3 as any).name);
+              if (v4) skuParts.push(v4.name);
+              const sku = skuParts.join('-').toUpperCase().replace(/\s+/g, '-');
 
-            const barcode = variantIndex < barcodeLines.length ? barcodeLines[variantIndex] : '';
+              const nameParts = [];
+              if (v1) nameParts.push(v1);
+              if (v2) nameParts.push(v2);
+              if (v3) nameParts.push((v3 as any).name);
+              if (v4) nameParts.push(v4.name);
+              const variantName = `${product.name}${nameParts.length > 0 ? ' - ' + nameParts.join(' / ') : ''}`;
 
-            variants.push({
-              sku,
-              name: variantName,
-              barcode,
-              option_1: v1,
-              option_2: v2,
-              option_3: v3 ? (v3 as any).name : null,
-              wholesale_price: price,
-              retail_price: retail,
-              spec_values: {},
-            });
-            variantIndex++;
+              const barcode = variantIndex < barcodeLines.length ? barcodeLines[variantIndex] : '';
+
+              variants.push({
+                sku,
+                name: variantName,
+                barcode,
+                option_1: v1,
+                option_2: v2,
+                option_3: v3 ? (v3 as any).name : null,
+                wholesale_price: finalWholesale,
+                retail_price: finalRetail,
+                spec_values: {},
+                _modelGroupId: v4?.id,
+                _modelGroupType: v4?.type,
+              });
+              variantIndex++;
+            }
           }
         }
       }
@@ -341,8 +570,8 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
   });
 
   const resetForm = () => {
-    setOption1Values('');
-    setOption2Values('');
+    setOption1Rows([]);
+    setOption2Rows([]);
     setSelectedColorIds([]);
     setSelectedModelIds([]);
     setSelectedGroupIds([]);
@@ -350,6 +579,54 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     setRetailPrice(product.base_retail_price.toString());
     setBarcodeList('');
     setGeneratedVariants([]);
+  };
+
+  const updateOptionRow = (
+    setter: React.Dispatch<React.SetStateAction<OptionValueRow[]>>,
+    id: string,
+    field: keyof OptionValueRow,
+    value: string,
+  ) => {
+    setter(prev => prev.map(r => (r.id === id ? { ...r, [field]: value } : r)));
+  };
+
+  const removeOptionRow = (
+    setter: React.Dispatch<React.SetStateAction<OptionValueRow[]>>,
+    id: string,
+  ) => {
+    setter(prev => prev.filter(r => r.id !== id));
+  };
+
+  const handleConfirmBulkPaste = () => {
+    const rows = bulkPasteText
+      .split(/[,，\n]/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+      .map(s => {
+        const parts = s.split(':');
+        const name = parts[0].trim();
+        if (parts.length === 3) {
+          // 名稱:SKU值:批發價,零售價
+          const skuValue = parts[1].trim();
+          const prices = parts[2].split(/[,，]/).map(p => p.trim());
+          return createOptionRow(name, skuValue, prices[0] || '', prices[1] || '');
+        }
+        if (parts.length === 2) {
+          // 名稱:批發價,零售價
+          const prices = parts[1].split(/[,，]/).map(p => p.trim());
+          return createOptionRow(name, '', prices[0] || '', prices[1] || '');
+        }
+        return createOptionRow(name);
+      });
+
+    if (bulkPasteTarget === 'option1') {
+      setOption1Rows(prev => [...prev, ...rows]);
+    } else if (bulkPasteTarget === 'option2') {
+      setOption2Rows(prev => [...prev, ...rows]);
+    }
+
+    setBulkPasteTarget(null);
+    setBulkPasteText('');
   };
 
   const updateVariantField = (index: number, field: keyof GeneratedVariant, value: string) => {
@@ -373,60 +650,64 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
             批次建立變體
           </DialogTitle>
           <DialogDescription>
-            為「{product.name}」批次建立變體，輸入各選項的值（用逗號或換行分隔），系統會自動生成排列組合
+             在下方表格輸入各選項值，可選填批發價／零售價（也可後續在預覽表格編輯），系統會自動生成排列組合
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
           {/* 選項輸入 */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="option1">選項1（必填）</Label>
-              <Textarea
-                id="option1"
-                placeholder="輸入選項值，例如：&#10;霧面&#10;透明&#10;抗藍光"
-                value={option1Values}
-                onChange={(e) => setOption1Values(e.target.value)}
-                className="min-h-[100px]"
+              <Label>選項1（必填）</Label>
+              <OptionsTable
+                rows={option1Rows}
+                onUpdate={(id, field, value) => updateOptionRow(setOption1Rows, id, field, value)}
+                onRemove={(id) => removeOptionRow(setOption1Rows, id)}
+                onAdd={() => setOption1Rows(prev => [...prev, createOptionRow()])}
+                onBulkPaste={() => { setBulkPasteText(''); setBulkPasteTarget('option1'); }}
+                placeholder="輸入選項值"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="option2">選項2（選填）</Label>
-              <Textarea
-                id="option2"
-                placeholder="輸入選項值，例如：&#10;128GB&#10;256GB&#10;512GB"
-                value={option2Values}
-                onChange={(e) => setOption2Values(e.target.value)}
-                className="min-h-[100px]"
+              <Label>選項2（選填）</Label>
+              <OptionsTable
+                rows={option2Rows}
+                onUpdate={(id, field, value) => updateOptionRow(setOption2Rows, id, field, value)}
+                onRemove={(id) => removeOptionRow(setOption2Rows, id)}
+                onAdd={() => setOption2Rows(prev => [...prev, createOptionRow()])}
+                onBulkPaste={() => { setBulkPasteText(''); setBulkPasteTarget('option2'); }}
+                placeholder="輸入選項值"
               />
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>顏色</Label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-[10px]"
-                  onClick={() => setIsColorManageOpen(true)}
-                >
-                  <Palette className="h-3 w-3 mr-1" /> 管理顏色
-                </Button>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>顏色</Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[10px]"
+                    onClick={() => setIsColorManageOpen(true)}
+                  >
+                    <Palette className="h-3 w-3 mr-1" /> 管理顏色
+                  </Button>
+                </div>
+                <ColorSelectField
+                  selectedColorIds={selectedColorIds}
+                  onChange={setSelectedColorIds}
+                />
               </div>
-              <ColorSelectField
-                selectedColorIds={selectedColorIds}
-                onChange={setSelectedColorIds}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>型號 / 群組（選填）</Label>
-              <StandaloneDeviceModelSelectField
-                modelIds={selectedModelIds}
-                groupIds={selectedGroupIds}
-                onChange={({ modelIds, groupIds }) => {
-                  setSelectedModelIds(modelIds);
-                  setSelectedGroupIds(groupIds);
-                }}
-              />
+              <div className="space-y-2">
+                <Label>型號 / 群組（選填）</Label>
+                <StandaloneDeviceModelSelectField
+                  modelIds={selectedModelIds}
+                  groupIds={selectedGroupIds}
+                  onChange={({ modelIds, groupIds }) => {
+                    setSelectedModelIds(modelIds);
+                    setSelectedGroupIds(groupIds);
+                  }}
+                />
+              </div>
             </div>
           </div>
 
@@ -446,6 +727,28 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
             open={isColorManageOpen}
             onOpenChange={setIsColorManageOpen}
           />
+
+          {/* 批量貼上對話框 */}
+          <Dialog open={bulkPasteTarget !== null} onOpenChange={(open) => { if (!open) setBulkPasteTarget(null); }}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>批量貼上</DialogTitle>
+                <DialogDescription>
+                  每行或逗號分隔一個值。支援格式：<code>名稱</code>、<code>名稱:批發價,零售價</code> 或 <code>名稱:SKU值:批發價,零售價</code>
+                </DialogDescription>
+              </DialogHeader>
+              <Textarea
+                value={bulkPasteText}
+                onChange={e => setBulkPasteText(e.target.value)}
+                placeholder={'例如：\n霧面:M:800,1200\n透明:T:900,1300\n抗藍光'}
+                className="min-h-[200px]"
+              />
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setBulkPasteTarget(null)}>取消</Button>
+                <Button onClick={handleConfirmBulkPaste}>確認新增</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {/* 預設價格 */}
           <div className="grid gap-4 sm:grid-cols-2">
