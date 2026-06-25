@@ -364,8 +364,6 @@ export default function ProductCatalog({
                 const key = variant ? `${product.id}-${variant.id}` : product.id;
                 const qty = variant ? getItemQuantity(product.id, variant.id) : getItemQuantity(product.id);
                 const price = variant ? ((variant as VariantWithPricing).effective_wholesale_price ?? variant.wholesale_price) : product.wholesale_price;
-                const displayName = variant ? variant.name : product.name;
-
                 return (
                   <div
                     key={key}
@@ -381,9 +379,14 @@ export default function ProductCatalog({
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate pr-2">
-                          {displayName}
+                        <div className="font-medium break-words pr-2">
+                          {product.name}
                         </div>
+                        {variant && (
+                          <div className="text-sm text-muted-foreground break-words mt-0.5">
+                            {variant.name}
+                          </div>
+                        )}
                         <div className="flex flex-wrap gap-1 mt-1">
                           {variant && (
                             <>

@@ -122,10 +122,9 @@ export function useStoreCatalogProducts({
       } else {
         relationsQuery = relationsQuery.in("product_id", ["__none__"]);
       }
-      const [relationResult, modelResult, groupResult, specResult, coverResult, priceResult] =
+      const [relationResult, groupResult, specResult, coverResult, priceResult] =
         await Promise.all([
           relationsQuery,
-          supabase.from("device_models").select("id, name, aliases"),
           supabase
             .from("device_model_groups")
             .select("id, name, device_model_group_items(device_models(id, name, aliases))"),
@@ -141,9 +140,19 @@ export function useStoreCatalogProducts({
           supabase.from("store_products").select("*"),
         ]);
 
+      // 只抓取 entity_model_relations 中有參照的 device_models
+      const referencedModelIds = [...new Set(
+        (relationResult.data || [])
+          .filter((r: any) => r.model_id)
+          .map((r: any) => r.model_id as string)
+      )];
+      const { data: deviceModelsData } = referencedModelIds.length > 0
+        ? await supabase.from("device_models").select("id, name, aliases").in("id", referencedModelIds)
+        : { data: [] };
+
       // 3. 建立 MAP
       const devModelsMap = new Map(
-        (modelResult.data || []).map((m: any) => [m.id, m])
+        (deviceModelsData || []).map((m: any) => [m.id, m])
       );
       const devGroupsMap = new Map(
         (groupResult.data || []).map((g: any) => [g.id, g])

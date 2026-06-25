@@ -51,17 +51,25 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
     // 2. 關聯資料全量抓取 (不使用 PostgREST embed，避免 schema cache 問題)
     const [
       { data: allRelations },
-      { data: allModels },
       { data: allGroupsWithItems },
       { data: allSpecs },
       { data: allCovers }
     ] = await Promise.all([
       supabase.from('entity_model_relations').select('product_id, variant_id, model_id, group_id, relation_type, reason'),
-      supabase.from('device_models').select('id, name, aliases'),
       supabase.from('device_model_groups').select('id, name, device_model_group_items(device_models(id, name, aliases))'),
       supabase.from('entity_spec_values').select('*'),
       supabase.from('product_images').select('entity_type, entity_id, url').eq('is_cover', true)
     ]);
+
+    // 只抓取 entity_model_relations 中有參照的 device_models（避開 PostgREST 1000 rows 限制）
+    const referencedModelIds = [...new Set(
+      (allRelations || [])
+        .filter(r => r.model_id)
+        .map(r => r.model_id as string)
+    )];
+    const { data: allModels } = referencedModelIds.length > 0
+      ? await supabase.from('device_models').select('id, name, aliases').in('id', referencedModelIds)
+      : { data: [] };
 
     // 預先建立 device_models 查找 Map
     const devModelsMap = new Map<string, any>();

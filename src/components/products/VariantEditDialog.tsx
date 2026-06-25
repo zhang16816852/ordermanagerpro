@@ -37,6 +37,7 @@ import { serializeSpecs, deserializeSpecs } from '@/utils/specLogic';
 import { useSpecStore } from '@/store/useSpecStore';
 import { entityRelationService } from '@/services/entityRelationService';
 import { ProductImageManager } from '@/components/products/images/ProductImageManager';
+import { VariantBindingManager } from './form/sections/VariantBindingManager';
 
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;
@@ -201,7 +202,6 @@ export function VariantEditDialog({
             toast.error(`新增失敗：${error.message}`);
         },
     });
-
     const updateMutation = useMutation({
         mutationFn: async (values: any) => {
             const {
@@ -469,6 +469,12 @@ export function VariantEditDialog({
                                     </p>
                                 </div>
                                 <ProductImageManager entityType="variant" entityId={variant.id} />
+                            </div>
+                        )}
+
+                        {variant && (
+                            <div className="border-t pt-4">
+                                <VariantBindingManager variantId={variant.id} />
                             </div>
                         )}
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useDeviceModels } from '../../products/hooks/useDeviceModels';
 import { FullDeviceModel as DeviceModel } from '@/types/device-models';
+import { fetchAllRows } from '@/lib/utils';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
@@ -181,7 +182,7 @@ export function DeviceModelManager() {
       const { data: updatedBrands } = await supabase.from('device_brands').select('*');
       const brandMap = new Map((updatedBrands || []).map((b: any) => [b.name.toLowerCase(), b.id]));
 
-      const { data: existingModels } = await supabase.from('device_models').select('*');
+      const existingModels = await fetchAllRows<any>('device_models', '*');
       const existingByName = new Map((existingModels || []).map((m: any) => [m.name.toLowerCase(), m]));
       const existingById = new Map((existingModels || []).map((m: any) => [m.id, m]));
 

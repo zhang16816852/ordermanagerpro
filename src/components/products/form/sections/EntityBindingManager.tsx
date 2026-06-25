@@ -98,7 +98,7 @@ export function EntityBindingManager({ productId }: EntityBindingManagerProps) {
           產品綁定管理
         </h3>
         <p className="text-sm text-muted-foreground mt-1">
-          綁定後，價格、規格、型號關聯、分類會自動同步。名稱、SKU、圖片、變體各自獨立。
+          綁定後，價格、規格值會自動同步。名稱、SKU、圖片、變體、型號關聯、分類各自獨立。
         </p>
       </div>
 
@@ -210,17 +210,9 @@ export function EntityBindingManager({ productId }: EntityBindingManagerProps) {
                 <Badge variant="outline" className="text-[9px] h-4 px-1">自動</Badge>
                 規格值 (<code className="text-[10px]">entity_spec_values</code>)
               </li>
-              <li className="flex items-center gap-2">
-                <Badge variant="outline" className="text-[9px] h-4 px-1">自動</Badge>
-                型號關聯 (<code className="text-[10px]">entity_model_relations</code>)
-              </li>
-              <li className="flex items-center gap-2">
-                <Badge variant="outline" className="text-[9px] h-4 px-1">自動</Badge>
-                分類 (<code className="text-[10px]">product_category_links</code>)
-              </li>
               <li className="flex items-center gap-2 mt-2">
                 <Badge variant="secondary" className="text-[9px] h-4 px-1">各自獨立</Badge>
-                名稱、SKU、圖片、變體、品牌
+                名稱、SKU、圖片、變體、品牌、型號關聯、分類
               </li>
             </ul>
           </div>

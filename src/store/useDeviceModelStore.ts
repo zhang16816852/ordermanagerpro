@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { supabase } from '@/integrations/supabase/client';
 import { Database } from '@/integrations/supabase/types';
 import { CacheService, CACHE } from '@/services/cacheService';
+import { fetchAllRows } from '@/lib/utils';
 
 export type DeviceModel = Database['public']['Tables']['device_models']['Row'];
 export type DeviceBrand = Database['public']['Tables']['device_brands']['Row'];
@@ -88,20 +89,18 @@ export const useDeviceModelStore = create<DeviceModelStore>((set, get) => ({
     set({ isLoading: true });
     try {
       const results = await Promise.all([
-        supabase.from('device_models').select('*').order('name'),
+        fetchAllRows<any>('device_models', '*', { order: [{ column: 'name' }] }),
         supabase.from('device_brands').select('*').order('name'),
         supabase.from('device_model_groups').select('*').is('deleted_at', null).order('name'),
         supabase.from('device_model_group_items').select('group_id, model_id').order('position')
       ]);
 
-      const [modelsRes, brandsRes, groupsRes, groupItemsRes] = results;
+      const [models, brandsRes, groupsRes, groupItemsRes] = results;
 
-      if (modelsRes.error) throw modelsRes.error;
       if (brandsRes.error) throw brandsRes.error;
       if (groupsRes.error) throw groupsRes.error;
       if (groupItemsRes.error) throw groupItemsRes.error;
 
-      const models = modelsRes.data || [];
       const brands = brandsRes.data || [];
       const groups = groupsRes.data || [];
       const groupItems = groupItemsRes.data || [];

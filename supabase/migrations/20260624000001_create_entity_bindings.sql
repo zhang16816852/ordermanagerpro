@@ -1,6 +1,6 @@
 -- Migration: Product Binding (實體商品綁定同步)
 -- 允許 product ↔ product 及 variant ↔ variant 之間建立直接綁定關係
--- 規格值、價格、型號關聯、分類會透過 DB Trigger 自動同步
+-- 價格、規格值透過 DB Trigger 自動同步
 
 -- 1. 建立 entity_bindings 表
 CREATE TABLE IF NOT EXISTS public.entity_bindings (
@@ -42,7 +42,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_eb_variant_unique
     GREATEST(COALESCE(variant_id, '00000000-0000-0000-0000-000000000000'), COALESCE(bound_variant_id, '00000000-0000-0000-0000-000000000000'))
   ) WHERE binding_type = 'variant';
 
--- 2. 輔助函數：遞迴找出所有連通產品 (避免 A→B→C 需間接更新)
+-- 2. 輔助函數：遞迴找出所有連通產品
 CREATE OR REPLACE FUNCTION public.get_bound_product_ids(p_product_id UUID)
 RETURNS UUID[] AS $$
 DECLARE
@@ -74,7 +74,39 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STABLE;
 
--- 3. Trigger: 價格同步 (products.base_wholesale_price / base_retail_price)
+-- 3. 輔助函數：遞迴找出所有連通變體
+CREATE OR REPLACE FUNCTION public.get_bound_variant_ids(p_variant_id UUID)
+RETURNS UUID[] AS $$
+DECLARE
+    v_result UUID[];
+BEGIN
+    WITH RECURSIVE chain AS (
+        SELECT 
+            CASE WHEN variant_id = p_variant_id THEN bound_variant_id ELSE variant_id END AS node_id,
+            1 AS depth
+        FROM public.entity_bindings
+        WHERE binding_type = 'variant'
+          AND (variant_id = p_variant_id OR bound_variant_id = p_variant_id)
+        
+        UNION
+        
+        SELECT 
+            CASE WHEN eb.variant_id = c.node_id THEN eb.bound_variant_id ELSE eb.variant_id END,
+            c.depth + 1
+        FROM chain c
+        JOIN public.entity_bindings eb ON eb.binding_type = 'variant'
+          AND (eb.variant_id = c.node_id OR eb.bound_variant_id = c.node_id)
+        WHERE c.depth < 20
+    )
+    SELECT array_agg(DISTINCT node_id) INTO v_result
+    FROM chain
+    WHERE node_id IS NOT NULL AND node_id != p_variant_id;
+    
+    RETURN v_result;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- 4. Trigger: 價格同步 (products.base_wholesale_price / base_retail_price)
 CREATE OR REPLACE FUNCTION public.trgfn_sync_product_prices()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -102,27 +134,32 @@ CREATE TRIGGER trg_sync_product_prices
     AFTER UPDATE OF base_wholesale_price, base_retail_price ON public.products
     FOR EACH ROW EXECUTE FUNCTION public.trgfn_sync_product_prices();
 
--- 4. Trigger: 規格值同步 (entity_spec_values)
+-- 5. Trigger: 規格值同步 (entity_spec_values, 支援 product 及 variant)
 CREATE OR REPLACE FUNCTION public.trgfn_sync_spec_values()
 RETURNS TRIGGER AS $$
 DECLARE
     v_ids UUID[];
     v_eid UUID;
+    v_etype TEXT;
 BEGIN
     IF pg_trigger_depth() > 1 THEN RETURN COALESCE(NEW, OLD); END IF;
 
     v_eid := COALESCE(NEW.entity_id, OLD.entity_id);
-    IF COALESCE(NEW.entity_type, OLD.entity_type) != 'product' THEN
+    v_etype := COALESCE(NEW.entity_type, OLD.entity_type);
+
+    IF v_etype = 'product' THEN
+        v_ids := public.get_bound_product_ids(v_eid);
+    ELSIF v_etype = 'variant' THEN
+        v_ids := public.get_bound_variant_ids(v_eid);
+    ELSE
         RETURN COALESCE(NEW, OLD);
     END IF;
-
-    v_ids := public.get_bound_product_ids(v_eid);
 
     IF v_ids IS NOT NULL THEN
         IF TG_OP IN ('INSERT', 'UPDATE') THEN
             DELETE FROM public.entity_spec_values
             WHERE entity_id = ANY(v_ids)
-              AND entity_type = 'product'
+              AND entity_type = v_etype
               AND spec_id = NEW.spec_id
               AND category_id = NEW.category_id
               AND COALESCE(parent_id, '00000000-0000-0000-0000-000000000000')
@@ -134,13 +171,13 @@ BEGIN
                  parent_id, instance_uuid, is_inherited, origin_entity_id,
                  lifecycle_state, display_order)
             SELECT
-                unnest(v_ids), 'product', NEW.spec_id, NEW.category_id, NEW.value,
+                unnest(v_ids), v_etype, NEW.spec_id, NEW.category_id, NEW.value,
                 NEW.parent_id, NEW.instance_uuid, NEW.is_inherited, NEW.origin_entity_id,
                 NEW.lifecycle_state, NEW.display_order;
         ELSIF TG_OP = 'DELETE' THEN
             DELETE FROM public.entity_spec_values
             WHERE entity_id = ANY(v_ids)
-              AND entity_type = 'product'
+              AND entity_type = v_etype
               AND spec_id = OLD.spec_id
               AND category_id = OLD.category_id
               AND COALESCE(parent_id, '00000000-0000-0000-0000-000000000000')
@@ -158,76 +195,7 @@ CREATE TRIGGER trg_sync_spec_values
     AFTER INSERT OR UPDATE OR DELETE ON public.entity_spec_values
     FOR EACH ROW EXECUTE FUNCTION public.trgfn_sync_spec_values();
 
--- 5. Trigger: 型號關聯同步 (entity_model_relations)
-CREATE OR REPLACE FUNCTION public.trgfn_sync_model_relations()
-RETURNS TRIGGER AS $$
-DECLARE
-    v_ids UUID[];
-    v_eid UUID;
-BEGIN
-    IF pg_trigger_depth() > 1 THEN RETURN COALESCE(NEW, OLD); END IF;
-
-    v_eid := COALESCE(NEW.product_id, OLD.product_id);
-    IF v_eid IS NULL THEN RETURN COALESCE(NEW, OLD); END IF;  -- variant-level, skip
-
-    v_ids := public.get_bound_product_ids(v_eid);
-
-    IF v_ids IS NOT NULL THEN
-        IF TG_OP IN ('INSERT', 'UPDATE') THEN
-            INSERT INTO public.entity_model_relations
-                (product_id, model_id, group_id, relation_type, reason)
-            SELECT unnest(v_ids), NEW.model_id, NEW.group_id, NEW.relation_type, NEW.reason
-            ON CONFLICT DO NOTHING;
-        ELSIF TG_OP = 'DELETE' THEN
-            DELETE FROM public.entity_model_relations
-            WHERE product_id = ANY(v_ids)
-              AND model_id IS NOT DISTINCT FROM OLD.model_id
-              AND group_id IS NOT DISTINCT FROM OLD.group_id
-              AND relation_type = OLD.relation_type;
-        END IF;
-    END IF;
-
-    RETURN COALESCE(NEW, OLD);
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_sync_model_relations ON public.entity_model_relations;
-CREATE TRIGGER trg_sync_model_relations
-    AFTER INSERT OR UPDATE OR DELETE ON public.entity_model_relations
-    FOR EACH ROW EXECUTE FUNCTION public.trgfn_sync_model_relations();
-
--- 6. Trigger: 分類同步 (product_category_links)
-CREATE OR REPLACE FUNCTION public.trgfn_sync_category_links()
-RETURNS TRIGGER AS $$
-DECLARE
-    v_ids UUID[];
-BEGIN
-    IF pg_trigger_depth() > 1 THEN RETURN COALESCE(NEW, OLD); END IF;
-
-    v_ids := public.get_bound_product_ids(COALESCE(NEW.product_id, OLD.product_id));
-
-    IF v_ids IS NOT NULL THEN
-        IF TG_OP IN ('INSERT', 'UPDATE') THEN
-            INSERT INTO public.product_category_links (product_id, category_id)
-            SELECT unnest(v_ids), COALESCE(NEW.category_id, OLD.category_id)
-            ON CONFLICT DO NOTHING;
-        ELSIF TG_OP = 'DELETE' THEN
-            DELETE FROM public.product_category_links
-            WHERE product_id = ANY(v_ids)
-              AND category_id = OLD.category_id;
-        END IF;
-    END IF;
-
-    RETURN COALESCE(NEW, OLD);
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_sync_category_links ON public.product_category_links;
-CREATE TRIGGER trg_sync_category_links
-    AFTER INSERT OR UPDATE OR DELETE ON public.product_category_links
-    FOR EACH ROW EXECUTE FUNCTION public.trgfn_sync_category_links();
-
--- 7. RLS
+-- 6. RLS
 ALTER TABLE public.entity_bindings ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow authenticated full access on entity_bindings"

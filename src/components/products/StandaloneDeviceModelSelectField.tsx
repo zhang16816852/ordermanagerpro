@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { X, Plus, Search, Layers, ShieldAlert } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows } from '@/lib/utils';
 import { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -76,14 +77,10 @@ export function StandaloneDeviceModelSelectField({
     const { data: models = [] } = useQuery({
         queryKey: ['device_models_active'],
         queryFn: async () => {
-            const { data, error } = await supabase
-                .from('device_models')
-                .select('*')
-                .eq('is_active', true)
-                .order('sort_order', { ascending: true })
-                .order('name', { ascending: true });
-            if (error) return [];
-            return data;
+            return fetchAllRows<any>(
+                'device_models', '*',
+                { eq: [['is_active', true]], order: [{ column: 'sort_order' }, { column: 'name' }] }
+            );
         },
     });
 

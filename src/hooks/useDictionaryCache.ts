@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { CacheService } from '@/services/cacheService';
+import { fetchAllRows } from '@/lib/utils';
 
 const CACHE_KEY = 'ac_dictionary_v1';
 const SCHEMA_VERSION = 1;
@@ -112,14 +113,10 @@ export const useDictionaryCache = () => {
       }
 
       if (needsUpdate(local.deviceModelsVersion, modelVer.version, local.deviceModels)) {
-        const { data: modelData, error } = await supabase
-          .from('device_models')
-          .select('*')
-          .eq('is_active', true)
-          .order('sort_order', { ascending: true })
-          .order('name', { ascending: true });
-        if (error) throw error;
-        local.deviceModels = modelData || [];
+        local.deviceModels = await fetchAllRows<any>(
+          'device_models', '*',
+          { eq: [['is_active', true]], order: [{ column: 'sort_order' }, { column: 'name' }] }
+        );
         local.deviceModelsVersion = modelVer.version;
         updated = true;
       }

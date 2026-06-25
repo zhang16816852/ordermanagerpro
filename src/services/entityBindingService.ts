@@ -15,6 +15,13 @@ export interface BoundProductInfo {
   sku: string;
 }
 
+export interface BoundVariantInfo {
+  id: string;
+  name: string;
+  sku: string;
+  product_name: string;
+}
+
 export const entityBindingService = {
   async fetchBindings(entityType: 'product' | 'variant', entityId: string): Promise<EntityBinding[]> {
     if (entityType === 'product') {
@@ -82,6 +89,45 @@ export const entityBindingService = {
       .delete()
       .eq('id', bindingId);
     if (error) throw error;
+  },
+
+  getBoundVariantIds(bindings: EntityBinding[], entityId: string): string[] {
+    return bindings.map(b => {
+      if (b.variant_id === entityId) return b.bound_variant_id!;
+      if (b.bound_variant_id === entityId) return b.variant_id!;
+      return null;
+    }).filter(Boolean) as string[];
+  },
+
+  async fetchBoundVariants(variantIds: string[]): Promise<BoundVariantInfo[]> {
+    if (variantIds.length === 0) return [];
+    const { data, error } = await supabase
+      .from('product_variants')
+      .select('id, name, sku, product_id, products(name)')
+      .in('id', variantIds);
+    if (error) throw error;
+    return (data || []).map((v: any) => ({
+      id: v.id,
+      name: v.name,
+      sku: v.sku,
+      product_name: v.products?.name || '',
+    }));
+  },
+
+  async searchVariants(query: string): Promise<BoundVariantInfo[]> {
+    if (!query || query.length < 1) return [];
+    const { data, error } = await supabase
+      .from('product_variants')
+      .select('id, name, sku, product_id, products(name)')
+      .or(`name.ilike.%${query}%,sku.ilike.%${query}%`)
+      .limit(15);
+    if (error) throw error;
+    return (data || []).map((v: any) => ({
+      id: v.id,
+      name: v.name,
+      sku: v.sku,
+      product_name: v.products?.name || '',
+    }));
   },
 
   async searchProducts(query: string): Promise<BoundProductInfo[]> {

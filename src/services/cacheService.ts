@@ -118,6 +118,6 @@ export class CacheService {
   static isStale(localVersion: string, serverVersion: string): boolean {
     if (!localVersion || localVersion === '0') return true;
     if (!serverVersion) return false;
-    return serverVersion > localVersion;
+    return parseInt(serverVersion, 10) > parseInt(localVersion, 10);
   }
 }

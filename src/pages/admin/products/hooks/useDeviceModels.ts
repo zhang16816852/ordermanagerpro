@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Database } from '@/integrations/supabase/types';
+import { fetchAllRows } from '@/lib/utils';
 
 export type DeviceModel = Database['public']['Tables']['device_models']['Row'] & { device_type?: string | null, screen_size?: string | null, device_series?: string | null, device_remarks?: string | null, release_date?: string | null, aliases?: string[] | null };
 export type DeviceModelInsert = Database['public']['Tables']['device_models']['Insert'] & { device_type?: string | null, screen_size?: string | null, device_series?: string | null, device_remarks?: string | null, release_date?: string | null, aliases?: string[] | null };
@@ -13,17 +14,10 @@ export function useDeviceModels() {
   const { data: models = [], isLoading } = useQuery({
     queryKey: ['device_models'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('device_models')
-        .select(`*`)
-        .order('sort_order', { ascending: true })
-        .order('name', { ascending: true });
-
-      if (error) {
-        console.error('Error fetching device models:', error);
-        throw error;
-      }
-      return data as (DeviceModel & { brand?: { name: string } | null })[];
+      return fetchAllRows<DeviceModel & { brand?: { name: string } | null }>(
+        'device_models', '*',
+        { order: [{ column: 'sort_order' }, { column: 'name' }] }
+      );
     },
   });
 
