@@ -182,9 +182,9 @@ export function StandaloneDeviceModelSelectField({
                         選擇型號或群組...
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[350px] p-0 overflow-y-auto max-h-[min(400px,var(--radix-popover-content-available-height))]" align="start">
-                    <Tabs defaultValue="models">
-                        <div className="p-2 border-b flex justify-between items-center bg-muted/20">
+                <PopoverContent className="w-[350px] p-0 overflow-hidden max-h-[min(400px,var(--radix-popover-content-available-height))]" align="start" usePortal={false}>
+                    <Tabs defaultValue="models" className="flex flex-col h-full min-h-0">
+                        <div className="flex-shrink-0 p-2 border-b flex justify-between items-center bg-muted/20">
                             <TabsList className="h-8">
                                 <TabsTrigger value="models" className="text-xs">型號</TabsTrigger>
                                 <TabsTrigger value="groups" className="text-xs">群組</TabsTrigger>
@@ -200,9 +200,10 @@ export function StandaloneDeviceModelSelectField({
                             </div>
                         </div>
 
-                        <TabsContent value="models" className="m-0">
-                            <ScrollArea className="max-h-[200px]">
-                                <div className="p-2 space-y-1">
+                        <div className="flex-1 min-h-0 overflow-hidden">
+                            <TabsContent value="models" className="m-0 flex flex-col h-full min-h-0">
+                                <ScrollArea className="h-[260px] w-full">
+                                    <div className="p-2 space-y-1">
                                     {filteredModels.map((model) => {
                                         const isSelected = modelIds.includes(model.id);
                                         return (
@@ -219,44 +220,44 @@ export function StandaloneDeviceModelSelectField({
                                             </div>
                                         );
                                     })}
-                                </div>
-                            </ScrollArea>
-                            <div className="border-t p-2">
-                                {showAddModel ? (
-                                    <div className="flex gap-1">
-                                        <Input
-                                            placeholder="輸入型號名稱..."
-                                            value={newModelName}
-                                            onChange={(e) => setNewModelName(e.target.value)}
-                                            className="h-7 text-xs flex-1"
-                                            autoFocus
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault();
-                                                    if (newModelName.trim()) addModelMutation.mutate(newModelName.trim());
-                                                }
-                                            }}
-                                        />
-                                        <Button
-                                            size="sm"
-                                            className="h-7 text-xs"
-                                            onClick={() => newModelName.trim() && addModelMutation.mutate(newModelName.trim())}
-                                            disabled={!newModelName.trim() || addModelMutation.isPending}
-                                        >
-                                            新增
-                                        </Button>
                                     </div>
-                                ) : (
-                                    <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground" onClick={() => setShowAddModel(true)}>
-                                        <Plus className="h-3 w-3 mr-1" />快速新增型號
-                                    </Button>
-                                )}
-                            </div>
-                        </TabsContent>
+                                </ScrollArea>
+                                <div className="border-t p-2">
+                                    {showAddModel ? (
+                                        <div className="flex gap-1">
+                                            <Input
+                                                placeholder="輸入型號名稱..."
+                                                value={newModelName}
+                                                onChange={(e) => setNewModelName(e.target.value)}
+                                                className="h-7 text-xs flex-1"
+                                                autoFocus
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        if (newModelName.trim()) addModelMutation.mutate(newModelName.trim());
+                                                    }
+                                                }}
+                                            />
+                                            <Button
+                                                size="sm"
+                                                className="h-7 text-xs"
+                                                onClick={() => newModelName.trim() && addModelMutation.mutate(newModelName.trim())}
+                                                disabled={!newModelName.trim() || addModelMutation.isPending}
+                                            >
+                                                新增
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground" onClick={() => setShowAddModel(true)}>
+                                            <Plus className="h-3 w-3 mr-1" />快速新增型號
+                                        </Button>
+                                    )}
+                                </div>
+                            </TabsContent>
 
-                        <TabsContent value="groups" className="m-0">
-                            <ScrollArea className="max-h-[200px]">
-                                <div className="p-2 space-y-1">
+                            <TabsContent value="groups" className="m-0 flex flex-col h-full min-h-0">
+                                <ScrollArea className="h-[260px] w-full">
+                                    <div className="p-2 space-y-1">
                                     {groups.filter(g => g.name.toLowerCase().includes(search.toLowerCase())).map((group) => {
                                         const isSelected = groupIds.includes(group.id);
                                         return (
@@ -276,40 +277,41 @@ export function StandaloneDeviceModelSelectField({
                                             </div>
                                         );
                                     })}
-                                </div>
-                            </ScrollArea>
-                            <div className="border-t p-2">
-                                {showAddGroup ? (
-                                    <div className="flex gap-1">
-                                        <Input
-                                            placeholder="輸入群組名稱..."
-                                            value={newGroupName}
-                                            onChange={(e) => setNewGroupName(e.target.value)}
-                                            className="h-7 text-xs flex-1"
-                                            autoFocus
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault();
-                                                    if (newGroupName.trim()) addGroupMutation.mutate(newGroupName.trim());
-                                                }
-                                            }}
-                                        />
-                                        <Button
-                                            size="sm"
-                                            className="h-7 text-xs"
-                                            onClick={() => newGroupName.trim() && addGroupMutation.mutate(newGroupName.trim())}
-                                            disabled={!newGroupName.trim() || addGroupMutation.isPending}
-                                        >
-                                            新增
-                                        </Button>
                                     </div>
-                                ) : (
-                                    <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground" onClick={() => setShowAddGroup(true)}>
-                                        <Plus className="h-3 w-3 mr-1" />快速新增群組
-                                    </Button>
-                                )}
-                            </div>
-                        </TabsContent>
+                                </ScrollArea>
+                                <div className="border-t p-2">
+                                    {showAddGroup ? (
+                                        <div className="flex gap-1">
+                                            <Input
+                                                placeholder="輸入群組名稱..."
+                                                value={newGroupName}
+                                                onChange={(e) => setNewGroupName(e.target.value)}
+                                                className="h-7 text-xs flex-1"
+                                                autoFocus
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        if (newGroupName.trim()) addGroupMutation.mutate(newGroupName.trim());
+                                                    }
+                                                }}
+                                            />
+                                            <Button
+                                                size="sm"
+                                                className="h-7 text-xs"
+                                                onClick={() => newGroupName.trim() && addGroupMutation.mutate(newGroupName.trim())}
+                                                disabled={!newGroupName.trim() || addGroupMutation.isPending}
+                                            >
+                                                新增
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground" onClick={() => setShowAddGroup(true)}>
+                                            <Plus className="h-3 w-3 mr-1" />快速新增群組
+                                        </Button>
+                                    )}
+                                </div>
+                            </TabsContent>
+                        </div>
                     </Tabs>
                 </PopoverContent>
             </Popover>
