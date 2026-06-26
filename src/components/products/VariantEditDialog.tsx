@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -59,8 +59,8 @@ export function VariantEditDialog({
     onSuccess,
 }: VariantEditDialogProps) {
     const queryClient = useQueryClient();
-    const { colors, fetchColors } = useColorStore();
-    const { specMap, fetchSpecs } = useSpecStore();
+    const { colors } = useColorStore();
+    const { specMap } = useSpecStore();
 
     const form = useForm({
         defaultValues: {
@@ -83,68 +83,75 @@ export function VariantEditDialog({
     });
 
     // 初始化模型的 state
+    const initializedRef = useRef<string | null>(null);
     useEffect(() => {
+        if (!open) {
+            initializedRef.current = null;
+            return;
+        }
+        const variantId = variant?.id || 'new';
+        if (initializedRef.current === variantId && variantId !== 'new') return;
+        initializedRef.current = variantId;
+
         const init = async () => {
-            if (open) {
-                const latestColors = await fetchColors();
-                fetchSpecs();
+            const latestColors = await useColorStore.getState().fetchColors();
+            useSpecStore.getState().fetchSpecs();
 
-                if (variant) {
-                    // 取得設備型號連結與群組連結與排除
-                    const [links, groupLinks, exclusions, specValues] = await Promise.all([
-                        supabase.from('entity_model_relations').select('model_id').eq('variant_id', variant.id).eq('relation_type', 'include').not('model_id', 'is', null),
-                        supabase.from('entity_model_relations').select('group_id').eq('variant_id', variant.id).eq('relation_type', 'include').not('group_id', 'is', null),
-                        supabase.from('entity_model_relations').select('model_id').eq('variant_id', variant.id).eq('relation_type', 'exclude').not('model_id', 'is', null),
-                        supabase.from('entity_spec_values').select('*').eq('entity_id', variant.id).eq('entity_type', 'variant').is('deleted_at', null)
-                    ]);
+            if (variant) {
+                // 取得設備型號連結與群組連結與排除
+                const [links, groupLinks, exclusions, specValues] = await Promise.all([
+                    supabase.from('entity_model_relations').select('model_id').eq('variant_id', variant.id).eq('relation_type', 'include').not('model_id', 'is', null),
+                    supabase.from('entity_model_relations').select('group_id').eq('variant_id', variant.id).eq('relation_type', 'include').not('group_id', 'is', null),
+                    supabase.from('entity_model_relations').select('model_id').eq('variant_id', variant.id).eq('relation_type', 'exclude').not('model_id', 'is', null),
+                    supabase.from('entity_spec_values').select('*').eq('entity_id', variant.id).eq('entity_type', 'variant').is('deleted_at', null)
+                ]);
 
-                    // 根據 option_3 的名稱找回顏色 ID
-                    let colorIds: string[] = [];
-                    if (variant.option_3) {
-                        const color = latestColors.find(c => c.name === variant.option_3);
-                        if (color) colorIds = [color.id];
-                    }
-
-                    form.reset({
-                        sku: variant.sku,
-                        name: variant.name,
-                        option_1: variant.option_1 || '',
-                        option_2: variant.option_2 || '',
-                        color: variant.color || '',
-                        barcode: variant.barcode || '',
-                        wholesale_price: variant.wholesale_price,
-                        retail_price: variant.retail_price,
-                        status: variant.status as any,
-                        spec_values: deserializeSpecs(specValues.data || []),
-                        selectedColorIds: colorIds,
-                        selectedModelIds: links.data?.map(l => l.model_id) || [],
-                        selectedGroupIds: groupLinks.data?.map(l => l.group_id) || [],
-                        selectedExclusionIds: exclusions.data?.map(l => l.model_id) || [],
-                        category_ids: (product as any)?.category_ids || [],
-                    });
-                } else {
-                    form.reset({
-                        sku: product ? `${product.sku}-` : '',
-                        name: '',
-                        option_1: '',
-                        option_2: '',
-                        color: '',
-                        barcode: '',
-                        wholesale_price: product?.base_wholesale_price || 0,
-                        retail_price: product?.base_retail_price || 0,
-                        status: 'active',
-                        spec_values: {},
-                        selectedColorIds: [],
-                        selectedModelIds: [],
-                        selectedGroupIds: [],
-                        selectedExclusionIds: [],
-                        category_ids: (product as any)?.category_ids || [],
-                    });
+                // 根據 option_3 的名稱找回顏色 ID
+                let colorIds: string[] = [];
+                if (variant.option_3) {
+                    const color = latestColors.find(c => c.name === variant.option_3);
+                    if (color) colorIds = [color.id];
                 }
+
+                form.reset({
+                    sku: variant.sku,
+                    name: variant.name,
+                    option_1: variant.option_1 || '',
+                    option_2: variant.option_2 || '',
+                    color: variant.color || '',
+                    barcode: variant.barcode || '',
+                    wholesale_price: variant.wholesale_price,
+                    retail_price: variant.retail_price,
+                    status: variant.status as any,
+                    spec_values: deserializeSpecs(specValues.data || []),
+                    selectedColorIds: colorIds,
+                    selectedModelIds: links.data?.map(l => l.model_id) || [],
+                    selectedGroupIds: groupLinks.data?.map(l => l.group_id) || [],
+                    selectedExclusionIds: exclusions.data?.map(l => l.model_id) || [],
+                    category_ids: (product as any)?.category_ids || [],
+                });
+            } else {
+                form.reset({
+                    sku: product ? `${product.sku}-` : '',
+                    name: '',
+                    option_1: '',
+                    option_2: '',
+                    color: '',
+                    barcode: '',
+                    wholesale_price: product?.base_wholesale_price || 0,
+                    retail_price: product?.base_retail_price || 0,
+                    status: 'active',
+                    spec_values: {},
+                    selectedColorIds: [],
+                    selectedModelIds: [],
+                    selectedGroupIds: [],
+                    selectedExclusionIds: [],
+                    category_ids: (product as any)?.category_ids || [],
+                });
             }
         };
         init();
-    }, [open, variant, product, form, fetchColors, fetchSpecs]);
+    }, [open, variant?.id, product?.id]);
 
     const createMutation = useMutation({
         mutationFn: async (values: any) => {

@@ -3,12 +3,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Plus, Layers, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Layers, Pencil, Trash2, ShoppingCart } from 'lucide-react';
 import { VariantBatchCreator } from './VariantBatchCreator';
 import { VariantEditDialog } from '@/components/products/VariantEditDialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { useOrderDraftStore } from '@/store/useOrderDraftStore';
+import type { ProductWithPricing, VariantWithPricing } from '@/types/product';
 
 const STATUS_LABELS: Record<string, string> = {
   active: '上架中',
@@ -22,6 +24,17 @@ export function VariantSection({ product }: { product: any }) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingVariant, setEditingVariant] = useState<any>(null);
   const queryClient = useQueryClient();
+  const store = useOrderDraftStore();
+
+  const getVariantQty = (productId: string, variantId?: string) => {
+    let total = 0;
+    for (const sid of Object.keys(store.drafts)) {
+      total += store.getItemQuantity(sid, productId, variantId);
+    }
+    return total;
+  };
+
+  const firstStoreId = Object.keys(store.drafts)[0];
 
   // 取得變體資料
   const { data: variants, isLoading } = useQuery({
@@ -41,6 +54,17 @@ export function VariantSection({ product }: { product: any }) {
   // 刷新函數
   const refreshVariants = () => {
     queryClient.invalidateQueries({ queryKey: ['product-variants', product.id] });
+  };
+
+  const handleAddToCart = (variant: any) => {
+    const productForCart = { ...product, wholesale_price: product.wholesale_price ?? 0, retail_price: product.retail_price ?? 0, has_store_price: false } as ProductWithPricing;
+    const variantForCart = { ...variant, effective_wholesale_price: variant.wholesale_price, effective_retail_price: variant.retail_price, has_brand_price: false } as VariantWithPricing;
+    if (!firstStoreId) {
+      toast.error('沒有可用的購物車');
+      return;
+    }
+    store.addItem(firstStoreId, productForCart, variantForCart);
+    toast.success(`${product.name} / ${variant.name} 已加入購物車`);
   };
 
   // 處理刪除 (範例)
@@ -87,7 +111,7 @@ export function VariantSection({ product }: { product: any }) {
               <TableHead>狀態</TableHead>
               <TableHead className="text-right">批發價</TableHead>
               <TableHead className="text-right">零售價</TableHead>
-
+              <TableHead className="w-[100px] text-center">購物車</TableHead>
               <TableHead className="w-[100px] text-center">操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -102,11 +126,12 @@ export function VariantSection({ product }: { product: any }) {
                   <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
                   <TableCell><Skeleton className="h-8 w-16 mx-auto" /></TableCell>
+                  <TableCell><Skeleton className="h-8 w-16 mx-auto" /></TableCell>
                 </TableRow>
               ))
             ) : variants?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={10} className="h-32 text-center text-muted-foreground">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Layers className="h-8 w-8 opacity-20" />
                     <p>尚未建立任何變體，請點擊「批次產生」快速建立。</p>
@@ -130,6 +155,26 @@ export function VariantSection({ product }: { product: any }) {
                   </TableCell>
                   <TableCell className="text-right font-mono">${v.wholesale_price}</TableCell>
                   <TableCell className="text-right font-mono">${v.retail_price}</TableCell>
+                  <TableCell className="text-center">
+                    {(() => {
+                      const cartQty = getVariantQty(product.id, v.id);
+                      return cartQty > 0 ? (
+                        <Badge variant="default" className="text-[10px] h-5 px-1.5 whitespace-nowrap">
+                          已加入 x{cartQty}
+                        </Badge>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[10px] px-1.5 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => handleAddToCart(v)}
+                        >
+                          <ShoppingCart className="h-3 w-3 mr-0.5" />
+                          加入
+                        </Button>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell className="text-center">
                     <div className="flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button

@@ -376,7 +376,7 @@ export function ProductDetailDialog({
         return calculatePriceRange(product.wholesale_price, product.variants?.map(v => v.effective_wholesale_price) || []).display;
     }, [product, selectedVariant]);
 
-    const qty = (product && selectedVariantId) ? getItemQuantity(selectedVariantId) : (product ? getItemQuantity(product.id) : 0);
+    const qty = (product && selectedVariantId) ? getItemQuantity(product.id, selectedVariantId) : (product ? getItemQuantity(product.id) : 0);
 
     const handleAddProduct = () => {
         if (!product) return;
@@ -537,9 +537,9 @@ export function ProductDetailDialog({
                                 </div>
                             )}
 
-                            <Button onClick={handleAddProduct} className="w-full" disabled={product.has_variants && !selectedVariantId}>
+                            <Button onClick={handleAddProduct} className="w-full" variant={qty > 0 ? "secondary" : "default"} disabled={product.has_variants && !selectedVariantId}>
                                 <ShoppingCart className="mr-2 h-4 w-4" />
-                                {product.has_variants && !selectedVariantId ? "請先選擇規格選項" : `加入購物車 ${qty > 0 ? `(已選 ${qty})` : ''}`}
+                                {product.has_variants && !selectedVariantId ? "請先選擇規格選項" : qty > 0 ? `已在購物車中 (x${qty})` : "加入購物車"}
                             </Button>
                         </div>
                     </div>

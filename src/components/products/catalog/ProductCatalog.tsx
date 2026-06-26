@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Search, ChevronRight, Info, LayoutGrid } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -58,6 +58,29 @@ export default function ProductCatalog({
   const [variantDialogProduct, setVariantDialogProduct] = useState<ProductWithPricing | null>(null);
   const [selectedVariantForDialog, setSelectedVariantForDialog] = useState<VariantWithPricing | null>(null);
   const [detailProduct, setDetailProduct] = useState<ProductWithPricing | null>(null);
+  const [localSearch, setLocalSearch] = useState(search);
+  const prevSearchRef = useRef(search);
+
+  useEffect(() => {
+    if (search !== prevSearchRef.current) {
+      setLocalSearch(search);
+      prevSearchRef.current = search;
+    }
+  }, [search]);
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      prevSearchRef.current = localSearch;
+      onSearchChange(localSearch);
+    }
+  };
+
+  const handleSearchBlur = () => {
+    if (localSearch !== prevSearchRef.current) {
+      prevSearchRef.current = localSearch;
+      onSearchChange(localSearch);
+    }
+  };
 
   const { addItem, getItemQuantity, getTotalProductQuantity } = useStoreDraft(storeId);
   const { templates: allTemplates } = useStoreProductCache(storeId);
@@ -252,8 +275,10 @@ export default function ProductCatalog({
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder={viewMode === 'products' ? "搜尋產品名稱或 SKU..." : "搜尋單品名稱、SKU 或規格..."}
-              value={search}
-              onChange={(e) => onSearchChange(e.target.value)}
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              onBlur={handleSearchBlur}
               className="pl-10"
             />
           </div>

@@ -212,7 +212,9 @@ export function StandaloneDeviceModelSelectField({
                                                 className={`flex items-center gap-2 p-1.5 rounded-md hover:bg-muted cursor-pointer transition-colors ${isSelected ? 'bg-amber-50 text-amber-900' : ''}`}
                                                 onClick={() => toggleModel(model.id)}
                                             >
-                                                <Checkbox checked={isSelected} onCheckedChange={() => toggleModel(model.id)} />
+                                                <span onClick={(e) => e.stopPropagation()}>
+                                                    <Checkbox checked={isSelected} onCheckedChange={() => toggleModel(model.id)} />
+                                                </span>
                                                 <span className="text-sm">
                                                     {model.device_series ? <span className="text-[10px] text-muted-foreground mr-1">[{model.device_series}]</span> : null}
                                                     {model.name}
@@ -266,7 +268,9 @@ export function StandaloneDeviceModelSelectField({
                                                 className={`flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 text-blue-900' : ''}`}
                                                 onClick={() => toggleGroup(group.id)}
                                             >
-                                                <Checkbox checked={isSelected} onCheckedChange={() => toggleGroup(group.id)} />
+                                                <span onClick={(e) => e.stopPropagation()}>
+                                                    <Checkbox checked={isSelected} onCheckedChange={() => toggleGroup(group.id)} />
+                                                </span>
                                                 <div className="flex flex-col">
                                                     <div className="flex items-center gap-1">
                                                         <Layers className="h-3 w-3 text-blue-500" />
