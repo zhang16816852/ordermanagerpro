@@ -12,6 +12,7 @@ import AdminPurchaseOrders from "@/pages/admin/purchase-orders/index";
 import AdminCategories from "@/pages/admin/categories/index";
 import AdminInventory from "@/pages/admin/inventory/index";
 import AdminAuditLogs from "@/pages/admin/audit-logs/index";
+import AdminOrderGridTemplates from "@/pages/admin/order-grid-templates/index";
 
 export const adminRoutes = [
     { path: "/admin", element: <AdminDashboard /> },
@@ -28,4 +29,5 @@ export const adminRoutes = [
     { path: "/admin/accounting", element: <AdminAccounting /> },
     { path: "/admin/purchase-orders", element: <AdminPurchaseOrders /> },
     { path: "/admin/audit-logs", element: <AdminAuditLogs /> },
+    { path: "/admin/order-grid-templates", element: <AdminOrderGridTemplates /> },
 ];

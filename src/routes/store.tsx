@@ -11,7 +11,6 @@ import StoreNotifications from "@/pages/store/Notifications";
 import StoreAccounting from "@/pages/store/Accounting";
 import MarketCreatePage from "@/pages/market/create";
 import MyListingsPage from "@/pages/market/my-listings";
-
 export const storeRoutes = [
     { path: "/dashboard", element: <StoreDashboard /> },
     { path: "/orders", element: <StoreOrderList /> },

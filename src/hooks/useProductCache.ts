@@ -5,6 +5,7 @@ import { Product, ProductWithDetails, ProductWithPricing, VariantWithPricing } f
 import { SyncManager } from '@/services/syncManager';
 import { CacheService, CACHE, type FetchResult } from '@/services/cacheService';
 import { useCache } from '@/hooks/useCache';
+import type { OrderGridTemplateWithProducts } from '@/types/order-grid';
 
 const PRODUCT_CACHE_CFG = CACHE.products;
 
@@ -227,6 +228,19 @@ export const useProductCache = (storeId?: string | null) => {
     staleWhileRevalidate: true,
   });
 
+  const { data: templates = [] } = useQuery<OrderGridTemplateWithProducts[]>({
+    queryKey: ['table_templates'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('table_templates')
+        .select('*, template_variants:table_template_variants(*)')
+        .order('name');
+      if (error) throw error;
+      return (data || []) as OrderGridTemplateWithProducts[];
+    },
+    staleTime: 30000,
+  });
+
   const [optimisticBump, setOptimisticBump] = useState(0);
   const [optimisticProducts, setOptimisticProducts] = useState<ProductWithDetails[] | null>(null);
 
@@ -251,6 +265,7 @@ export const useProductCache = (storeId?: string | null) => {
 
   return {
     products: effectiveProducts,
+    templates,
     isLoading,
     isRevalidating,
     version: dataVersion,
@@ -263,7 +278,7 @@ export const useProductCache = (storeId?: string | null) => {
  * [V7.5] 提供門市使用的產品快取，整合定價資訊
  */
 export const useStoreProductCache = (storeId?: string | null) => {
-  const { products: rawProducts, isLoading: isCacheLoading, version, refresh } = useProductCache();
+  const { products: rawProducts, templates, isLoading: isCacheLoading, version, refresh } = useProductCache();
 
   // 抓取門市特定價格 (目前 store_products 表尚無 store_id 欄位，採全量抓取後於前端過濾)
   const { data: storeProducts = [], isLoading: isStoreLoading } = useQuery({
@@ -307,6 +322,7 @@ export const useStoreProductCache = (storeId?: string | null) => {
 
   return {
     products: productsWithPricing,
+    templates,
     isLoading: isCacheLoading || isStoreLoading,
     version,
     refresh,

@@ -68,7 +68,7 @@ export default function StoreCatalog() {
   }, [selectedCategory, categoryHierarchy]);
 
   const page = parseInt(searchParams.get("page") || "1", 10);
-  const [viewMode, setViewMode] = useState<'products' | 'variants' | 'gallery'>('products');
+  const [viewMode, setViewMode] = useState<'products' | 'variants' | 'gallery' | 'table'>('products');
 
 
 
@@ -211,6 +211,15 @@ export default function StoreCatalog() {
                   }`}
               >
                 圖卡
+              </button>
+              <button
+                onClick={() => setViewMode('table')}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'table'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                表格
               </button>
             </div>
 

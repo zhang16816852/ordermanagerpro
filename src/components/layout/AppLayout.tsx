@@ -61,6 +61,7 @@ const adminNavItems: NavItem[] = [
   { title: '採購管理', href: '/admin/purchase-orders', icon: Truck },
   { title: '會計管理', href: '/admin/accounting', icon: FileText },
   { title: '媒合市場', href: '/market', icon: ShoppingBag },
+  { title: 'Table 式下單', href: '/admin/order-grid-templates', icon: Layers },
   { title: '操作日誌', href: '/admin/audit-logs', icon: HistoryIcon },
 ];
 // ← 新增這兩行：取得購物車總件數

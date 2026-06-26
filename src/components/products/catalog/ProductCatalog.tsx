@@ -1,7 +1,6 @@
-// src/components/products/catalog/ProductCatalog.tsx
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, ChevronRight, Info } from "lucide-react";
+import { Search, ChevronRight, Info, LayoutGrid } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,12 +24,15 @@ import { calculatePriceRange } from "@/utils/priceUtils";
 import { useProductColors } from "@/hooks/useProductColors";
 import { getContrastColor } from "@/utils/colorUtils";
 import { VariantOptionsPicker } from "@/components/products/catalog/VariantOptionsPicker";
+import { useStoreProductCache } from "@/hooks/useProductCache";
+import { OrderGridRenderer } from "@/components/order-grid/OrderGridRenderer";
+import type { GridQuantities } from "@/types/order-grid";
 
 interface ProductCatalogProps {
   products: ProductWithPricing[];
   isLoading: boolean;
   storeId: string;
-  viewMode?: 'products' | 'variants' | 'gallery';
+  viewMode?: 'products' | 'variants' | 'gallery' | 'table';
   search: string;
   onSearchChange: (val: string) => void;
   categoryFilter?: string | null;
@@ -58,6 +60,7 @@ export default function ProductCatalog({
   const [detailProduct, setDetailProduct] = useState<ProductWithPricing | null>(null);
 
   const { addItem, getItemQuantity, getTotalProductQuantity } = useStoreDraft(storeId);
+  const { templates: allTemplates } = useStoreProductCache(storeId);
 
   // Sync detailProduct with URL ?p=...
   useEffect(() => {
@@ -93,7 +96,6 @@ export default function ProductCatalog({
 
   const filteredProducts = products
     .filter((product) => {
-      // 1. Category Filter (Recursive)
       if (categoryFilter && effectiveSubCategoryIds.size > 0) {
         const pCategoryIds = (product as any).category_ids || [];
         if (!pCategoryIds.some((id: string) => effectiveSubCategoryIds.has(id))) {
@@ -103,7 +105,6 @@ export default function ProductCatalog({
 
       if (!productMatchesSpecFilters(product, specFilters, (id: string) => product.variants || [])) return false;
 
-      // 3. Brand Filter
       if (brandFilter.length > 0) {
         const pBrandId = (product as any).brand_id;
         if (!pBrandId || !brandFilter.includes(pBrandId)) {
@@ -116,7 +117,6 @@ export default function ProductCatalog({
     .map((product) => {
       if (keywords.length === 0) return product;
 
-      // 商品主體比對：合併商品本體與所有變體的型號名稱
       const allVariantModelNames = (product.variants || []).flatMap(
         (v: any) => v.effective_model_names || []
       );
@@ -167,7 +167,6 @@ export default function ProductCatalog({
     .filter((product) => {
       if (keywords.length === 0) return true;
 
-      // 最終過濾：合併商品本體型號與所有變體型號做比對
       const allVariantModelNames = (product.variants || []).flatMap(
         (v: any) => v.effective_model_names || []
       );
@@ -191,7 +190,6 @@ export default function ProductCatalog({
       );
 
       if (viewMode === 'variants') {
-        // 單品模式：只保留有符合變體的產品
         return (product.variants?.length ?? 0) > 0;
       }
 
@@ -199,6 +197,18 @@ export default function ProductCatalog({
 
       return (product.variants?.length ?? 0) > 0;
     });
+
+  const filteredVariantIds = useMemo(() => {
+    const ids = new Set<string>();
+    filteredProducts.forEach(p => p.variants?.forEach((v: any) => ids.add(v.id)));
+    return ids;
+  }, [filteredProducts]);
+
+  const matchingTemplates = useMemo(() => {
+    return (allTemplates || []).filter(t =>
+      t.template_variants?.some(tv => filteredVariantIds.has(tv.variant_id))
+    );
+  }, [allTemplates, filteredVariantIds]);
 
   const handleProductClick = (product: ProductWithPricing) => {
     if (product.has_variants && product.variants && product.variants.length > 1) {
@@ -229,6 +239,11 @@ export default function ProductCatalog({
               {viewMode === 'gallery' && (
                 <Badge variant="outline" className="text-xs">
                   圖卡檢視
+                </Badge>
+              )}
+              {viewMode === 'table' && (
+                <Badge variant="outline" className="text-xs">
+                  表格式下單
                 </Badge>
               )}
             </div>
@@ -353,7 +368,7 @@ export default function ProductCatalog({
                 );
               })}
             </div>
-          ) : (
+          ) : viewMode === 'variants' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredProducts.flatMap(product => {
                 if (product.has_variants && product.variants && product.variants.length > 0) {
@@ -422,6 +437,67 @@ export default function ProductCatalog({
                   </div>
                 );
               })}
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {matchingTemplates.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  目前篩選結果沒有對應的 table 範本
+                </div>
+              ) : (
+                matchingTemplates.map((template) => {
+                  const templateVariantIds = new Set(
+                    template.template_variants?.map((tv) => tv.variant_id) || []
+                  );
+                  const templateFilteredProducts = filteredProducts
+                    .filter((p) =>
+                      (p.variants || []).some((v: any) => templateVariantIds.has(v.id))
+                    )
+                    .map((p) => ({
+                      ...p,
+                      variants: (p.variants || []).filter((v: any) =>
+                        templateVariantIds.has(v.id)
+                      ),
+                    }));
+
+                  if (templateFilteredProducts.length === 0) return null;
+
+                  return (
+                    <Card key={template.id} className="overflow-hidden">
+                      <CardHeader className="px-4 py-3 border-b bg-muted/20">
+                        <div className="flex items-center gap-2">
+                          <LayoutGrid className="h-4 w-4 text-muted-foreground" />
+                          <CardTitle className="text-base font-medium">
+                            {template.name}
+                          </CardTitle>
+                        </div>
+                        {template.description && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {template.description}
+                          </p>
+                        )}
+                      </CardHeader>
+                      <CardContent className="p-4">
+                        <OrderGridRenderer
+                          template={template}
+                          products={templateFilteredProducts}
+                          onAddToCart={(items) => {
+                            let addedCount = 0;
+                            items.forEach(({ variant, product, quantity }) => {
+                              for (let i = 0; i < quantity; i++) {
+                                addItem(product, variant);
+                                addedCount++;
+                              }
+                            });
+                            toast.success(`已加入 ${addedCount} 項商品至購物車`);
+                          }}
+                          initialQuantities={{} as GridQuantities}
+                        />
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              )}
             </div>
           )}
         </CardContent>
