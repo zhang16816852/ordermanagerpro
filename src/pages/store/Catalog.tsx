@@ -23,7 +23,6 @@ import { getSubCategoryIds } from "@/utils/treeUtils";
 
 export default function StoreCatalog() {
   const { storeId } = useAuth();
-  console.log("StoreCatalog: storeId =", storeId);
   const { totalItems } = useStoreDraft(storeId || '');
   const { products: allProducts, isLoading: isSidebarLoading } = useStoreProductCache(storeId ?? null);
   const { fetchData: fetchDeviceData } = useDeviceModelStore();
