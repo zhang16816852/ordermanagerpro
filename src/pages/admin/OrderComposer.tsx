@@ -58,7 +58,7 @@ export default function AdminOrderComposer() {
   const { totalItems } = useStoreDraft(selectedStoreId || "");
   const { fetchData: fetchDeviceData } = useDeviceModelStore();
 
-  const [viewMode, setViewMode] = useState<"products" | "variants" | "gallery">("products");
+  const [viewMode, setViewMode] = useState<"products" | "variants" | "gallery" | "table">("products");
   const [searchParams, setSearchParams] = useSearchParams();
 
   const search = searchParams.get("search") || "";
@@ -269,6 +269,16 @@ export default function AdminOrderComposer() {
                     }`}
                   >
                     圖卡
+                  </button>
+                  <button
+                    onClick={() => setViewMode("table")}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                      viewMode === "table"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    表格
                   </button>
                 </div>
 
