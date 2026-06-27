@@ -1,8 +1,10 @@
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, RefreshCw, Upload, Download } from 'lucide-react';
+import { Plus, Search, RefreshCw, Upload, Download, Table2 } from 'lucide-react';
 import { VariantManager } from '@/components/products/VariantManager';
+import { toast } from 'sonner';
 
 import { useProductsList } from './hooks/useProductsList';
 import { ProductsTable } from './components/ProductsTable';
@@ -11,6 +13,9 @@ import { DeviceModelManager } from '../libraries/device-models/DeviceModelManage
 import { ColorManager } from '../libraries/colors/ColorManager';
 import { CatalogSidebar } from '@/components/products/catalog/CatalogSidebar';
 import { ProductWithPricing } from '@/types/product';
+import { OrderGridTemplateFormDialog } from '@/components/order-grid/OrderGridTemplateFormDialog';
+import { useTableTemplates } from '@/hooks/useTableTemplates';
+import type { DimensionConfig } from '@/types/order-grid';
 
 export default function AdminProducts() {
     const {
@@ -30,6 +35,32 @@ export default function AdminProducts() {
     } = useProductsList();
 
     const isMutationLoading = createMutation.isPending || updateMutation.isPending;
+    const { createTemplate } = useTableTemplates();
+    const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+    const [quickCreateSaving, setQuickCreateSaving] = useState(false);
+
+    const allVariantIds = useMemo(
+        () => filteredProducts.flatMap(p => (p.variants || []).map((v: any) => v.id)),
+        [filteredProducts]
+    );
+
+    const handleQuickCreateSave = async (data: {
+        name: string;
+        description?: string;
+        row_config: DimensionConfig;
+        col_config: DimensionConfig;
+        tab_config?: DimensionConfig | null;
+        variant_ids: string[];
+    }) => {
+        setQuickCreateSaving(true);
+        try {
+            createTemplate(data);
+            setQuickCreateOpen(false);
+            toast.success(`範本「${data.name}」已建立`);
+        } finally {
+            setQuickCreateSaving(false);
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -64,6 +95,10 @@ export default function AdminProducts() {
                             </Button>
                         </>
                     )}
+                    <Button variant="outline" size="sm" onClick={() => setQuickCreateOpen(true)} className="h-9">
+                        <Table2 className="mr-2 h-4 w-4" />
+                        建立表格
+                    </Button>
                     <Button size="sm" onClick={() => { setEditingProduct(null); setIsDialogOpen(true); }} className="h-9 shadow-md">
                         <Plus className="mr-2 h-4 w-4" />
                         新增產品
@@ -155,6 +190,14 @@ export default function AdminProducts() {
                 </TabsContent>
             </Tabs>
 
+            <OrderGridTemplateFormDialog
+                open={quickCreateOpen}
+                onOpenChange={setQuickCreateOpen}
+                products={filteredProducts}
+                defaultVariantIds={allVariantIds}
+                onSave={handleQuickCreateSave}
+                isLoading={quickCreateSaving}
+            />
             <ProductDialogs
                 isDialogOpen={isDialogOpen}
                 setIsDialogOpen={setIsDialogOpen}

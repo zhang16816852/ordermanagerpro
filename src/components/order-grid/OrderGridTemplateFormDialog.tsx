@@ -38,6 +38,7 @@ interface OrderGridTemplateFormDialogProps {
     variant_ids: string[];
   }) => void;
   isLoading?: boolean;
+  defaultVariantIds?: string[];
 }
 
 const defaultRowConfig: DimensionConfig = {
@@ -59,6 +60,7 @@ export function OrderGridTemplateFormDialog({
   products,
   onSave,
   isLoading,
+  defaultVariantIds,
 }: OrderGridTemplateFormDialogProps) {
   const isEditing = !!template?.id;
 
@@ -99,9 +101,9 @@ export function OrderGridTemplateFormDialog({
         label: 'Tab',
         field: 'option_3',
       });
-      setVariantIds([]);
+      setVariantIds(defaultVariantIds || []);
     }
-  }, [template, open]);
+  }, [template, open, defaultVariantIds]);
 
   const selectedProducts = useMemo(() => {
     const variantSet = new Set(variantIds);
