@@ -3,18 +3,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Minus } from 'lucide-react';
 import type { GridCellVariant, GridMode } from '@/types/order-grid';
+import type { VariantWithPricing, ProductWithPricing } from '@/types/product';
 import { cn } from '@/lib/utils';
 
 interface OrderGridCellProps {
   items: GridCellVariant[];
   mode: GridMode;
   onQuantityChange: (variantId: string, quantity: number) => void;
+  onItemAdd?: (variant: VariantWithPricing, product: ProductWithPricing, delta: number) => void;
 }
 
 export function OrderGridCell({
   items,
   mode,
   onQuantityChange,
+  onItemAdd,
 }: OrderGridCellProps) {
   if (items.length === 0) {
     return (
@@ -33,6 +36,9 @@ export function OrderGridCell({
               quantity={quantity}
               onQuantityChange={onQuantityChange}
               variantId={variant.id}
+              onItemAdd={onItemAdd}
+              variant={variant}
+              product={product}
             />
           ) : (
             <InputModeCell
@@ -51,35 +57,43 @@ function ButtonModeCell({
   quantity,
   onQuantityChange,
   variantId,
+  onItemAdd,
+  variant,
+  product,
 }: {
   quantity: number;
   onQuantityChange: (variantId: string, quantity: number) => void;
   variantId: string;
+  onItemAdd?: (variant: VariantWithPricing, product: ProductWithPricing, delta: number) => void;
+  variant: VariantWithPricing;
+  product: ProductWithPricing;
 }) {
   return (
-    <div className="flex items-center justify-center gap-px">
+    <div className="flex flex-col items-center gap-0.5 py-0.5">
+      <Button
+        variant={quantity > 0 ? 'default' : 'outline'}
+        size="icon"
+        className="h-5 w-5"
+        onClick={() => {
+          onQuantityChange(variantId, quantity + 1);
+          onItemAdd?.(variant, product, 1);
+        }}
+      >
+        <Plus className="h-2.5 w-2.5" />
+      </Button>
+      <span className="text-xs font-medium leading-none text-primary">{quantity}</span>
       {quantity > 0 && (
         <Button
           variant="outline"
           size="icon"
-          className="h-6 w-6"
-          onClick={() => onQuantityChange(variantId, quantity - 1)}
+          className="h-5 w-5"
+          onClick={() => {
+            onQuantityChange(variantId, quantity - 1);
+            onItemAdd?.(variant, product, -1);
+          }}
         >
-          <Minus className="h-3 w-3" />
+          <Minus className="h-2.5 w-2.5" />
         </Button>
-      )}
-      <Button
-        variant={quantity > 0 ? 'default' : 'outline'}
-        size="icon"
-        className="h-6 w-6"
-        onClick={() => onQuantityChange(variantId, quantity + 1)}
-      >
-        <Plus className="h-3 w-3" />
-      </Button>
-      {quantity > 0 && (
-        <span className="text-xs font-medium text-primary min-w-[20px] text-center">
-          {quantity}
-        </span>
       )}
     </div>
   );
@@ -120,8 +134,9 @@ function InputModeCell({
         onChange={(e) => setLocalValue(e.target.value)}
         onBlur={sync}
         onKeyDown={handleKeyDown}
+        onFocus={(e) => e.target.select()}
         className={cn(
-          'h-7 w-16 text-center text-xs',
+          'h-7 w-16 sm:w-20 text-center text-xs',
           parseInt(localValue) > 0 && 'border-primary/50 bg-primary/5'
         )}
         placeholder="0"

@@ -60,10 +60,9 @@ export function BatchToolbar({ data, onBatchUpdate, allBrands, categories }: Bat
                     <Select onValueChange={(v) => {
                         const brand = allBrands.find(b => b.id === v);
                         if (brand) {
-                            selectedIndices.forEach(i => {
-                                onBatchUpdate([i], 'brand', brand.name);
-                                onBatchUpdate([i], 'brand_id', brand.id);
-                            });
+                            const indices = Array.from(selectedIndices);
+                            onBatchUpdate(indices, 'brand', brand.name);
+                            onBatchUpdate(indices, 'brand_id', brand.id);
                         }
                     }}>
                         <SelectTrigger className="h-8 text-xs">
@@ -88,10 +87,9 @@ export function BatchToolbar({ data, onBatchUpdate, allBrands, categories }: Bat
                     <Select onValueChange={(v) => {
                         const cat = categories.find(c => c.id === v);
                         if (cat) {
-                            selectedIndices.forEach(i => {
-                                onBatchUpdate([i], 'category', cat.name);
-                                onBatchUpdate([i], 'category_id', cat.id);
-                            });
+                            const indices = Array.from(selectedIndices);
+                            onBatchUpdate(indices, 'category', cat.name);
+                            onBatchUpdate(indices, 'category_id', cat.id);
                         }
                     }}>
                         <SelectTrigger className="h-8 text-xs">
@@ -116,26 +114,31 @@ export function BatchToolbar({ data, onBatchUpdate, allBrands, categories }: Bat
                     <div className="space-y-1">
                         <Label className="text-[10px]">增加 %</Label>
                         <Input type="number" placeholder="例如 10" className="h-7 text-xs"
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    const pct = parseFloat((e.target as HTMLInputElement).value);
-                                    if (!isNaN(pct)) {
-                                        selectedIndices.forEach(i => {
-                                            const row = data[i];
-                                            const wholesale = row.is_variant
-                                                ? (row.variant_wholesale_price ?? row.base_wholesale_price)
-                                                : row.base_wholesale_price;
-                                            const retail = row.is_variant
-                                                ? (row.variant_retail_price ?? row.base_retail_price)
-                                                : row.base_retail_price;
-                                            const wKey = row.is_variant ? 'variant_wholesale_price' : 'base_wholesale_price';
-                                            const rKey = row.is_variant ? 'variant_retail_price' : 'base_retail_price';
-                                            onBatchUpdate([i], wKey as any, Math.round(wholesale * (1 + pct / 100) * 100) / 100);
-                                            onBatchUpdate([i], rKey as any, Math.round(retail * (1 + pct / 100) * 100) / 100);
-                                        });
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        const pct = parseFloat((e.target as HTMLInputElement).value);
+                                        if (!isNaN(pct)) {
+                                            const indices = Array.from(selectedIndices);
+                                            const wKey: keyof ImportRow = 'base_wholesale_price';
+                                            const rKey: keyof ImportRow = 'base_retail_price';
+                                            const vwKey: keyof ImportRow = 'variant_wholesale_price';
+                                            const vrKey: keyof ImportRow = 'variant_retail_price';
+                                            indices.forEach(i => {
+                                                const row = data[i];
+                                                const wholesale = row.is_variant
+                                                    ? (row.variant_wholesale_price ?? row.base_wholesale_price)
+                                                    : row.base_wholesale_price;
+                                                const retail = row.is_variant
+                                                    ? (row.variant_retail_price ?? row.base_retail_price)
+                                                    : row.base_retail_price;
+                                                const wk = row.is_variant ? vwKey : wKey;
+                                                const rk = row.is_variant ? vrKey : rKey;
+                                                onBatchUpdate([i], wk, Math.round(wholesale * (1 + pct / 100) * 100) / 100);
+                                                onBatchUpdate([i], rk, Math.round(retail * (1 + pct / 100) * 100) / 100);
+                                            });
+                                        }
                                     }
-                                }
-                            }}
+                                }}
                         />
                     </div>
                 </PopoverContent>

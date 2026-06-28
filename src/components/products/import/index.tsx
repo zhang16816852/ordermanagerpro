@@ -34,6 +34,7 @@ export function UnifiedProductImport({ open, onOpenChange, onSuccess }: UnifiedP
         isLoading,
         handleFileUpload,
         updateRow,
+        batchUpdateRows,
         removeRow,
         importMutation,
         downloadTemplate,
@@ -93,6 +94,7 @@ export function UnifiedProductImport({ open, onOpenChange, onSuccess }: UnifiedP
                                 filterStatus={filterStatus}
                                 onStatusFilterChange={setFilterStatus}
                                 onUpdate={updateRow}
+                                onBatchUpdate={batchUpdateRows}
                                 onRemove={removeRow}
                                 allBrands={allBrands}
                                 specDefs={specDefs}

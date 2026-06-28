@@ -13,6 +13,7 @@ interface OrderGridToolbarProps {
   quantities: GridQuantities;
   onAddToCart: () => void;
   onClear: () => void;
+  showAddToCart?: boolean;
   className?: string;
 }
 
@@ -23,6 +24,7 @@ export function OrderGridToolbar({
   quantities,
   onAddToCart,
   onClear,
+  showAddToCart = true,
   className,
 }: OrderGridToolbarProps) {
   const totalItems = Object.values(quantities).reduce(
@@ -77,20 +79,22 @@ export function OrderGridToolbar({
             <Trash2 className="h-3.5 w-3.5 mr-1" />
             清空
           </Button>
-          <Button
-            size="sm"
-            onClick={onAddToCart}
-            disabled={totalItems === 0}
-            className="h-8"
-          >
-            <ShoppingCart className="h-3.5 w-3.5 mr-1" />
-            加入購物車
-            {totalItems > 0 && (
-              <span className="ml-1.5 bg-primary-foreground/20 px-1.5 rounded text-xs">
-                {totalItems}
-              </span>
-            )}
-          </Button>
+          {showAddToCart && (
+            <Button
+              size="sm"
+              onClick={onAddToCart}
+              disabled={totalItems === 0}
+              className="h-8"
+            >
+              <ShoppingCart className="h-3.5 w-3.5 mr-1" />
+              加入購物車
+              {totalItems > 0 && (
+                <span className="ml-1.5 bg-primary-foreground/20 px-1.5 rounded text-xs">
+                  {totalItems}
+                </span>
+              )}
+            </Button>
+          )}
         </div>
       </div>
     </div>

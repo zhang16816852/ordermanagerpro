@@ -38,7 +38,7 @@ export function PreviewToolbar({ data, filterStatus, onStatusFilterChange, filte
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">所有分類</SelectItem>
-                        {Array.from(new Set(safeData.map(r => r.category).filter(Boolean))).map(catName => (
+                        {Array.from(new Set(safeData.flatMap(r => r.category.split(',').map(s => s.trim())).filter(Boolean))).map(catName => (
                             <SelectItem key={catName} value={catName}>{catName}</SelectItem>
                         ))}
                     </SelectContent>

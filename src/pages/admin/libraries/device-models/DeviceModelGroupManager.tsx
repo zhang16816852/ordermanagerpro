@@ -40,12 +40,14 @@ export function DeviceModelGroupManager() {
   const { data: usage = { products: 0, variants: 0 } } = useGroupUsage(selectedGroupId || '');
 
   const handleSaveGroup = async () => {
-    if (!editingGroup?.name) return;
+    const normalizedName = (editingGroup?.name || '').replace(/\s+/g, ' ').trim();
+    if (!normalizedName) return;
+    const normalized = { ...editingGroup, name: normalizedName };
     
-    if (editingGroup.id) {
-      await updateGroupMutation.mutateAsync({ id: editingGroup.id, values: editingGroup });
+    if (normalized.id) {
+      await updateGroupMutation.mutateAsync({ id: normalized.id, values: normalized });
     } else {
-      await createGroupMutation.mutateAsync(editingGroup);
+      await createGroupMutation.mutateAsync(normalized);
     }
     setIsEditModalOpen(false);
     setEditingGroup(null);
@@ -149,7 +151,7 @@ export function DeviceModelGroupManager() {
 
           for (const row of rows) {
             const groupIdFromCsv = row['群組ID'];
-            const groupName = row['群組名稱'];
+            const groupName = (row['群組名稱'] || '').replace(/\s+/g, ' ').trim();
             const description = row['群組描述'] || '';
             const modelsStr = row['適用型號'] || '';
 

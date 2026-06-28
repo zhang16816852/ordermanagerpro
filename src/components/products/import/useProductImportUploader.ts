@@ -50,20 +50,11 @@ export function useProductImportUploader(
                     const catId = row.category_id || getCatId((row as any)._categoryName) || getCatId(row.category);
 
                     if (!existing) {
-                        const newRow = { ...row, has_variants: false, _categoryIds: [] as string[], _multiSpecs: {} as Record<string, Record<string, any>> };
-                        if (catId) {
-                            newRow._categoryIds!.push(catId);
-                            if (row._specs) newRow._multiSpecs![catId] = { ...row._specs };
-                        }
-                        chunkProductsMap.set(sku, newRow);
+                        chunkProductsMap.set(sku, { ...row, has_variants: false });
                     } else {
                         const merged = { ...existing };
                         if (!row.is_variant) Object.assign(merged, row);
                         merged.has_variants = existing.has_variants || row.is_variant;
-                        merged._categoryIds = [...(existing._categoryIds || [])];
-                        if (catId && !merged._categoryIds!.includes(catId)) merged._categoryIds!.push(catId);
-                        merged._multiSpecs = { ...(existing._multiSpecs || {}) };
-                        if (catId && row._specs) merged._multiSpecs![catId] = { ...(merged._multiSpecs![catId] || {}), ...row._specs };
                         chunkProductsMap.set(sku, merged);
                     }
                 });
@@ -76,6 +67,7 @@ export function useProductImportUploader(
                 });
 
                 const productsUpsertData = Array.from(chunkProductsMap.values()).map(row => ({
+                    id: row.product_id || crypto.randomUUID(),
                     sku: row.product_sku,
                     name: row.product_name,
                     description: row.description || null,
@@ -88,42 +80,41 @@ export function useProductImportUploader(
                     has_variants: row.has_variants,
                     barcode: row.barcode || null,
                     color: row.option_3 || null,
-                    ...(row.product_id ? { id: row.product_id } : {})
                 }));
 
                 if (productsUpsertData.length > 0) {
-                    const { error: pErr } = await supabase.from('products').upsert(productsUpsertData, { onConflict: 'sku' });
+                    const { error: pErr } = await supabase.from('products').upsert(productsUpsertData, { onConflict: 'id' });
                     if (pErr) throw pErr;
                 }
 
                 const { data: insertedProducts } = await supabase.from('products').select('id, sku').in('sku', Array.from(chunkProductsMap.keys()));
                 const productIdMap = new Map(insertedProducts?.map(p => [p.sku, p.id]) || []);
 
-                const relationPromises: Promise<any>[] = [];
-                const variantSpecPromises: Promise<any>[] = [];
+                const relationPromises: any[] = [];
+                const variantSpecPromises: any[] = [];
 
                 for (const [sku, row] of chunkProductsMap) {
                     const pId = productIdMap.get(sku);
                     if (!pId) continue;
 
-                    const categoryIds = row._categoryIds || [];
-                    if (categoryIds.length > 0) {
+                    const allCatIds = row.category_ids?.filter(Boolean) || (row.category_id ? [row.category_id] : []);
+                    if (allCatIds.length > 0) {
                         relationPromises.push(
                             supabase.from('product_category_links').upsert(
-                                categoryIds.map(cid => ({ product_id: pId, category_id: cid })),
+                                allCatIds.map(cid => ({ product_id: pId, category_id: cid })),
                                 { onConflict: 'product_id,category_id' }
                             )
                         );
-                    }
 
-                    for (const catId of categoryIds) {
-                        const specsForCat = row._multiSpecs?.[catId] || {};
+                        const primaryCatId = allCatIds[0];
                         let pathMap = new Map<string, any>();
                         if (row.spec_values) {
                             const existingSpecs = deserializeSpecs(row.spec_values);
                             Object.entries(existingSpecs).forEach(([p, v]) => pathMap.set(p, v));
                         }
-                        Object.entries(specsForCat).forEach(([key, val]) => pathMap.set(key, val));
+                        if (row._specs) {
+                            Object.entries(row._specs).forEach(([key, val]) => pathMap.set(key, val));
+                        }
                         const serialized = serializeSpecs(Object.fromEntries(pathMap), specMap as any);
 
                         if (serialized && serialized.length > 0) {
@@ -131,7 +122,7 @@ export function useProductImportUploader(
                                 supabase.rpc('sync_product_specs_v6', {
                                     p_entity_id: pId,
                                     p_entity_type: 'product',
-                                    p_category_id: catId,
+                                    p_category_id: primaryCatId,
                                     p_new_data: serialized
                                 })
                             );
@@ -139,13 +130,27 @@ export function useProductImportUploader(
                     }
                 }
 
-                const variantsToInsert = Array.from(
-                    new Map(
-                        chunk.filter(r => r.is_variant && r.variant_sku).map(r => [r.variant_sku, r])
-                    ).values()
-                ).map(row => {
-                    const data: any = {
-                        product_id: productIdMap.get(row.product_sku),
+                const variantSkuGroups = new Map<string, ImportRow[]>();
+                chunk.filter(r => r.is_variant && r.variant_sku).forEach(r => {
+                    const list = variantSkuGroups.get(r.variant_sku) || [];
+                    list.push(r);
+                    variantSkuGroups.set(r.variant_sku, list);
+                });
+
+                const DIFF_MAP: Record<string, string> = {
+                    '變體名稱': 'name',
+                    '變體選項1': 'option_1',
+                    '變體選項2': 'option_2',
+                    '變體選項3': 'option_3',
+                    '變體批發價': 'wholesale_price',
+                    '變體零售價': 'retail_price',
+                    '變體狀態': 'status',
+                    '變體條碼': 'barcode',
+                };
+
+                const variantsToInsert = Array.from(variantSkuGroups.entries()).map(([sku, rows]) => {
+                    const rowData = rows.map(row => ({
+                        product_id: productIdMap.get(row.product_sku)!,
                         sku: row.variant_sku,
                         name: row.variant_name || row.product_name,
                         option_1: row.option_1 || null,
@@ -154,14 +159,29 @@ export function useProductImportUploader(
                         wholesale_price: row.variant_wholesale_price || row.base_wholesale_price,
                         retail_price: row.variant_retail_price || row.base_retail_price,
                         status: row.variant_status || row.product_status,
-                        barcode: row.barcode || null
-                    };
-                    data.id = row.variant_id || crypto.randomUUID();
-                    return data;
+                        barcode: row.barcode || null,
+                        diff: (row.diff || []) as string[],
+                        variant_id: row.variant_id,
+                    }));
+
+                    const matchedRow = rowData.find(r => r.variant_id);
+                    const id = matchedRow?.variant_id || crypto.randomUUID();
+
+                    const { diff, variant_id, ...rest } = rowData[0];
+                    const merged = { ...rest, id };
+
+                    for (const [diffStr, fieldKey] of Object.entries(DIFF_MAP)) {
+                        const changedRows = rowData.filter(r => r.diff.includes(diffStr));
+                        if (changedRows.length === 1) {
+                            (merged as any)[fieldKey] = changedRows[0][fieldKey as keyof typeof changedRows[0]];
+                        }
+                    }
+
+                    return merged;
                 });
 
                 if (variantsToInsert.length > 0) {
-                    const { error: vErr } = await supabase.from('product_variants').upsert(variantsToInsert, { onConflict: 'sku' });
+                    const { error: vErr } = await supabase.from('product_variants').upsert(variantsToInsert, { onConflict: 'id' });
                     if (vErr) throw vErr;
                 }
 
@@ -220,8 +240,7 @@ export function useProductImportUploader(
                         relationPromises.push(entityRelationService.updateRelations('variant', vId, relations));
                     }
 
-                    const getCatId = (cName: string | undefined) => categories.find(c => c.name === cName?.split(',')[0].trim())?.id;
-                    const catId = row.category_id || getCatId((row as any)._categoryName) || getCatId(row.category);
+                    const catId = row.category_ids?.[0] || row.category_id;
                     if (catId && row._specs && Object.keys(row._specs).length > 0) {
                         let pathMap = new Map<string, any>();
                         if (row.spec_values) {
@@ -285,7 +304,6 @@ export function useProductImportUploader(
                     )
                 );
             }
-
             await supabase.rpc('bump_data_version', { p_table_name: 'products', p_source_table: 'products' });
             return batchResult;
         },

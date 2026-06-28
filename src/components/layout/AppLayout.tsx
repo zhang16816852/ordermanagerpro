@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect } from 'react';
+import { ReactNode, useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link, useMatch, useResolvedPath } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useSpecStore } from '@/store/useSpecStore';
@@ -32,11 +32,11 @@ import {
   LogOut,
   Settings,
   ChevronRight,
+  ChevronLeft,
   Layers,
   History as HistoryIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { GlobalSearch } from './GlobalSearch';
 import { NotificationDropdown } from './NotificationDropdown';
 import { performGlobalDataSync } from '@/utils/versionCheck';
 
@@ -75,10 +75,12 @@ interface AppLayoutProps {
 // 放在 AppLayout 外部或同個檔案內
 function SideNavLink({
   item,
-  onClick
+  onClick,
+  collapsed,
 }: {
   item: NavItem;
-  onClick: () => void
+  onClick: () => void;
+  collapsed?: boolean;
 }) {
   // useMatch 會檢查當前 URL 是否匹配 item.href
   // end: item.href === '/' 確保首頁必須完全匹配，而其他路徑則匹配開頭即可
@@ -93,28 +95,33 @@ function SideNavLink({
     <Link
       to={item.href}
       onClick={onClick}
+      title={collapsed ? item.title : undefined}
       className={cn(
         'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors relative',
+        collapsed ? 'justify-center' : '',
         isActive
           ? 'bg-sidebar-primary text-sidebar-primary-foreground font-medium'
           : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
       )}
     >
-      <div className="relative">
+      <div className={cn('relative', collapsed ? 'mx-auto' : '')}>
         <item.icon className="h-5 w-5" />
         {item.badge !== undefined && item.badge > 0 && (
           <Badge
             variant="destructive"
-            className="absolute -top-1.5 -right-1.5 h-5 min-w-[1.25rem] px-1 text-[10px] flex items-center justify-center rounded-full border-2 border-sidebar"
+            className={cn(
+              'absolute -top-1.5 -right-1.5 h-5 min-w-[1.25rem] px-1 text-[10px] flex items-center justify-center rounded-full border-2 border-sidebar',
+              collapsed ? 'hidden' : ''
+            )}
           >
             {item.badge > 99 ? '99+' : item.badge}
           </Badge>
         )}
       </div>
 
-      <span className="flex-1">{item.title}</span>
+      {!collapsed && <span className="flex-1">{item.title}</span>}
 
-      {isActive && <ChevronRight className="ml-auto h-4 w-4 opacity-70" />}
+      {!collapsed && isActive && <ChevronRight className="ml-auto h-4 w-4 opacity-70" />}
     </Link>
   );
 }
@@ -123,6 +130,38 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { user, isAdmin, signOut, storeRoles, currentStoreId } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    const saved = localStorage.getItem('sidebar-collapsed');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [hovered, setHovered] = useState(false);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isExpanded = !collapsed || hovered;
+
+  const handleSidebarMouseEnter = () => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setHovered(true);
+  };
+
+  const handleSidebarMouseLeave = () => {
+    hoverTimerRef.current = setTimeout(() => {
+      setHovered(false);
+      hoverTimerRef.current = null;
+    }, 200);
+  };
+
+  const toggleCollapsed = () => {
+    setCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('sidebar-collapsed', JSON.stringify(next));
+      return next;
+    });
+    setHovered(false);
+  };
 
   // [v6] 啟動全域版本同步 (邏輯已封裝至 versionCheck.ts)
   useEffect(() => {
@@ -163,7 +202,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     navigate('/auth');
   };
 
-  const NavContent = () => (
+  const NavContent = ({ collapsed: navCollapsed }: { collapsed?: boolean }) => (
     <div className="flex flex-col h-full">
       {/* Logo ... */}
 
@@ -173,6 +212,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             <SideNavLink
               key={item.href}
               item={item}
+              collapsed={navCollapsed}
               onClick={() => setSidebarOpen(false)}
             />
           ))}
@@ -185,19 +225,24 @@ export function AppLayout({ children }: AppLayoutProps) {
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
-                className="w-full justify-start gap-3 h-auto py-2 px-3 text-sidebar-foreground hover:bg-sidebar-accent"
+                className={cn(
+                  'w-full justify-start gap-3 h-auto py-2 px-3 text-sidebar-foreground hover:bg-sidebar-accent',
+                  navCollapsed ? 'justify-center px-2' : ''
+                )}
               >
-                <Avatar className="h-8 w-8">
+                <Avatar className="h-8 w-8 shrink-0">
                   <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-sm">
                     {userInitial}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-medium truncate">{user?.email}</p>
-                  <p className="text-xs text-sidebar-foreground/60">
-                    {isAdmin ? '系統管理員' : storeRoles?.[0]?.role || 'Customer'}
-                  </p>
-                </div>
+                {!navCollapsed && (
+                  <div className="flex-1 text-left min-w-0">
+                    <p className="text-sm font-medium truncate">{user?.email}</p>
+                    <p className="text-xs text-sidebar-foreground/60">
+                      {isAdmin ? '系統管理員' : storeRoles?.[0]?.role || 'Customer'}
+                    </p>
+                  </div>
+                )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -217,9 +262,13 @@ export function AppLayout({ children }: AppLayoutProps) {
         ) : (
           <Button
             onClick={() => navigate('/auth')}
-            className="w-full h-10 rounded-xl font-semibold bg-primary hover:bg-primary/95 text-primary-foreground flex items-center justify-center gap-2"
+            className={cn(
+              'h-10 rounded-xl font-semibold bg-primary hover:bg-primary/95 text-primary-foreground flex items-center justify-center gap-2',
+              navCollapsed ? 'w-10 p-0 mx-auto' : 'w-full'
+            )}
+            title={navCollapsed ? '登入系統' : undefined}
           >
-            登入系統
+            <span className="text-sm">{navCollapsed ? '⋯' : '登入系統'}</span>
           </Button>
         )}
       </div>
@@ -229,14 +278,26 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="min-h-screen bg-background">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:w-64 lg:flex-col bg-sidebar">
-        <NavContent />
+      <aside
+        onMouseEnter={handleSidebarMouseEnter}
+        onMouseLeave={handleSidebarMouseLeave}
+        className={cn(
+          'hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:flex-col bg-sidebar z-20 transition-[width] duration-200',
+          isExpanded ? 'lg:w-64' : 'lg:w-16'
+        )}
+      >
+        <NavContent collapsed={!isExpanded} />
       </aside>
 
-      {/* Desktop Header (New) */}
-      <header className="hidden lg:flex fixed top-0 right-0 left-64 h-14 items-center justify-between px-6 bg-background/60 backdrop-blur-md border-b z-30">
-        <div className="flex-1 max-w-xl">
-          <GlobalSearch />
+      {/* Desktop Header */}
+      <header className={cn(
+        'hidden lg:flex fixed top-0 right-0 h-14 items-center justify-between px-6 bg-background/60 backdrop-blur-md border-b z-30 transition-[left] duration-200',
+        isExpanded ? 'left-64' : 'left-16'
+      )}>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={toggleCollapsed} className="h-8 w-8 shrink-0">
+            {isExpanded ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </Button>
         </div>
         <div className="flex items-center gap-4">
           <NotificationDropdown />
@@ -254,19 +315,18 @@ export function AppLayout({ children }: AppLayoutProps) {
           <SheetContent side="left" className="p-0 w-64 bg-sidebar border-sidebar-border">
             <SheetTitle className="sr-only">導覽選單</SheetTitle>
             <SheetDescription className="sr-only">存取系統的各個模組與功能</SheetDescription>
-            <NavContent />
+            <NavContent collapsed={false} />
           </SheetContent>
         </Sheet>
-
-        <div className="flex-1">
-          <GlobalSearch />
-        </div>
 
         <NotificationDropdown />
       </header>
 
       {/* Main Content */}
-      <main className="lg:pl-64 lg:pt-14">
+      <main className={cn(
+        'lg:pt-14 min-w-0 transition-[padding] duration-200',
+        isExpanded ? 'lg:pl-64' : 'lg:pl-16'
+      )}>
         <div className="container py-6">{children}</div>
       </main>
     </div>

@@ -56,9 +56,10 @@ export function StandaloneDeviceModelSelectField({
 
     const addGroupMutation = useMutation({
         mutationFn: async (name: string) => {
+            const clean = name.replace(/\s+/g, ' ').trim();
             const { data, error } = await supabase
                 .from('device_model_groups')
-                .insert([{ name }])
+                .insert([{ name: clean }])
                 .select()
                 .single();
             if (error) throw error;

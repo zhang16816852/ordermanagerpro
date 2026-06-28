@@ -25,15 +25,13 @@ interface ProductGroupSectionProps {
     allDeviceGroups: any[];
     allColors: any[];
     addModel: (data: any) => Promise<any>;
-    searchQuery: string;
-    setSearchQuery: (q: string) => void;
     specDefs?: { id: string; name: string }[];
 }
 
 export function ProductGroupSection({
     groupKey, rows, indices, onUpdate, onRemove,
     allBrands, categories, allDeviceModels, allDeviceBrands, allDeviceGroups,
-    allColors, addModel, searchQuery, setSearchQuery, specDefs = []
+    allColors, addModel, specDefs = []
 }: ProductGroupSectionProps) {
     const [collapsed, setCollapsed] = useState(false);
     const mainRow = rows[0];
@@ -81,8 +79,9 @@ export function ProductGroupSection({
                 <div className="w-[110px] shrink-0">
                     <BrandCategoryCell row={mainRow} index={mainIdx} onUpdate={onUpdate} allBrands={allBrands} categories={categories} type="brand" />
                 </div>
-                <div className="w-[90px] shrink-0">
+                <div className="w-[110px] shrink-0 flex items-center gap-1">
                     <BrandCategoryCell row={mainRow} index={mainIdx} onUpdate={onUpdate} allBrands={allBrands} categories={categories} type="category" />
+
                 </div>
                 <div className="w-[150px] shrink-0 text-right">
                     <PriceCell row={mainRow} index={mainIdx} onUpdate={onUpdate} />
@@ -115,14 +114,13 @@ export function ProductGroupSection({
                                         isDiff={row.diff?.includes('變體名稱')} />
                                 </div>
                                 <div className="w-[80px] shrink-0 text-[10px] text-muted-foreground">
-                                    <ColorCell row={row} index={idx} onUpdate={onUpdate} allColors={allColors}
-                                        searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
+                                    <ColorCell row={row} index={idx} onUpdate={onUpdate} allColors={allColors} />
                                 </div>
                                 <div className="w-[110px] shrink-0">
                                     <DeviceModelCell value={row.variant_device_models} isVariant index={idx}
                                         onUpdate={onUpdate} allDeviceModels={allDeviceModels}
                                         allDeviceBrands={allDeviceBrands} allDeviceGroups={allDeviceGroups}
-                                        addModel={addModel} searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
+                                        addModel={addModel} />
                                 </div>
                                 <div className="w-[150px] shrink-0 text-right">
                                     <PriceCell row={row} index={idx} onUpdate={onUpdate} />

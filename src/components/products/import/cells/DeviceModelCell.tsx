@@ -19,16 +19,15 @@ interface DeviceModelCellProps {
     allDeviceBrands: any[];
     allDeviceGroups: any[];
     addModel: (data: any) => Promise<any>;
-    searchQuery: string;
-    setSearchQuery: (q: string) => void;
 }
 
 export function DeviceModelCell({
     value, isVariant = false, index, onUpdate,
     allDeviceModels, allDeviceBrands, allDeviceGroups,
-    addModel, searchQuery, setSearchQuery
+    addModel
 }: DeviceModelCellProps) {
     const [addingModel, setAddingModel] = useState(false);
+    const [localSearch, setLocalSearch] = useState('');
     const [modelForm, setModelForm] = useState({ name: '', brand_id: '', device_series: '', device_type: 'smartphone' });
 
     const renderBadges = () => {
@@ -36,7 +35,6 @@ export function DeviceModelCell({
 
         const models = value.split(',').map(s => s.trim()).filter(Boolean);
         const displayLimit = 2;
-
         return (
             <div className="flex flex-wrap gap-1">
                 {models.slice(0, displayLimit).map((part, i) => {
@@ -145,8 +143,9 @@ export function DeviceModelCell({
                             const res = await addModel(modelForm);
                             if (res) {
                                 const current = value ? value.split(',').map(s => s.trim()) : [];
-                                if (!current.includes(res.name)) {
-                                    onUpdate(index, isVariant ? 'variant_device_models' : 'device_models', [...current, res.name].join(', '));
+                                const cleanName = res.name.replace(/\s+/g, ' ').trim();
+                                if (!current.includes(cleanName)) {
+                                    onUpdate(index, isVariant ? 'variant_device_models' : 'device_models', [...current, cleanName].join(', '));
                                 }
                                 setAddingModel(false);
                                 toast.success(`已建立並套用：${res.name}`);
@@ -157,18 +156,18 @@ export function DeviceModelCell({
                     </div>
                 ) : (
                     <Command>
-                        <CommandInput placeholder="搜尋型號..." className="h-9 text-xs" value={searchQuery} onValueChange={setSearchQuery} />
+                        <CommandInput placeholder="搜尋型號..." className="h-9 text-xs" value={localSearch} onValueChange={setLocalSearch} />
                         <CommandList className="max-h-[300px] overflow-y-auto">
                             <CommandGroup heading="快速操作">
                                 <CommandItem
                                     onSelect={() => {
-                                        setModelForm({ name: searchQuery, brand_id: '', device_series: '', device_type: 'smartphone' });
+                                        setModelForm({ name: localSearch, brand_id: '', device_series: '', device_type: 'smartphone' });
                                         setAddingModel(true);
                                     }}
                                     className="flex items-center gap-2 py-2 cursor-pointer text-primary"
                                 >
                                     <Plus className="h-3.5 w-3.5" />
-                                    <span className="text-xs">建立新型號 {searchQuery ? `"${searchQuery}"` : ''}</span>
+                                    <span className="text-xs">建立新型號 {localSearch ? `"${localSearch}"` : ''}</span>
                                 </CommandItem>
                             </CommandGroup>
                             <CommandEmpty className="py-3 text-xs text-center text-muted-foreground">找不到型號</CommandEmpty>
@@ -179,7 +178,7 @@ export function DeviceModelCell({
                                         <CommandItem key={`group-${g.id}`}
                                             onSelect={() => {
                                                 const current = value ? value.split(',').map(s => s.trim()) : [];
-                                                const groupValue = `group:${g.name}`;
+                                                const groupValue = `group:${g.name.replace(/\s+/g, ' ').trim()}`;
                                                 const next = isSelected ? current.filter(s => s.toLowerCase() !== groupValue.toLowerCase()) : [...current, groupValue];
                                                 onUpdate(index, isVariant ? 'variant_device_models' : 'device_models', next.join(', '));
                                             }}
@@ -207,7 +206,7 @@ export function DeviceModelCell({
                                         <CommandItem key={m.id}
                                             onSelect={() => {
                                                 const current = value ? value.split(',').map(s => s.trim()) : [];
-                                                const next = isSelected ? current.filter(s => s.toLowerCase() !== m.name.toLowerCase()) : [...current, m.name];
+                                                const next = isSelected ? current.filter(s => s.toLowerCase() !== m.name.toLowerCase()) : [...current, m.name.replace(/\s+/g, ' ').trim()];
                                                 onUpdate(index, isVariant ? 'variant_device_models' : 'device_models', next.join(', '));
                                             }}
                                             className={cn("flex items-center gap-2 py-2 cursor-pointer", isSelected && "bg-primary/5 text-primary font-medium")}

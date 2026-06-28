@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, ChevronRight, Info, LayoutGrid } from "lucide-react";
+import { Search, ChevronRight, Info } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,8 +25,7 @@ import { useProductColors } from "@/hooks/useProductColors";
 import { getContrastColor } from "@/utils/colorUtils";
 import { VariantOptionsPicker } from "@/components/products/catalog/VariantOptionsPicker";
 import { useStoreProductCache } from "@/hooks/useProductCache";
-import { OrderGridRenderer } from "@/components/order-grid/OrderGridRenderer";
-import type { GridQuantities } from "@/types/order-grid";
+import { ProductCatalogTable } from "@/components/products/catalog/ProductCatalogTable";
 
 interface ProductCatalogProps {
   products: ProductWithPricing[];
@@ -82,7 +81,7 @@ export default function ProductCatalog({
     }
   };
 
-  const { addItem, getItemQuantity, getTotalProductQuantity } = useStoreDraft(storeId);
+  const { addItem, getItemQuantity, getTotalProductQuantity, removeItem, updateQuantity } = useStoreDraft(storeId);
   const { templates: allTemplates } = useStoreProductCache(storeId);
 
   // Sync detailProduct with URL ?p=...
@@ -464,66 +463,15 @@ export default function ProductCatalog({
               })}
             </div>
           ) : (
-            <div className="space-y-6">
-              {matchingTemplates.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  目前篩選結果沒有對應的 table 範本
-                </div>
-              ) : (
-                matchingTemplates.map((template) => {
-                  const templateVariantIds = new Set(
-                    template.template_variants?.map((tv) => tv.variant_id) || []
-                  );
-                  const templateFilteredProducts = filteredProducts
-                    .filter((p) =>
-                      (p.variants || []).some((v: any) => templateVariantIds.has(v.id))
-                    )
-                    .map((p) => ({
-                      ...p,
-                      variants: (p.variants || []).filter((v: any) =>
-                        templateVariantIds.has(v.id)
-                      ),
-                    }));
-
-                  if (templateFilteredProducts.length === 0) return null;
-
-                  return (
-                    <Card key={template.id} className="overflow-hidden">
-                      <CardHeader className="px-4 py-3 border-b bg-muted/20">
-                        <div className="flex items-center gap-2">
-                          <LayoutGrid className="h-4 w-4 text-muted-foreground" />
-                          <CardTitle className="text-base font-medium">
-                            {template.name}
-                          </CardTitle>
-                        </div>
-                        {template.description && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {template.description}
-                          </p>
-                        )}
-                      </CardHeader>
-                      <CardContent className="p-4">
-                        <OrderGridRenderer
-                          template={template}
-                          products={templateFilteredProducts}
-                          onAddToCart={(items) => {
-                            let addedCount = 0;
-                            items.forEach(({ variant, product, quantity }) => {
-                              for (let i = 0; i < quantity; i++) {
-                                addItem(product, variant);
-                                addedCount++;
-                              }
-                            });
-                            toast.success(`已加入 ${addedCount} 項商品至購物車`);
-                          }}
-                          initialQuantities={{} as GridQuantities}
-                        />
-                      </CardContent>
-                    </Card>
-                  );
-                })
-              )}
-            </div>
+            <ProductCatalogTable
+              matchingTemplates={matchingTemplates}
+              filteredProducts={filteredProducts}
+              storeId={storeId}
+              addItem={addItem}
+              removeItem={removeItem}
+              updateQuantity={updateQuantity}
+              getItemQuantity={getItemQuantity}
+            />
           )}
         </CardContent>
       </Card>

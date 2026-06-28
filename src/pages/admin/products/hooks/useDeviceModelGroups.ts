@@ -37,10 +37,11 @@ export function useDeviceModelGroups() {
   // 2. 建立群組
   const createGroupMutation = useMutation({
     mutationFn: async (values: Partial<DeviceModelGroup>) => {
+      const clean = values.name ? values.name.replace(/\s+/g, ' ').trim() : values.name;
       const { data, error } = await supabase
         .from('device_model_groups')
         // 透過 as any 繞過 Supabase 對 name 必填的型別限制，呼叫方需確保 name 有值
-        .insert([values as any])
+        .insert([{ ...values, name: clean } as any])
         .select()
         .single();
       if (error) throw error;
@@ -56,9 +57,10 @@ export function useDeviceModelGroups() {
   // 3. 更新群組
   const updateGroupMutation = useMutation({
     mutationFn: async ({ id, values }: { id: string; values: Partial<DeviceModelGroup> }) => {
+      const clean = values.name ? values.name.replace(/\s+/g, ' ').trim() : values.name;
       const { error } = await supabase
         .from('device_model_groups')
-        .update(values)
+        .update({ ...values, name: clean })
         .eq('id', id);
       if (error) throw error;
     },

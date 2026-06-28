@@ -11,12 +11,11 @@ interface ColorCellProps {
     index: number;
     onUpdate: (index: number, field: keyof ImportRow, value: any) => void;
     allColors: any[];
-    searchQuery: string;
-    setSearchQuery: (q: string) => void;
 }
 
-export function ColorCell({ row, index, onUpdate, allColors, searchQuery, setSearchQuery }: ColorCellProps) {
+export function ColorCell({ row, index, onUpdate, allColors }: ColorCellProps) {
     const [addingColor, setAddingColor] = useState(false);
+    const [localSearch, setLocalSearch] = useState('');
 
     if (!row.is_variant) {
         return <span className="text-[10px] text-muted-foreground/30 pl-2">-</span>;
@@ -49,7 +48,7 @@ export function ColorCell({ row, index, onUpdate, allColors, searchQuery, setSea
             <PopoverContent className="p-0 w-[240px]" align="start" onWheel={(e) => e.stopPropagation()}>
                 {addingColor ? (
                     <QuickColorAdd
-                        initialName={searchQuery || row.option_3 || ''}
+                        initialName={localSearch || row.option_3 || ''}
                         onSuccess={(newColor) => {
                             onUpdate(index, 'option_3', newColor.name);
                             setAddingColor(false);
@@ -59,22 +58,22 @@ export function ColorCell({ row, index, onUpdate, allColors, searchQuery, setSea
                 ) : (
                     <Command>
                         <CommandInput placeholder="搜尋或輸入..." className="h-9 text-xs"
-                            value={searchQuery} onValueChange={setSearchQuery} />
+                            value={localSearch} onValueChange={setLocalSearch} />
                         <CommandList className="max-h-[300px] overflow-y-auto">
                             <CommandGroup heading="快速操作">
                                 <CommandItem onSelect={() => setAddingColor(true)}
                                     className="flex items-center gap-2 py-2 cursor-pointer text-primary">
                                     <Plus className="h-3.5 w-3.5" />
-                                    <span className="text-xs">建立新顏色 {searchQuery || row.option_3 ? `"${searchQuery || row.option_3}"` : ''}</span>
+                                    <span className="text-xs">建立新顏色 {localSearch || row.option_3 ? `"${localSearch || row.option_3}"` : ''}</span>
                                 </CommandItem>
                             </CommandGroup>
                             <CommandEmpty className="py-3 text-xs text-center text-muted-foreground">
-                                找不到顏色 "{searchQuery}"
+                                找不到顏色 "{localSearch}"
                             </CommandEmpty>
                             <CommandGroup heading="現有顏色庫">
                                 {allColors.map(c => (
                                     <CommandItem key={c.id}
-                                        onSelect={() => { onUpdate(index, 'option_3', c.name); setSearchQuery(''); }}
+                                        onSelect={() => { onUpdate(index, 'option_3', c.name); setLocalSearch(''); }}
                                         className="flex items-center gap-2 py-2 cursor-pointer">
                                         <div className="w-3.5 h-3.5 rounded-full border border-black/10 shrink-0"
                                             style={{ backgroundColor: c.hex_code || '#808080' }} />

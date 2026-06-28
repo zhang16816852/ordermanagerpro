@@ -3,6 +3,30 @@ import { supabase } from '@/integrations/supabase/client';
 import { deserializeSpecs, formatSpecValue } from '@/utils/specLogic';
 import { ImportRow } from './useProductImport';
 
+const PRODUCT_DIFF_MAP: Record<string, (keyof ImportRow)[]> = {
+    '產品名稱': ['product_name'],
+    '描述': ['description'],
+    '型號': ['model'],
+    '系列': ['series'],
+    '品牌': ['brand', 'brand_id'],
+    '批發價': ['base_wholesale_price'],
+    '零售價': ['base_retail_price'],
+    '狀態': ['product_status'],
+    '條碼': ['barcode'],
+    '顏色': ['option_3'],
+};
+
+const VARIANT_DIFF_MAP: Record<string, (keyof ImportRow)[]> = {
+    '變體名稱': ['variant_name'],
+    '變體選項1': ['option_1'],
+    '變體選項2': ['option_2'],
+    '變體選項3': ['option_3'],
+    '變體批發價': ['variant_wholesale_price'],
+    '變體零售價': ['variant_retail_price'],
+    '變體狀態': ['variant_status'],
+    '變體條碼': ['barcode'],
+};
+
 export function useProductImportValidator(
     allColors: any[],
     allDeviceModels: any[],
@@ -29,8 +53,12 @@ export function useProductImportValidator(
             errors.push(`找不到品牌 "${row.brand}"`);
         }
 
-        if (row.category && !row.category_id) {
-            errors.push(`找不到分類 "${row.category}"`);
+        if (row.category) {
+            row.category.split(',').map(s => s.trim()).filter(Boolean).forEach(cat => {
+                if (!categories.find(c => c.name?.trim().toLowerCase() === cat.toLowerCase())) {
+                    errors.push(`找不到分類 "${cat}"`);
+                }
+            });
         }
 
         if (row.option_3 && is_variant) {
@@ -88,13 +116,29 @@ export function useProductImportValidator(
         const allVariantSkus = rawParsed.map(r => r.variant_sku).filter(Boolean);
         const allIds = rawParsed.map(r => r.product_id || r.variant_id).filter(Boolean);
 
-        const { data: existingProducts } = await supabase.from('products').select('*')
-            .or(`sku.in.(${allSkus.join(',')})${allIds.length > 0 ? `,id.in.(${allIds.join(',')})` : ''}`);
+        let existingProducts: any[] = [];
+        if (allSkus.length > 0) {
+            const { data } = await supabase.from('products').select('*').in('sku', allSkus);
+            if (data) existingProducts.push(...data);
+        }
+        if (allIds.length > 0) {
+            const { data } = await supabase.from('products').select('*').in('id', allIds);
+            if (data) existingProducts.push(...data);
+        }
 
-        const { data: existingVariants } = await supabase.from('product_variants').select('*')
-            .or(`sku.in.(${allVariantSkus.join(',')})${allIds.length > 0 ? `,id.in.(${allIds.join(',')})` : ''}`);
+        let existingVariants: any[] = [];
+        if (allVariantSkus.length > 0) {
+            const { data } = await supabase.from('product_variants').select('*').in('sku', allVariantSkus);
+            if (data) existingVariants.push(...data);
+        }
+        if (allIds.length > 0) {
+            const { data } = await supabase.from('product_variants').select('*').in('id', allIds);
+            if (data) existingVariants.push(...data);
+        }
 
-        return rawParsed.map(row => {
+            const seenVariantIds = new Set<string>();
+
+        const enrichedRows = rawParsed.map(row => {
             const product = (existingProducts || []).find(p =>
                 (row.product_id && p.id === row.product_id) || p.sku === row.product_sku
             );
@@ -153,9 +197,90 @@ export function useProductImportValidator(
             }
 
             const { errors } = validateRow(row as any);
-            return { ...row, errors, isValid: errors.length === 0, action, diff };
+            const enriched = { ...row, errors, isValid: errors.length === 0, action, diff };
+
+            if (enriched.is_variant && enriched.variant_id) {
+                if (seenVariantIds.has(enriched.variant_id)) {
+                    enriched.variant_id = undefined;
+                    enriched.errors = [...enriched.errors, '變體 ID 重複，將產生新的 ID'];
+                    enriched.isValid = false;
+                } else {
+                    seenVariantIds.add(enriched.variant_id);
+                }
+            }
+
+            return enriched;
         });
+
+        return mergeEnrichedRows(enrichedRows);
     }, [validateRow]);
+
+    const mergeEnrichedRows = useCallback((rows: ImportRow[]): ImportRow[] => {
+        if (rows.length <= 1) return rows;
+
+        const applyDiffMerge = (group: ImportRow[], diffMap: Record<string, (keyof ImportRow)[]>) => {
+            const result = { ...group[0] };
+            result.diff = [...new Set(group.flatMap(r => r.diff || []))];
+            result.errors = [...new Set(group.flatMap(r => r.errors || []))];
+            result.isValid = group.every(r => r.isValid);
+            result.action = group.some(r => r.action === 'update') ? 'update' : 'create';
+
+            for (const [diffStr, fields] of Object.entries(diffMap)) {
+                const changedRows = group.filter(r => (r.diff || []).includes(diffStr));
+                if (changedRows.length === 1) {
+                    for (const field of fields) {
+                        const val = changedRows[0][field];
+                        if (val !== undefined && val !== null && val !== '') {
+                            (result as any)[field] = val;
+                        }
+                    }
+                }
+            }
+
+            const firstWithId = group.find(r => !r.is_variant ? r.product_id : r.variant_id);
+            if (firstWithId) {
+                if (!group[0].is_variant) result.product_id = firstWithId.product_id;
+                else result.variant_id = firstWithId.variant_id;
+            }
+
+            return result as ImportRow;
+        };
+
+        const productGroups = new Map<string, ImportRow[]>();
+        const variantGroups = new Map<string, ImportRow[]>();
+        const seenKeys = new Set<string>();
+
+        rows.forEach(row => {
+            if (row.is_variant && row.variant_sku) {
+                const key = `${row.product_sku}::${row.variant_sku}`;
+                if (!variantGroups.has(key)) variantGroups.set(key, []);
+                variantGroups.get(key)!.push(row);
+            } else {
+                const key = row.product_sku;
+                if (!productGroups.has(key)) productGroups.set(key, []);
+                productGroups.get(key)!.push(row);
+            }
+        });
+
+        const result: ImportRow[] = [];
+        rows.forEach(row => {
+            if (row.is_variant && row.variant_sku) {
+                const key = `${row.product_sku}::${row.variant_sku}`;
+                if (seenKeys.has(key)) return;
+                seenKeys.add(key);
+                const group = variantGroups.get(key)!;
+                result.push(group.length > 1 ? applyDiffMerge(group, VARIANT_DIFF_MAP) : group[0]);
+            } else {
+                const key = row.product_sku;
+                if (seenKeys.has(key)) return;
+                seenKeys.add(key);
+                const group = productGroups.get(key)!;
+                result.push(group.length > 1 ? applyDiffMerge(group, PRODUCT_DIFF_MAP) : group[0]);
+            }
+        });
+
+        return result;
+    }, []);
 
     return { validateRow, enrichWithDiff };
 }

@@ -42,13 +42,14 @@ export interface ImportRow {
     product_id?: string;
     variant_id?: string;
     _specs?: Record<string, any>;
+    category_ids?: string[];
+    category_names?: string[];
     errors: string[];
     isValid: boolean;
     action?: 'create' | 'update';
     diff?: string[];
     has_variants?: boolean;
-    _multiSpecs?: Record<string, Record<string, any>>;
-    _categoryIds?: string[];
+
 }
 
 export function useProductImport(onSuccess: () => void) {
@@ -70,7 +71,7 @@ export function useProductImport(onSuccess: () => void) {
     const { colors: allColors, fetchColors } = useColorStore();
     const { models: allDeviceModels, groups: allGroups, fetchData: fetchDeviceData } = useDeviceModelStore();
 
-    useEffect(() => { fetchColors(); fetchDeviceData(); fetchSpecs(); }, [fetchColors, fetchDeviceData, fetchSpecs]);
+    useEffect(() => { fetchColors(); fetchDeviceData(true); fetchSpecs(); }, [fetchColors, fetchDeviceData, fetchSpecs]);
 
     const { data: allBrands = [] } = useQuery({
         queryKey: ['brands-all-for-import'],
@@ -88,6 +89,8 @@ export function useProductImport(onSuccess: () => void) {
         if (!file) return;
 
         try {
+            await fetchDeviceData(true);
+
             const rawParsed = await parser.handleFileUpload(file);
             if (rawParsed.length === 0) {
                 toast.error('檔案中沒有有效的產品資料');
@@ -101,7 +104,7 @@ export function useProductImport(onSuccess: () => void) {
             console.error('File parsing error:', err);
             toast.error(`檔案解析失敗: ${err.message}`);
         }
-    }, [parser, validator]);
+    }, [parser, validator, fetchDeviceData]);
 
     const resetState = useCallback(() => {
         setStep('upload');
@@ -121,13 +124,24 @@ export function useProductImport(onSuccess: () => void) {
         setImportData(prev => prev.filter((_, i) => i !== index));
     }, []);
 
+    const batchUpdateRows = useCallback((updates: { index: number; field: keyof ImportRow; value: any }[]) => {
+        setImportData(prev => {
+            const next = [...prev];
+            for (const { index, field, value } of updates) {
+                next[index] = { ...next[index], [field]: value };
+            }
+            return next;
+        });
+    }, []);
+
     const uploader = useProductImportUploader(
         importData, categories, allDeviceModels, allGroups,
         onSuccess, resetState
     );
 
     const filteredData = importData.filter(row => {
-        const categoryMatch = filterCategory === 'all' || row.category === filterCategory;
+        const cats = row.category.split(',').map(s => s.trim());
+        const categoryMatch = filterCategory === 'all' || cats.includes(filterCategory);
         const statusMatch = filterStatus === 'all' ||
             (filterStatus === 'changed' && row.diff && row.diff.length > 0) ||
             (filterStatus === 'new' && row.action === 'create') ||
@@ -156,7 +170,7 @@ export function useProductImport(onSuccess: () => void) {
                 const { errors } = validator.validateRow(row as any);
                 return { ...row, errors, isValid: errors.length === 0 };
             }));
-        }, 100);
+        }, 300);
         return () => clearTimeout(timer);
     }, [allColors, allDeviceModels, allGroups, validator]);
 
@@ -172,6 +186,7 @@ export function useProductImport(onSuccess: () => void) {
         isLoading: uploader.importMutation.isPending,
         handleFileUpload,
         updateRow,
+        batchUpdateRows,
         removeRow,
         importMutation: uploader.importMutation,
         downloadTemplate,

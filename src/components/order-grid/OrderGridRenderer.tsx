@@ -6,11 +6,10 @@ import { OrderGridToolbar } from './OrderGridToolbar';
 import { buildGridMatrix, filterRowsColsForTab } from '@/lib/order-grid-utils';
 import type {
   OrderGridTemplateWithProducts,
-  ProductWithPricing,
-  VariantWithPricing,
   GridMode,
   GridQuantities,
 } from '@/types/order-grid';
+import type { ProductWithPricing, VariantWithPricing } from '@/types/product';
 
 interface OrderGridRendererProps {
   template: OrderGridTemplateWithProducts;
@@ -18,14 +17,18 @@ interface OrderGridRendererProps {
   onAddToCart: (
     items: { variant: VariantWithPricing; product: ProductWithPricing; quantity: number }[]
   ) => void;
+  onDirectItemAdd?: (variant: VariantWithPricing, product: ProductWithPricing, delta: number) => void;
   initialQuantities?: GridQuantities;
+  getCartQuantity?: (productId: string, variantId: string) => number;
 }
 
 export function OrderGridRenderer({
   template,
   products,
   onAddToCart,
+  onDirectItemAdd,
   initialQuantities,
+  getCartQuantity,
 }: OrderGridRendererProps) {
   const [mode, setMode] = useState<GridMode>('button');
   const [quantities, setQuantities] = useState<GridQuantities>(initialQuantities || {});
@@ -110,16 +113,16 @@ export function OrderGridRenderer({
     return (
       <ScrollArea className="w-full">
         <div className="min-w-[400px]">
-          <table className="w-full border-collapse">
+          <table className="w-full border-separate border-spacing-0 table-fixed">
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 bg-background border-b border-r p-2 text-xs font-medium text-muted-foreground text-left min-w-[100px]">
+                <th className="sticky left-0 z-10 bg-background border-b border-r p-2 text-xs font-medium text-muted-foreground text-left w-16 sm:w-[100px] break-words">
                   {template.row_config.label} \ {template.col_config.label}
                 </th>
                 {displayCols.map((cv) => (
                   <th
                     key={cv}
-                    className="border-b border-r p-2 text-xs font-medium text-muted-foreground text-center min-w-[120px]"
+                    className="border-b border-r p-2 text-xs font-medium text-muted-foreground text-center break-words"
                   >
                     {cv}
                   </th>
@@ -129,7 +132,7 @@ export function OrderGridRenderer({
             <tbody>
               {displayRows.map((rv) => (
                 <tr key={rv}>
-                  <td className="sticky left-0 z-10 bg-background border-b border-r p-2 text-xs font-medium text-muted-foreground">
+                  <td className="sticky left-0 z-10 bg-background border-b border-r p-2 text-xs font-medium text-muted-foreground break-words">
                     {rv}
                   </td>
                   {displayCols.map((cv) => {
@@ -137,17 +140,22 @@ export function OrderGridRenderer({
                     const rawItems = cells.get(key) || [];
                     const cellItems = rawItems.map((item) => ({
                       ...item,
-                      quantity: quantities[item.variant.id] || 0,
+                      quantity: getCartQuantity
+                        ? mode === 'button'
+                          ? getCartQuantity(item.product.id, item.variant.id)
+                          : (quantities[item.variant.id] ?? getCartQuantity(item.product.id, item.variant.id))
+                        : (quantities[item.variant.id] || 0),
                     }));
                     return (
                       <td
                         key={cv}
-                        className="border-b border-r p-1.5 align-top min-w-[120px]"
+                        className="border-b border-r p-1.5 align-middle break-words"
                       >
                         <OrderGridCell
                           items={cellItems}
                           mode={mode}
                           onQuantityChange={handleQuantityChange}
+                          onItemAdd={mode === 'button' ? onDirectItemAdd : undefined}
                         />
                       </td>
                     );
@@ -174,6 +182,7 @@ export function OrderGridRenderer({
             quantities={quantities}
             onAddToCart={handleAddToCart}
             onClear={handleClear}
+            showAddToCart={!(mode === 'button' && onDirectItemAdd)}
           />
           <div className="flex items-center justify-center py-12 text-sm text-muted-foreground border rounded-lg">
             無法產生 grid：維度值為空
@@ -191,6 +200,7 @@ export function OrderGridRenderer({
           quantities={quantities}
           onAddToCart={handleAddToCart}
           onClear={handleClear}
+          showAddToCart={!(mode === 'button' && onDirectItemAdd)}
         />
         {nonEmpty}
       </div>
@@ -206,6 +216,7 @@ export function OrderGridRenderer({
         quantities={quantities}
         onAddToCart={handleAddToCart}
         onClear={handleClear}
+        showAddToCart={!(mode === 'button' && onDirectItemAdd)}
       />
       <Tabs defaultValue={grid.tabValues[0]}>
         <TabsList>

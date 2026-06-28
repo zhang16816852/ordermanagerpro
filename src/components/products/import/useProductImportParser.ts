@@ -5,18 +5,24 @@ import jschardet from 'jschardet';
 import { parseProductExcel } from '@/utils/excelUtils';
 import { ImportRow } from './useProductImport';
 
-const REVERSE_STATUS_MAP: Record<string, string> = {
+type ProductStatus = 'active' | 'discontinued' | 'preorder' | 'sold_out';
+
+const REVERSE_STATUS_MAP: Record<string, ProductStatus> = {
     '上架中': 'active', '上架': 'active',
     '已停售': 'discontinued', '停產': 'discontinued', '停售': 'discontinued',
     '預購中': 'preorder', '預購': 'preorder',
     '售完停產': 'sold_out', '缺貨': 'sold_out', '售完': 'sold_out',
 };
 
-const parseStatus = (val: any): string => {
+const VALID_STATUSES: ProductStatus[] = ['active', 'discontinued', 'preorder', 'sold_out'];
+
+const parseStatus = (val: any): ProductStatus => {
     const v = String(val || '').trim();
     if (!v) return 'active';
-    if (REVERSE_STATUS_MAP[v]) return REVERSE_STATUS_MAP[v];
-    return v.toLowerCase();
+    const mapped = REVERSE_STATUS_MAP[v];
+    if (mapped) return mapped;
+    const lower = v.toLowerCase() as ProductStatus;
+    return VALID_STATUSES.includes(lower) ? lower : 'active';
 };
 
 const normalizeBarcode = (value: any): string => {
@@ -124,8 +130,8 @@ export function useProductImportParser(
                 variant_status: parseStatus(row.variant_status || row.status),
                 barcode: normalizeBarcode(row.barcode),
 
-                device_models: !is_variant ? String(row['適用型號'] || row.device_models || '').trim() : '',
-                variant_device_models: is_variant ? String(row['適用型號'] || row.device_models || row.variant_device_models || '').trim() : '',
+                device_models: !is_variant ? String(row['適用型號'] || row.device_models || '').replace(/\s+/g, ' ').trim() : '',
+                variant_device_models: is_variant ? String(row['適用型號'] || row.device_models || row.variant_device_models || '').replace(/\s+/g, ' ').trim() : '',
 
                 is_variant,
                 product_id: !is_variant ? row.id : undefined,
@@ -142,9 +148,15 @@ export function useProductImportParser(
             }
 
             if (baseRow.category) {
-                const search = baseRow.category.split(',')[0].trim().toLowerCase();
-                const matched = categories.find(c => c.name?.trim().toLowerCase() === search);
-                if (matched) baseRow.category_id = matched.id;
+                const names = baseRow.category.split(',').map(s => s.trim()).filter(Boolean);
+                baseRow.category_names = names;
+                baseRow.category_ids = names.map(n => {
+                    const m = categories.find(c => c.name?.trim().toLowerCase() === n.toLowerCase());
+                    return m?.id;
+                }).filter(Boolean) as string[];
+                if (baseRow.category_ids.length > 0) {
+                    baseRow.category_id = baseRow.category_ids[0];
+                }
             }
 
             return baseRow;
@@ -152,6 +164,5 @@ export function useProductImportParser(
 
         return rawParsed;
     }, [allBrands, categories]);
-
     return { handleFileUpload, parseCondensedSpecs, normalizeBarcode, parseStatus };
 }

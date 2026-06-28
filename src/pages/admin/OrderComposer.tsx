@@ -210,7 +210,7 @@ export default function AdminOrderComposer() {
             />
           </aside>
 
-          <div className="flex-1 space-y-6">
+          <div className="flex-1 space-y-6 min-w-0">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-bold tracking-tight">商品目錄</h1>
