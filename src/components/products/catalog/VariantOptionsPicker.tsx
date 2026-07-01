@@ -8,13 +8,14 @@ interface VariantOptionsPickerProps {
     product: any;
     onVariantSelect: (variant: any | null) => void;
     onSelectionChange?: (selectedOptions: Record<string, string | null>) => void;
+    getVariantQuantity?: (variantId: string) => number;
 }
 
 /**
  * [V7.5] 多層級規格選擇器組件
  * 封裝了自動選取、可用性檢查與多維度標籤渲染邏輯
  */
-export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChange }: VariantOptionsPickerProps) {
+export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChange, getVariantQuantity }: VariantOptionsPickerProps) {
     const { colors } = useProductColors();
     const [selectedOptions, setSelectedOptions] = useState<{ [key: string]: string | null }>({
         option_1: null,
@@ -123,6 +124,26 @@ export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChan
         }));
     };
 
+    const badgeQuantity = useCallback((dimKey: string, value: string) => {
+        if (!getVariantQuantity) return 0;
+        const hasSelectionInOtherDim = optionDimensions.some(([dk]) =>
+            dk !== dimKey && selectedOptions[dk] != null
+        );
+        const isThisSelected = selectedOptions[dimKey] === value;
+        if (!hasSelectionInOtherDim && !isThisSelected) return 0;
+        const testOptions = { ...selectedOptions, [dimKey]: value };
+        const match = variants.find((v: any) => {
+            const vModel = v.modelDisplay || null;
+            const sModel = testOptions.modelDisplay || null;
+            return vModel === sModel &&
+                v.option_1 === testOptions.option_1 &&
+                v.option_2 === testOptions.option_2 &&
+                v.option_3 === testOptions.option_3;
+        });
+        if (!match) return 0;
+        return getVariantQuantity(match.id);
+    }, [getVariantQuantity, optionDimensions, selectedOptions, variants]);
+
     if (!product.has_variants || variants.length === 0) return null;
 
     return (
@@ -139,6 +160,7 @@ export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChan
                         {values.map((val: string) => {
                             const isSelected = selectedOptions[dimKey] === val;
                             const isAvailable = isOptionAvailable(dimKey, val);
+                            const qty = badgeQuantity(dimKey, val);
                             return (
                                 <Badge
                                     key={val}
@@ -163,6 +185,11 @@ export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChan
                                         return null;
                                     })()}
                                     {val}
+                                    {qty > 0 && (
+                                        <span className="ml-1 text-[10px] font-bold text-primary bg-primary/10 rounded-full px-1.5 py-0.5 leading-none">
+                                            {qty}
+                                        </span>
+                                    )}
                                 </Badge>
                             );
                         })}

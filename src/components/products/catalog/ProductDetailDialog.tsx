@@ -9,125 +9,53 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ProductWithPricing, VariantWithPricing } from "@/types/product";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ProductWithPricing } from "@/types/product";
 import { useStoreDraft } from "@/store/useOrderDraftStore";
 import { toast } from "sonner";
-import { ShoppingCart, ImageIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { ShoppingCart } from "lucide-react";
 import { useSpecStore } from "@/store/useSpecStore";
 import { supabase } from "@/integrations/supabase/client";
 import { CacheService, CACHE, ONE_YEAR_MS } from "@/services/cacheService";
-import { formatSpecValue, deserializeSpecs, getTreeSortedVisiblePaths, getVisibleSpecsTree } from "@/utils/specLogic";
+import { formatSpecValue, getTreeSortedVisiblePaths, getVisibleSpecsTree } from "@/utils/specLogic";
 import { useBrands } from "@/hooks/useBrands";
 import { calculatePriceRange } from "@/utils/priceUtils";
-import { VariantOptionsPicker } from "@/components/products/catalog/VariantOptionsPicker";
-import { useProductColors } from "@/hooks/useProductColors";
+import { ImageGallery } from "@/components/products/catalog/ImageGallery";
+import { ProductVariantSection } from "@/components/products/catalog/ProductVariantSection";
 import type { ProductImage } from "@/components/products/images/ProductImageManager";
+import type { OrderGridTemplateWithProducts } from "@/types/order-grid";
 
 interface ProductDetailDialogProps {
     product: ProductWithPricing | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     storeId: string;
+    templates?: OrderGridTemplateWithProducts[];
 }
 
-// =============================================
-// 圖片輪播子元件
-// =============================================
-function ImageGallery({ images, coverUrl }: { images: ProductImage[], coverUrl?: string | null }) {
-    const [activeIndex, setActiveIndex] = useState(0);
+const SHOW_IMAGES_KEY = "product_detail_show_images";
 
-    const allImages = useMemo(() => {
-        if (images.length > 0) return images;
-        // 若無圖片但有封面 URL（來自快取），產生一個虛擬項目
-        if (coverUrl) return [{ id: 'cover', url: coverUrl } as unknown as ProductImage];
-        return [];
-    }, [images, coverUrl]);
-
-    useEffect(() => { setActiveIndex(0); }, [allImages]);
-
-    if (allImages.length === 0) {
-        return (
-            <div className="aspect-square bg-muted rounded-lg flex items-center justify-center overflow-hidden border">
-                <div className="flex flex-col items-center text-muted-foreground">
-                    <ImageIcon className="h-12 w-12 mb-2" />
-                    <span className="text-xs">尚無圖片</span>
-                </div>
-            </div>
-        );
+function getShowImagesDefault(): boolean {
+    try {
+        return localStorage.getItem(SHOW_IMAGES_KEY) === "true";
+    } catch {
+        return false;
     }
-
-    return (
-        <div className="space-y-2">
-            {/* 主圖 */}
-            <div className="aspect-square bg-muted rounded-lg overflow-hidden border relative group">
-                <img
-                    src={allImages[activeIndex]?.url}
-                    alt="產品圖片"
-                    className="w-full h-full object-cover"
-                />
-                {allImages.length > 1 && (
-                    <>
-                        <button
-                            className="absolute left-1 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => setActiveIndex(i => (i - 1 + allImages.length) % allImages.length)}
-                        >
-                            <ChevronLeft className="h-4 w-4" />
-                        </button>
-                        <button
-                            className="absolute right-1 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => setActiveIndex(i => (i + 1) % allImages.length)}
-                        >
-                            <ChevronRight className="h-4 w-4" />
-                        </button>
-                        <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1">
-                            {allImages.map((_, i) => (
-                                <div
-                                    key={i}
-                                    className={cn('h-1.5 rounded-full transition-all', i === activeIndex ? 'w-4 bg-white' : 'w-1.5 bg-white/50')}
-                                />
-                            ))}
-                        </div>
-                    </>
-                )}
-            </div>
-
-            {/* 縮圖列（超過 1 張才顯示）*/}
-            {allImages.length > 1 && (
-                <div className="flex gap-1.5 overflow-x-auto pb-1">
-                    {allImages.map((img, i) => (
-                        <div
-                            key={img.id}
-                            className={cn(
-                                'w-14 h-14 flex-shrink-0 rounded overflow-hidden border-2 cursor-pointer transition-all',
-                                i === activeIndex ? 'border-primary' : 'border-transparent hover:border-muted-foreground/40'
-                            )}
-                            onClick={() => setActiveIndex(i)}
-                        >
-                            <img src={img.url} alt="" className="w-full h-full object-cover" />
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
 }
 
-/**
- * 產品詳情彈窗組件
- */
 export function ProductDetailDialog({
     product,
     open,
     onOpenChange,
     storeId,
+    templates,
 }: ProductDetailDialogProps) {
     const { addItem, getItemQuantity } = useStoreDraft(storeId);
     const { getBrandName } = useBrands();
-    const { colors } = useProductColors();
     const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
     const [pickerOptions, setPickerOptions] = useState<Record<string, string | null> | null>(null);
+    const [showImages, setShowImages] = useState(getShowImagesDefault);
 
-    // 抓取圖片
     const [productImages, setProductImages] = useState<ProductImage[]>([]);
     const [variantImageMap, setVariantImageMap] = useState<Map<string, ProductImage[]>>(new Map());
 
@@ -180,7 +108,6 @@ export function ProductDetailDialog({
             });
     }, [open, product]);
 
-    // 決定目前顯示的圖片（選了變體就用變體圖，否則用主商品圖）
     const displayImages = useMemo(() => {
         if (selectedVariantId) {
             const vImgs = variantImageMap.get(selectedVariantId);
@@ -197,6 +124,11 @@ export function ProductDetailDialog({
         setPickerOptions(options);
     }, []);
 
+    const toggleShowImages = (checked: boolean) => {
+        setShowImages(checked);
+        try { localStorage.setItem(SHOW_IMAGES_KEY, String(checked)); } catch {}
+    };
+
     useEffect(() => {
         if (!open) {
             setSelectedVariantId(null);
@@ -211,10 +143,10 @@ export function ProductDetailDialog({
             fetchSpecs();
         }
     }, [open, specDefinitions.length, categoryLinks.length, fetchSpecs]);
-    console.log("產品", product);
+
     const selectedVariant = useMemo(() => {
         if (!selectedVariantId || !product?.variants) return null;
-        return product.variants.find(v => v.id === selectedVariantId) || null;
+        return product.variants.find((v: any) => v.id === selectedVariantId) || null;
     }, [product?.variants, selectedVariantId]);
 
     const effectiveModels = useMemo(() => {
@@ -224,7 +156,6 @@ export function ProductDetailDialog({
         const seenIds = new Set<string>();
 
         const addModels = (target: any) => {
-            // 直接關聯 (琥珀色)
             ((target as any).device_models || []).forEach((m: any) => {
                 const name = typeof m === 'string' ? m : m?.name;
                 if (!name || seenIds.has(name)) return;
@@ -232,7 +163,6 @@ export function ProductDetailDialog({
                 results.push({ model_id: m?.id || name, model_name: name, source: 'direct' });
             });
 
-            // 群組關聯 (藍色)
             ((target as any).device_model_groups || []).forEach((g: any) => {
                 const name = typeof g === 'string' ? g : g?.name;
                 if (!name || seenIds.has(name)) return;
@@ -242,10 +172,8 @@ export function ProductDetailDialog({
         };
 
         if (selectedVariant) {
-            // 已選取變體 → 只顯示該變體的型號
             addModels(selectedVariant);
         } else if (pickerOptions && Object.values(pickerOptions).some(v => v !== null)) {
-            // 部分選取（如只選型號）→ 只從符合選項的變體收集
             const opts = pickerOptions;
             const matchedVariants = (product.variants || []).filter((v: any) => {
                 const mModel = !opts.modelDisplay || v.modelDisplay === opts.modelDisplay;
@@ -256,7 +184,6 @@ export function ProductDetailDialog({
             });
             matchedVariants.forEach((v: any) => addModels(v));
         } else {
-            // 未選取變體 → 先從主商品收集，再從所有變體收集聯集
             addModels(product);
             (product.variants || []).forEach((v: any) => addModels(v));
         }
@@ -266,11 +193,9 @@ export function ProductDetailDialog({
 
     const variants = product?.variants || [];
 
-    // --- 規格彙整與排序邏輯 ---
     const combinedSpecs = useMemo(() => {
         if (!product || specDefinitions.length === 0) return [];
 
-        // 1. 建立分類專屬排序權重表 (Category Sort Map)
         const productCategoryIds = (product as any).category_ids || [];
         const categorySortMap: Record<string, number> = {};
 
@@ -282,11 +207,9 @@ export function ProductDetailDialog({
                 }
             });
 
-        // 2. 建立以 specId 為主的彙整表
         const specIdAgg = new Map<string, { rawValues: any[], stringifiedSet: Set<string> }>();
         const addValue = (pathKey: string, val: any) => {
             if (val === null || val === undefined || val === '') return;
-            // 提取真正的 specId (從 A:B:C 中提取 B)
             const parts = pathKey.split(':');
             const specId = parts.length >= 2 ? parts[1] : pathKey;
 
@@ -301,15 +224,12 @@ export function ProductDetailDialog({
             }
         };
 
-        // 收集產品與變體的所有規格數據
         if (product.spec_values) Object.entries(product.spec_values).forEach(([k, v]) => addValue(k, v));
-        const vList = selectedVariantId ? variants.filter(v => v.id === selectedVariantId) : variants;
-        vList.forEach(v => {
+        const vList = selectedVariantId ? variants.filter((v: any) => v.id === selectedVariantId) : variants;
+        vList.forEach((v: any) => {
             if (v.spec_values) Object.entries(v.spec_values).forEach(([k, val]) => addValue(k, val));
         });
 
-        // 2. 建立一個「智慧值字典」給 getVisibleSpecsTree 使用
-        // 透過 Proxy 讓連動計算時，不管傳入什麼路徑 (pathKey)，都能對應到正確的 specId 數值
         const flattenedValues: Record<string, any> = {};
         specIdAgg.forEach((agg, specId) => { flattenedValues[specId] = agg.rawValues[0]; });
 
@@ -321,7 +241,6 @@ export function ProductDetailDialog({
             }
         });
 
-        // 3. 計算可見路徑 (這會觸發所有隱藏的 Triggers)
         const visiblePathsMap = getVisibleSpecsTree(
             specDefinitions as any,
             valueProxy as any,
@@ -334,7 +253,6 @@ export function ProductDetailDialog({
             categorySortMap
         );
 
-        // 4. 映射回顯示格式
         return sortedPaths.map(({ pathKey, level }) => {
             const specId = pathKey.split(':')[1];
             const def = specDefinitions.find((s: any) => s.id === specId);
@@ -373,7 +291,7 @@ export function ProductDetailDialog({
             const price = selectedVariant.effective_wholesale_price ?? selectedVariant.wholesale_price;
             return `$${price}`;
         }
-        return calculatePriceRange(product.wholesale_price, product.variants?.map(v => v.effective_wholesale_price) || []).display;
+        return calculatePriceRange(product.wholesale_price, product.variants?.map((v: any) => v.effective_wholesale_price) || []).display;
     }, [product, selectedVariant]);
 
     const qty = (product && selectedVariantId) ? getItemQuantity(product.id, selectedVariantId) : (product ? getItemQuantity(product.id) : 0);
@@ -405,14 +323,26 @@ export function ProductDetailDialog({
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                    {/* 圖片輪播區域 */}
-                    <ImageGallery
-                        images={displayImages}
-                        coverUrl={(product as any).image_url}
+                <div className="flex items-center gap-2 pt-1 pb-2">
+                    <Checkbox
+                        id="show-images"
+                        checked={showImages}
+                        onCheckedChange={(checked) => toggleShowImages(checked === true)}
                     />
+                    <label htmlFor="show-images" className="text-xs text-muted-foreground cursor-pointer select-none">
+                        顯示圖片
+                    </label>
+                </div>
 
-                    <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
+                    {showImages && (
+                        <ImageGallery
+                            images={displayImages}
+                            coverUrl={(product as any).image_url}
+                        />
+                    )}
+
+                    <div className={cn("space-y-4", !showImages && "md:col-span-2")}>
                         <div>
                             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">價格</h3>
                             <div className="text-2xl font-bold text-primary mt-1">{currentPriceDisplay}</div>
@@ -479,7 +409,7 @@ export function ProductDetailDialog({
                             <div className="pt-4 border-t">
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">產品規格</h3>
                                 <div className="space-y-0.5">
-                                    {combinedSpecs.map((spec) => {
+                                    {combinedSpecs.map((spec: any) => {
                                         const parts = spec.id.split(':');
                                         const specId = parts.length >= 2 ? parts[1] : spec.id;
                                         const def = specDefinitions.find((s: any) => s.id === specId);
@@ -529,30 +459,39 @@ export function ProductDetailDialog({
                             </div>
                         )}
 
-                        <div className="pt-6">
+                        <div className="pt-6 space-y-3">
                             {selectedVariant && (
-                                <div className="mb-4 p-3 bg-primary/5 border border-primary/20 rounded-lg animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg animate-in fade-in slide-in-from-bottom-2 duration-300">
                                     <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">已選定規格</p>
                                     <p className="text-sm font-semibold text-foreground leading-snug">{selectedVariant.name}</p>
                                 </div>
                             )}
 
-                            <Button onClick={handleAddProduct} className="w-full" variant={qty > 0 ? "secondary" : "default"} disabled={product.has_variants && !selectedVariantId}>
+                            <Button
+                                onClick={handleAddProduct}
+                                className="w-full"
+                                variant={qty > 0 ? "secondary" : "default"}
+                                disabled={product.has_variants && !selectedVariantId}
+                            >
                                 <ShoppingCart className="mr-2 h-4 w-4" />
-                                {product.has_variants && !selectedVariantId ? "請先選擇規格選項" : qty > 0 ? `已在購物車中 (x${qty})` : "加入購物車"}
+                                {product.has_variants && !selectedVariantId
+                                    ? "請先選擇規格選項"
+                                    : qty > 0
+                                        ? `已在購物車中 (x${qty})`
+                                        : "加入購物車"}
                             </Button>
                         </div>
                     </div>
                 </div>
 
                 {product.has_variants && (
-                    <div className="mt-6 border-t pt-4 space-y-6">
-                        <VariantOptionsPicker
-                            product={product}
-                            onVariantSelect={handleVariantSelect}
-                            onSelectionChange={handleOptionsChange}
-                        />
-                    </div>
+                    <ProductVariantSection
+                        product={product}
+                        storeId={storeId}
+                        onVariantSelect={handleVariantSelect}
+                        onSelectionChange={handleOptionsChange}
+                        templates={templates}
+                    />
                 )}
             </DialogContent>
         </Dialog>

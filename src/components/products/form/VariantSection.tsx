@@ -3,7 +3,22 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Plus, Layers, Pencil, Trash2, ShoppingCart } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Plus, Layers, Pencil, Trash2, ShoppingCart, CheckSquare, Edit3 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { VariantBatchCreator } from './VariantBatchCreator';
 import { VariantEditDialog } from '@/components/products/VariantEditDialog';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,6 +38,9 @@ export function VariantSection({ product }: { product: any }) {
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingVariant, setEditingVariant] = useState<any>(null);
+  const [selectedVariantIds, setSelectedVariantIds] = useState<Set<string>>(new Set());
+  const [isBatchEditOpen, setIsBatchEditOpen] = useState(false);
+  const [batchEditEntries, setBatchEditEntries] = useState<Array<{ field: string; value: string }>>([]);
   const queryClient = useQueryClient();
   const store = useOrderDraftStore();
 
@@ -79,6 +97,65 @@ export function VariantSection({ product }: { product: any }) {
     }
   };
 
+  const handleBatchDelete = async () => {
+    if (selectedVariantIds.size === 0) return;
+    if (!confirm(`確定要刪除所選的 ${selectedVariantIds.size} 個變體？`)) return;
+    const { error } = await supabase.from('product_variants').delete().in('id', Array.from(selectedVariantIds));
+    if (error) {
+      toast.error('批量刪除失敗');
+    } else {
+      toast.success('已批量刪除變體');
+      setSelectedVariantIds(new Set());
+      refreshVariants();
+    }
+  };
+
+  const FIELD_OPTIONS: Array<{ value: string; label: string; type: 'number' | 'text' | 'select' }> = [
+    { value: 'wholesale_price', label: '批發價', type: 'number' },
+    { value: 'retail_price', label: '零售價', type: 'number' },
+    { value: 'status', label: '狀態', type: 'select' },
+    { value: 'name', label: '變體名稱', type: 'text' },
+    { value: 'option_1', label: '選項1', type: 'text' },
+    { value: 'option_2', label: '選項2', type: 'text' },
+    { value: 'barcode', label: '條碼', type: 'text' },
+  ];
+
+  const handleBatchEdit = async () => {
+    const updates: Record<string, any> = {};
+    for (const entry of batchEditEntries) {
+      if (entry.value === '') continue;
+      const opt = FIELD_OPTIONS.find(o => o.value === entry.field);
+      if (!opt) continue;
+      updates[entry.field] = opt.type === 'number' ? parseFloat(entry.value) : entry.value;
+    }
+    if (Object.keys(updates).length === 0) {
+      toast.error('請至少填寫一個欄位');
+      return;
+    }
+    const { error } = await supabase.from('product_variants').update(updates).in('id', Array.from(selectedVariantIds));
+    if (error) {
+      toast.error(`批量更新失敗：${error.message}`);
+    } else {
+      toast.success('已批量更新變體');
+      setSelectedVariantIds(new Set());
+      setIsBatchEditOpen(false);
+      refreshVariants();
+    }
+  };
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (!variants) return;
+    setSelectedVariantIds(checked ? new Set(variants.map(v => v.id)) : new Set());
+  };
+
+  const toggleSelectVariant = (id: string) => {
+    setSelectedVariantIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center bg-muted/30 p-4 rounded-lg border border-dashed">
@@ -99,10 +176,37 @@ export function VariantSection({ product }: { product: any }) {
         </div>
       </div>
 
+      {/* 批次操作列 */}
+      {selectedVariantIds.size > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-lg">
+          <CheckSquare className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">已選取 {selectedVariantIds.size} 項</span>
+          <div className="ml-auto flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => { setBatchEditEntries([]); setIsBatchEditOpen(true); }}>
+              <Edit3 className="mr-1 h-4 w-4" />
+              批次編輯
+            </Button>
+            <Button variant="destructive" size="sm" onClick={handleBatchDelete}>
+              <Trash2 className="mr-1 h-4 w-4" />
+              刪除所選
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="border rounded-md">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
+              <TableHead className="w-10">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={!!variants?.length && selectedVariantIds.size === variants.length}
+                  ref={(el) => { if (el) el.indeterminate = selectedVariantIds.size > 0 && selectedVariantIds.size < (variants?.length || 0); }}
+                  onChange={(e) => toggleSelectAll(e.target.checked)}
+                />
+              </TableHead>
               <TableHead className="w-[120px]">SKU</TableHead>
               <TableHead>規格名稱</TableHead>
               <TableHead>選項1</TableHead>
@@ -120,6 +224,7 @@ export function VariantSection({ product }: { product: any }) {
               // 載入中的 Skeleton 效果
               [1, 2, 3].map((i) => (
                 <TableRow key={i}>
+                  <TableCell><Skeleton className="h-4 w-4" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                   <TableCell colSpan={3}><Skeleton className="h-4 w-24" /></TableCell>
@@ -131,7 +236,7 @@ export function VariantSection({ product }: { product: any }) {
               ))
             ) : variants?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={11} className="h-32 text-center text-muted-foreground">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Layers className="h-8 w-8 opacity-20" />
                     <p>尚未建立任何變體，請點擊「批次產生」快速建立。</p>
@@ -140,7 +245,15 @@ export function VariantSection({ product }: { product: any }) {
               </TableRow>
             ) : (
               variants?.map((v) => (
-                <TableRow key={v.id} className="group">
+                <TableRow key={v.id} className={`group ${selectedVariantIds.has(v.id) ? 'bg-muted/50' : ''}`}>
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={selectedVariantIds.has(v.id)}
+                      onChange={() => toggleSelectVariant(v.id)}
+                    />
+                  </TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">
                     {v.sku}
                   </TableCell>
@@ -201,6 +314,76 @@ export function VariantSection({ product }: { product: any }) {
           </TableBody>
         </Table>
       </div>
+
+      {/* 批次編輯對話框 */}
+      <Dialog open={isBatchEditOpen} onOpenChange={setIsBatchEditOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>批次編輯欄位</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {batchEditEntries.map((entry, idx) => {
+              const opt = FIELD_OPTIONS.find(o => o.value === entry.field);
+              return (
+                <div key={idx} className="flex items-end gap-2">
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-xs">欄位</Label>
+                    <Select
+                      value={entry.field}
+                      onValueChange={v => setBatchEditEntries(prev => prev.map((e, i) => i === idx ? { ...e, field: v, value: '' } : e))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="選擇欄位" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {FIELD_OPTIONS.filter(o => !batchEditEntries.some((e, i) => i !== idx && e.field === o.value)).map(o => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex-[2] space-y-1">
+                    <Label className="text-xs">新值</Label>
+                    {opt?.type === 'select' ? (
+                      <Select value={entry.value} onValueChange={v => setBatchEditEntries(prev => prev.map((e, i) => i === idx ? { ...e, value: v } : e))}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="選擇狀態" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">上架中</SelectItem>
+                          <SelectItem value="preorder">預購中</SelectItem>
+                          <SelectItem value="sold_out">售完停產</SelectItem>
+                          <SelectItem value="discontinued">已停售</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        type={opt?.type === 'number' ? 'number' : 'text'}
+                        step={opt?.type === 'number' ? '0.01' : undefined}
+                        placeholder="輸入新值"
+                        value={entry.value}
+                        onChange={e => setBatchEditEntries(prev => prev.map((ent, i) => i === idx ? { ...ent, value: e.target.value } : ent))}
+                      />
+                    )}
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-destructive" onClick={() => setBatchEditEntries(prev => prev.filter((_, i) => i !== idx))}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              );
+            })}
+            <Button variant="outline" size="sm" className="w-full" onClick={() => setBatchEditEntries(prev => [...prev, { field: '', value: '' }])}>
+              <Plus className="mr-1 h-4 w-4" /> 增加欄位
+            </Button>
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button variant="outline" onClick={() => setIsBatchEditOpen(false)}>取消</Button>
+            <Button onClick={handleBatchEdit}>
+              更新 {selectedVariantIds.size} 個變體
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* 批次產生器 */}
       <VariantBatchCreator

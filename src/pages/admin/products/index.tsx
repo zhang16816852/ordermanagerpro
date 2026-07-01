@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, RefreshCw, Upload, Download, Table2 } from 'lucide-react';
+import { Plus, Search, RefreshCw, Upload, Download, Table2, ShoppingCart } from 'lucide-react';
 import { VariantManager } from '@/components/products/VariantManager';
 import { toast } from 'sonner';
 
@@ -37,6 +37,7 @@ export default function AdminProducts() {
     const isMutationLoading = createMutation.isPending || updateMutation.isPending;
     const { createTemplate } = useTableTemplates();
     const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+    const [isSelectionOpen, setIsSelectionOpen] = useState(false);
     const [quickCreateSaving, setQuickCreateSaving] = useState(false);
 
     const allVariantIds = useMemo(
@@ -64,45 +65,60 @@ export default function AdminProducts() {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">產品管理</h1>
-                    <p className="text-muted-foreground text-sm mt-1">
-                        管理產品基本資訊與變體
-                        <span className="ml-2 text-[10px] opacity-40">版本: {version}</span>
-                    </p>
+            <div className="sticky top-0 z-20 bg-background pb-3 md:pb-0 md:relative md:z-auto">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 md:pt-0">
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight">產品管理</h1>
+                        <p className="text-muted-foreground text-sm mt-1">
+                            管理產品基本資訊與變體
+                            <span className="ml-2 text-[10px] opacity-40">版本: {version}</span>
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {selectedProductIds.size > 0 ? (
+                            <div className="flex items-center gap-2 bg-primary/5 p-1 rounded-lg border border-primary/10">
+                                <Button variant="ghost" size="sm" onClick={() => toggleSelectAll(false)} className="text-xs h-8">
+                                    取消選取 ({selectedProductIds.size})
+                                </Button>
+                                <Button variant="default" size="sm" onClick={handleBatchExport} className="h-8 shadow-sm">
+                                    <Download className="mr-2 h-4 w-4" />
+                                    匯出產品
+                                </Button>
+                            </div>
+                        ) : (
+                            <>
+                                <Button variant="outline" size="sm" onClick={forceRefresh} className="h-9">
+                                    <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                    重新整理
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)} className="h-9">
+                                    <Upload className="mr-2 h-4 w-4" />
+                                    批次匯入
+                                </Button>
+                            </>
+                        )}
+                        <Button variant="outline" size="sm" onClick={() => setQuickCreateOpen(true)} className="h-9">
+                            <Table2 className="mr-2 h-4 w-4" />
+                            建立表格
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setIsSelectionOpen(true)} className="h-9">
+                            <ShoppingCart className="mr-2 h-4 w-4" />
+                            選取產品
+                        </Button>
+                        <Button size="sm" onClick={() => { setEditingProduct(null); setIsDialogOpen(true); }} className="h-9 shadow-md">
+                            <Plus className="mr-2 h-4 w-4" />
+                            新增產品
+                        </Button>
+                    </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    {selectedProductIds.size > 0 ? (
-                        <div className="flex items-center gap-2 bg-primary/5 p-1 rounded-lg border border-primary/10">
-                            <Button variant="ghost" size="sm" onClick={() => toggleSelectAll(false)} className="text-xs h-8">
-                                取消選取 ({selectedProductIds.size})
-                            </Button>
-                            <Button variant="default" size="sm" onClick={handleBatchExport} className="h-8 shadow-sm">
-                                <Download className="mr-2 h-4 w-4" />
-                                匯出產品
-                            </Button>
-                        </div>
-                    ) : (
-                        <>
-                            <Button variant="outline" size="sm" onClick={forceRefresh} className="h-9">
-                                <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                                重新整理
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => setIsImportOpen(true)} className="h-9">
-                                <Upload className="mr-2 h-4 w-4" />
-                                批次匯入
-                            </Button>
-                        </>
-                    )}
-                    <Button variant="outline" size="sm" onClick={() => setQuickCreateOpen(true)} className="h-9">
-                        <Table2 className="mr-2 h-4 w-4" />
-                        建立表格
-                    </Button>
-                    <Button size="sm" onClick={() => { setEditingProduct(null); setIsDialogOpen(true); }} className="h-9 shadow-md">
-                        <Plus className="mr-2 h-4 w-4" />
-                        新增產品
-                    </Button>
+                <div className="relative w-full mt-3 md:hidden">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-50" />
+                    <Input
+                        placeholder="在目前的篩選結果中搜尋..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="pl-9 bg-background border-none shadow-inner h-10 rounded-lg"
+                    />
                 </div>
             </div>
 
@@ -139,7 +155,7 @@ export default function AdminProducts() {
                             />
                         </div>
                         <div className="lg:col-span-3 space-y-4">
-                            <div className="relative w-full">
+                            <div className="relative w-full hidden md:block">
                                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-50" />
                                 <Input
                                     placeholder="在目前的篩選結果中搜尋..."
@@ -221,6 +237,9 @@ export default function AdminProducts() {
                 onDeleteConfirm={(id) => deleteMutation.mutate(id)}
                 onImportSuccess={handleImportSuccess}
                 isMutationLoading={isMutationLoading}
+                isSelectionOpen={isSelectionOpen}
+                setIsSelectionOpen={setIsSelectionOpen}
+                products={filteredProducts as any}
             />
         </div>
     );

@@ -491,6 +491,7 @@ export default function ProductCatalog({
               <VariantOptionsPicker 
                 product={variantDialogProduct}
                 onVariantSelect={(v) => setSelectedVariantForDialog(v)}
+                getVariantQuantity={(variantId) => getItemQuantity(variantDialogProduct.id, variantId)}
               />
 
               <div className="pt-4 border-t flex justify-end gap-3">
@@ -513,6 +514,7 @@ export default function ProductCatalog({
         open={!!detailProduct}
         onOpenChange={(open) => !open && handleOpenDetail(null)}
         storeId={storeId}
+        templates={matchingTemplates}
       />
     </>
   );
