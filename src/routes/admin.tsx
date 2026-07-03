@@ -13,6 +13,10 @@ import AdminCategories from "@/pages/admin/categories/index";
 import AdminInventory from "@/pages/admin/inventory/index";
 import AdminAuditLogs from "@/pages/admin/audit-logs/index";
 import AdminOrderGridTemplates from "@/pages/admin/order-grid-templates/index";
+import AdminRepairOrders from "@/pages/admin/repair-orders/index";
+import AdminRepairOrderNew from "@/pages/admin/repair-orders/new";
+import AdminRepairOrderEdit from "@/pages/admin/repair-orders/new";
+import AdminRepairOrderDetail from "@/pages/admin/repair-orders/detail";
 
 export const adminRoutes = [
     { path: "/admin", element: <AdminDashboard /> },
@@ -30,4 +34,8 @@ export const adminRoutes = [
     { path: "/admin/purchase-orders", element: <AdminPurchaseOrders /> },
     { path: "/admin/audit-logs", element: <AdminAuditLogs /> },
     { path: "/admin/order-grid-templates", element: <AdminOrderGridTemplates /> },
+    { path: "/admin/repair-orders", element: <AdminRepairOrders /> },
+    { path: "/admin/repair-orders/new", element: <AdminRepairOrderNew /> },
+    { path: "/admin/repair-orders/:id", element: <AdminRepairOrderDetail /> },
+    { path: "/admin/repair-orders/:id/edit", element: <AdminRepairOrderEdit /> },
 ];

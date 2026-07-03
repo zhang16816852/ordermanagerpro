@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vue 彈出視窗 - 解析度顯示</title>
+  <!-- Vue 3 CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <!-- Tailwind CSS CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body>
+  <div id="app" class="min-h-screen bg-gray-100 flex items-center justify-center">
+    <!-- 按鈕觸發彈出視窗 -->
+    <button @click="showModal = true" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+      顯示解析度
+    </button>
+
+    <!-- 彈出視窗 -->
+    <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+        <h2 class="text-xl font-bold mb-4">解析度資訊</h2>
+        <p class="mb-2"><strong>窗口解析度：</strong> {{ windowWidth }} x {{ windowHeight }} 像素</p>
+        <p class="mb-4"><strong>實際螢幕解析度：</strong> {{ screenWidth }} x {{ screenHeight }} 像素</p>
+        <button @click="showModal = false" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
+          關閉
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+
+    createApp({
+      data() {
+        return {
+          showModal: false,
+          windowWidth: window.innerWidth,
+          windowHeight: window.innerHeight,
+          screenWidth: window.screen.width,
+          screenHeight: window.screen.height
+        };
+      },
+      mounted() {
+        // 監聽窗口大小變化
+        window.addEventListener('resize', this.updateWindowSize);
+      },
+      beforeUnmount() {
+        // 移除監聽器
+        window.removeEventListener('resize', this.updateWindowSize);
+      },
+      methods: {
+        updateWindowSize() {
+          this.windowWidth = window.innerWidth;
+          this.windowHeight = window.innerHeight;
+        }
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

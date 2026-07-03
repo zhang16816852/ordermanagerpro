@@ -70,6 +70,7 @@ export function OrderTableView({
             <TableHead>品項數</TableHead>
             <TableHead className="text-right">金額</TableHead>
             <TableHead>來源</TableHead>
+            <TableHead>訂單狀態</TableHead>
             <TableHead>出貨狀態</TableHead>
             <TableHead>建立時間</TableHead>
             <TableHead className="text-right">操作</TableHead>
@@ -85,6 +86,7 @@ export function OrderTableView({
                 <TableCell><Skeleton className="h-4 w-8" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+                <TableCell><Skeleton className="h-5 w-12" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                 <TableCell><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
@@ -92,7 +94,7 @@ export function OrderTableView({
             ))
           ) : orders.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={statusTab === 'pending' ? 9 : 8} className="text-center py-12 text-muted-foreground italic">
+              <TableCell colSpan={statusTab === 'pending' ? 10 : 9} className="text-center py-12 text-muted-foreground italic">
                 沒有找到符合條件的訂單
               </TableCell>
             </TableRow>
@@ -117,10 +119,11 @@ export function OrderTableView({
                   </TableCell>
                   <TableCell>{order.order_items.length}</TableCell>
                   <TableCell className="text-right font-bold">${getOrderTotal(order.order_items).toLocaleString()}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{order.source_type === 'frontend' ? '前台' : '後台'}</Badge>
-                  </TableCell>
-                  <TableCell><OrderStatusBadge status={itemStatus} type="shipping" /></TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{order.source_type === 'frontend' ? '前台' : '後台'}</Badge>
+                    </TableCell>
+                    <TableCell><OrderStatusBadge status={order.status} type="order" /></TableCell>
+                    <TableCell><OrderStatusBadge status={itemStatus} type="shipping" /></TableCell>
                   <TableCell className="text-muted-foreground text-xs uppercase">
                     {format(new Date(order.created_at), 'MM/dd HH:mm', { locale: zhTW })}
                   </TableCell>

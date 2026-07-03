@@ -23,6 +23,7 @@ export function BrandsTab() {
     const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
     const [brandForm, setBrandForm] = useState<Partial<Brand>>({
         name: '',
+        abbreviation: '',
         description: '',
         sort_order: 0,
     });
@@ -31,10 +32,10 @@ export function BrandsTab() {
     const openBrandDialog = (brand: Brand | null = null) => {
         if (brand) {
             setEditingBrand(brand);
-            setBrandForm({ name: brand.name, description: brand.description || '', sort_order: brand.sort_order || 0 });
+            setBrandForm({ name: brand.name, abbreviation: brand.abbreviation || '', description: brand.description || '', sort_order: brand.sort_order || 0 });
         } else {
             setEditingBrand(null);
-            setBrandForm({ name: '', description: '', sort_order: 0 });
+            setBrandForm({ name: '', abbreviation: '', description: '', sort_order: 0 });
         }
         setIsBrandDialogOpen(true);
     };
@@ -74,7 +75,14 @@ export function BrandsTab() {
                     <Card key={brand.id} className="relative group overflow-hidden border-primary/10 hover:border-primary/50 transition-colors">
                         <CardHeader className="pb-2">
                             <div className="flex justify-between items-start">
-                                <CardTitle className="text-lg">{brand.name}</CardTitle>
+                                <CardTitle className="text-lg">
+                                    {brand.name}
+                                    {brand.abbreviation && (
+                                        <span className="ml-2 text-xs font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                            {brand.abbreviation}
+                                        </span>
+                                    )}
+                                </CardTitle>
                             </div>
                             {brand.description && (
                                 <CardDescription className="text-xs truncate" title={brand.description}>
@@ -120,6 +128,15 @@ export function BrandsTab() {
                                 value={brandForm.name}
                                 onChange={(e) => setBrandForm(prev => ({ ...prev, name: e.target.value }))}
                                 placeholder="輸入品牌名稱"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">品牌縮寫</label>
+                            <Input
+                                value={brandForm.abbreviation || ''}
+                                onChange={(e) => setBrandForm(prev => ({ ...prev, abbreviation: e.target.value }))}
+                                placeholder="例如：APL"
+                                maxLength={50}
                             />
                         </div>
                         <div className="space-y-2">

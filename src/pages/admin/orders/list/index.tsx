@@ -81,6 +81,7 @@ export default function AdminOrderList() {
         .map(item => ({
           ...item,
           orderId: order.id,
+          orderCode: order.code,
           orderCreatedAt: order.created_at,
           storeName: order.stores?.name || '',
           storeCode: order.stores?.code || '',
@@ -106,6 +107,7 @@ export default function AdminOrderList() {
         .map(item => ({
           ...item,
           orderId: order.id,
+          orderCode: order.code,
           orderCreatedAt: order.created_at,
           storeName: order.stores?.name || '',
           storeCode: order.stores?.code || '',
@@ -218,6 +220,7 @@ export default function AdminOrderList() {
                   maxQuantity: item.pendingQuantity,
                   storeId: item.storeId,
                   storeName: item.storeName,
+                  orderId: item.orderId,
                 });
               } else next.delete(item.id);
               setSelectedItems(next);
@@ -234,6 +237,7 @@ export default function AdminOrderList() {
                     maxQuantity: item.pendingQuantity,
                     storeId: item.storeId,
                     storeName: item.storeName,
+                    orderId: item.orderId,
                   });
                 });
                 setSelectedItems(next);

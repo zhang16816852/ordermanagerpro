@@ -18,6 +18,7 @@ export type FullDeviceModel = Database['public']['Tables']['device_models']['Row
     device_remarks?: string | null;
     release_date?: string | null;
     aliases?: string[] | null;
+    specifications?: Record<string, any> | null;
 };
 
 export type FullDeviceModelInsert = Database['public']['Tables']['device_models']['Insert'] & {
@@ -27,6 +28,7 @@ export type FullDeviceModelInsert = Database['public']['Tables']['device_models'
     device_remarks?: string | null;
     release_date?: string | null;
     aliases?: string[] | null;
+    specifications?: Record<string, any> | null;
 };
 
 export type FullDeviceModelUpdate = Database['public']['Tables']['device_models']['Update'] & {
@@ -36,4 +38,5 @@ export type FullDeviceModelUpdate = Database['public']['Tables']['device_models'
     device_remarks?: string | null;
     release_date?: string | null;
     aliases?: string[] | null;
+    specifications?: Record<string, any> | null;
 };

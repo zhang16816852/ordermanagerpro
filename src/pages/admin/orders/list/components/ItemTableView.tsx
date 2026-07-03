@@ -50,6 +50,7 @@ export function ItemTableView({
               />
             </TableHead>
             <TableHead>店鋪</TableHead>
+            <TableHead>訂單編號</TableHead>
             <TableHead>SKU</TableHead>
             <TableHead>產品名稱</TableHead>
             <TableHead className="text-right">訂購</TableHead>
@@ -66,6 +67,7 @@ export function ItemTableView({
               <TableRow key={i}>
                 <TableCell><Skeleton className="h-4 w-4" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-8 ml-auto" /></TableCell>
@@ -78,7 +80,7 @@ export function ItemTableView({
             ))
           ) : items.length === 0 && cancelledItems.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={10} className="text-center py-12 text-muted-foreground italic">
+              <TableCell colSpan={11} className="text-center py-12 text-muted-foreground italic">
                 沒有找到待處理商品
               </TableCell>
             </TableRow>
@@ -98,6 +100,9 @@ export function ItemTableView({
                     <TableCell>
                       <div className="font-medium text-xs">{item.storeName}</div>
                       {item.storeCode && <div className="text-[10px] text-muted-foreground opacity-70">{item.storeCode}</div>}
+                    </TableCell>
+                    <TableCell className="font-mono text-[11px] text-muted-foreground">
+                      {item.orderCode?.slice(0, 12) || item.orderId?.slice(0, 8)}
                     </TableCell>
                     <TableCell className="font-mono text-xs">{item.product?.sku}</TableCell>
                     <TableCell className="text-sm">
@@ -142,6 +147,9 @@ export function ItemTableView({
                 <TableRow key={`cancelled-${item.id}`} className="opacity-40 bg-muted/20 grayscale pointer-events-none">
                   <TableCell></TableCell>
                   <TableCell className="text-xs">{item.storeName}</TableCell>
+                  <TableCell className="font-mono text-[11px] text-muted-foreground">
+                    {item.orderCode?.slice(0, 12) || item.orderId?.slice(0, 8)}
+                  </TableCell>
                   <TableCell className="font-mono text-xs line-through">{item.product?.sku}</TableCell>
                   <TableCell className="text-sm italic">
                     <span className="line-through">{item.product?.name}</span>

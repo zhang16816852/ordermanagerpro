@@ -25,7 +25,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Save, Lock, Unlock, Plus } from 'lucide-react';
+import { ArrowLeft, Save, Lock, Unlock, Plus, AlertTriangle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
@@ -282,6 +283,16 @@ export default function AdminOrderEdit() {
           </Button>
         </div>
       </div>
+
+      {/* 編輯警示 */}
+      {order.status !== 'pending' && (
+        <Alert variant="default" className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+          <AlertTriangle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+            此訂單狀態為「{statusInfo.label}」，部分品項可能已在出貨池或已出貨。修改時請謹慎操作，避免資料不一致。
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* 訂單資訊 */}
       <div className="grid gap-6 md:grid-cols-2">

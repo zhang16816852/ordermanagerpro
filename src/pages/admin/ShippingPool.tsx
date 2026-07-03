@@ -159,7 +159,6 @@ export default function AdminShippingPool() {
     },
   });
 
-  // 確認出貨：透過 RPC 原子化處理（單一交易）
   const shipMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("未登入");
@@ -172,10 +171,15 @@ export default function AdminShippingPool() {
       });
 
       if (error) throw error;
-      return data;
+      return data as Array<{ sales_note_id: string; store_id: string }>;
     },
-    onSuccess: () => {
-      toast.success(`已建立 ${selectedStores.size} 個銷售單並出貨`);
+    onSuccess: (data) => {
+      toast.success(`已建立 ${selectedStores.size} 個銷售單並出貨`, {
+        action: data?.length > 0 ? {
+          label: "檢視銷貨單",
+          onClick: () => window.location.href = "/admin/sales-notes",
+        } : undefined,
+      });
       setSelectedStores(new Set());
       setShowShipDialog(false);
       setNotes("");
@@ -345,8 +349,8 @@ export default function AdminShippingPool() {
       </Card>
 
       <Dialog open={showShipDialog} onOpenChange={setShowShipDialog}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0">
+          <DialogHeader className="p-6 pb-2">
             <DialogTitle className="flex items-center gap-2">
               <Send className="h-5 w-5" />
               確認出貨
@@ -355,10 +359,7 @@ export default function AdminShippingPool() {
               將選定店家的待出貨品項合併產生銷售單，並更新系統訂單狀態。出貨後資料將從集貨池中移除。
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              將選中店家的出貨池項目合併為銷售單並標記為已出貨：
-            </p>
+          <div className="flex-1 overflow-y-auto px-6 space-y-4">
             <div className="rounded-lg border p-4 bg-muted/50">
               <div className="grid grid-cols-3 gap-2 text-sm">
                 <div>
@@ -375,14 +376,42 @@ export default function AdminShippingPool() {
                 </div>
               </div>
             </div>
-            <div className="space-y-2">
-              {groupedByStore.filter(g => selectedStores.has(g.storeId)).map(group => (
-                <div key={group.storeId} className="flex items-center justify-between text-sm border rounded p-2">
-                  <span className="font-medium">{group.storeName}</span>
-                  <Badge variant="outline">{group.items.length} 項 / {group.totalQuantity} 件</Badge>
+            {groupedByStore.filter(g => selectedStores.has(g.storeId)).map(group => {
+              const groupTotal = group.items.reduce((sum, item) => sum + item.quantity * (item.order_item?.unit_price || 0), 0);
+              return (
+                <div key={group.storeId} className="space-y-2 border rounded p-3">
+                  <div className="flex items-center justify-between border-b pb-1">
+                    <h3 className="font-bold text-primary">{group.storeName}</h3>
+                    <Badge variant="outline">{group.items.length} 項 / {group.totalQuantity} 件</Badge>
+                  </div>
+                  <Table>
+                    <TableHeader className="bg-muted/30">
+                      <TableRow>
+                        <TableHead>SKU</TableHead>
+                        <TableHead>產品</TableHead>
+                        <TableHead className="text-right">數量</TableHead>
+                        <TableHead className="text-right">單價</TableHead>
+                        <TableHead className="text-right">小計</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {group.items.map(item => (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-mono text-xs">{item.order_item?.product?.sku}</TableCell>
+                          <TableCell className="text-sm">{item.order_item?.product?.name}</TableCell>
+                          <TableCell className="text-right">{item.quantity}</TableCell>
+                          <TableCell className="text-right">${item.order_item?.unit_price.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-medium">${(item.quantity * (item.order_item?.unit_price || 0)).toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <div className="text-right text-sm font-bold">
+                    合計：${groupTotal.toFixed(2)}
+                  </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
             <div>
               <label className="text-sm font-medium">備註（選填）</label>
               <Textarea
@@ -393,7 +422,7 @@ export default function AdminShippingPool() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="p-6 pt-2 bg-muted/20 border-t">
             <Button variant="outline" onClick={() => setShowShipDialog(false)}>
               取消
             </Button>

@@ -35,6 +35,7 @@ import {
   ChevronLeft,
   Layers,
   History as HistoryIcon,
+  Wrench,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NotificationDropdown } from './NotificationDropdown';
@@ -53,6 +54,7 @@ const adminNavItems: NavItem[] = [
   { title: '店鋪管理', href: '/admin/stores', icon: Store },
   { title: '產品管理', href: '/admin/products', icon: PackageSearch },
   { title: '庫存管理', href: '/admin/inventory', icon: Package },
+  { title: '維修管理', href: '/admin/repair-orders', icon: Wrench },
   { title: '分類管理', href: '/admin/categories', icon: Layers },
   { title: '連鎖客戶價格', href: '/admin/brand-pricing', icon: ShoppingCart },
   { title: '所有訂單', href: '/admin/orders', icon: ClipboardList },
@@ -173,6 +175,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     { title: '儀表板', href: '/dashboard', icon: Home },
     { title: '商品目錄', href: '/catalog', icon: PackageSearch },
     { title: '我的訂單', href: '/orders', icon: ClipboardList },
+    { title: '維修管理', href: '/dashboard/repair-orders', icon: Wrench },
     { title: '媒合市場', href: '/market', icon: ShoppingBag },
     { title: '銷貨單', href: '/sales-notes', icon: FileText },
     { title: '會計報表', href: '/accounting', icon: FileText },

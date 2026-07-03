@@ -207,6 +207,7 @@ export type Database = {
       }
       brands: {
         Row: {
+          abbreviation: string | null
           created_at: string | null
           description: string | null
           id: string
@@ -215,6 +216,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          abbreviation?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -223,6 +225,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          abbreviation?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -1941,9 +1944,319 @@ export type Database = {
         }
         Relationships: []
       }
+      repair_orders: {
+        Row: {
+          id: string
+          code: string
+          store_id: string | null
+          status: Database["public"]["Enums"]["repair_order_status"]
+          customer_name: string
+          customer_phone: string | null
+          customer_email: string | null
+          customer_notes: string | null
+          device_model_id: string | null
+          device_color: string | null
+          device_storage: string | null
+          device_ram: string | null
+          device_specs: Json
+          device_imei: string | null
+          device_sn: string | null
+          device_passcode: string | null
+          device_condition: string | null
+          reported_issue: string | null
+          diagnostic_result: string | null
+          internal_notes: string | null
+          parts_cost: number
+          labor_fee: number
+          total_cost: number
+          total_price: number
+          discount: number
+          deposit: number
+          payment_method: string | null
+          created_by: string | null
+          assigned_to: string | null
+          created_at: string
+          updated_at: string
+          diagnosed_at: string | null
+          started_at: string | null
+          completed_at: string | null
+          delivered_at: string | null
+        }
+        Insert: {
+          id?: string
+          code?: string
+          store_id?: string | null
+          status?: Database["public"]["Enums"]["repair_order_status"]
+          customer_name: string
+          customer_phone?: string | null
+          customer_email?: string | null
+          customer_notes?: string | null
+          device_model_id?: string | null
+          device_color?: string | null
+          device_storage?: string | null
+          device_ram?: string | null
+          device_specs?: Json
+          device_imei?: string | null
+          device_sn?: string | null
+          device_passcode?: string | null
+          device_condition?: string | null
+          reported_issue?: string | null
+          diagnostic_result?: string | null
+          internal_notes?: string | null
+          parts_cost?: number
+          labor_fee?: number
+          total_cost?: number
+          total_price?: number
+          discount?: number
+          deposit?: number
+          payment_method?: string | null
+          created_by?: string | null
+          assigned_to?: string | null
+          created_at?: string
+          updated_at?: string
+          diagnosed_at?: string | null
+          started_at?: string | null
+          completed_at?: string | null
+          delivered_at?: string | null
+        }
+        Update: {
+          id?: string
+          code?: string
+          store_id?: string | null
+          status?: Database["public"]["Enums"]["repair_order_status"]
+          customer_name?: string
+          customer_phone?: string | null
+          customer_email?: string | null
+          customer_notes?: string | null
+          device_model_id?: string | null
+          device_color?: string | null
+          device_storage?: string | null
+          device_ram?: string | null
+          device_specs?: Json
+          device_imei?: string | null
+          device_sn?: string | null
+          device_passcode?: string | null
+          device_condition?: string | null
+          reported_issue?: string | null
+          diagnostic_result?: string | null
+          internal_notes?: string | null
+          parts_cost?: number
+          labor_fee?: number
+          total_cost?: number
+          total_price?: number
+          discount?: number
+          deposit?: number
+          payment_method?: string | null
+          created_by?: string | null
+          assigned_to?: string | null
+          created_at?: string
+          updated_at?: string
+          diagnosed_at?: string | null
+          started_at?: string | null
+          completed_at?: string | null
+          delivered_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repair_orders_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_orders_device_model_id_fkey"
+            columns: ["device_model_id"]
+            isOneToOne: false
+            referencedRelation: "device_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_orders_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_orders_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      repair_order_items: {
+        Row: {
+          id: string
+          repair_order_id: string
+          item_type: Database["public"]["Enums"]["repair_item_type"]
+          service_name: string | null
+          service_category: string | null
+          product_id: string | null
+          variant_id: string | null
+          part_name: string | null
+          description: string | null
+          quantity: number
+          unit_cost: number
+          unit_price: number
+          sort_order: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          repair_order_id: string
+          item_type?: Database["public"]["Enums"]["repair_item_type"]
+          service_name?: string | null
+          service_category?: string | null
+          product_id?: string | null
+          variant_id?: string | null
+          part_name?: string | null
+          description?: string | null
+          quantity?: number
+          unit_cost?: number
+          unit_price?: number
+          sort_order?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          repair_order_id?: string
+          item_type?: Database["public"]["Enums"]["repair_item_type"]
+          service_name?: string | null
+          service_category?: string | null
+          product_id?: string | null
+          variant_id?: string | null
+          part_name?: string | null
+          description?: string | null
+          quantity?: number
+          unit_cost?: number
+          unit_price?: number
+          sort_order?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repair_order_items_repair_order_id_fkey"
+            columns: ["repair_order_id"]
+            isOneToOne: false
+            referencedRelation: "repair_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_order_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      repair_order_status_history: {
+        Row: {
+          id: string
+          repair_order_id: string
+          from_status: string | null
+          to_status: string
+          changed_by: string | null
+          note: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          repair_order_id: string
+          from_status?: string | null
+          to_status: string
+          changed_by?: string | null
+          note?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          repair_order_id?: string
+          from_status?: string | null
+          to_status?: string
+          changed_by?: string | null
+          note?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repair_order_status_history_repair_order_id_fkey"
+            columns: ["repair_order_id"]
+            isOneToOne: false
+            referencedRelation: "repair_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
+      repair_order_summary: {
+        Row: {
+          id: string | null
+          code: string | null
+          store_id: string | null
+          status: Database["public"]["Enums"]["repair_order_status"] | null
+          customer_name: string | null
+          customer_phone: string | null
+          customer_email: string | null
+          customer_notes: string | null
+          device_model_id: string | null
+          device_color: string | null
+          device_storage: string | null
+          device_ram: string | null
+          device_specs: Json | null
+          device_imei: string | null
+          device_sn: string | null
+          device_passcode: string | null
+          device_condition: string | null
+          reported_issue: string | null
+          diagnostic_result: string | null
+          internal_notes: string | null
+          parts_cost: number | null
+          labor_fee: number | null
+          total_cost: number | null
+          total_price: number | null
+          discount: number | null
+          deposit: number | null
+          payment_method: string | null
+          created_by: string | null
+          assigned_to: string | null
+          created_at: string | null
+          updated_at: string | null
+          diagnosed_at: string | null
+          started_at: string | null
+          completed_at: string | null
+          delivered_at: string | null
+          profit: number | null
+          final_price: number | null
+          profit_margin_percent: number | null
+          device_brand_name: string | null
+          device_model_name: string | null
+          device_specifications: Json | null
+          device_type: string | null
+          device_screen_size: string | null
+          created_by_email: string | null
+          assigned_to_email: string | null
+        }
+        Insert: {
+          [_ in never]: never
+        }
+        Update: {
+          [_ in never]: never
+        }
+        Relationships: []
+      }
     }
     Functions: {
       accept_invitation: {
@@ -2045,6 +2358,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      ship_from_pool: {
+        Args: {
+          p_store_ids: string[]
+          p_created_by: string
+          p_notes?: string | null
+        }
+        Returns: Json
+      }
       sync_product_specs_v6: {
         Args: {
           p_category_id: string
@@ -2095,6 +2416,17 @@ export type Database = {
       spec_value_type: "string" | "number" | "boolean" | "array" | "object"
       store_role: "founder" | "manager" | "employee"
       system_role: "admin" | "customer"
+      repair_order_status:
+        | "pending"
+        | "diagnosing"
+        | "quoting"
+        | "awaiting_approval"
+        | "awaiting_parts"
+        | "repairing"
+        | "ready"
+        | "delivered"
+        | "cancelled"
+      repair_item_type: "service" | "part"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2251,6 +2583,18 @@ export const Constants = {
       spec_value_type: ["string", "number", "boolean", "array", "object"],
       store_role: ["founder", "manager", "employee"],
       system_role: ["admin", "customer"],
+      repair_order_status: [
+        "pending",
+        "diagnosing",
+        "quoting",
+        "awaiting_approval",
+        "awaiting_parts",
+        "repairing",
+        "ready",
+        "delivered",
+        "cancelled",
+      ],
+      repair_item_type: ["service", "part"],
     },
   },
 } as const

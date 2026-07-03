@@ -36,21 +36,36 @@ export function BrandSelectField({ form }: BrandSelectFieldProps) {
                     <Select
                         onValueChange={(newBrandId: string) => {
                             const currentName = form.getValues('name') || '';
+                            const currentSku = form.getValues('sku') || '';
                             const oldBrandId = form.getValues('brand_id');
-                            const oldBrandName = brands.find((b: any) => b.id === oldBrandId)?.name || '';
-                            const newBrandName = brands.find((b: any) => b.id === newBrandId)?.name || '';
+                            const oldBrand = brands.find((b: any) => b.id === oldBrandId);
+                            const newBrand = brands.find((b: any) => b.id === newBrandId);
+                            const oldBrandName = oldBrand?.name || '';
+                            const newBrandName = newBrand?.name || '';
+                            const oldAbbr = oldBrand?.abbreviation || '';
+                            const newAbbr = newBrand?.abbreviation || '';
 
+                            // Auto-update product name
                             let nameWithoutBrand = currentName;
                             if (oldBrandName && currentName === oldBrandName) {
                                 nameWithoutBrand = '';
                             } else if (oldBrandName && currentName.startsWith(oldBrandName + ' ')) {
                                 nameWithoutBrand = currentName.substring(oldBrandName.length + 1);
                             }
-
                             const newName = newBrandName ? `${newBrandName} ${nameWithoutBrand}` : nameWithoutBrand;
+
+                            // Auto-update SKU with abbreviation
+                            let skuWithoutAbbr = currentSku;
+                            if (oldAbbr && currentSku === oldAbbr) {
+                                skuWithoutAbbr = '';
+                            } else if (oldAbbr && currentSku.startsWith(oldAbbr)) {
+                                skuWithoutAbbr = currentSku.substring(oldAbbr.length);
+                            }
+                            const newSku = newAbbr ? `${newAbbr}${skuWithoutAbbr}` : skuWithoutAbbr;
 
                             field.onChange(newBrandId);
                             form.setValue('name', newName);
+                            form.setValue('sku', newSku);
                         }}
                         value={field.value || ""}
                         disabled={isLoadingBrands}
@@ -64,7 +79,7 @@ export function BrandSelectField({ form }: BrandSelectFieldProps) {
                             <SelectItem value="none" disabled className="hidden">無</SelectItem>
                             {brands.map((brand: any) => (
                                 <SelectItem key={brand.id} value={brand.id}>
-                                    {brand.name}
+                                    {brand.abbreviation ? `${brand.name} (${brand.abbreviation})` : brand.name}
                                 </SelectItem>
                             ))}
                         </SelectContent>

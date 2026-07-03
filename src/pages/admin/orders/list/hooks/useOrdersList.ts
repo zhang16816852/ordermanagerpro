@@ -144,7 +144,6 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
     mutationFn: async (items: any[]) => {
       if (!user) throw new Error('未登入');
 
-      // 分批處理：已存在出貨池的累加數量，不存在的則新增
       const orderItemIds = items.map(i => i.itemId);
       const { data: existingItems } = await supabase
         .from('shipping_pool')
@@ -155,8 +154,10 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
 
       const toInsert: any[] = [];
       const toUpdate: { id: string; quantity: number }[] = [];
+      const orderIdsToLock = new Set<string>();
 
       for (const item of items) {
+        if (item.orderId) orderIdsToLock.add(item.orderId);
         const existing = existingMap.get(item.itemId);
         if (existing) {
           toUpdate.push({ id: existing.id, quantity: existing.quantity + item.quantity });
@@ -181,6 +182,16 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
           .update({ quantity: update.quantity })
           .eq('id', update.id);
         if (error) throw error;
+      }
+
+      // 自動鎖定訂單：將相關訂單設為 processing
+      if (orderIdsToLock.size > 0) {
+        const { error: lockError } = await supabase
+          .from('orders')
+          .update({ status: 'processing' })
+          .in('id', Array.from(orderIdsToLock))
+          .eq('status', 'pending');
+        if (lockError) throw lockError;
       }
     },
     onSuccess: (_, variables) => {

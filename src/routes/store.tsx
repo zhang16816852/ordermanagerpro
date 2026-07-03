@@ -11,6 +11,10 @@ import StoreNotifications from "@/pages/store/Notifications";
 import StoreAccounting from "@/pages/store/Accounting";
 import MarketCreatePage from "@/pages/market/create";
 import MyListingsPage from "@/pages/market/my-listings";
+import StoreRepairOrders from "@/pages/store/repair-orders/index";
+import StoreRepairOrderNew from "@/pages/store/repair-orders/new";
+import StoreRepairOrderEdit from "@/pages/store/repair-orders/new";
+import StoreRepairOrderDetail from "@/pages/store/repair-orders/detail";
 export const storeRoutes = [
     { path: "/dashboard", element: <StoreDashboard /> },
     { path: "/orders", element: <StoreOrderList /> },
@@ -25,4 +29,8 @@ export const storeRoutes = [
     { path: "/accounting", element: <StoreAccounting /> },
     { path: "/market/create", element: <MarketCreatePage /> },
     { path: "/market/my-listings", element: <MyListingsPage /> },
+    { path: "/dashboard/repair-orders", element: <StoreRepairOrders /> },
+    { path: "/dashboard/repair-orders/new", element: <StoreRepairOrderNew /> },
+    { path: "/dashboard/repair-orders/:id", element: <StoreRepairOrderDetail /> },
+    { path: "/dashboard/repair-orders/:id/edit", element: <StoreRepairOrderEdit /> },
 ];

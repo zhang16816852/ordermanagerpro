@@ -47,6 +47,7 @@ export interface SpecDefinition {
 export interface Brand {
     id: string;
     name: string;
+    abbreviation: string | null;
     description: string | null;
     sort_order: number;
 }

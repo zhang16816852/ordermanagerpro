@@ -7,16 +7,16 @@ CREATE OR REPLACE FUNCTION public.ship_from_pool(
   p_notes TEXT DEFAULT NULL
 )
 RETURNS JSONB
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions
 AS $$
 DECLARE
   v_store_id UUID;
   v_sales_note_id UUID;
-  v_access_token TEXT;
+  v_access_token UUID;
   v_item RECORD;
   v_new_shipped_qty INTEGER;
   v_new_status public.order_item_status;
-  v_affected_order_ids UUID[];
+  v_affected_order_ids UUID[] := '{}';
   v_order_id UUID;
   v_all_shipped BOOLEAN;
   v_result JSONB;
@@ -25,7 +25,7 @@ BEGIN
 
   FOR v_store_id IN SELECT unnest(p_store_ids) LOOP
     -- 1. 產生 access_token
-    v_access_token := encode(gen_random_bytes(24), 'base64');
+    v_access_token := gen_random_uuid();
 
     -- 2. 建立銷售單 (status = 'shipped')
     INSERT INTO public.sales_notes (store_id, created_by, status, shipped_at, notes, access_token)
