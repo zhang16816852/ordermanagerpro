@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -91,10 +92,13 @@ export function SpecLibraryTab() {
         { key: 'sort_order', header: '排序', width: '80px', align: 'right' },
     ];
 
+    const [searchParams, setSearchParams] = useSearchParams();
     const [isSpecDialogOpen, setIsSpecDialogOpen] = useState(false);
     const [editingSpec, setEditingSpec] = useState<SpecDefinition | null>(null);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [viewMode, setViewMode] = useState<'grid' | 'tree'>('grid');
+    const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+    const [viewMode, setViewMode] = useState<'grid' | 'tree'>(
+        searchParams.get('view') === 'tree' ? 'tree' : 'grid'
+    );
     const [specForm, setSpecForm] = useState<Partial<SpecDefinition>>({
         name: '',
         type: 'select',
@@ -347,14 +351,32 @@ export function SpecLibraryTab() {
         }
     };
 
+    const handleViewModeChange = (mode: 'grid' | 'tree') => {
+        setViewMode(mode);
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set("view", mode);
+            return next;
+        }, { replace: true });
+    };
+    const handleSearchChange = (val: string) => {
+        setSearchQuery(val);
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            if (val) next.set("search", val);
+            else next.delete("search");
+            return next;
+        }, { replace: true });
+    };
+
     return (
         <TooltipProvider>
             <div className="space-y-6 pb-20">
                 <Toolbar
                     viewMode={viewMode}
-                    onViewModeChange={setViewMode}
+                    onViewModeChange={handleViewModeChange}
                     searchQuery={searchQuery}
-                    onSearchChange={setSearchQuery}
+                    onSearchChange={handleSearchChange}
                     onAdd={() => openSpecDialog()}
                     onExportJSON={handleSpecExportJSON}
                     onImportJSON={handleImportJSONWithPreview}

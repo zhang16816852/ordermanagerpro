@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -195,10 +196,25 @@ export function CategoryTab() {
         }
     };
 
+    const [searchParams, setSearchParams] = useSearchParams();
+    const initExpanded = searchParams.get('expanded')?.split(',').filter(Boolean) || [];
     // Dialog 狀態
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+    const [expandedIds, setExpandedIdsState] = useState<Set<string>>(new Set(initExpanded));
+    const setExpandedIds: React.Dispatch<React.SetStateAction<Set<string>>> = (val) => {
+        setExpandedIdsState((prev) => {
+            const next = typeof val === 'function' ? (val as (prev: Set<string>) => Set<string>)(prev) : val;
+            const str = Array.from(next).join(',');
+            setSearchParams((p) => {
+                const s = new URLSearchParams(p);
+                if (str) s.set('expanded', str);
+                else s.delete('expanded');
+                return s;
+            }, { replace: true });
+            return next;
+        });
+    };
 
     // 表單狀態
     const [name, setName] = useState('');

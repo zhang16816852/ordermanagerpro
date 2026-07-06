@@ -81,6 +81,11 @@ export default function CartPanel({
                       <p className="font-semibold text-sm break-words leading-tight">
                         {item.productName || item.name}
                       </p>
+                      {item.variantName && (
+                        <p className="text-xs font-medium text-muted-foreground mt-0.5">
+                          {item.variantName}
+                        </p>
+                      )}
                       {item.options && item.options.length > 0 && (
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {item.options.join(' / ')}
@@ -157,6 +162,11 @@ export default function CartPanel({
                           <div className="font-semibold text-sm">
                             {item.productName || item.name}
                           </div>
+                          {item.variantName && (
+                            <div className="text-xs font-medium text-muted-foreground">
+                              {item.variantName}
+                            </div>
+                          )}
                           {item.options && item.options.length > 0 && (
                             <div className="text-xs text-muted-foreground">
                               {item.options.join(' / ')}

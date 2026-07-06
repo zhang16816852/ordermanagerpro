@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -14,9 +14,10 @@ import { useAuth } from '@/hooks/useAuth';
 export default function AdminRepairOrders() {
   const navigate = useNavigate();
   const { currentStoreId } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { orders, isLoading, updateStatusMutation } = useRepairOrders();
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || 'all');
 
   const filtered = useMemo(() => {
     if (!orders) return [];
@@ -145,7 +146,15 @@ export default function AdminRepairOrders() {
           <Input
             placeholder="搜尋客戶、單號、IMEI..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                if (e.target.value) next.set("search", e.target.value);
+                else next.delete("search");
+                return next;
+              }, { replace: true });
+            }}
             className="pl-9 bg-background"
           />
         </div>
@@ -155,7 +164,15 @@ export default function AdminRepairOrders() {
               key={key}
               variant={statusFilter === key ? 'default' : 'outline'}
               className="cursor-pointer"
-              onClick={() => setStatusFilter(key)}
+              onClick={() => {
+                setStatusFilter(key);
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev);
+                  if (key !== 'all') next.set("status", key);
+                  else next.delete("status");
+                  return next;
+                }, { replace: true });
+              }}
             >
               {label} {statusCounts[key] !== undefined ? `(${statusCounts[key]})` : ''}
             </Badge>

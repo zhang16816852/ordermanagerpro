@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useProductCache } from '@/hooks/useProductCache';
@@ -27,9 +28,10 @@ interface PriceEntry {
 
 export default function AdminStorePricing() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { products, isLoading: productsLoading, forceRefresh } = useProductCache();
-  const [search, setSearch] = useState('');
-  const [selectedStore, setSelectedStore] = useState<string>('');
+  const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [selectedStore, setSelectedStore] = useState<string>(searchParams.get('store') || '');
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [priceEntries, setPriceEntries] = useState<Record<string, PriceEntry>>({});
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
@@ -260,7 +262,16 @@ export default function AdminStorePricing() {
           <StorePicker
             stores={stores}
             value={selectedStore}
-            onChange={(v) => setSelectedStore(v as string)}
+            onChange={(v) => {
+              const val = v as string;
+              setSelectedStore(val);
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                if (val) next.set("store", val);
+                else next.delete("store");
+                return next;
+              }, { replace: true });
+            }}
             valueField="brand"
             placeholder="選擇連鎖客戶..."
             searchPlaceholder="搜尋連鎖客戶..."
@@ -312,7 +323,15 @@ export default function AdminStorePricing() {
           <Input
             placeholder="搜尋產品名稱或 SKU..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                if (e.target.value) next.set("search", e.target.value);
+                else next.delete("search");
+                return next;
+              }, { replace: true });
+            }}
             className="pl-9"
           />
         </div>

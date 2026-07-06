@@ -116,8 +116,7 @@ export function ProductRowItem({
 }: ProductRowItemProps) {
     const hasVariants = product.has_variants && variants.length > 0;
     
-    // v4.9 獲取顯示品牌名稱 (優先從字典對照，無則回退至舊有 brand 欄位)
-    const displayBrand = (product.brand_id ? brandMap[product.brand_id] : (product as any).brand) || '-';
+    const displayBrand = (product.brand_id ? brandMap[product.brand_id] : null) || '-';
 
     return (
         <Collapsible open={isExpanded} onOpenChange={onToggleExpand} asChild>

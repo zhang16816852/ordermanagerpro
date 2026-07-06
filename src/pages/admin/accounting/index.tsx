@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -31,8 +32,9 @@ import { PaymentDialog } from './components/PaymentDialog';
 import { AccountingEntry } from './types';
 
 export default function AdminAccounting() {
-  const [selectedMonth, setSelectedMonth] = useState(() => format(new Date(), 'yyyy-MM'));
-  const [activeTab, setActiveTab] = useState('entries');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedMonth, setSelectedMonth] = useState(searchParams.get('month') || format(new Date(), 'yyyy-MM'));
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'entries');
 
   // Dialog States
   const [entryDialogOpen, setEntryDialogOpen] = useState(false);
@@ -74,7 +76,14 @@ export default function AdminAccounting() {
           <p className="text-muted-foreground">管理收入、支出和帳戶餘額</p>
         </div>
         <div className="flex gap-2">
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+          <Select value={selectedMonth} onValueChange={(v) => {
+            setSelectedMonth(v);
+            setSearchParams((prev) => {
+              const next = new URLSearchParams(prev);
+              next.set("month", v);
+              return next;
+            }, { replace: true });
+          }}>
             <SelectTrigger className="w-40 bg-background">
               <SelectValue />
             </SelectTrigger>
@@ -93,7 +102,14 @@ export default function AdminAccounting() {
       <StatsCards entries={entries} accounts={accounts} />
 
       {/* Main Content Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs value={activeTab} onValueChange={(v) => {
+        setActiveTab(v);
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("tab", v);
+          return next;
+        }, { replace: true });
+      }} className="space-y-4">
         <TabsList className="bg-muted/50 p-1">
           <TabsTrigger value="entries">收支明細</TabsTrigger>
           <TabsTrigger value="accounts">帳戶管理</TabsTrigger>

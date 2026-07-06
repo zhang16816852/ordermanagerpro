@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useSupabaseAction } from '@/hooks/useSupabaseAction';
 import { useState } from 'react';
 
 export function useInventory() {
-    const [search, setSearch] = useState('');
-    const [lowStockOnly, setLowStockOnly] = useState(false);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [search, setSearch] = useState(searchParams.get('search') || '');
+    const [lowStockOnly, setLowStockOnly] = useState(searchParams.get('lowStock') === 'true');
 
     // 獲取所有庫存資料，包含關連的產品與變體資訊
     const { data: inventory = [], isLoading } = useQuery({
@@ -85,13 +87,33 @@ export function useInventory() {
         }
     );
 
+    const updateSearch = (value: string) => {
+        setSearch(value);
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            if (value) next.set('search', value);
+            else next.delete('search');
+            return next;
+        }, { replace: true });
+    };
+
+    const updateLowStockOnly = (value: boolean) => {
+        setLowStockOnly(value);
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            if (value) next.set('lowStock', 'true');
+            else next.delete('lowStock');
+            return next;
+        }, { replace: true });
+    };
+
     return {
         inventory: filteredData,
         isLoading,
         search,
-        setSearch,
+        setSearch: updateSearch,
         lowStockOnly,
-        setLowStockOnly,
+        setLowStockOnly: updateLowStockOnly,
         updateInventory
     };
 }

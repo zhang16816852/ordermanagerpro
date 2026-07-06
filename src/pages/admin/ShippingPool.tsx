@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -45,8 +46,9 @@ interface GroupedByStore {
 export default function AdminShippingPool() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [storeFilter, setStoreFilter] = useState<string>("all");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [search, setSearch] = useState(searchParams.get("search") || "");
+  const [storeFilter, setStoreFilter] = useState<string>(searchParams.get("store") || "all");
   const [selectedStores, setSelectedStores] = useState<Set<string>>(new Set());
   const [showShipDialog, setShowShipDialog] = useState(false);
   const [notes, setNotes] = useState("");
@@ -232,11 +234,27 @@ export default function AdminShippingPool() {
               <Input
                 placeholder="搜尋店鋪或產品..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    if (e.target.value) next.set("search", e.target.value);
+                    else next.delete("search");
+                    return next;
+                  }, { replace: true });
+                }}
                 className="pl-10"
               />
             </div>
-            <Select value={storeFilter} onValueChange={setStoreFilter}>
+            <Select value={storeFilter} onValueChange={(v) => {
+              setStoreFilter(v);
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                if (v && v !== "all") next.set("store", v);
+                else next.delete("store");
+                return next;
+              }, { replace: true });
+            }}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="篩選店鋪" />
               </SelectTrigger>

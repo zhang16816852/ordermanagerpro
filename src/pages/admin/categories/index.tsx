@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FolderTree, Database, Tag } from 'lucide-react';
 import { CategoryTab } from './components/CategoryTab';
@@ -7,7 +8,8 @@ import { BrandsTab } from './components/BrandsTab';
 
 // 規格與分類管理主頁面
 export default function AdminCategories() {
-    const [activeTab, setActiveTab] = useState('categories');
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'categories');
 
     return (
         <div className="space-y-6">
@@ -20,7 +22,14 @@ export default function AdminCategories() {
             </div>
 
             {/* 三個主要 Tab */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <Tabs value={activeTab} onValueChange={(v) => {
+                setActiveTab(v);
+                setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    next.set("tab", v);
+                    return next;
+                }, { replace: true });
+            }} className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="categories" className="flex items-center gap-2">
                         <FolderTree className="h-4 w-4" />

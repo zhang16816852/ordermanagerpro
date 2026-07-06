@@ -112,7 +112,7 @@ export function OrderTableView({
                       />
                     </TableCell>
                   )}
-                  <TableCell className="font-mono text-xs font-medium">{orderId.slice(0, 12)}</TableCell>
+                  <TableCell className="font-mono text-xs font-medium">{orderId.slice(0, 16)}</TableCell>
                   <TableCell>
                     <div className="font-medium">{order.stores?.name}</div>
                     {order.stores?.code && <div className="text-xs text-muted-foreground">{order.stores.code}</div>}

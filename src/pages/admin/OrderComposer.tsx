@@ -12,25 +12,15 @@ import { ProductWithPricing, Category } from "@/types/product";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { StorePicker } from "@/components/ui/StorePicker";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Sheet,
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { toast } from "sonner";
-import { Send, ShoppingCart, Filter, Copy, Check } from "lucide-react";
+import { ShoppingCart, Filter } from "lucide-react";
 import ProductCatalog from "@/components/products/catalog/ProductCatalog";
 import CartPanel from "@/components/order/CartPanel";
 import { CatalogSidebar } from "@/components/products/catalog/CatalogSidebar";
@@ -38,9 +28,8 @@ import { CatalogSidebar } from "@/components/products/catalog/CatalogSidebar";
 export default function AdminOrderComposer() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [selectedStoreId, setSelectedStoreId] = useState<string>("");
-  const [createdOrder, setCreatedOrder] = useState<{ id: string; code?: string | null; access_token: string } | null>(null);
-  const [isCopied, setIsCopied] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedStoreId, setSelectedStoreId] = useState<string>(searchParams.get("storeId") || "");
 
   const { data: stores = [], isLoading: storesLoading } = useQuery({
     queryKey: ["admin-stores-list"],
@@ -58,12 +47,15 @@ export default function AdminOrderComposer() {
   const { totalItems } = useStoreDraft(selectedStoreId || "");
   const { fetchData: fetchDeviceData } = useDeviceModelStore();
 
-  const [viewMode, setViewMode] = useState<"products" | "variants" | "gallery" | "table">("products");
-  const [searchParams, setSearchParams] = useSearchParams();
-
   const search = searchParams.get("search") || "";
   const categoryNameInUrl = searchParams.get("category");
   const selectedBrands = searchParams.get("brands")?.split(",").filter(Boolean) || [];
+  const viewModeParam = searchParams.get("view");
+  const [viewMode, setViewMode] = useState<"products" | "variants" | "gallery" | "table">(
+    (["products", "variants", "gallery", "table"].includes(viewModeParam || "")
+      ? viewModeParam
+      : "products") as "products" | "variants" | "gallery" | "table"
+  );
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["categories"],
@@ -143,30 +135,20 @@ export default function AdminOrderComposer() {
     }));
   }, [storefrontItems]) as unknown as ProductWithPricing[];
 
-  const { createOrder, isPending, items, notes, totalAmount, updateNotes } = useCreateOrder({
+  const { items, notes, totalAmount, updateNotes } = useCreateOrder({
     storeId: selectedStoreId,
     userId: user?.id ?? "",
     sourceType: "admin_proxy",
-    queryKeyToInvalidate: ["admin-orders"],
-    onSuccess: (data) => {
-      setCreatedOrder({ id: data.id, code: data.code, access_token: data.access_token });
-    },
   });
 
   const handleStoreChange = (storeId: string) => {
     setSelectedStoreId(storeId);
-  };
-
-  const getShareLink = () => {
-    if (!createdOrder) return "";
-    return `${window.location.origin}/share/order/${createdOrder.code || createdOrder.id}?token=${createdOrder.access_token}`;
-  };
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(getShareLink());
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
-    toast.success("連結已複製");
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (storeId) next.set("storeId", storeId);
+      else next.delete("storeId");
+      return next;
+    }, { replace: true });
   };
 
   return (
@@ -240,46 +222,26 @@ export default function AdminOrderComposer() {
                 </Sheet>
 
                 <div className="flex bg-muted p-1 rounded-lg">
-                  <button
-                    onClick={() => setViewMode("products")}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
-                      viewMode === "products"
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    產品
-                  </button>
-                  <button
-                    onClick={() => setViewMode("variants")}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
-                      viewMode === "variants"
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    單品
-                  </button>
-                  <button
-                    onClick={() => setViewMode("gallery")}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
-                      viewMode === "gallery"
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    圖卡
-                  </button>
-                  <button
-                    onClick={() => setViewMode("table")}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
-                      viewMode === "table"
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    表格
-                  </button>
+                  {(["products", "variants", "gallery", "table"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => {
+                        setViewMode(mode);
+                        setSearchParams((prev) => {
+                          const next = new URLSearchParams(prev);
+                          next.set("view", mode);
+                          return next;
+                        }, { replace: true });
+                      }}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                        viewMode === mode
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {mode === "products" ? "產品" : mode === "variants" ? "單品" : mode === "gallery" ? "圖卡" : "表格"}
+                    </button>
+                  ))}
                 </div>
 
                 <Sheet>
@@ -299,11 +261,13 @@ export default function AdminOrderComposer() {
                   </SheetTrigger>
                   <SheetContent
                     side="right"
-                    className="w-full sm:max-w-[500px] p-0 h-full flex flex-col"
+                    className="w-full sm:max-w-[500px] p-0 flex flex-col"
                   >
-                    <CartPanel storeId={selectedStoreId} showCheckoutButton={false} />
+                    <div className="flex-1 min-h-0 overflow-y-auto">
+                      <CartPanel storeId={selectedStoreId} showCheckoutButton={false} />
+                    </div>
                     {items.length > 0 && (
-                      <div className="p-4 border-t space-y-4">
+                      <div className="shrink-0 p-4 border-t space-y-4">
                         <Textarea
                           placeholder="訂單備註..."
                           value={notes}
@@ -317,11 +281,9 @@ export default function AdminOrderComposer() {
                         <Button
                           size="lg"
                           className="w-full"
-                          onClick={() => createOrder()}
-                          disabled={isPending}
+                          onClick={() => navigate(`/admin/orders/checkout?storeId=${selectedStoreId}`)}
                         >
-                          <Send className="h-4 w-4 mr-2" />
-                          {isPending ? "處理中..." : "送出訂單"}
+                          確認訂單
                         </Button>
                       </div>
                     )}
@@ -349,25 +311,6 @@ export default function AdminOrderComposer() {
         </div>
       )}
 
-      <Dialog open={!!createdOrder} onOpenChange={(open) => !open && navigate("/admin/orders")}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>訂單建立成功</DialogTitle>
-            <DialogDescription>
-              您可以複製以下連結並傳送給客戶，以便他們查看訂單詳情。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center space-x-2">
-            <Input value={getShareLink()} readOnly />
-            <Button size="icon" variant="outline" onClick={copyToClipboard}>
-              {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => navigate("/admin/orders")}>完成</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

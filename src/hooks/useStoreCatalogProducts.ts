@@ -96,9 +96,9 @@ export function useStoreCatalogProducts({
         }
         productQuery = productQuery.or(searchOr.join(","));
       }
-      // brands filter: only exact match on brand column
+      // brands filter: only exact match on brand_id column
       if (brands && brands.length > 0) {
-        productQuery = productQuery.in("brand", brands);
+        productQuery = productQuery.in("brand_id", brands);
       }
 
       const { data: products, count: totalCount, error: productsError } = await productQuery;

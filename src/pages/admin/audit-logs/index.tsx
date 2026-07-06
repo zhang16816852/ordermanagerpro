@@ -1,10 +1,13 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { History, Search, Filter, Eye, User, FileJson } from 'lucide-react';
+import { History, Search, Filter, Eye, User, FileJson, Store } from 'lucide-react';
 import { DataTable } from '@/components/shared/DataTable';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { useAuditLogs, AuditLogItem } from './hooks/useAuditLogs';
@@ -12,17 +15,29 @@ import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 
 export default function AdminAuditLogs() {
-    const [page, setPage] = useState(1);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [page, setPage] = useState(parseInt(searchParams.get('page') || '1', 10));
     const [pageSize] = useState(15);
-    const [entityType, setEntityType] = useState('all');
-    const [action, setAction] = useState('all');
+    const [entityType, setEntityType] = useState(searchParams.get('entityType') || 'all');
+    const [action, setAction] = useState(searchParams.get('action') || 'all');
+    const [storeFilter, setStoreFilter] = useState(searchParams.get('storeId') || 'all');
     const [selectedLog, setSelectedLog] = useState<AuditLogItem | null>(null);
+
+    const { data: stores } = useQuery({
+        queryKey: ['admin-stores'],
+        queryFn: async () => {
+            const { data, error } = await supabase.from('stores').select('id, name, code');
+            if (error) throw error;
+            return data;
+        },
+    });
 
     const { data, isLoading } = useAuditLogs({
         page,
         pageSize,
         entityType,
-        action
+        action,
+        storeId: storeFilter !== 'all' ? storeFilter : undefined,
     });
 
     const columns = [
@@ -97,7 +112,15 @@ export default function AdminAuditLogs() {
                 <CardHeader className="pb-4">
                     <div className="flex flex-col md:flex-row gap-4">
                         <div className="flex-1">
-                            <Select value={entityType} onValueChange={setEntityType}>
+                            <Select value={entityType} onValueChange={(v) => {
+                                setEntityType(v);
+                                setSearchParams((prev) => {
+                                    const next = new URLSearchParams(prev);
+                                    if (v !== 'all') next.set("entityType", v);
+                                    else next.delete("entityType");
+                                    return next;
+                                }, { replace: true });
+                            }}>
                                 <SelectTrigger className="w-full md:w-64 bg-background">
                                     <Filter className="mr-2 h-4 w-4" />
                                     <SelectValue placeholder="篩選實體類型" />
@@ -112,8 +135,37 @@ export default function AdminAuditLogs() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="flex gap-2">
-                            <Select value={action} onValueChange={setAction}>
+                        <div className="flex gap-2 flex-wrap">
+                            <Select value={storeFilter} onValueChange={(v) => {
+                                setStoreFilter(v);
+                                setPage(1);
+                                setSearchParams((prev) => {
+                                    const next = new URLSearchParams(prev);
+                                    if (v !== 'all') next.set("storeId", v);
+                                    else next.delete("storeId");
+                                    return next;
+                                }, { replace: true });
+                            }}>
+                                <SelectTrigger className="w-48 bg-background">
+                                    <Store className="mr-2 h-4 w-4" />
+                                    <SelectValue placeholder="篩選店家" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">所有店家</SelectItem>
+                                    {stores?.map((s) => (
+                                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Select value={action} onValueChange={(v) => {
+                                setAction(v);
+                                setSearchParams((prev) => {
+                                    const next = new URLSearchParams(prev);
+                                    if (v !== 'all') next.set("action", v);
+                                    else next.delete("action");
+                                    return next;
+                                }, { replace: true });
+                            }}>
                                 <SelectTrigger className="w-40 bg-background">
                                     <SelectValue placeholder="動作" />
                                 </SelectTrigger>
@@ -136,7 +188,15 @@ export default function AdminAuditLogs() {
                             pageIndex: page - 1,
                             pageSize: pageSize,
                             pageCount: Math.ceil((data?.total || 0) / pageSize),
-                            onPageChange: (idx) => setPage(idx + 1)
+                            onPageChange: (idx) => {
+                        const p = idx + 1;
+                        setPage(p);
+                        setSearchParams((prev) => {
+                            const next = new URLSearchParams(prev);
+                            next.set("page", p.toString());
+                            return next;
+                        }, { replace: true });
+                    }
                         }}
                     />
                 </CardContent>

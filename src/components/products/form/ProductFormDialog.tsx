@@ -141,7 +141,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
         aria-describedby={undefined}
       >
         <DialogHeader className="p-6 pb-0">
-          <DialogTitle>{initialData ? `編輯產品: ${initialData.name}` : '新增產品'}</DialogTitle>
+          <DialogTitle>{initialData ? `編輯產品: ${form.watch('name') || initialData.name}` : '新增產品'}</DialogTitle>
           <DialogDescription>
             請在此填寫產品的基本資訊、型號與規格。完成後點擊「儲存修改」按鈕以同步資料。
           </DialogDescription>

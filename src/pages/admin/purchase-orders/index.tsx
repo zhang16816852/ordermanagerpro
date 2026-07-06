@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { OrderListTab } from './components/OrderListTab';
 import { SupplierTab } from './components/SupplierTab';
 import { OrderForm } from './components/OrderForm';
@@ -18,7 +19,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ClipboardList, Users, Plus } from 'lucide-react';
 
 export default function AdminPurchaseOrders() {
-  const [activeTab, setActiveTab] = useState('orders');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'orders');
   const [viewingOrder, setViewingOrder] = useState<PurchaseOrder | null>(null);
   const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null);
   const [createOrderOpen, setCreateOrderOpen] = useState(false);
@@ -60,7 +62,14 @@ export default function AdminPurchaseOrders() {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs value={activeTab} onValueChange={(v) => {
+        setActiveTab(v);
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("tab", v);
+          return next;
+        }, { replace: true });
+      }} className="space-y-4">
         <TabsList>
           <TabsTrigger value="orders" className="flex items-center gap-2">
             <ClipboardList className="h-4 w-4" /> 採購單

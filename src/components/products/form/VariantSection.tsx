@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Layers, Pencil, Trash2, ShoppingCart, CheckSquare, Edit3 } from 'lucide-react';
+import { Plus, Layers, Pencil, Trash2, ShoppingCart, CheckSquare, Edit3, ReplaceAll, Search } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -41,6 +41,11 @@ export function VariantSection({ product }: { product: any }) {
   const [selectedVariantIds, setSelectedVariantIds] = useState<Set<string>>(new Set());
   const [isBatchEditOpen, setIsBatchEditOpen] = useState(false);
   const [batchEditEntries, setBatchEditEntries] = useState<Array<{ field: string; value: string }>>([]);
+  const [isReplaceOpen, setIsReplaceOpen] = useState(false);
+  const [replaceScope, setReplaceScope] = useState<'all' | 'selected'>('selected');
+  const [replaceFind, setReplaceFind] = useState('');
+  const [replaceWith, setReplaceWith] = useState('');
+  const [replaceFields, setReplaceFields] = useState<Set<string>>(new Set(['name', 'option_1', 'option_2', 'option_3', 'sku']));
   const queryClient = useQueryClient();
   const store = useOrderDraftStore();
 
@@ -120,6 +125,69 @@ export function VariantSection({ product }: { product: any }) {
     { value: 'barcode', label: '條碼', type: 'text' },
   ];
 
+  const REPLACE_FIELDS: Array<{ value: string; label: string }> = [
+    { value: 'name', label: '變體名稱' },
+    { value: 'option_1', label: '選項1' },
+    { value: 'option_2', label: '選項2' },
+    { value: 'option_3', label: '顏色' },
+    { value: 'sku', label: 'SKU' },
+    { value: 'barcode', label: '條碼' },
+  ];
+
+  const replacePreview = useMemo(() => {
+    if (!variants || !replaceFind || replaceFields.size === 0) return [];
+
+    const targetVariants = replaceScope === 'selected'
+      ? variants.filter(v => selectedVariantIds.has(v.id))
+      : variants;
+
+    return targetVariants.filter(v => {
+      for (const field of replaceFields) {
+        const val = (v as any)[field];
+        if (typeof val === 'string' && val.includes(replaceFind)) return true;
+      }
+      return false;
+    });
+  }, [variants, replaceFind, replaceFields, replaceScope, selectedVariantIds]);
+
+  const handleReplace = async () => {
+    if (!replaceFind || replaceFields.size === 0 || !variants) return;
+
+    const targetVariants = replaceScope === 'selected'
+      ? variants.filter(v => selectedVariantIds.has(v.id))
+      : variants;
+
+    const changedVariants: any[] = [];
+
+    for (const v of targetVariants) {
+      let changed = false;
+      const newV = { ...v };
+      for (const field of replaceFields) {
+        const oldVal = (v as any)[field];
+        if (typeof oldVal === 'string' && oldVal.includes(replaceFind)) {
+          (newV as any)[field] = oldVal.replaceAll(replaceFind, replaceWith);
+          changed = true;
+        }
+      }
+      if (changed) changedVariants.push(newV);
+    }
+
+    if (changedVariants.length === 0) {
+      toast.info('沒有符合的變體需要取代');
+      return;
+    }
+
+    const { error } = await supabase.from('product_variants').upsert(changedVariants, { onConflict: 'id' });
+    if (error) {
+      toast.error(`取代失敗：${error.message}`);
+    } else {
+      toast.success(`已取代 ${changedVariants.length} 個變體`);
+      setIsReplaceOpen(false);
+      setSelectedVariantIds(new Set());
+      refreshVariants();
+    }
+  };
+
   const handleBatchEdit = async () => {
     const updates: Record<string, any> = {};
     for (const entry of batchEditEntries) {
@@ -170,6 +238,9 @@ export function VariantSection({ product }: { product: any }) {
             <Layers className="mr-2 h-4 w-4" />
             {variants && variants.length > 0 ? '批次編輯 / 產生' : '批次產生'}
           </Button>
+          <Button size="sm" variant="outline" onClick={() => { setReplaceScope('all'); setIsReplaceOpen(true); }}>
+            <ReplaceAll className="mr-2 h-4 w-4" /> 取代全部
+          </Button>
           <Button size="sm" onClick={() => { setEditingVariant(null); setIsDialogOpen(true); }}>
             <Plus className="mr-2 h-4 w-4" /> 新增單一
           </Button>
@@ -185,6 +256,10 @@ export function VariantSection({ product }: { product: any }) {
             <Button variant="outline" size="sm" onClick={() => { setBatchEditEntries([]); setIsBatchEditOpen(true); }}>
               <Edit3 className="mr-1 h-4 w-4" />
               批次編輯
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => { setReplaceScope('selected'); setIsReplaceOpen(true); }}>
+              <ReplaceAll className="mr-1 h-4 w-4" />
+              取代所選
             </Button>
             <Button variant="destructive" size="sm" onClick={handleBatchDelete}>
               <Trash2 className="mr-1 h-4 w-4" />
@@ -380,6 +455,138 @@ export function VariantSection({ product }: { product: any }) {
             <Button variant="outline" onClick={() => setIsBatchEditOpen(false)}>取消</Button>
             <Button onClick={handleBatchEdit}>
               更新 {selectedVariantIds.size} 個變體
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 取代對話框 */}
+      <Dialog open={isReplaceOpen} onOpenChange={setIsReplaceOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>批次取代變體欄位</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2 flex-1 overflow-y-auto">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Search className="h-4 w-4" />
+              作用範圍：
+              {replaceScope === 'selected'
+                ? `已選取 ${selectedVariantIds.size} 個變體`
+                : `全部 ${variants?.length || 0} 個變體`
+              }
+              {selectedVariantIds.size > 0 && (
+                <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setReplaceScope(replaceScope === 'all' ? 'selected' : 'all')}>
+                  {replaceScope === 'all' ? '改為已選取' : '改為全部'}
+                </Button>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>目標欄位</Label>
+              <div className="flex flex-wrap gap-3">
+                {REPLACE_FIELDS.map(f => (
+                  <label key={f.value} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={replaceFields.has(f.value)}
+                      onChange={() => {
+                        setReplaceFields(prev => {
+                          const next = new Set(prev);
+                          if (next.has(f.value)) next.delete(f.value);
+                          else next.add(f.value);
+                          return next;
+                        });
+                      }}
+                    />
+                    {f.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label>尋找文字</Label>
+                <Input
+                  placeholder="輸入要取代的文字..."
+                  value={replaceFind}
+                  onChange={e => setReplaceFind(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>取代為</Label>
+                <Input
+                  placeholder="輸入新文字..."
+                  value={replaceWith}
+                  onChange={e => setReplaceWith(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {replaceFind && replaceFields.size > 0 && (
+              <div className="space-y-2">
+                <Label>預覽（符合 {replacePreview.length} 個變體）</Label>
+                <div className="border rounded-md max-h-60 overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>變體</TableHead>
+                        <TableHead>變更內容</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {replacePreview.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={2} className="text-center text-muted-foreground py-8">
+                            無符合項目
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        replacePreview.map(v => {
+                          const changes: { field: string; oldVal: string; newVal: string }[] = [];
+                          for (const field of replaceFields) {
+                            const val = (v as any)[field];
+                            if (typeof val === 'string' && val.includes(replaceFind)) {
+                              changes.push({
+                                field: REPLACE_FIELDS.find(f => f.value === field)?.label || field,
+                                oldVal: val,
+                                newVal: val.replaceAll(replaceFind, replaceWith),
+                              });
+                            }
+                          }
+                          return (
+                            <TableRow key={v.id}>
+                              <TableCell className="font-medium">{v.name}</TableCell>
+                              <TableCell>
+                                <div className="text-xs space-y-0.5">
+                                  {changes.map((c, i) => (
+                                    <div key={i} className="text-muted-foreground">
+                                      <span className="font-medium">{c.field}</span>:
+                                      "<span className="line-through">{c.oldVal}</span>"
+                                      → "<span className="text-primary">{c.newVal}</span>"
+                                    </div>
+                                  ))}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button variant="outline" onClick={() => setIsReplaceOpen(false)}>取消</Button>
+            <Button
+              onClick={handleReplace}
+              disabled={!replaceFind || replaceFields.size === 0 || replacePreview.length === 0}
+            >
+              <ReplaceAll className="mr-2 h-4 w-4" />
+              取代 {replacePreview.length} 個變體
             </Button>
           </div>
         </DialogContent>

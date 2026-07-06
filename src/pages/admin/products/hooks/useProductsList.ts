@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useProductCache } from '@/hooks/useProductCache';
 import { useSpecStore } from '@/store/useSpecStore';
 import { getSubCategoryIds, productMatchesSpecFilters } from '@/utils/treeUtils';
@@ -10,20 +11,35 @@ import { ProductWithPricing } from '@/types/product';
 
 type Product = ProductWithPricing;
 
+function parseSpecsFromUrl(raw: string | null): Record<string, string[]> {
+    if (!raw) return {};
+    try {
+        return JSON.parse(decodeURIComponent(raw));
+    } catch { return {}; }
+}
+
+function parseSetFromUrl(raw: string | null): Set<string> {
+    if (!raw) return new Set();
+    return new Set(raw.split(',').filter(Boolean));
+}
+
 export function useProductsList() {
+    const [searchParams, setSearchParams] = useSearchParams();
     const { products, isLoading, version, forceRefresh } = useProductCache();
     const { brandMap } = useBrands();
 
     // --- UI States ---
-    const [search, setSearch] = useState('');
-    const [activeTab, setActiveTab] = useState<'list' | 'variants' | 'models' | 'colors'>('list');
+    const [search, setSearch] = useState(searchParams.get('search') || '');
+    const [activeTab, setActiveTab] = useState<'list' | 'variants' | 'models' | 'colors'>(
+        (['list', 'variants', 'models', 'colors'].includes(searchParams.get('tab') || '') ? searchParams.get('tab') : 'list') as 'list' | 'variants' | 'models' | 'colors'
+    );
     const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
-    const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
+    const [expandedProducts, setExpandedProducts] = useState<Set<string>>(parseSetFromUrl(searchParams.get('expanded')));
 
     // --- Filter States ---
-    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-    const [selectedSpecs, setSelectedSpecs] = useState<Record<string, string[]>>({});
-    const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(searchParams.get('category') || null);
+    const [selectedSpecs, setSelectedSpecs] = useState<Record<string, string[]>>(parseSpecsFromUrl(searchParams.get('specs')));
+    const [selectedBrands, setSelectedBrands] = useState<string[]>(searchParams.get('brands')?.split(',').filter(Boolean) || []);
 
     // --- Dialog States ---
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -46,6 +62,8 @@ export function useProductsList() {
             const next = new Set(prev);
             if (next.has(productId)) next.delete(productId);
             else next.add(productId);
+            const str = Array.from(next).join(',');
+            updateUrl(str ? { expanded: str } : { expanded: null });
             return next;
         });
     };
@@ -186,17 +204,73 @@ export function useProductsList() {
         forceRefresh();
     }, [forceRefresh]);
 
+    const updateUrl = (overrides: Record<string, string | null>) => {
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            for (const [key, val] of Object.entries(overrides)) {
+                if (val) next.set(key, val);
+                else next.delete(key);
+            }
+            return next;
+        }, { replace: true });
+    };
+
+    const updateSearch = (val: string) => {
+        setSearch(val);
+        updateUrl(val ? { search: val } : { search: null });
+    };
+
+    const updateActiveTab = (val: 'list' | 'variants' | 'models' | 'colors') => {
+        setActiveTab(val);
+        updateUrl({ tab: val });
+    };
+
+    const updateExpanded = (val: Set<string>) => {
+        setExpandedProducts(val);
+        const str = Array.from(val).join(',');
+        updateUrl(str ? { expanded: str } : { expanded: null });
+    };
+
+    const updateCategory = (val: string | null) => {
+        setSelectedCategory(val);
+        updateUrl(val ? { category: val } : { category: null });
+    };
+
+    const updateBrands = (val: string[]) => {
+        setSelectedBrands(val);
+        const str = val.join(',');
+        updateUrl(str ? { brands: str } : { brands: null });
+    };
+
+    const updateSpecs = (val: Record<string, string[]>) => {
+        setSelectedSpecs(val);
+        const keys = Object.keys(val);
+        if (keys.length > 0) {
+            updateUrl({ specs: encodeURIComponent(JSON.stringify(val)) });
+        } else {
+            updateUrl({ specs: null });
+        }
+    };
+
     const clearFilters = useCallback(() => {
         setSelectedCategory(null);
         setSelectedSpecs({});
         setSelectedBrands([]);
         setSearch('');
-    }, []);
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete('search');
+            next.delete('category');
+            next.delete('brands');
+            next.delete('specs');
+            return next;
+        }, { replace: true });
+    }, [setSearchParams]);
 
     return {
         products, isLoading, version, forceRefresh,
         brandMap,
-        search, setSearch, activeTab, setActiveTab,
+        search, setSearch: updateSearch, activeTab, setActiveTab: updateActiveTab,
         selectedProductIds, toggleSelect, toggleSelectAll, isAllSelected,
         expandedProducts, toggleExpanded, filteredProducts,
         isDialogOpen, setIsDialogOpen, isImportOpen, setIsImportOpen,
@@ -204,9 +278,9 @@ export function useProductsList() {
         handleCopy, handleBatchExport: handleBatchExportWrapper, handleImportSuccess, getProductVariants, getProductModels, getProductModelGroups,
         createMutation: mutations.createMutation, updateMutation: mutations.updateMutation,
         deleteMutation: mutations.deleteMutation, updateVariantPriceMutation: mutations.updateVariantPriceMutation,
-        selectedCategory, setSelectedCategory,
-        selectedSpecs, setSelectedSpecs,
-        selectedBrands, setSelectedBrands,
+        selectedCategory, setSelectedCategory: updateCategory,
+        selectedSpecs, setSelectedSpecs: updateSpecs,
+        selectedBrands, setSelectedBrands: updateBrands,
         clearFilters
     };
 }

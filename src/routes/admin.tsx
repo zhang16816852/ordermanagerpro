@@ -3,6 +3,7 @@ import AdminOrderList from "@/pages/admin/orders/list/index";
 import AdminProducts from "@/pages/admin/products/index";
 import AdminStores from "@/pages/admin/Stores";
 import AdminOrderComposer from "@/pages/admin/OrderComposer";
+import AdminOrderCheckout from "@/pages/admin/AdminOrderCheckout";
 import AdminOrderEdit from "@/pages/admin/AdminOrderEdit";
 import AdminSalesNotes from "@/pages/admin/SalesNotes";
 import AdminShippingPool from "@/pages/admin/ShippingPool";
@@ -26,6 +27,7 @@ export const adminRoutes = [
     { path: "/admin/stores", element: <AdminStores /> },
     { path: "/admin/orders", element: <AdminOrderList /> },
     { path: "/admin/orders/new", element: <AdminOrderComposer /> },
+    { path: "/admin/orders/checkout", element: <AdminOrderCheckout /> },
     { path: "/admin/orders/:orderId/edit", element: <AdminOrderEdit /> },
     { path: "/admin/sales-notes", element: <AdminSalesNotes /> },
     { path: "/admin/shipping-pool", element: <AdminShippingPool /> },

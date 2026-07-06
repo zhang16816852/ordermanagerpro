@@ -17,11 +17,17 @@ export default function AdminOrderList() {
   const navigate = useNavigate();
 
   // Basic UI States
-  const [searchParams] = useSearchParams();
-  const [statusTab, setStatusTab] = useState<'pending' | 'processing' | 'shipped'>('pending');
-  const [viewMode, setViewMode] = useState<'orders' | 'items'>('orders');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const validTabs = ['pending', 'processing', 'shipped'] as const;
+  const urlTab = searchParams.get('tab') as typeof validTabs[number] | null;
+  const [statusTab, setStatusTab] = useState<'pending' | 'processing' | 'shipped'>(
+    validTabs.includes(urlTab as any) ? (urlTab as 'pending' | 'processing' | 'shipped') : 'pending'
+  );
+  const [viewMode, setViewMode] = useState<'orders' | 'items'>(
+    searchParams.get('view') === 'items' ? 'items' : 'orders'
+  );
   const [search, setSearch] = useState(searchParams.get('id') || searchParams.get('search') || '');
-  const [storeFilter, setStoreFilter] = useState<string>('all');
+  const [storeFilter, setStoreFilter] = useState<string>(searchParams.get('store') || 'all');
 
   // 當 URL 參數變動時同步搜尋框
   useEffect(() => {
@@ -173,13 +179,33 @@ export default function AdminOrderList() {
           setStatusTab(v);
           setSelectedOrderIds(new Set());
           setSelectedItems(new Map());
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set("tab", v);
+            return next;
+          }, { replace: true });
         }}
         viewMode={viewMode}
-        onViewModeChange={setViewMode}
+        onViewModeChange={(v) => {
+          setViewMode(v);
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set("view", v);
+            return next;
+          }, { replace: true });
+        }}
         search={search}
         onSearchChange={setSearch}
         storeFilter={storeFilter}
-        onStoreFilterChange={setStoreFilter}
+        onStoreFilterChange={(v) => {
+          setStoreFilter(v);
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            if (v && v !== "all") next.set("store", v);
+            else next.delete("store");
+            return next;
+          }, { replace: true });
+        }}
         stores={stores}
       />
 

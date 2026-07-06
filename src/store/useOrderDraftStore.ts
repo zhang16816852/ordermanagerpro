@@ -20,6 +20,7 @@ export interface OrderDraftItem {
 export interface OrderDraft {
   items: OrderDraftItem[];
   notes: string;
+  priceSyncMap: Record<string, boolean>;
   updatedAt: number;
 }
 
@@ -42,6 +43,15 @@ interface OrderDraftState {
   // 更新數量
   updateQuantity: (storeId: string, itemId: string, quantity: number) => void;
 
+  // 更新單價
+  updateItemPrice: (storeId: string, itemId: string, price: number) => void;
+
+  // 取代整個 items 陣列（拖曳排序後）
+  reorderItems: (storeId: string, items: OrderDraftItem[]) => void;
+
+  // 取代 priceSyncMap
+  setPriceSyncMap: (storeId: string, map: Record<string, boolean>) => void;
+
   // 移除商品
   removeItem: (storeId: string, itemId: string) => void;
 
@@ -61,6 +71,7 @@ interface OrderDraftState {
 const createEmptyDraft = (): OrderDraft => ({
   items: [],
   notes: "",
+  priceSyncMap: {},
   updatedAt: Date.now(),
 });
 
@@ -83,9 +94,16 @@ export const useOrderDraftStore = create<OrderDraftState>()(
           
           const isVirtual = 'physical_product_id' in product;
           const realProductId = isVirtual ? (product as any).physical_product_id : product.id;
-          const realVariantId = isVirtual ? (product as any).physical_variant_id : variant?.id;
+          const fallbackVariantId = isVirtual ? (product as any).physical_variant_id : undefined;
+          const realVariantId = fallbackVariantId ?? variant?.id ?? undefined;
           const realModelName = isVirtual ? (product as any).device_model_name : (selectedModelName || variant?.effective_model_names?.[0]);
-          const itemId = customItemId || (isVirtual ? product.id : generateItemId(product.id, variant?.id));
+          const itemId = customItemId || (
+            isVirtual && !fallbackVariantId
+              ? generateItemId(product.id, realVariantId)
+              : isVirtual
+                ? product.id
+                : generateItemId(product.id, variant?.id)
+          );
 
           const existingIndex = draft.items.findIndex((item) => item.id === itemId);
 
@@ -106,7 +124,7 @@ export const useOrderDraftStore = create<OrderDraftState>()(
               productName: isVirtual ? (product as any).display_name || product.name : product.name,
               variantId: realVariantId,
               name: product.name,
-              variantName: variant?.name || (isVirtual ? product.name : undefined),
+              variantName: variant?.name ?? undefined,
               sku: variant?.sku || product.sku,
               price: variant 
                 ? (variant.effective_wholesale_price ?? variant.wholesale_price) 
@@ -152,6 +170,62 @@ export const useOrderDraftStore = create<OrderDraftState>()(
               [storeId]: {
                 ...draft,
                 items: newItems,
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        });
+      },
+
+      updateItemPrice: (storeId, itemId, price) => {
+        set((state) => {
+          const draft = state.drafts[storeId];
+          if (!draft) return state;
+
+          return {
+            drafts: {
+              ...state.drafts,
+              [storeId]: {
+                ...draft,
+                items: draft.items.map((item) =>
+                  item.id === itemId ? { ...item, price } : item
+                ),
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        });
+      },
+
+      reorderItems: (storeId, items) => {
+        set((state) => {
+          const draft = state.drafts[storeId];
+          if (!draft) return state;
+
+          return {
+            drafts: {
+              ...state.drafts,
+              [storeId]: {
+                ...draft,
+                items,
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        });
+      },
+
+      setPriceSyncMap: (storeId, map) => {
+        set((state) => {
+          const draft = state.drafts[storeId];
+          if (!draft) return state;
+
+          return {
+            drafts: {
+              ...state.drafts,
+              [storeId]: {
+                ...draft,
+                priceSyncMap: map,
                 updatedAt: Date.now(),
               },
             },
@@ -243,10 +317,14 @@ export function useStoreDraft(storeId: string | undefined) {
       draft: createEmptyDraft(),
       items: [],
       notes: "",
+      priceSyncMap: {},
       totalItems: 0,
       totalAmount: 0,
       addItem: () => { },
       updateQuantity: () => { },
+      updateItemPrice: () => { },
+      reorderItems: () => { },
+      setPriceSyncMap: () => { },
       removeItem: () => { },
       updateNotes: () => { },
       clearDraft: () => { },
@@ -261,12 +339,19 @@ export function useStoreDraft(storeId: string | undefined) {
     draft,
     items: draft.items,
     notes: draft.notes,
+    priceSyncMap: draft.priceSyncMap,
     totalItems: store.getTotalItems(storeId),
     totalAmount: store.getTotalAmount(storeId),
     addItem: (product: ProductWithPricing, variant?: VariantWithPricing, selectedModelName?: string, customItemId?: string) =>
       store.addItem(storeId, product, variant, selectedModelName, customItemId),
     updateQuantity: (itemId: string, quantity: number) =>
       store.updateQuantity(storeId, itemId, quantity),
+    updateItemPrice: (itemId: string, price: number) =>
+      store.updateItemPrice(storeId, itemId, price),
+    reorderItems: (items: OrderDraftItem[]) =>
+      store.reorderItems(storeId, items),
+    setPriceSyncMap: (map: Record<string, boolean>) =>
+      store.setPriceSyncMap(storeId, map),
     removeItem: (itemId: string) => store.removeItem(storeId, itemId),
     updateNotes: (notes: string) => store.updateNotes(storeId, notes),
     clearDraft: () => store.clearDraft(storeId),

@@ -323,8 +323,8 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
   };
 
   const generateVariants = () => {
-    const opt1 = option1Rows.filter(r => r.name.trim()).map(r => r.name.trim());
-    const opt2 = option2Rows.filter(r => r.name.trim()).map(r => r.name.trim());
+    const opt1 = [...new Set(option1Rows.filter(r => r.name.trim()).map(r => r.name.trim()))];
+    const opt2 = [...new Set(option2Rows.filter(r => r.name.trim()).map(r => r.name.trim()))];
 
     const selectedColors = selectedColorIds
       .map(id => colors.find(c => c.id === id))
@@ -496,7 +496,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
         product_id: product.id,
         sku: v.sku,
         name: v.name,
-        barcode: v.barcode || null,
+        barcode: v.barcode || undefined,
         option_1: v.option_1 || null,
         option_2: v.option_2 || null,
         option_3: v.option_3 || null,
@@ -505,10 +505,13 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
         status: 'active' as const,
       }));
 
-      // 1. Upsert 變體並取回 ID
+      // 1. 依 SKU 去重（同 SKU 保留最後一筆）
+      const dedupedVariants = [...new Map(variantsToInsert.map(v => [v.sku, v])).values()];
+
+      // 2. Upsert 變體並取回 ID
       const { data: upsertedVariants, error } = await supabase
         .from('product_variants')
-        .upsert(variantsToInsert, { onConflict: 'sku' })
+        .upsert(dedupedVariants, { onConflict: 'sku' })
         .select('id, sku');
 
       if (error) throw error;

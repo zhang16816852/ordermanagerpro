@@ -32,9 +32,11 @@ import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { OrderItemsTable } from '@/components/order/OrderItemsTable';
 
-const statusLabels = {
+const statusLabels: Record<string, { label: string; className: string }> = {
   pending: { label: '未確認', className: 'bg-warning text-warning-foreground' },
   processing: { label: '處理中', className: 'bg-primary text-primary-foreground' },
+  shipped: { label: '已出貨', className: 'bg-success text-success-foreground' },
+  cancelled: { label: '已取消', className: 'bg-destructive text-destructive-foreground' },
 };
 
 export default function AdminOrderEdit() {
@@ -244,7 +246,7 @@ export default function AdminOrderEdit() {
     );
   }
 
-  const statusInfo = statusLabels[order.status as keyof typeof statusLabels];
+  const statusInfo = statusLabels[order.status] || { label: order.status, className: 'bg-muted text-muted-foreground' };
   const availableProducts = products.filter(
     p => p.status === 'active' && !orderItems.some(item => item.productId === p.id)
   );

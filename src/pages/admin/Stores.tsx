@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables, TablesInsert } from '@/integrations/supabase/types';
@@ -50,12 +51,14 @@ type StoreUserRecord = {
 export default function AdminStores() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // --- Shared state ---
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'stores');
   const [storeSearch, setStoreSearch] = useState('');
-  const [userSearch, setUserSearch] = useState('');
-  const [storeFilter, setStoreFilter] = useState('all');
-  const [roleFilter, setRoleFilter] = useState('all');
+  const [userSearch, setUserSearch] = useState(searchParams.get('search') || '');
+  const [storeFilter, setStoreFilter] = useState(searchParams.get('storeFilter') || 'all');
+  const [roleFilter, setRoleFilter] = useState(searchParams.get('roleFilter') || 'all');
 
   // --- Store CRUD state ---
   const [isStoreDialogOpen, setIsStoreDialogOpen] = useState(false);
@@ -368,7 +371,14 @@ export default function AdminStores() {
         </div>
       </div>
 
-      <Tabs defaultValue="stores" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={(v) => {
+        setActiveTab(v);
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("tab", v);
+          return next;
+        }, { replace: true });
+      }} className="space-y-6">
         <TabsList>
           <TabsTrigger value="stores" className="gap-2">
             <Store className="h-4 w-4" />
@@ -397,7 +407,15 @@ export default function AdminStores() {
               <Input
                 placeholder="搜尋店鋪名稱或代碼..."
                 value={storeSearch}
-                onChange={(e) => setStoreSearch(e.target.value)}
+                onChange={(e) => {
+                  setStoreSearch(e.target.value);
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    if (e.target.value) next.set("search", e.target.value);
+                    else next.delete("search");
+                    return next;
+                  }, { replace: true });
+                }}
                 className="pl-9"
               />
             </div>
@@ -527,11 +545,26 @@ export default function AdminStores() {
                 <Input
                   placeholder="搜尋用戶（Email、姓名、電話）..."
                   value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
+                  onChange={(e) => {
+                    setUserSearch(e.target.value);
+                    setSearchParams((prev) => {
+                      const next = new URLSearchParams(prev);
+                      if (e.target.value) next.set("search", e.target.value);
+                      else next.delete("search");
+                      return next;
+                    }, { replace: true });
+                  }}
                   className="pl-9"
                 />
               </div>
-              <Select value={storeFilter} onValueChange={setStoreFilter}>
+              <Select value={storeFilter} onValueChange={(v) => {
+                setStoreFilter(v);
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.set("storeFilter", v);
+                  return next;
+                }, { replace: true });
+              }}>
                 <SelectTrigger className="w-[180px]">
                   <Store className="h-3.5 w-3.5 mr-1" />
                   <SelectValue placeholder="所有店鋪" />
@@ -546,7 +579,14 @@ export default function AdminStores() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <Select value={roleFilter} onValueChange={(v) => {
+                setRoleFilter(v);
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.set("roleFilter", v);
+                  return next;
+                }, { replace: true });
+              }}>
                 <SelectTrigger className="w-[140px]">
                   <SelectValue placeholder="所有角色" />
                 </SelectTrigger>

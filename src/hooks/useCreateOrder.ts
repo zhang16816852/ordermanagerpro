@@ -9,6 +9,8 @@ interface UseCreateOrderParams {
   userId: string;
   sourceType: "frontend" | "admin_proxy";
   queryKeyToInvalidate?: string[];
+  customItems?: OrderDraftItem[];
+  customNotes?: string;
   onSuccess?: (order: { id: string; code?: string | null; access_token: string }) => void;
   onSettled?: () => void;
 }
@@ -18,11 +20,15 @@ export function useCreateOrder({
   userId,
   sourceType,
   queryKeyToInvalidate,
+  customItems,
+  customNotes,
   onSuccess,
   onSettled,
 }: UseCreateOrderParams) {
   const queryClient = useQueryClient();
-  const { items, notes, totalAmount, updateNotes, clearDraft } = useStoreDraft(storeId);
+  const { items: draftItems, notes: draftNotes, totalAmount, updateNotes, clearDraft } = useStoreDraft(storeId);
+  const items = customItems ?? draftItems;
+  const notes = customNotes ?? draftNotes;
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -42,15 +48,7 @@ export function useCreateOrder({
 
       if (orderError) throw orderError;
 
-      const orderItems: {
-        order_id: string;
-        product_id: string;
-        variant_id: string | null;
-        store_id: string;
-        quantity: number;
-        unit_price: number;
-        selected_model_name: string | null;
-      }[] = items.map((item: OrderDraftItem) => ({
+      const orderItems = items.map((item: OrderDraftItem) => ({
         order_id: order.id,
         product_id: item.productId,
         variant_id: item.variantId || null,
