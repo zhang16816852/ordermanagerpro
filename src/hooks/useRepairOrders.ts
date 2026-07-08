@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { RepairOrder, RepairOrderInsert, RepairOrderUpdate, RepairOrderItem, RepairOrderItemInsert, RepairOrderSummary } from '@/types/repair';
 
 export function useRepairOrders(storeId?: string | null) {
@@ -50,7 +51,7 @@ export function useRepairOrders(storeId?: string | null) {
       toast.success('維修單已建立');
     },
     onError: (err: any) => {
-      toast.error('建立失敗：' + err.message);
+      toast.error('建立失敗：' + getErrorMessage(err));
     },
   });
 
@@ -70,7 +71,7 @@ export function useRepairOrders(storeId?: string | null) {
       toast.success('維修單已更新');
     },
     onError: (err: any) => {
-      toast.error('更新失敗：' + err.message);
+      toast.error('更新失敗：' + getErrorMessage(err));
     },
   });
 
@@ -84,7 +85,7 @@ export function useRepairOrders(storeId?: string | null) {
       toast.success('維修單已刪除');
     },
     onError: (err: any) => {
-      toast.error('刪除失敗：' + err.message);
+      toast.error('刪除失敗：' + getErrorMessage(err));
     },
   });
 
@@ -104,7 +105,7 @@ export function useRepairOrders(storeId?: string | null) {
       toast.success(`狀態已更新為 ${data.status}`);
     },
     onError: (err: any) => {
-      toast.error('狀態更新失敗：' + err.message);
+      toast.error('狀態更新失敗：' + getErrorMessage(err));
     },
   });
 

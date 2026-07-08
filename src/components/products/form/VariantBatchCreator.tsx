@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { Layers, Sparkles, AlertCircle, Palette, X } from 'lucide-react';
 import { ColorSelectField } from './ColorSelectField';
 import { ColorManagementDialog } from './ColorManagementDialog';
@@ -568,7 +569,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
       resetForm();
     },
     onError: (error) => {
-      toast.error(`建立失敗：${error.message}`);
+      toast.error(`建立失敗：${getErrorMessage(error)}`);
     },
   });
 

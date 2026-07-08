@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { Database } from '@/integrations/supabase/types';
 import { fetchAllRows } from '@/lib/utils';
 
@@ -38,7 +39,7 @@ export function useDeviceModels() {
     },
     onError: (error: any) => {
       console.error('Create error:', error);
-      toast.error(error.message?.includes('unique') ? '該型號名稱已存在' : '新增失敗');
+            toast.error(getErrorMessage(error, '新增失敗'));
     },
   });
 

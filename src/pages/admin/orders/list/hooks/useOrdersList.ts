@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Order, OrderItem, ShippingPoolItem } from '@/types/order';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 
 export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'processing' | 'shipped') {
   const { user } = useAuth();
@@ -122,7 +123,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
         toast.info('沒有需要同步的訂單');
       }
     },
-    onError: (error: Error) => toast.error(`同步失敗: ${error.message}`),
+    onError: (error: Error) => toast.error(`同步失敗: ${getErrorMessage(error)}`),
   });
 
   const confirmOrdersMutation = useMutation({
@@ -137,7 +138,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
       toast.success(`已將 ${variables.length} 個訂單轉為處理中`);
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(getErrorMessage(error)),
   });
 
   const addToShippingPoolMutation = useMutation({
@@ -200,7 +201,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
       queryClient.invalidateQueries({ queryKey: ['shipping-pool-items'] });
       queryClient.invalidateQueries({ queryKey: ['shipping-pool'] });
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(getErrorMessage(error)),
   });
 
   const cancelItemsMutation = useMutation({
@@ -217,7 +218,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
       toast.success(`已將 ${count} 個品項標記為「${label}」`);
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(getErrorMessage(error)),
   });
 
   return {

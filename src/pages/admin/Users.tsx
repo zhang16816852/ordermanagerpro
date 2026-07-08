@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Search, Users, Store, UserPlus, Mail, Clock, Trash2, Copy } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { getErrorMessage } from '@/lib/errorMessages';
 import { useAuth } from "@/hooks/useAuth";
 
 export default function AdminUsers() {
@@ -133,7 +134,7 @@ export default function AdminUsers() {
       queryClient.invalidateQueries({ queryKey: ["admin-store-users"] });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getErrorMessage(error));
     },
   });
 
@@ -159,7 +160,7 @@ export default function AdminUsers() {
       queryClient.invalidateQueries({ queryKey: ["admin-invitations"] });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getErrorMessage(error));
     },
   });
 
@@ -176,7 +177,7 @@ export default function AdminUsers() {
       queryClient.invalidateQueries({ queryKey: ["admin-store-users"] });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getErrorMessage(error));
     },
   });
 

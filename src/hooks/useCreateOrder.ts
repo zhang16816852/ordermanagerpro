@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getErrorMessage } from '@/lib/errorMessages';
 import { useStoreDraft } from "@/store/useOrderDraftStore";
 import type { OrderDraftItem } from "@/store/useOrderDraftStore";
 
@@ -79,7 +80,7 @@ export function useCreateOrder({
       }
     },
     onError: (error: Error) => {
-      toast.error(error.message || "建立訂單失敗");
+      toast.error(getErrorMessage(error, "建立訂單失敗"));
     },
     onSettled,
   });

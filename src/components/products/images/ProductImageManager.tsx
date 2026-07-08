@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { imageStorageService } from '@/services/imageStorageService';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { ImageIcon, Star, Trash2, Upload, Loader2, GripVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -81,7 +82,7 @@ export function ProductImageManager({ entityType, entityId, className }: Product
             queryClient.invalidateQueries({ queryKey: ['product-images', entityType, entityId] });
             toast.success('圖片上傳成功');
         },
-        onError: (err: Error) => toast.error(err.message),
+        onError: (err: Error) => toast.error(getErrorMessage(err)),
     });
 
     // 設為封面 Mutation

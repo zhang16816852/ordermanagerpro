@@ -57,7 +57,7 @@ export function OrderTableView({
       <Table containerClassName="h-full">
         <TableHeader className="bg-muted/50">
           <TableRow>
-            {statusTab === 'pending' && (
+            {(statusTab === 'pending' || statusTab === 'processing') && (
               <TableHead className="w-12">
                 <Checkbox
                   checked={orders.length > 0 && selectedOrderIds.size === orders.length}
@@ -80,7 +80,7 @@ export function OrderTableView({
           {isLoading ? (
             Array.from({ length: 5 }).map((_, i) => (
               <TableRow key={i}>
-                {statusTab === 'pending' && <TableCell><Skeleton className="h-4 w-4" /></TableCell>}
+                {(statusTab === 'pending' || statusTab === 'processing') && <TableCell><Skeleton className="h-4 w-4" /></TableCell>}
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-8" /></TableCell>
@@ -94,25 +94,25 @@ export function OrderTableView({
             ))
           ) : orders.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={statusTab === 'pending' ? 10 : 9} className="text-center py-12 text-muted-foreground italic">
+              <TableCell colSpan={(statusTab === 'pending' || statusTab === 'processing') ? 10 : 9} className="text-center py-12 text-muted-foreground italic">
                 沒有找到符合條件的訂單
               </TableCell>
             </TableRow>
           ) : (
             orders.map((order) => {
               const itemStatus = getOrderShipmentStatus(order.order_items);
-              const orderId = order.code || order.id;
+              const displayId = order.code || order.id;
               return (
-                <TableRow key={order.id} className={selectedOrderIds.has(orderId) ? 'bg-muted/50' : ''}>
-                  {statusTab === 'pending' && (
+                <TableRow key={order.id} className={selectedOrderIds.has(order.id) ? 'bg-muted/50' : ''}>
+                  {(statusTab === 'pending' || statusTab === 'processing') && (
                     <TableCell>
                       <Checkbox
-                        checked={selectedOrderIds.has(orderId)}
-                        onCheckedChange={(checked) => onToggleSelection(orderId, !!checked)}
+                        checked={selectedOrderIds.has(order.id)}
+                        onCheckedChange={(checked) => onToggleSelection(order.id, !!checked)}
                       />
                     </TableCell>
                   )}
-                  <TableCell className="font-mono text-xs font-medium">{orderId.slice(0, 16)}</TableCell>
+                  <TableCell className="font-mono text-xs font-medium">{displayId.slice(0, 16)}</TableCell>
                   <TableCell>
                     <div className="font-medium">{order.stores?.name}</div>
                     {order.stores?.code && <div className="text-xs text-muted-foreground">{order.stores.code}</div>}

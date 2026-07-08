@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/select';
 import { Upload, AlertCircle, Check, X, FileSpreadsheet, Pencil, Layers } from 'lucide-react';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 
 interface ImportRow {
   product_sku: string;
@@ -243,7 +244,7 @@ export function VariantBatchImport({ open, onOpenChange }: VariantBatchImportPro
           setStep('preview');
         },
         error: (error) => {
-          toast.error(`解析失敗：${error.message}`);
+          toast.error(`解析失敗：${getErrorMessage(error)}`);
         }
       });
     };
@@ -327,7 +328,7 @@ export function VariantBatchImport({ open, onOpenChange }: VariantBatchImportPro
       handleClose();
     },
     onError: (error: Error) => {
-      toast.error(`匯入失敗：${error.message}`);
+      toast.error(`匯入失敗：${getErrorMessage(error)}`);
     },
   });
 

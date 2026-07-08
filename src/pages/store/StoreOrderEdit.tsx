@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { OrderItemsTable } from '@/components/order/OrderItemsTable';
@@ -133,7 +134,7 @@ export default function StoreOrderEdit() {
       navigate('/orders');
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getErrorMessage(error));
     },
   });
 

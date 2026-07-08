@@ -13,6 +13,7 @@ import { useDeviceModelGroups } from '@/pages/admin/products/hooks/useDeviceMode
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 
 interface StandaloneDeviceModelSelectFieldProps {
     modelIds?: string[];
@@ -51,7 +52,7 @@ export function StandaloneDeviceModelSelectField({
             setShowAddModel(false);
             toast.success(`已新增型號「${data.name}」`);
         },
-        onError: (err) => toast.error('新增型號失敗: ' + err.message),
+        onError: (err) => toast.error('新增型號失敗: ' + getErrorMessage(err)),
     });
 
     const addGroupMutation = useMutation({
@@ -72,7 +73,7 @@ export function StandaloneDeviceModelSelectField({
             setShowAddGroup(false);
             toast.success(`已新增群組「${data.name}」`);
         },
-        onError: (err) => toast.error('新增群組失敗: ' + err.message),
+        onError: (err) => toast.error('新增群組失敗: ' + getErrorMessage(err)),
     });
 
     const { data: models = [] } = useQuery({

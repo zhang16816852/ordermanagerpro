@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Search, Package, Truck, Send, Store, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { getErrorMessage } from '@/lib/errorMessages';
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -157,7 +158,7 @@ export default function AdminShippingPool() {
       queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getErrorMessage(error));
     },
   });
 
@@ -191,7 +192,7 @@ export default function AdminShippingPool() {
       queryClient.invalidateQueries({ queryKey: ["admin-sales-notes"] });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getErrorMessage(error));
     },
   });
 

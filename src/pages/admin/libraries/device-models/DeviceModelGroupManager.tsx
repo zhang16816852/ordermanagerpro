@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import Papa from 'papaparse';
 import { Download, Upload, FileUp } from 'lucide-react';
 import { useRef } from 'react';
@@ -115,7 +116,7 @@ export function DeviceModelGroupManager() {
       toast.success('匯出完成');
     } catch (err: any) {
       toast.dismiss();
-      toast.error(`匯出失敗: ${err.message}`);
+      toast.error(`匯出失敗: ${getErrorMessage(err)}`);
     }
   };
 
@@ -208,7 +209,7 @@ export function DeviceModelGroupManager() {
           e.target.value = ''; // 清除 input
         } catch (err: any) {
           toast.dismiss();
-          toast.error(`匯入失敗: ${err.message}`);
+          toast.error(`匯入失敗: ${getErrorMessage(err)}`);
         }
       }
     });

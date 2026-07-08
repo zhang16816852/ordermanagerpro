@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { Save, Search, Loader2, CheckSquare, Square, Layers } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -149,7 +150,7 @@ export function VariantModelMatrix({ productId }: VariantModelMatrixProps) {
             queryClient.invalidateQueries({ queryKey: ['variant-model-links-batch', productId] });
         },
         onError: (err: any) => {
-            toast.error('儲存失敗：' + err.message);
+            toast.error('儲存失敗：' + getErrorMessage(err));
         }
     });
 

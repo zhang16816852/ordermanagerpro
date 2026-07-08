@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Users, UserPlus, Mail, Clock, Copy, Link } from "lucide-react";
 import { toast } from "sonner";
+import { getErrorMessage } from '@/lib/errorMessages';
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -97,7 +98,7 @@ export default function StoreTeam() {
       queryClient.invalidateQueries({ queryKey: ["store-invitations"] });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getErrorMessage(error));
     },
   });
 

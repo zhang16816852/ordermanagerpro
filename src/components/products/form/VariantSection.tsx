@@ -23,6 +23,7 @@ import { VariantBatchCreator } from './VariantBatchCreator';
 import { VariantEditDialog } from '@/components/products/VariantEditDialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { Badge } from '@/components/ui/badge';
 import { useOrderDraftStore } from '@/store/useOrderDraftStore';
 import type { ProductWithPricing, VariantWithPricing } from '@/types/product';
@@ -179,7 +180,7 @@ export function VariantSection({ product }: { product: any }) {
 
     const { error } = await supabase.from('product_variants').upsert(changedVariants, { onConflict: 'id' });
     if (error) {
-      toast.error(`取代失敗：${error.message}`);
+      toast.error(`取代失敗：${getErrorMessage(error)}`);
     } else {
       toast.success(`已取代 ${changedVariants.length} 個變體`);
       setIsReplaceOpen(false);
@@ -202,7 +203,7 @@ export function VariantSection({ product }: { product: any }) {
     }
     const { error } = await supabase.from('product_variants').update(updates).in('id', Array.from(selectedVariantIds));
     if (error) {
-      toast.error(`批量更新失敗：${error.message}`);
+      toast.error(`批量更新失敗：${getErrorMessage(error)}`);
     } else {
       toast.success('已批量更新變體');
       setSelectedVariantIds(new Set());

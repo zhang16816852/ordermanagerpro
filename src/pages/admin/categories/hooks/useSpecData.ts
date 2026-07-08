@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import Papa from 'papaparse';
 import { SpecDefinition } from '../types';
 import { useSpecStore } from '@/store/useSpecStore';
@@ -238,7 +239,7 @@ export function useSpecData() {
                 queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
                 toast.success(`JSON 匯入成功，共處理 ${items.length} 筆規格`);
             } catch (err: any) {
-                toast.error('JSON 匯入失敗：' + err.message);
+                toast.error('JSON 匯入失敗：' + getErrorMessage(err));
             }
         };
         reader.readAsText(file);
@@ -319,7 +320,7 @@ export function useSpecData() {
                     toast.success('CSV 匯入成功');
 
                 } catch (err: any) {
-                    toast.error(`CSV 匯入失敗: ${err.message}`);
+                    toast.error(`CSV 匯入失敗: ${getErrorMessage(err)}`);
                 }
             }
         });

@@ -13,6 +13,7 @@ import { useRepairOrders, useRepairOrderItems } from '@/hooks/useRepairOrders';
 import { useAuth } from '@/hooks/useAuth';
 import { REPAIR_ORDER_STATUS_LABELS, RepairOrder, RepairOrderInsert, RepairOrderItemInsert } from '@/types/repair';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 
 interface DeviceModelOption {
   id: string;
@@ -211,7 +212,7 @@ export default function AdminRepairOrderForm() {
                 sort_order: idx,
               }))
             );
-            if (error) toast.error('品項儲存失敗：' + error.message);
+            if (error) toast.error('品項儲存失敗：' + getErrorMessage(error));
           }
           navigate(`/admin/repair-orders/${data.id}`);
         },

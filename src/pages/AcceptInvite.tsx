@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { Loader2, CheckCircle, XCircle, Store, UserPlus, Mail, Lock, User } from 'lucide-react';
 import { z } from 'zod';
 
@@ -188,7 +189,7 @@ const AcceptInvite = () => {
             setShowSignUp(false); // 回到選擇畫面
             setIsAlreadyRegistered(true); // 顯示「登入」UI
           } else {
-            toast.error(signUpError.message);
+            toast.error(getErrorMessage(signUpError));
           }
           setRegistering(false);
           return;
@@ -262,7 +263,7 @@ const AcceptInvite = () => {
       navigate('/dashboard');
     } catch (err: any) {
       console.error('Registration/Claim error:', err);
-      toast.error(err.message || '操作失敗，請稍後再試');
+      toast.error(getErrorMessage(err, '操作失敗，請稍後再試'));
     } finally {
       setRegistering(false);
     }

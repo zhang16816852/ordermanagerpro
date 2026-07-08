@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { formatSpecValue } from '@/utils/specLogic';
 import { generateProductExcel } from '@/utils/excelUtils';
 import * as XLSX from 'xlsx';
@@ -102,7 +103,7 @@ export function useProductImport(onSuccess: () => void) {
             setStep('preview');
         } catch (err: any) {
             console.error('File parsing error:', err);
-            toast.error(`檔案解析失敗: ${err.message}`);
+            toast.error(`檔案解析失敗: ${getErrorMessage(err)}`);
         }
     }, [parser, validator, fetchDeviceData]);
 

@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 
 interface SupabaseActionOptions<TData, TVariables> {
     successMessage?: string;
@@ -46,7 +47,7 @@ export function useSupabaseAction<TData = any, TVariables = any>(
         },
         onError: (error: Error) => {
             toast.dismiss('supabase-action');
-            const message = options.errorMessage || `操作失敗: ${error.message}`;
+            const message = options.errorMessage || getErrorMessage(error, '操作失敗');
             toast.error(message);
             
             if (options.onError) {

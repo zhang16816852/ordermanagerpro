@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { Account, AccountingCategory, AccountingEntry, PaymentStatus } from '../types';
 

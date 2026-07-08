@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Package, CheckCircle, Truck } from "lucide-react";
 import { toast } from "sonner";
+import { getErrorMessage } from '@/lib/errorMessages';
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -67,7 +68,7 @@ export default function StoreReceiving() {
       queryClient.invalidateQueries({ queryKey: ["store-receiving"] });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getErrorMessage(error));
     },
   });
 

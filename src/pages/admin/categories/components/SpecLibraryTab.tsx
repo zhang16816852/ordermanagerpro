@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { SpecDialog } from './SpecDialog';
 import { useSpecData } from '../hooks/useSpecData';
 import { SpecDefinition } from '../types';
@@ -47,7 +48,7 @@ export function SpecLibraryTab() {
             setPreviewData(items);
             setPreviewOpen(true);
         } catch (err: any) {
-            toast.error(`CSV 解析失敗：${err.message}`);
+            toast.error(`CSV 解析失敗：${getErrorMessage(err)}`);
         }
         e.target.value = '';
     };
@@ -62,7 +63,7 @@ export function SpecLibraryTab() {
             setPreviewData(items);
             setPreviewOpen(true);
         } catch (err: any) {
-            toast.error(`JSON 解析失敗：${err.message}`);
+            toast.error(`JSON 解析失敗：${getErrorMessage(err)}`);
         }
         e.target.value = '';
     };

@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { ImagePlus, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { getErrorMessage } from '@/lib/errorMessages';
 import { cn } from "@/lib/utils";
 
 const MAX_IMAGES = 2;
@@ -55,7 +56,7 @@ export function MarketImageUploader({ value, onChange, disabled }: MarketImageUp
       onChange([...value, ...uploaded]);
       toast.success(`成功上傳 ${uploaded.length} 張圖片`);
     } catch (err: any) {
-      toast.error("上傳失敗：" + err.message);
+      toast.error("上傳失敗：" + getErrorMessage(err));
     } finally {
       setUploading(false);
       // Reset input so same file can be re-selected

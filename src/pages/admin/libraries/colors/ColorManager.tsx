@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Trash2, Pencil, Plus, Save, X, Palette, Search } from 'lucide-react';
 import { getContrastColor } from '@/utils/colorUtils';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import * as XLSX from 'xlsx';
 import { Download, Upload } from 'lucide-react';
@@ -53,7 +54,7 @@ export function ColorManager() {
       }
       cancelEdit();
     } catch (error: any) {
-      toast.error('儲存失敗：' + (error.message || '未知錯誤'));
+      toast.error('儲存失敗：' + (getErrorMessage(error, '未知錯誤')));
     }
   };
 

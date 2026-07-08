@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 
 export interface DeviceModelGroup {
   id: string;
@@ -51,7 +52,7 @@ export function useDeviceModelGroups() {
       queryClient.invalidateQueries({ queryKey: ['device_model_groups'] });
       toast.success('群組建立成功');
     },
-    onError: (err: any) => toast.error(`建立失敗: ${err.message}`),
+    onError: (err: any) => toast.error(`建立失敗: ${getErrorMessage(err)}`),
   });
 
   // 3. 更新群組

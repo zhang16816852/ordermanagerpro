@@ -1,10 +1,21 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { Plus, Package, FileText } from 'lucide-react';
+import { Plus, Package, FileText, Send } from 'lucide-react';
 import { OrderDetailDialog } from '@/components/order/OrderDetailDialog';
-import { Order } from '@/types/order';
+import { OrdersCardView } from '@/components/order/OrdersCardView';
+import { ItemsCardView } from '@/components/order/ItemsCardView';
+import { Order, OrderItem } from '@/types/order';
 import { exportToCSV } from '@/lib/exportUtils';
+import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 
 import { useOrdersList } from './hooks/useOrdersList';
 import { OrderFilters } from './components/OrderFilters';
@@ -42,6 +53,10 @@ export default function AdminOrderList() {
   const [selectedItems, setSelectedItems] = useState<Map<string, any>>(new Map());
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [shipToPoolOpen, setShipToPoolOpen] = useState(false);
+  const [directShipDialogOpen, setDirectShipDialogOpen] = useState(false);
+  const [directShipNotes, setDirectShipNotes] = useState('');
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   // Core Hook
   const {
@@ -55,6 +70,46 @@ export default function AdminOrderList() {
     addToShippingPoolMutation,
     cancelItemsMutation,
   } = useOrdersList(storeFilter, statusTab);
+
+  const directShipMutation = useMutation({
+    mutationFn: async ({
+      orderIds, notes,
+    }: { orderIds: string[]; notes: string }) => {
+      if (!user) throw new Error('未登入');
+      const results = [];
+      for (const orderId of orderIds) {
+        const { data, error } = await supabase.rpc('direct_ship_order', {
+          p_order_id: orderId,
+          p_created_by: user.id,
+          p_notes: notes || null,
+        });
+        if (error) throw error;
+        results.push(data);
+      }
+      return results;
+    },
+    onSuccess: (results, variables) => {
+      const count = variables.orderIds.length;
+      toast.success(`已將 ${count} 個訂單轉為銷貨單`, {
+        action: count === 1 ? {
+          label: '複製連結',
+          onClick: () => {
+            const r = results[0] as any;
+            const link = `${window.location.origin}/share/sales-note/${r.sales_note_code || r.sales_note_id}?token=${r.access_token}`;
+            navigator.clipboard.writeText(link);
+            toast.success('連結已複製');
+          },
+        } : undefined,
+        duration: 10000,
+      });
+      setDirectShipDialogOpen(false);
+      setDirectShipNotes('');
+      setSelectedOrderIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-sales-notes'] });
+    },
+    onError: (error: Error) => toast.error(getErrorMessage(error)),
+  });
 
   // Filtering Logic (Orders)
   const filteredOrders = useMemo(() => {
@@ -88,6 +143,7 @@ export default function AdminOrderList() {
           ...item,
           orderId: order.id,
           orderCode: order.code,
+          orderStatus: order.status,
           orderCreatedAt: order.created_at,
           storeName: order.stores?.name || '',
           storeCode: order.stores?.code || '',
@@ -114,6 +170,7 @@ export default function AdminOrderList() {
           ...item,
           orderId: order.id,
           orderCode: order.code,
+          orderStatus: order.status,
           orderCreatedAt: order.created_at,
           storeName: order.stores?.name || '',
           storeCode: order.stores?.code || '',
@@ -122,6 +179,31 @@ export default function AdminOrderList() {
         }))
     ) || [];
   }, [orders, search, viewMode]);
+
+  // Helper functions
+  const getOrderShipmentStatus = (items: OrderItem[]) => {
+    if (items.length === 0) return 'waiting';
+    const allProcessed = items.every((i) =>
+      i.status === 'shipped' || i.status === 'cancelled' || i.status === 'discontinued'
+    );
+    const someShipped = items.some((i) => i.shipped_quantity > 0);
+    if (allProcessed) return 'shipped';
+    if (someShipped) return 'partial';
+    return 'waiting';
+  };
+
+  const getOrderTotal = (items: OrderItem[]) => {
+    return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+  };
+
+  const itemStatusLabels: Record<string, { label: string; className: string }> = {
+    waiting: { label: '待出貨', className: 'bg-primary text-primary-foreground' },
+    partial: { label: '部分出貨', className: 'bg-warning text-warning-foreground' },
+    shipped: { label: '已出貨', className: 'bg-success text-success-foreground' },
+    cancelled: { label: '已取消', className: 'bg-destructive text-destructive-foreground' },
+    out_of_stock: { label: '缺貨', className: 'bg-muted text-muted-foreground' },
+    discontinued: { label: '已停售', className: 'bg-muted text-muted-foreground' },
+  };
 
   // Grouped Selections for Dialog
   const groupedSelections = useMemo(() => {
@@ -136,12 +218,12 @@ export default function AdminOrderList() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] space-y-4 p-4 md:p-6 overflow-hidden bg-muted/10">
-      <div className="flex items-center justify-between flex-none">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">所有訂單</h1>
           <p className="text-muted-foreground">查看與管理系統中的所有訂單</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button onClick={() => navigate('/admin/orders/new')} size="sm">
             <Plus className="mr-2 h-4 w-4" /> 代訂訂單
           </Button>
@@ -211,74 +293,107 @@ export default function AdminOrderList() {
 
       <div className="flex-1 min-h-0 flex flex-col pt-2">
         {viewMode === 'orders' ? (
-          <OrderTableView
-            orders={filteredOrders}
-            isLoading={isLoading}
-            statusTab={statusTab}
-            selectedOrderIds={selectedOrderIds}
-            onToggleSelection={(id, checked) => {
-              const next = new Set(selectedOrderIds);
-              if (checked) next.add(id); else next.delete(id);
-              setSelectedOrderIds(next);
-            }}
-            onToggleAll={(checked) => {
-              if (checked) setSelectedOrderIds(new Set(filteredOrders.map(o => o.code || o.id)));
-              else setSelectedOrderIds(new Set());
-            }}
-            onView={setViewingOrder}
-            onEdit={(id) => navigate(`/admin/orders/${id}/edit`)}
-          />
+          <>
+            {/* Desktop: Table */}
+            <div className="hidden md:block flex-1 min-h-0">
+              <div className="h-full flex flex-col">
+                <OrderTableView
+                  orders={filteredOrders}
+                  isLoading={isLoading}
+                  statusTab={statusTab}
+                  selectedOrderIds={selectedOrderIds}
+                  onToggleSelection={(id, checked) => {
+                    const next = new Set(selectedOrderIds);
+                    if (checked) next.add(id); else next.delete(id);
+                    setSelectedOrderIds(next);
+                  }}
+                  onToggleAll={(checked) => {
+                    if (checked) setSelectedOrderIds(new Set(filteredOrders.map(o => o.id)));
+                    else setSelectedOrderIds(new Set());
+                  }}
+                  onView={setViewingOrder}
+                  onEdit={(id) => navigate(`/admin/orders/${id}/edit`)}
+                />
+              </div>
+            </div>
+            {/* Mobile: Cards */}
+            <div className="md:hidden flex-1 min-h-0">
+              <OrdersCardView
+                orders={filteredOrders}
+                isLoading={isLoading}
+                onView={setViewingOrder}
+                onEdit={(id) => navigate(`/admin/orders/${id}/edit`)}
+                getOrderShipmentStatus={getOrderShipmentStatus}
+                getOrderTotal={getOrderTotal}
+              />
+            </div>
+          </>
         ) : (
-          <ItemTableView
-            items={allPendingItems}
-            cancelledItems={allCancelledItems}
-            isLoading={isLoading}
-            selectedItems={selectedItems}
-            shippingPoolMap={shippingPoolMap}
-            onToggleSelection={(item, checked) => {
-              const next = new Map(selectedItems);
-              if (checked) {
-                next.set(item.id, {
-                  itemId: item.id,
-                  productName: item.product?.name || '',
-                  sku: item.product?.sku || '',
-                  quantity: item.pendingQuantity,
-                  maxQuantity: item.pendingQuantity,
-                  storeId: item.storeId,
-                  storeName: item.storeName,
-                  orderId: item.orderId,
-                });
-              } else next.delete(item.id);
-              setSelectedItems(next);
-            }}
-            onToggleAll={(checked) => {
-              if (checked) {
-                const next = new Map();
-                allPendingItems.forEach(item => {
-                  next.set(item.id, {
-                    itemId: item.id,
-                    productName: item.product?.name || '',
-                    sku: item.product?.sku || '',
-                    quantity: item.pendingQuantity,
-                    maxQuantity: item.pendingQuantity,
-                    storeId: item.storeId,
-                    storeName: item.storeName,
-                    orderId: item.orderId,
-                  });
-                });
-                setSelectedItems(next);
-              } else setSelectedItems(new Map());
-            }}
-            onUpdateQuantity={(id, qty) => {
-              const next = new Map(selectedItems);
-              const item = next.get(id);
-              if (item) {
-                next.set(id, { ...item, quantity: Math.min(Math.max(1, qty), item.maxQuantity) });
-                setSelectedItems(next);
-              }
-            }}
-            onRestoreItem={(id) => cancelItemsMutation.mutate({ itemIds: [id], targetStatus: 'waiting' })}
-          />
+          <>
+            {/* Desktop: Table */}
+            <div className="hidden md:block flex-1 min-h-0">
+              <div className="h-full flex flex-col">
+                <ItemTableView
+                items={allPendingItems}
+                cancelledItems={allCancelledItems}
+                isLoading={isLoading}
+                selectedItems={selectedItems}
+                shippingPoolMap={shippingPoolMap}
+                onToggleSelection={(item, checked) => {
+                  const next = new Map(selectedItems);
+                  if (checked) {
+                    next.set(item.id, {
+                      itemId: item.id,
+                      productName: item.product?.name || '',
+                      sku: item.product?.sku || '',
+                      quantity: item.pendingQuantity,
+                      maxQuantity: item.pendingQuantity,
+                      storeId: item.storeId,
+                      storeName: item.storeName,
+                      orderId: item.orderId,
+                    });
+                  } else next.delete(item.id);
+                  setSelectedItems(next);
+                }}
+                onToggleAll={(checked) => {
+                  if (checked) {
+                    const next = new Map();
+                    allPendingItems.forEach(item => {
+                      next.set(item.id, {
+                        itemId: item.id,
+                        productName: item.product?.name || '',
+                        sku: item.product?.sku || '',
+                        quantity: item.pendingQuantity,
+                        maxQuantity: item.pendingQuantity,
+                        storeId: item.storeId,
+                        storeName: item.storeName,
+                        orderId: item.orderId,
+                      });
+                    });
+                    setSelectedItems(next);
+                  } else setSelectedItems(new Map());
+                }}
+                onUpdateQuantity={(id, qty) => {
+                  const next = new Map(selectedItems);
+                  const item = next.get(id);
+                  if (item) {
+                    next.set(id, { ...item, quantity: Math.min(Math.max(1, qty), item.maxQuantity) });
+                    setSelectedItems(next);
+                  }
+                }}
+                onRestoreItem={(id) => cancelItemsMutation.mutate({ itemIds: [id], targetStatus: 'waiting' })}
+              />
+            </div>
+            </div>
+            {/* Mobile: Cards */}
+            <div className="md:hidden flex-1 min-h-0">
+              <ItemsCardView
+                items={allPendingItems}
+                isLoading={isLoading}
+                statusLabels={itemStatusLabels}
+              />
+            </div>
+          </>
         )}
       </div>
 
@@ -287,9 +402,10 @@ export default function AdminOrderList() {
         viewMode={viewMode}
         selectedOrderCount={selectedOrderIds.size}
         selectedItemCount={selectedItems.size}
-        isLoading={confirmOrdersMutation.isPending || addToShippingPoolMutation.isPending || cancelItemsMutation.isPending}
+        isLoading={confirmOrdersMutation.isPending || addToShippingPoolMutation.isPending || cancelItemsMutation.isPending || directShipMutation.isPending}
         onConfirmOrders={() => confirmOrdersMutation.mutate(Array.from(selectedOrderIds))}
         onShipItems={() => setShipToPoolOpen(true)}
+        onDirectShipOrders={() => setDirectShipDialogOpen(true)}
         onCancelItems={() => {
           if (confirm(`確定要標記這 ${selectedItems.size} 個品項為 停產/取消 嗎？`)) {
             cancelItemsMutation.mutate({ itemIds: Array.from(selectedItems.keys()), targetStatus: 'cancelled' });
@@ -310,6 +426,49 @@ export default function AdminOrderList() {
           }
         })}
       />
+
+      {/* Direct Ship Dialog */}
+      <Dialog open={directShipDialogOpen} onOpenChange={setDirectShipDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="h-5 w-5" />
+              直接轉銷貨單
+            </DialogTitle>
+            <DialogDescription>
+              將 {selectedOrderIds.size} 個訂單的所有剩餘品項直接出貨，跳過出貨池。
+              品項將全額出貨，無法部分出貨。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="rounded-lg border p-4 bg-muted/50">
+              <div className="text-sm flex gap-4">
+                <span><span className="text-muted-foreground">選擇訂單：</span><span className="font-medium">{selectedOrderIds.size}</span></span>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">備註（選填）</label>
+              <Textarea
+                value={directShipNotes}
+                onChange={(e) => setDirectShipNotes(e.target.value)}
+                placeholder="輸入出貨備註..."
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDirectShipDialogOpen(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={() => directShipMutation.mutate({ orderIds: Array.from(selectedOrderIds), notes: directShipNotes })}
+              disabled={directShipMutation.isPending}
+            >
+              {directShipMutation.isPending ? '處理中...' : '確認轉銷貨單'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Order Detail View */}
       <OrderDetailDialog

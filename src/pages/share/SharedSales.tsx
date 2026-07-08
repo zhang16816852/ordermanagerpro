@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, AlertCircle, FileText, Printer, Download, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { getErrorMessage } from '@/lib/errorMessages';
 import { useState, useEffect, useRef } from "react";
 import { PrintDialog, PrintOptions } from "@/components/PrintDialog";
 import { QRCodeSVG } from "qrcode.react";
@@ -94,7 +95,7 @@ export default function SharedSales() {
       queryClient.invalidateQueries({ queryKey: ["shared-sale", salesNoteId, token, user?.id] });
     },
     onError: (error) => {
-      toast.error(`確認失敗：${error.message}`);
+      toast.error(`確認失敗：${getErrorMessage(error)}`);
     },
   });
 

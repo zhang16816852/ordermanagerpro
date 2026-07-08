@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Bell, Check, CheckCheck, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { getErrorMessage } from '@/lib/errorMessages';
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
@@ -62,7 +63,7 @@ export default function StoreNotifications() {
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getErrorMessage(error));
     },
   });
 

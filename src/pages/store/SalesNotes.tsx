@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { SalesNoteListTable } from '@/components/sales/SalesNoteListTable';
 import { SalesNoteDetailDialog } from '@/components/sales/SalesNoteDetailDialog';
 import type { SalesNoteDetail } from '@/components/sales/SalesNoteDetailDialog';
@@ -92,7 +93,7 @@ export default function StoreSalesNotes() {
       setSelectedNoteId(null);
     },
     onError: (error) => {
-      toast.error(`確認失敗：${error.message}`);
+      toast.error(`確認失敗：${getErrorMessage(error)}`);
     },
   });
 

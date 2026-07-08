@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { entityRelationService } from '@/services/entityRelationService';
 import { ProductWithPricing } from '@/types/product';
 
@@ -145,7 +146,7 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
                 const { data: newProduct } = await supabase.from('products').select('*').eq('id', newProductId).single();
                 if (newProduct) { setEditingProduct(newProduct as any); setIsDialogOpen(true); }
             }
-        } catch (error: any) { toast.error(`複製失敗：${error.message}`); }
+        } catch (error: any) { toast.error(`複製失敗：${getErrorMessage(error)}`); }
     };
 
     const handleImportSuccess = () => {

@@ -28,6 +28,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Save, Lock, Unlock, Plus, AlertTriangle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { OrderItemsTable } from '@/components/order/OrderItemsTable';
@@ -152,7 +153,7 @@ export default function AdminOrderEdit() {
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getErrorMessage(error));
     },
   });
 
@@ -172,7 +173,7 @@ export default function AdminOrderEdit() {
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(getErrorMessage(error));
     },
   });
 
@@ -253,7 +254,7 @@ export default function AdminOrderEdit() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" onClick={() => navigate('/admin/orders')}>
             <ArrowLeft className="mr-2 h-4 w-4" />

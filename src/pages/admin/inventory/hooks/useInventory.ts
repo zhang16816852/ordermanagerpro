@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useSupabaseAction } from '@/hooks/useSupabaseAction';
 import { useState } from 'react';
+import { getErrorMessage } from '@/lib/errorMessages';
 
 export function useInventory() {
     const [searchParams, setSearchParams] = useSearchParams();

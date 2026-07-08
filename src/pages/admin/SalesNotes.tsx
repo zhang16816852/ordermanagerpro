@@ -9,6 +9,7 @@ import { Search, FileText } from "lucide-react";
 import { SalesNoteListTable } from "@/components/sales/SalesNoteListTable";
 import { SalesNoteDetailDialog, SalesNoteDetail } from "@/components/sales/SalesNoteDetailDialog";
 import { toast } from "sonner";
+import { getErrorMessage } from '@/lib/errorMessages';
 
 export default function AdminSalesNotes() {
   const queryClient = useQueryClient();
@@ -85,7 +86,7 @@ export default function AdminSalesNotes() {
       queryClient.invalidateQueries({ queryKey: ["shipping-pool-items"] });
     },
     onError: (error: Error) => {
-      toast.error(`刪除失敗：${error.message}`);
+      toast.error(`刪除失敗：${getErrorMessage(error)}`);
     },
   });
 

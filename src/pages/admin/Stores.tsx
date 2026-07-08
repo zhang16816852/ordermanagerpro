@@ -27,6 +27,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Pencil, Search, Users, Store, Mail, Copy, Trash2, UserPlus, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -180,7 +181,7 @@ export default function AdminStores() {
       toast.success('店鋪已新增');
       setIsStoreDialogOpen(false);
     },
-    onError: (err) => toast.error(`新增失敗：${err.message}`),
+    onError: (err) => toast.error(`新增失敗：${getErrorMessage(err)}`),
   });
 
   const updateStoreMutation = useMutation({
@@ -194,7 +195,7 @@ export default function AdminStores() {
       setIsStoreDialogOpen(false);
       setEditingStore(null);
     },
-    onError: (err) => toast.error(`更新失敗：${err.message}`),
+    onError: (err) => toast.error(`更新失敗：${getErrorMessage(err)}`),
   });
 
   const assignMutation = useMutation({
@@ -228,7 +229,7 @@ export default function AdminStores() {
       queryClient.invalidateQueries({ queryKey: ['admin-store-users'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stores'] });
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => toast.error(getErrorMessage(err)),
   });
 
   const removeStoreMutation = useMutation({
@@ -241,7 +242,7 @@ export default function AdminStores() {
       queryClient.invalidateQueries({ queryKey: ['admin-store-users'] });
       queryClient.invalidateQueries({ queryKey: ['admin-stores'] });
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => toast.error(getErrorMessage(err)),
   });
 
   const inviteMutation = useMutation({
@@ -263,7 +264,7 @@ export default function AdminStores() {
       setSelectedRole('employee');
       queryClient.invalidateQueries({ queryKey: ['admin-invitations'] });
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => toast.error(getErrorMessage(err)),
   });
 
   // ==================== HELPERS ====================

@@ -29,6 +29,7 @@ import {
     FormMessage,
 } from "@/components/ui/form";
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { StandaloneDeviceModelSelectField } from './StandaloneDeviceModelSelectField';
 import { ColorSelectField } from './form/ColorSelectField';
 import { useColorStore } from '@/store/useColorStore';
@@ -206,7 +207,7 @@ export function VariantEditDialog({
             onSuccess?.();
         },
         onError: (error: any) => {
-            toast.error(`新增失敗：${error.message}`);
+            toast.error(`新增失敗：${getErrorMessage(error)}`);
         },
     });
     const updateMutation = useMutation({
@@ -261,7 +262,7 @@ export function VariantEditDialog({
             onSuccess?.();
         },
         onError: (error: any) => {
-            toast.error(`更新失敗：${error.message}`);
+            toast.error(`更新失敗：${getErrorMessage(error)}`);
         },
     });
 

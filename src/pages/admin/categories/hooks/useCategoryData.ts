@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import Papa from 'papaparse';
 import { Category, CategoryHierarchy } from '../types';
 import { useSpecStore } from '@/store/useSpecStore';
@@ -447,7 +448,7 @@ export function useCategoryData() {
                     toast.success(`成功匯入 ${categoriesToUpsert.length} 筆分類`);
                 } catch (err: any) {
                     console.error('Import error:', err);
-                    toast.error(`匯入失敗: ${err.message}`);
+                    toast.error(`匯入失敗: ${getErrorMessage(err)}`);
                 }
             }
         });

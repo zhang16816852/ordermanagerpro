@@ -9,6 +9,7 @@ import {
   Tag, Loader2, AlertCircle, CheckCircle2, Pencil, Trash2
 } from "lucide-react";
 import { toast } from "sonner";
+import { getErrorMessage } from '@/lib/errorMessages';
 import { cn } from "@/lib/utils";
 
 interface ListingDetail {
@@ -71,7 +72,7 @@ export default function MarketDetailPage() {
         .maybeSingle();
       if (error || !data) {
         console.error("Fetch listing error:", error);
-        toast.error(error ? `載入失敗: ${error.message}` : "找不到這筆刊登資訊");
+        toast.error(error ? `載入失敗: ${getErrorMessage(error)}` : "找不到這筆刊登資訊");
         navigate("/market");
         return;
       }

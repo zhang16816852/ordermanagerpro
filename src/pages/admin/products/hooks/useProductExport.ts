@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSpecStore } from '@/store/useSpecStore';
 import { generateProductExcel } from '@/utils/excelUtils';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import * as XLSX from 'xlsx';
 import { ProductWithPricing } from '@/types/product';
 
@@ -47,6 +48,6 @@ export async function handleBatchExport(
         toast.success('匯出成功');
     } catch (error: any) {
         console.error('Export error:', error);
-        toast.error(`匯出失敗: ${error.message}`);
+        toast.error(`匯出失敗: ${getErrorMessage(error)}`);
     }
 }

@@ -13,6 +13,7 @@ import { useRepairOrders } from '@/hooks/useRepairOrders';
 import { useAuth } from '@/hooks/useAuth';
 import { RepairOrderInsert } from '@/types/repair';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 
 export default function StoreRepairOrderForm() {
   const navigate = useNavigate();

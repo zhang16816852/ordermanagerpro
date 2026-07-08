@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { getErrorMessage } from '@/lib/errorMessages';
 
 // =============================================
 // 圖片儲存服務介面（Storage 抽象層）
@@ -43,7 +44,7 @@ export class SupabaseStorageService implements IImageStorageService {
                 upsert: false,
             });
 
-        if (error) throw new Error(`圖片上傳失敗: ${error.message}`);
+        if (error) throw new Error(`圖片上傳失敗: ${getErrorMessage(error)}`);
 
         return {
             url: this.getUrl(storagePath),
@@ -56,7 +57,7 @@ export class SupabaseStorageService implements IImageStorageService {
             .from(BUCKET)
             .remove([storagePath]);
 
-        if (error) throw new Error(`圖片刪除失敗: ${error.message}`);
+        if (error) throw new Error(`圖片刪除失敗: ${getErrorMessage(error)}`);
     }
 
     getUrl(storagePath: string): string {

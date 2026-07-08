@@ -7,6 +7,7 @@ import { useCreateOrder } from "@/hooks/useCreateOrder";
 import { useStoreDraft } from "@/store/useOrderDraftStore";
 import OrderReviewPanel from "@/components/order/OrderReviewPanel";
 import { toast } from "sonner";
+import { getErrorMessage } from '@/lib/errorMessages';
 import type { OrderDraftItem } from "@/store/useOrderDraftStore";
 
 export default function AdminOrderCheckout() {
@@ -161,7 +162,7 @@ export default function AdminOrderCheckout() {
         clearDraft();
         navigate("/admin/orders");
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "建立訂單失敗");
+        toast.error(getErrorMessage(err, "建立訂單失敗"));
       } finally {
         setIsPendingMode2(false);
       }

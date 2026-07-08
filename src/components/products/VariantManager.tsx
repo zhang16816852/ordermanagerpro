@@ -30,6 +30,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Plus, Pencil, Trash2, Layers, Search, CheckSquare, Edit3 } from 'lucide-react';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VariantBatchCreator } from './form/VariantBatchCreator';
 import { VariantEditDialog } from './VariantEditDialog';
@@ -116,7 +117,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
       toast.success('變體已刪除');
     },
     onError: (error) => {
-      toast.error(`刪除失敗：${error.message}`);
+      toast.error(`刪除失敗：${getErrorMessage(error)}`);
     },
   });
 
@@ -131,7 +132,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
       toast.success('已批量刪除變體');
     },
     onError: (error) => {
-      toast.error(`批量刪除失敗：${error.message}`);
+      toast.error(`批量刪除失敗：${getErrorMessage(error)}`);
     },
   });
 
@@ -147,7 +148,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
       toast.success('已批量更新變體');
     },
     onError: (error) => {
-      toast.error(`批量更新失敗：${error.message}`);
+      toast.error(`批量更新失敗：${getErrorMessage(error)}`);
     },
   });
 

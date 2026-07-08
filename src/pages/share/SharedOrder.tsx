@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, AlertCircle, Package, Printer } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { getErrorMessage } from '@/lib/errorMessages';
 import { useState, useEffect, useRef } from "react";
 import { PrintDialog, PrintOptions } from "@/components/PrintDialog";
 import { QRCodeSVG } from "qrcode.react";

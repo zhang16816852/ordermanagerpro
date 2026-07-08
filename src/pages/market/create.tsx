@@ -13,6 +13,7 @@ import {
   MessageCircle, Phone, Smartphone, AlertTriangle, RefreshCw
 } from "lucide-react";
 import { toast } from "sonner";
+import { getErrorMessage } from '@/lib/errorMessages';
 import { cn } from "@/lib/utils";
 
 const SUB_CATEGORIES = ["手機", "平板", "智慧手錶", "藍牙耳機", "其它3C"];
@@ -220,7 +221,7 @@ export default function MarketCreatePage() {
 
       navigate("/market/my-listings");
     } catch (err: any) {
-      toast.error(err.message || "操作失敗，請重試");
+      toast.error(getErrorMessage(err, "操作失敗，請重試"));
     } finally {
       setLoading(false);
     }

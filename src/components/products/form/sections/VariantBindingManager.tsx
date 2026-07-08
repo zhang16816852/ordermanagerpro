@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, Link2, Unlink, Search, Package } from 'lucide-react';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { entityBindingService, EntityBinding, BoundVariantInfo } from '@/services/entityBindingService';
 
 interface VariantBindingManagerProps {
@@ -69,7 +70,7 @@ export function VariantBindingManager({ variantId }: VariantBindingManagerProps)
       setSearchResults([]);
       await loadBindings();
     } catch (err: any) {
-      toast.error(`綁定失敗: ${err.message}`);
+      toast.error(`綁定失敗: ${getErrorMessage(err)}`);
     }
   };
 
@@ -79,7 +80,7 @@ export function VariantBindingManager({ variantId }: VariantBindingManagerProps)
       toast.success('已解除變體綁定');
       await loadBindings();
     } catch (err: any) {
-      toast.error(`解除綁定失敗: ${err.message}`);
+      toast.error(`解除綁定失敗: ${getErrorMessage(err)}`);
     }
   };
 

@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { Save, Copy, Loader2, ChevronsRight, Wand2, PenLine, Table2 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { SpecValueEditor } from './SpecValueEditor';
@@ -162,7 +163,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
             toast.success('變體規格矩陣已同步至雲端 (v6 Engine)');
             queryClient.invalidateQueries({ queryKey: ['product-variants-specs-v6', productId] });
         },
-        onError: (err: any) => toast.error('儲存失敗：' + err.message)
+        onError: (err: any) => toast.error('儲存失敗：' + getErrorMessage(err))
     });
 
     const handleValueChange = (variantId: string, pathKey: string, value: any) => {

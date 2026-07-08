@@ -11,6 +11,7 @@ import {
   AlertTriangle, CheckCircle, RefreshCw, ShoppingBag
 } from "lucide-react";
 import { toast } from "sonner";
+import { getErrorMessage } from '@/lib/errorMessages';
 import { cn } from "@/lib/utils";
 
 interface MyListing {

@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Truck, CheckSquare, XCircle, Package } from 'lucide-react';
+import { Truck, CheckSquare, XCircle, Package, Send } from 'lucide-react';
 
 interface BatchActionBarProps {
   statusTab: string;
@@ -9,6 +9,7 @@ interface BatchActionBarProps {
   onConfirmOrders: () => void;
   onShipItems: () => void;
   onCancelItems: () => void;
+  onDirectShipOrders: () => void;
   isLoading: boolean;
 }
 
@@ -20,6 +21,7 @@ export function BatchActionBar({
   onConfirmOrders,
   onShipItems,
   onCancelItems,
+  onDirectShipOrders,
   isLoading,
 }: BatchActionBarProps) {
   if (viewMode === 'orders' && selectedOrderCount === 0) return null;
@@ -46,6 +48,19 @@ export function BatchActionBar({
             >
               <CheckSquare className="h-4 w-4 mr-2" />
               確認轉處理中
+            </Button>
+          )}
+
+          {statusTab === 'processing' && viewMode === 'orders' && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onDirectShipOrders}
+              disabled={isLoading}
+              className="rounded-full shadow-inner active:scale-95 transition-all"
+            >
+              <Send className="h-4 w-4 mr-2" />
+              轉銷貨單
             </Button>
           )}
 

@@ -19,6 +19,7 @@ import { StorePicker } from '@/components/ui/StorePicker';
 import { Search, Save, Tags, RefreshCw, ChevronRight, ChevronDown, Layers } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errorMessages';
 
 interface PriceEntry {
   productId: string;
@@ -151,7 +152,7 @@ export default function AdminStorePricing() {
       queryClient.invalidateQueries({ queryKey: ['store-prices', selectedStore] });
     },
     onError: (error: Error) => {
-      toast.error(`儲存失敗: ${error.message}`);
+      toast.error(`儲存失敗: ${getErrorMessage(error)}`);
     },
   });
 

@@ -15,6 +15,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { getErrorMessage } from '@/lib/errorMessages';
 import { Card, CardContent } from '@/components/ui/card';
 import z from "zod";
 
@@ -158,7 +159,7 @@ export function SalesNoteDetailDialog({
             toast.success('收款已記錄');
         },
         onError: (error: any) => {
-            toast.error(`收款記錄失敗: ${error.message}`);
+            toast.error(`收款記錄失敗: ${getErrorMessage(error)}`);
         },
 
     });
