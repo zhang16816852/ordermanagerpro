@@ -57,6 +57,9 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
             await forceRefresh();
             toast.success('產品已新增');
         },
+        onError: (error) => {
+            toast.error(getErrorMessage(error, '新增失敗'));
+        },
     });
 
     const updateMutation = useMutation({
@@ -106,6 +109,9 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
             queryClient.invalidateQueries({ queryKey: ['all-product-variants'] });
             toast.success('產品已更新');
         },
+        onError: (error) => {
+            toast.error(getErrorMessage(error, '更新失敗'));
+        },
     });
 
     const deleteMutation = useMutation({
@@ -116,6 +122,9 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
         onSuccess: async () => {
             await forceRefresh();
             toast.success('產品已刪除');
+        },
+        onError: (error) => {
+            toast.error(getErrorMessage(error, '刪除失敗'));
         },
     });
 
