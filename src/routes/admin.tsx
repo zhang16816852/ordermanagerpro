@@ -1,5 +1,5 @@
 import AdminDashboard from "@/pages/admin/Dashboard";
-import AdminOrderList from "@/pages/admin/orders/list/index";
+import AdminOrderList from "@/pages/admin/orders/list/OrderListPage";
 import AdminProducts from "@/pages/admin/products/index";
 import AdminStores from "@/pages/admin/Stores";
 import AdminOrderComposer from "@/pages/admin/OrderComposer";

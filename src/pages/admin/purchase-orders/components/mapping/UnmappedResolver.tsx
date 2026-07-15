@@ -27,7 +27,7 @@ export function UnmappedResolver({ supplierId, unmappedItems, onRuleCreated, onA
   // 追蹤已經在本畫面中被解決的項目
   const [resolvedVendorIds, setResolvedVendorIds] = useState<Set<string>>(new Set());
 
-  const handleAssignCurrent = (internalProdId: string, internalVarId: string | null) => {
+  const handleAssignCurrent = (internalProdId: string, internalVarId: string | null, _productName?: string, _variantName?: string | null) => {
     if (resolvingItem) {
       onRuleCreated(resolvingItem.vendor_product_id, resolvingItem.vendor_product_name, internalProdId, internalVarId);
       markResolved(resolvingItem.vendor_product_id);

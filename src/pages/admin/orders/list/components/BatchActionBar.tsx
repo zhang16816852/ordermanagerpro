@@ -1,15 +1,19 @@
 import { Button } from '@/components/ui/button';
-import { Truck, CheckSquare, XCircle, Package, Send } from 'lucide-react';
+import { Truck, CheckSquare, XCircle, Package, Send, ClipboardList, FileText, FileSpreadsheet } from 'lucide-react';
 
 interface BatchActionBarProps {
   statusTab: string;
-  viewMode: 'orders' | 'items';
+  viewMode: 'orders' | 'items' | 'aggregate';
   selectedOrderCount: number;
   selectedItemCount: number;
+  selectedAggregateCount: number;
   onConfirmOrders: () => void;
   onShipItems: () => void;
   onCancelItems: () => void;
   onDirectShipOrders: () => void;
+  onConvertToPO: () => void;
+  onExportAggregateCSV: () => void;
+  onExportAggregateExcel: () => void;
   isLoading: boolean;
 }
 
@@ -18,14 +22,30 @@ export function BatchActionBar({
   viewMode,
   selectedOrderCount,
   selectedItemCount,
+  selectedAggregateCount,
   onConfirmOrders,
   onShipItems,
   onCancelItems,
   onDirectShipOrders,
+  onConvertToPO,
+  onExportAggregateCSV,
+  onExportAggregateExcel,
   isLoading,
 }: BatchActionBarProps) {
   if (viewMode === 'orders' && selectedOrderCount === 0) return null;
   if (viewMode === 'items' && selectedItemCount === 0) return null;
+  if (viewMode === 'aggregate' && selectedAggregateCount === 0) return null;
+
+  const getCount = () => {
+    if (viewMode === 'orders') return selectedOrderCount;
+    if (viewMode === 'items') return selectedItemCount;
+    return selectedAggregateCount;
+  };
+  const getLabel = () => {
+    if (viewMode === 'orders') return '個訂單';
+    if (viewMode === 'items') return '個品項';
+    return '項產品';
+  };
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -33,7 +53,7 @@ export function BatchActionBar({
         <div className="flex items-center gap-2 border-r border-primary-foreground/30 pr-6">
           <Package className="h-5 w-5" />
           <span className="font-bold text-lg">
-            已選擇 {viewMode === 'orders' ? selectedOrderCount : selectedItemCount} {viewMode === 'orders' ? '個訂單' : '個品項'}
+            已選擇 {getCount()} {getLabel()}
           </span>
         </div>
 
@@ -85,6 +105,41 @@ export function BatchActionBar({
               >
                 <XCircle className="h-4 w-4 mr-2" />
                 標記停產/取消
+              </Button>
+            </>
+          )}
+
+          {viewMode === 'aggregate' && (
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onExportAggregateCSV}
+                disabled={isLoading}
+                className="rounded-full shadow-inner active:scale-95 transition-all"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                匯出 CSV
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onExportAggregateExcel}
+                disabled={isLoading}
+                className="rounded-full shadow-inner active:scale-95 transition-all"
+              >
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                匯出 Excel
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onConvertToPO}
+                disabled={isLoading}
+                className="rounded-full shadow-inner active:scale-95 transition-all"
+              >
+                <ClipboardList className="h-4 w-4 mr-2" />
+                轉採購單
               </Button>
             </>
           )}

@@ -2,13 +2,13 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Package, Truck, CheckSquare, List, LayoutGrid } from 'lucide-react';
+import { Search, Package, Truck, CheckSquare, List, LayoutGrid, ClipboardList } from 'lucide-react';
 
 interface OrderFiltersProps {
   statusTab: 'pending' | 'processing' | 'shipped';
   onStatusTabChange: (v: 'pending' | 'processing' | 'shipped') => void;
-  viewMode: 'orders' | 'items';
-  onViewModeChange: (v: 'orders' | 'items') => void;
+  viewMode: 'orders' | 'items' | 'aggregate';
+  onViewModeChange: (v: 'orders' | 'items' | 'aggregate') => void;
   search: string;
   onSearchChange: (v: string) => void;
   storeFilter: string;
@@ -60,6 +60,14 @@ export function OrderFilters({
             className="h-8"
           >
             <LayoutGrid className="h-4 w-4 mr-1" /> 商品
+          </Button>
+          <Button
+            variant={viewMode === 'aggregate' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => onViewModeChange('aggregate')}
+            className="h-8"
+          >
+            <ClipboardList className="h-4 w-4 mr-1" /> 叫貨總覽
           </Button>
         </div>
       </div>

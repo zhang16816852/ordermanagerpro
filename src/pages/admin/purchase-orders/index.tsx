@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { OrderListTab } from './components/OrderListTab';
 import { SupplierTab } from './components/SupplierTab';
+import { ReceivingTab } from './components/ReceivingTab';
 import { OrderForm } from './components/OrderForm';
 import { SupplierForm } from './components/SupplierForm';
 import { OrderDetailDialog } from './components/OrderDetailDialog';
@@ -16,7 +17,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ClipboardList, Users, Plus } from 'lucide-react';
+import { ClipboardList, Users, Plus, PackageCheck } from 'lucide-react';
 
 export default function AdminPurchaseOrders() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -35,6 +36,8 @@ export default function AdminPurchaseOrders() {
     products,
     orderItems,
     itemsLoading,
+    sourceOrderMap,
+    supplierMappingMap,
     accounts,
     createOrderMutation,
     updateOrderMutation,
@@ -50,7 +53,7 @@ export default function AdminPurchaseOrders() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">採購管理</h1>
-          <p className="text-muted-foreground">管理供應商採購單與庫存入庫作業</p>
+          <p className="text-muted-foreground">管理供應商採購單、進貨收貨與庫存入庫作業</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => setCreateSupplierOpen(true)} variant="outline">
@@ -74,6 +77,9 @@ export default function AdminPurchaseOrders() {
           <TabsTrigger value="orders" className="flex items-center gap-2">
             <ClipboardList className="h-4 w-4" /> 採購單
           </TabsTrigger>
+          <TabsTrigger value="receiving" className="flex items-center gap-2">
+            <PackageCheck className="h-4 w-4" /> 進貨處理
+          </TabsTrigger>
           <TabsTrigger value="suppliers" className="flex items-center gap-2">
             <Users className="h-4 w-4" /> 供應商夥伴
           </TabsTrigger>
@@ -85,8 +91,13 @@ export default function AdminPurchaseOrders() {
             onView={(order) => setViewingOrder(order)}
             onEdit={(order) => { setEditingOrder(order); setCreateOrderOpen(true); }}
             onDelete={(id) => { if (confirm('確定要刪除此採購單嗎？')) deleteOrderMutation.mutate(id); }}
+            onStatusChange={(id, status) => updateOrderMutation.mutate({ id, status })}
             isLoading={ordersLoading}
           />
+        </TabsContent>
+
+        <TabsContent value="receiving" className="space-y-4">
+          <ReceivingTab />
         </TabsContent>
 
         <TabsContent value="suppliers" className="space-y-4">
@@ -169,6 +180,8 @@ export default function AdminPurchaseOrders() {
               orderItems={orderItems}
               products={products}
               accounts={accounts}
+              sourceOrderMap={sourceOrderMap}
+              supplierMappingMap={supplierMappingMap}
               isLoading={itemsLoading || addItemMutation.isPending || receiveItemsMutation.isPending || makePaymentMutation.isPending}
               onAddItem={(data) => addItemMutation.mutate({ purchase_order_id: viewingOrder.id, ...data })}
               onImportItems={(items) => {

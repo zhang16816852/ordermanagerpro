@@ -17,14 +17,15 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, PackageCheck, CreditCard, Download } from 'lucide-react';
+import { Plus, PackageCheck, CreditCard, Download, FileSpreadsheet } from 'lucide-react';
 import { PurchaseOrder, PurchaseOrderItem, ProductWithPrice } from '../types';
 import { ItemForm } from './ItemForm';
 import { ImportFromOrdersDialog } from './ImportFromOrdersDialog';
 import { ReceiveForm } from './ReceiveForm';
 import { PaymentForm } from './PaymentForm';
 import { ExcelImportDialog } from './ExcelImportDialog';
-import { FileSpreadsheet } from 'lucide-react';
+import { exportToCSV } from '@/lib/exportUtils';
+import * as xlsx from 'xlsx';
 
 
 interface OrderDetailDialogProps {
@@ -32,6 +33,8 @@ interface OrderDetailDialogProps {
   orderItems: PurchaseOrderItem[];
   products: ProductWithPrice[];
   accounts: any[];
+  sourceOrderMap: Record<string, string>;
+  supplierMappingMap: Record<string, { vendor_product_id: string; vendor_product_name: string }>;
   onAddItem: (data: any) => void;
   onImportItems: (items: any[]) => void;
   onReceiveItems: (data: any) => void;
@@ -44,6 +47,8 @@ export function OrderDetailDialog({
   orderItems,
   products,
   accounts,
+  sourceOrderMap,
+  supplierMappingMap,
   onAddItem,
   onImportItems,
   onReceiveItems,
@@ -55,6 +60,49 @@ export function OrderDetailDialog({
   const [excelImportOpen, setExcelImportOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
+
+  const getMappingKey = (item: PurchaseOrderItem) => `${item.product_id}_${item.variant_id || 'null'}`;
+
+  const handleExportCSV = () => {
+    const data = orderItems.map(item => {
+      const mapping = supplierMappingMap[getMappingKey(item)];
+      return {
+        'SKU': item.variant?.sku || item.product?.sku || '',
+        '產品名稱': item.product?.name || '',
+        '變體': item.variant?.name || '',
+        '廠商代碼': mapping?.vendor_product_id || '',
+        '廠商名稱': mapping?.vendor_product_name || '',
+        '數量': item.quantity,
+        '已收': item.received_quantity,
+        '單價': item.unit_cost,
+        '總額': item.quantity * item.unit_cost,
+        '來源訂單': (item.source_order_ids || []).map(id => sourceOrderMap[id] || id.slice(0, 8)).join(', '),
+      };
+    });
+    exportToCSV(data, `採購單_${order.id.slice(0, 8)}`);
+  };
+
+  const handleExportExcel = () => {
+    const data = orderItems.map(item => {
+      const mapping = supplierMappingMap[getMappingKey(item)];
+      return {
+        'SKU': item.variant?.sku || item.product?.sku || '',
+        '產品名稱': item.product?.name || '',
+        '變體': item.variant?.name || '',
+        '廠商代碼': mapping?.vendor_product_id || '',
+        '廠商名稱': mapping?.vendor_product_name || '',
+        '數量': item.quantity,
+        '已收': item.received_quantity,
+        '單價': item.unit_cost,
+        '總額': item.quantity * item.unit_cost,
+        '來源訂單': (item.source_order_ids || []).map(id => sourceOrderMap[id] || id.slice(0, 8)).join(', '),
+      };
+    });
+    const ws = xlsx.utils.json_to_sheet(data);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, '採購單');
+    xlsx.writeFile(wb, `採購單_${order.id.slice(0, 8)}_${Date.now()}.xlsx`);
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -76,9 +124,18 @@ export function OrderDetailDialog({
             {getStatusBadge(order.status)}
           </div>
           <p className="text-sm text-muted-foreground">供應商: {order.supplier?.name || '未指定'}</p>
+          {order.supplier_order_number && (
+            <p className="text-sm text-muted-foreground">廠商單號: {order.supplier_order_number}</p>
+          )}
           <p className="text-sm text-muted-foreground">日期: {order.order_date}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button size="sm" variant="outline" onClick={handleExportCSV}>
+            <Download className="h-4 w-4 mr-1" />匯出 CSV
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleExportExcel}>
+            <FileSpreadsheet className="h-4 w-4 mr-1" />匯出 Excel
+          </Button>
           <Dialog open={addItemOpen} onOpenChange={setAddItemOpen}>
             <DialogTrigger asChild>
               <Button size="sm" variant="outline"><Plus className="h-4 w-4 mr-1" />預算外品項</Button>
@@ -146,6 +203,9 @@ export function OrderDetailDialog({
             <TableRow>
               <TableHead>SKU</TableHead>
               <TableHead>產品名稱</TableHead>
+              <TableHead>廠商代碼</TableHead>
+              <TableHead>廠商名稱</TableHead>
+              <TableHead>來源訂單</TableHead>
               <TableHead className="text-right">數量</TableHead>
               <TableHead className="text-right">已收</TableHead>
               <TableHead className="text-right">單價</TableHead>
@@ -153,26 +213,44 @@ export function OrderDetailDialog({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {orderItems.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell className="font-mono text-xs">{item.variant?.sku || item.product?.sku}</TableCell>
-                <TableCell>
-                  <p className="text-sm font-medium">{item.product?.name}</p>
-                  {item.variant?.name && <p className="text-xs text-muted-foreground">{item.variant.name}</p>}
-                </TableCell>
-                <TableCell className="text-right font-medium">{item.quantity}</TableCell>
-                <TableCell className="text-right">
-                  <span className={item.received_quantity >= item.quantity ? 'text-green-600 font-bold' : 'text-orange-600'}>
-                    {item.received_quantity}
-                  </span>
-                </TableCell>
-                <TableCell className="text-right">${item.unit_cost.toLocaleString()}</TableCell>
-                <TableCell className="text-right font-bold">${(item.quantity * item.unit_cost).toLocaleString()}</TableCell>
-              </TableRow>
-            ))}
+            {orderItems.map((item) => {
+              const mapping = supplierMappingMap[getMappingKey(item)];
+              return (
+                <TableRow key={item.id}>
+                  <TableCell className="font-mono text-xs">{item.variant?.sku || item.product?.sku}</TableCell>
+                  <TableCell>
+                    <p className="text-sm font-medium">{item.product?.name}</p>
+                    {item.variant?.name && <p className="text-xs text-muted-foreground">{item.variant.name}</p>}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">{mapping?.vendor_product_id || '-'}</TableCell>
+                  <TableCell className="text-sm">{mapping?.vendor_product_name || '-'}</TableCell>
+                  <TableCell>
+                    {(item.source_order_ids || []).length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {item.source_order_ids!.map(id => (
+                          <Badge key={id} variant="outline" className="text-xs">
+                            {sourceOrderMap[id] || id.slice(0, 8)}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right font-medium">{item.quantity}</TableCell>
+                  <TableCell className="text-right">
+                    <span className={item.received_quantity >= item.quantity ? 'text-green-600 font-bold' : 'text-orange-600'}>
+                      {item.received_quantity}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">${item.unit_cost.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-bold">${(item.quantity * item.unit_cost).toLocaleString()}</TableCell>
+                </TableRow>
+              );
+            })}
             {orderItems.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground italic">目前無任何品項</TableCell>
+                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground italic">目前無任何品項</TableCell>
               </TableRow>
             )}
           </TableBody>

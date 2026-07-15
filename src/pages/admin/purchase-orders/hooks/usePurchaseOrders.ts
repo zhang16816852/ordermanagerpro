@@ -94,6 +94,45 @@ export function usePurchaseOrders(viewingOrderId?: string) {
     enabled: !!viewingOrderId,
   });
 
+  // Fetch supplier product mappings for vendor code/name in exports
+  const viewingOrder = viewingOrderId ? orders.find(o => o.id === viewingOrderId) : null;
+  const { data: supplierMappingMap = {} } = useQuery({
+    queryKey: ['supplier-mappings-export', viewingOrder?.supplier_id],
+    queryFn: async () => {
+      if (!viewingOrder?.supplier_id) return {};
+      const { data, error } = await (supabase as any)
+        .from('supplier_product_mappings')
+        .select('internal_product_id, internal_variant_id, vendor_product_id, vendor_product_name')
+        .eq('supplier_id', viewingOrder.supplier_id);
+      if (error) throw error;
+      return (data || []).reduce((acc: Record<string, { vendor_product_id: string; vendor_product_name: string }>, m: any) => {
+        const key = `${m.internal_product_id}_${m.internal_variant_id || 'null'}`;
+        acc[key] = { vendor_product_id: m.vendor_product_id, vendor_product_name: m.vendor_product_name };
+        return acc;
+      }, {});
+    },
+    enabled: !!viewingOrder?.supplier_id,
+  });
+
+  // Fetch source order codes for display
+  const allSourceOrderIds = [...new Set(orderItems.flatMap(item => item.source_order_ids || []))];
+  const { data: sourceOrderMap = {} } = useQuery({
+    queryKey: ['source-order-codes', allSourceOrderIds],
+    queryFn: async () => {
+      if (allSourceOrderIds.length === 0) return {};
+      const { data, error } = await (supabase as any)
+        .from('orders')
+        .select('id, code')
+        .in('id', allSourceOrderIds);
+      if (error) throw error;
+      return (data || []).reduce((acc: Record<string, string>, o: any) => {
+        acc[o.id] = o.code || o.id.slice(0, 8);
+        return acc;
+      }, {});
+    },
+    enabled: allSourceOrderIds.length > 0,
+  });
+
   // Mutations
   const createOrderMutation = useMutation({
     mutationFn: async (data: Partial<PurchaseOrder>) => {
@@ -250,6 +289,8 @@ export function usePurchaseOrders(viewingOrderId?: string) {
     products,
     orderItems,
     itemsLoading,
+    sourceOrderMap,
+    supplierMappingMap,
     accounts,
     createOrderMutation,
     updateOrderMutation,

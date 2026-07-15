@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Eye, Edit, Trash2 } from 'lucide-react';
+import { Eye, Edit, Trash2, Send } from 'lucide-react';
 import { PurchaseOrder } from '../types';
 
 interface OrderListTabProps {
@@ -16,6 +16,7 @@ interface OrderListTabProps {
   onView: (order: PurchaseOrder) => void;
   onEdit: (order: PurchaseOrder) => void;
   onDelete: (id: string) => void;
+  onStatusChange: (orderId: string, status: string) => void;
   isLoading: boolean;
 }
 
@@ -24,6 +25,7 @@ export function OrderListTab({
   onView,
   onEdit,
   onDelete,
+  onStatusChange,
   isLoading
 }: OrderListTabProps) {
   const getStatusBadge = (status: string) => {
@@ -44,6 +46,7 @@ export function OrderListTab({
           <TableRow>
             <TableHead>編號</TableHead>
             <TableHead>供應商</TableHead>
+            <TableHead>廠商單號</TableHead>
             <TableHead>日期</TableHead>
             <TableHead className="text-right">總額</TableHead>
             <TableHead>狀態</TableHead>
@@ -52,16 +55,27 @@ export function OrderListTab({
         </TableHeader>
         <TableBody>
           {isLoading ? (
-            <TableRow><TableCell colSpan={6} className="text-center py-8">載入中...</TableCell></TableRow>
+            <TableRow><TableCell colSpan={7} className="text-center py-8">載入中...</TableCell></TableRow>
           ) : orders.map((order) => (
             <TableRow key={order.id}>
               <TableCell className="font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
               <TableCell>{order.supplier?.name || '-'}</TableCell>
+              <TableCell className="text-sm">{order.supplier_order_number || '-'}</TableCell>
               <TableCell>{order.order_date}</TableCell>
               <TableCell className="text-right font-medium">${order.total_amount.toLocaleString()}</TableCell>
               <TableCell>{getStatusBadge(order.status)}</TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-2">
+                  {order.status === 'draft' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-blue-600 border-blue-500 hover:bg-blue-50"
+                      onClick={() => onStatusChange(order.id, 'ordered')}
+                    >
+                      <Send className="h-4 w-4 mr-1" />轉為已下單
+                    </Button>
+                  )}
                   <Button size="icon" variant="ghost" onClick={() => onView(order)}>
                     <Eye className="h-4 w-4" />
                   </Button>
@@ -77,7 +91,7 @@ export function OrderListTab({
           ))}
           {orders.length === 0 && !isLoading && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center py-8 text-muted-foreground italic">目前無採購紀錄</TableCell>
+              <TableCell colSpan={7} className="text-center py-8 text-muted-foreground italic">目前無採購紀錄</TableCell>
             </TableRow>
           )}
         </TableBody>

@@ -61,6 +61,8 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
             unit_price,
             status,
             store_id,
+            product_id,
+            variant_id,
             product:products (name, sku),
             product_variant:product_variants (name, option_1, option_2)
           )

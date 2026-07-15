@@ -18,7 +18,7 @@ export function SupplierMappingDialog({ open, onOpenChange, supplier }: Supplier
           </DialogDescription>
         </DialogHeader>
         {open && supplier && (
-          <SupplierMappingManager supplierId={supplier.id} />
+          <SupplierMappingManager supplierId={supplier.id} supplierName={supplier.name} />
         )}
       </DialogContent>
     </Dialog>

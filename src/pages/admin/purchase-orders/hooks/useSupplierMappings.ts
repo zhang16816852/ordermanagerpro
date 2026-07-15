@@ -17,6 +17,7 @@ export interface SupplierProductMapping {
   vendor_product_name: string | null;
   internal_product_id: string;
   internal_variant_id: string | null;
+  vendor_unit_cost: number | null;
   internal_product?: any;
   internal_variant?: any;
 }
@@ -76,6 +77,7 @@ export function useSupplierMappings(supplierId?: string) {
             vendor_product_name: data.vendor_product_name,
             internal_product_id: data.internal_product_id,
             internal_variant_id: data.internal_variant_id,
+            vendor_unit_cost: data.vendor_unit_cost ?? null,
             updated_at: new Date().toISOString(),
           },
           { onConflict: 'supplier_id, vendor_product_id' }

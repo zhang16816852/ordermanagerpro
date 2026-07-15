@@ -6,11 +6,12 @@ import { UnmappedResolver, UnmappedItem } from './UnmappedResolver';
 
 interface SupplierMappingManagerProps {
   supplierId: string;
-  unmappedItems?: UnmappedItem[]; // 如果在匯入流程中，可以傳入未對應清單，會多顯示「未對應處理」區域
+  supplierName: string;
+  unmappedItems?: UnmappedItem[];
   onAllUnmappedResolved?: () => void;
 }
 
-export function SupplierMappingManager({ supplierId, unmappedItems, onAllUnmappedResolved }: SupplierMappingManagerProps) {
+export function SupplierMappingManager({ supplierId, supplierName, unmappedItems, onAllUnmappedResolved }: SupplierMappingManagerProps) {
   const {
     mappings,
     config,
@@ -36,10 +37,10 @@ export function SupplierMappingManager({ supplierId, unmappedItems, onAllUnmappe
 
   return (
     <div className="space-y-4">
-      <Tabs defaultValue={defaultTab}>
+      <Tabs defaultValue="mappings">
         <TabsList className="mb-4">
-          {hasUnmappedItems && <TabsTrigger value="unmapped">未對應處理 ({unmappedItems.length})</TabsTrigger>}
           <TabsTrigger value="mappings">已對照規則</TabsTrigger>
+          {hasUnmappedItems && <TabsTrigger value="unmapped">未對應處理 ({unmappedItems.length})</TabsTrigger>}
           <TabsTrigger value="config">匯入欄位設定</TabsTrigger>
         </TabsList>
 
@@ -58,7 +59,11 @@ export function SupplierMappingManager({ supplierId, unmappedItems, onAllUnmappe
           <MappedRulesList
             mappings={mappings}
             onDelete={(id) => deleteMappingMutation.mutate(id)}
+            onSave={(data) => saveMappingMutation.mutate(data)}
+            isSaving={saveMappingMutation.isPending}
             isLoading={isLoadingMappings}
+            supplierId={supplierId}
+            supplierName={supplierName}
           />
         </TabsContent>
 

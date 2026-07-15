@@ -20,6 +20,7 @@ export interface PurchaseOrder {
   received_date: string | null;
   total_amount: number;
   notes: string | null;
+  supplier_order_number: string | null;
   created_by: string;
   created_at: string;
   supplier?: Supplier;
@@ -33,6 +34,7 @@ export interface PurchaseOrderItem {
   quantity: number;
   received_quantity: number;
   unit_cost: number;
+  source_order_ids?: string[] | null;
   product?: { id: string; name: string; sku: string };
   variant?: { id: string; name: string; sku: string };
 }

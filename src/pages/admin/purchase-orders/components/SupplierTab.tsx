@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, User, Phone, Mail, MapPin, FileEdit } from 'lucide-react';
+import { Plus, User, Phone, Mail, MapPin, FileEdit, Download } from 'lucide-react';
 import { Supplier } from '../types';
 
 interface SupplierTabProps {
@@ -11,6 +11,8 @@ interface SupplierTabProps {
 
 import { useState } from 'react';
 import { SupplierMappingDialog } from './SupplierMappingDialog';
+import { MappingExportDialog } from './mapping/MappingExportDialog';
+import { useSupplierMappings } from '../hooks/useSupplierMappings';
 
 export function SupplierTab({
   suppliers,
@@ -18,6 +20,7 @@ export function SupplierTab({
   isLoading
 }: SupplierTabProps) {
   const [mappingSupplier, setMappingSupplier] = useState<Supplier | null>(null);
+  const [exportSupplier, setExportSupplier] = useState<Supplier | null>(null);
 
   return (
     <div className="space-y-6">
@@ -64,6 +67,16 @@ export function SupplierTab({
                   <p className="text-xs text-muted-foreground line-clamp-2 italic">備註：{supplier.notes}</p>
                 </div>
               )}
+              <div className="pt-2 border-t mt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-muted-foreground"
+                  onClick={() => setExportSupplier(supplier)}
+                >
+                  <Download className="h-4 w-4 mr-1" /> 匯出對照
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}
@@ -79,6 +92,26 @@ export function SupplierTab({
         onOpenChange={(open) => !open && setMappingSupplier(null)}
         supplier={mappingSupplier}
       />
+
+      <SupplierExportWrapper
+        supplier={exportSupplier}
+        onOpenChange={(open) => !open && setExportSupplier(null)}
+      />
     </div>
+  );
+}
+
+function SupplierExportWrapper({ supplier, onOpenChange }: { supplier: Supplier | null; onOpenChange: (open: boolean) => void }) {
+  const { mappings } = useSupplierMappings(supplier?.id);
+
+  if (!supplier) return null;
+
+  return (
+    <MappingExportDialog
+      open={!!supplier}
+      onOpenChange={onOpenChange}
+      mappings={mappings}
+      supplierName={supplier.name}
+    />
   );
 }

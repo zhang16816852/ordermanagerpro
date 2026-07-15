@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface InternalProductSelectorProps {
-  onSelect: (productId: string, variantId: string | null) => void;
+  onSelect: (productId: string, variantId: string | null, productName: string, variantName: string | null) => void;
   onClose: () => void;
 }
 
@@ -70,7 +70,7 @@ export function InternalProductSelector({ onSelect, onClose }: InternalProductSe
                       </TableCell>
                       <TableCell className="text-sm">{v.sku}</TableCell>
                       <TableCell>
-                        <Button size="sm" variant="outline" onClick={() => onSelect(p.id, v.id)}>選擇</Button>
+                        <Button size="sm" variant="outline" onClick={() => onSelect(p.id, v.id, p.name, v.name || null)}>選擇</Button>
                       </TableCell>
                     </TableRow>
                   ));
@@ -80,7 +80,7 @@ export function InternalProductSelector({ onSelect, onClose }: InternalProductSe
                     <TableCell className="font-medium">{p.name}</TableCell>
                     <TableCell className="text-sm">{p.sku}</TableCell>
                     <TableCell>
-                      <Button size="sm" variant="outline" onClick={() => onSelect(p.id, null)}>選擇</Button>
+                      <Button size="sm" variant="outline" onClick={() => onSelect(p.id, null, p.name, null)}>選擇</Button>
                     </TableCell>
                   </TableRow>
                 );

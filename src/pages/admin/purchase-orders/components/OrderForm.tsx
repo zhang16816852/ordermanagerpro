@@ -32,6 +32,7 @@ export function OrderForm({
   const [expectedDate, setExpectedDate] = useState(order?.expected_date || '');
   const [notes, setNotes] = useState(order?.notes || '');
   const [status, setStatus] = useState<PurchaseOrderStatus>(order?.status || 'draft');
+  const [supplierOrderNumber, setSupplierOrderNumber] = useState(order?.supplier_order_number || '');
 
   return (
     <div className="space-y-4">
@@ -58,6 +59,15 @@ export function OrderForm({
           <Label>預計到貨（選填）</Label>
           <Input type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} />
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>廠商訂單編號（選填）</Label>
+        <Input
+          value={supplierOrderNumber}
+          onChange={(e) => setSupplierOrderNumber(e.target.value)}
+          placeholder="輸入廠商端的訂單編號"
+        />
       </div>
 
       {order && (
@@ -88,6 +98,7 @@ export function OrderForm({
             order_date: orderDate,
             expected_date: expectedDate || null,
             notes: notes || null,
+            supplier_order_number: supplierOrderNumber || null,
             status,
           })}
           disabled={isLoading}

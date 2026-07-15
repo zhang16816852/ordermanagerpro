@@ -10,6 +10,7 @@ import { OrdersCardView } from '@/components/order/OrdersCardView';
 import { ItemsCardView } from '@/components/order/ItemsCardView';
 import { Order, OrderItem } from '@/types/order';
 import { exportToCSV } from '@/lib/exportUtils';
+import * as xlsx from 'xlsx';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import {
@@ -21,6 +22,9 @@ import { useOrdersList } from './hooks/useOrdersList';
 import { OrderFilters } from './components/OrderFilters';
 import { OrderTableView } from './components/OrderTableView';
 import { ItemTableView } from './components/ItemTableView';
+import { AggregateTableView, AggregatedItem } from './components/AggregateTableView';
+import { AggregateCardsView } from './components/AggregateCardsView';
+import { AggregateToPODialog } from './components/AggregateToPODialog';
 import { BatchActionBar } from './components/BatchActionBar';
 import { ShipToPoolDialog } from './components/ShipToPoolDialog';
 
@@ -34,8 +38,8 @@ export default function AdminOrderList() {
   const [statusTab, setStatusTab] = useState<'pending' | 'processing' | 'shipped'>(
     validTabs.includes(urlTab as any) ? (urlTab as 'pending' | 'processing' | 'shipped') : 'pending'
   );
-  const [viewMode, setViewMode] = useState<'orders' | 'items'>(
-    searchParams.get('view') === 'items' ? 'items' : 'orders'
+  const [viewMode, setViewMode] = useState<'orders' | 'items' | 'aggregate'>(
+    searchParams.get('view') === 'items' ? 'items' : searchParams.get('view') === 'aggregate' ? 'aggregate' : 'orders'
   );
   const [search, setSearch] = useState(searchParams.get('id') || searchParams.get('search') || '');
   const [storeFilter, setStoreFilter] = useState<string>(searchParams.get('store') || 'all');
@@ -55,6 +59,8 @@ export default function AdminOrderList() {
   const [shipToPoolOpen, setShipToPoolOpen] = useState(false);
   const [directShipDialogOpen, setDirectShipDialogOpen] = useState(false);
   const [directShipNotes, setDirectShipNotes] = useState('');
+  const [convertToPOOpen, setConvertToPOOpen] = useState(false);
+  const [selectedAggregateItems, setSelectedAggregateItems] = useState<Map<string, { productId: string; variantId: string | null; quantity: number; maxQuantity: number; productName: string; sku: string; sourceOrderIds: string[] }>>(new Map());
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -180,6 +186,74 @@ export default function AdminOrderList() {
     ) || [];
   }, [orders, search, viewMode]);
 
+  // Aggregation logic: group pending items by product_id + variant_id across all stores
+  const aggregatedItems = useMemo((): AggregatedItem[] => {
+    if (viewMode !== 'aggregate') return [];
+
+    const allItems = orders?.flatMap(order =>
+      order.order_items
+        .filter(item => getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued')
+        .filter(item => {
+          if (!search) return true;
+          const searchLower = search.toLowerCase();
+          return (
+            item.product?.name.toLowerCase().includes(searchLower) ||
+            item.product?.sku.toLowerCase().includes(searchLower)
+          );
+        })
+        .map(item => ({
+          ...item,
+          orderId: order.id,
+          storeName: order.stores?.name || '',
+          storeCode: order.stores?.code || '',
+          storeId: order.store_id,
+          pendingQuantity: getPendingQuantity(item),
+        }))
+    ) || [];
+
+    // Group by productId + variantId
+    const grouped = new Map<string, AggregatedItem>();
+    for (const item of allItems) {
+      const key = `${item.product_id}_${item.variant_id || 'null'}`;
+      if (grouped.has(key)) {
+        const existing = grouped.get(key)!;
+        existing.totalPendingQuantity += item.pendingQuantity;
+        if (!existing.sourceOrderIds.includes(item.orderId)) {
+          existing.sourceOrderIds.push(item.orderId);
+        }
+        const existingStore = existing.storeBreakdown.find(s => s.storeId === item.storeId);
+        if (existingStore) {
+          existingStore.quantity += item.pendingQuantity;
+        } else {
+          existing.storeBreakdown.push({
+            storeId: item.storeId,
+            storeName: item.storeName,
+            storeCode: item.storeCode,
+            quantity: item.pendingQuantity,
+          });
+        }
+      } else {
+        grouped.set(key, {
+          productId: item.product_id,
+          variantId: item.variant_id || null,
+          productName: item.product?.name || '',
+          variantName: item.product_variant?.name || null,
+          sku: item.product?.sku || '',
+          totalPendingQuantity: item.pendingQuantity,
+          sourceOrderIds: [item.orderId],
+          storeBreakdown: [{
+            storeId: item.storeId,
+            storeName: item.storeName,
+            storeCode: item.storeCode,
+            quantity: item.pendingQuantity,
+          }],
+        });
+      }
+    }
+
+    return Array.from(grouped.values()).sort((a, b) => a.productName.localeCompare(b.productName));
+  }, [orders, search, viewMode, getPendingQuantity]);
+
   // Helper functions
   const getOrderShipmentStatus = (items: OrderItem[]) => {
     if (items.length === 0) return 'waiting';
@@ -215,6 +289,98 @@ export default function AdminOrderList() {
       return acc;
     }, {} as Record<string, { storeName: string; items: any[] }>);
   }, [selectedItems]);
+
+  // Aggregate view handlers
+  const getAggregateItemKey = (item: AggregatedItem) => `${item.productId}_${item.variantId || 'null'}`;
+
+  const handleToggleAggregateSelection = (item: AggregatedItem, checked: boolean) => {
+    const key = getAggregateItemKey(item);
+    setSelectedAggregateItems(prev => {
+      const next = new Map(prev);
+      if (checked) {
+        next.set(key, {
+          productId: item.productId,
+          variantId: item.variantId,
+          quantity: item.totalPendingQuantity,
+          maxQuantity: item.totalPendingQuantity,
+          productName: item.productName,
+          sku: item.sku,
+          sourceOrderIds: item.sourceOrderIds,
+        });
+      } else {
+        next.delete(key);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleAllAggregate = (checked: boolean) => {
+    if (checked) {
+      const next = new Map<string, { productId: string; variantId: string | null; quantity: number; maxQuantity: number; productName: string; sku: string; sourceOrderIds: string[] }>();
+      aggregatedItems.forEach(item => {
+        next.set(getAggregateItemKey(item), {
+          productId: item.productId,
+          variantId: item.variantId,
+          quantity: item.totalPendingQuantity,
+          maxQuantity: item.totalPendingQuantity,
+          productName: item.productName,
+          sku: item.sku,
+          sourceOrderIds: item.sourceOrderIds,
+        });
+      });
+      setSelectedAggregateItems(next);
+    } else {
+      setSelectedAggregateItems(new Map());
+    }
+  };
+
+  const handleUpdateAggregateQuantity = (key: string, quantity: number) => {
+    setSelectedAggregateItems(prev => {
+      const next = new Map(prev);
+      const item = next.get(key);
+      if (item) {
+        next.set(key, { ...item, quantity: Math.min(Math.max(1, quantity), item.maxQuantity) });
+      }
+      return next;
+    });
+  };
+
+  const handleExportAggregateCSV = () => {
+    const data = Array.from(selectedAggregateItems.values()).map(item => {
+      const agg = aggregatedItems.find(a => getAggregateItemKey(a) === `${item.productId}_${item.variantId || 'null'}`);
+      const storeDetail = agg?.storeBreakdown.map(s =>
+        `${s.storeCode || s.storeName}: ${s.quantity}`
+      ).join(', ') || '';
+      return {
+        '產品名稱': item.productName,
+        'SKU': item.sku,
+        '總需求量': item.maxQuantity,
+        '叫貨量': item.quantity,
+        '門市明細': storeDetail,
+      };
+    });
+    exportToCSV(data, `叫貨總覽_${statusTab}`);
+  };
+
+  const handleExportAggregateExcel = () => {
+    const data = Array.from(selectedAggregateItems.values()).map(item => {
+      const agg = aggregatedItems.find(a => getAggregateItemKey(a) === `${item.productId}_${item.variantId || 'null'}`);
+      const storeDetail = agg?.storeBreakdown.map(s =>
+        `${s.storeCode || s.storeName}: ${s.quantity}`
+      ).join(', ') || '';
+      return {
+        '產品名稱': item.productName,
+        'SKU': item.sku,
+        '總需求量': item.maxQuantity,
+        '叫貨量': item.quantity,
+        '門市明細': storeDetail,
+      };
+    });
+    const ws = xlsx.utils.json_to_sheet(data);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, '叫貨總覽');
+    xlsx.writeFile(wb, `叫貨總覽_${statusTab}_${Date.now()}.xlsx`);
+  };
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] space-y-4 p-4 md:p-6 overflow-hidden bg-muted/10">
@@ -261,6 +427,7 @@ export default function AdminOrderList() {
           setStatusTab(v);
           setSelectedOrderIds(new Set());
           setSelectedItems(new Map());
+          setSelectedAggregateItems(new Map());
           setSearchParams((prev) => {
             const next = new URLSearchParams(prev);
             next.set("tab", v);
@@ -292,7 +459,7 @@ export default function AdminOrderList() {
       />
 
       <div className="flex-1 min-h-0 flex flex-col pt-2">
-        {viewMode === 'orders' ? (
+        {viewMode === 'orders' && (
           <>
             {/* Desktop: Table */}
             <div className="hidden md:block flex-1 min-h-0">
@@ -328,7 +495,9 @@ export default function AdminOrderList() {
               />
             </div>
           </>
-        ) : (
+        )}
+
+        {viewMode === 'items' && (
           <>
             {/* Desktop: Table */}
             <div className="hidden md:block flex-1 min-h-0">
@@ -395,6 +564,34 @@ export default function AdminOrderList() {
             </div>
           </>
         )}
+
+        {viewMode === 'aggregate' && (
+          <>
+            {/* Desktop: Table */}
+            <div className="hidden md:block flex-1 min-h-0">
+              <div className="h-full flex flex-col">
+                <AggregateTableView
+                  items={aggregatedItems}
+                  isLoading={isLoading}
+                  selectedItems={selectedAggregateItems}
+                  onToggleSelection={handleToggleAggregateSelection}
+                  onToggleAll={handleToggleAllAggregate}
+                  onUpdateQuantity={handleUpdateAggregateQuantity}
+                />
+              </div>
+            </div>
+            {/* Mobile: Cards */}
+            <div className="md:hidden flex-1 min-h-0">
+              <AggregateCardsView
+                items={aggregatedItems}
+                isLoading={isLoading}
+                selectedItems={selectedAggregateItems}
+                onToggleSelection={handleToggleAggregateSelection}
+                onUpdateQuantity={handleUpdateAggregateQuantity}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       <BatchActionBar
@@ -402,6 +599,7 @@ export default function AdminOrderList() {
         viewMode={viewMode}
         selectedOrderCount={selectedOrderIds.size}
         selectedItemCount={selectedItems.size}
+        selectedAggregateCount={selectedAggregateItems.size}
         isLoading={confirmOrdersMutation.isPending || addToShippingPoolMutation.isPending || cancelItemsMutation.isPending || directShipMutation.isPending}
         onConfirmOrders={() => confirmOrdersMutation.mutate(Array.from(selectedOrderIds))}
         onShipItems={() => setShipToPoolOpen(true)}
@@ -411,6 +609,9 @@ export default function AdminOrderList() {
             cancelItemsMutation.mutate({ itemIds: Array.from(selectedItems.keys()), targetStatus: 'cancelled' });
           }
         }}
+        onConvertToPO={() => setConvertToPOOpen(true)}
+        onExportAggregateCSV={handleExportAggregateCSV}
+        onExportAggregateExcel={handleExportAggregateExcel}
       />
 
       {/* Confirmation Dialogs */}
@@ -475,6 +676,17 @@ export default function AdminOrderList() {
         order={viewingOrder}
         open={!!viewingOrder}
         onOpenChange={(open) => !open && setViewingOrder(null)}
+      />
+
+      {/* Convert to PO Dialog */}
+      <AggregateToPODialog
+        open={convertToPOOpen}
+        onOpenChange={setConvertToPOOpen}
+        selectedItems={Array.from(selectedAggregateItems.values())}
+        onCreated={() => {
+          setSelectedAggregateItems(new Map());
+          setConvertToPOOpen(false);
+        }}
       />
     </div>
   );
