@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useSpecStore } from '@/store/useSpecStore';
 import { getProductCache, syncProducts, setProductCache } from '@/hooks/useProductCache';
 import { useDeviceModelStore } from '@/store/useDeviceModelStore';
+import { getBrandSeriesCache, setBrandSeriesCache } from '@/hooks/useBrandSeriesCache';
 import { CacheService, CACHE } from '@/services/cacheService';
 
 export function formatTaipeiTime(date: Date = new Date()): string {
@@ -168,6 +169,38 @@ export class SyncManager {
       } else {
         await useDeviceModelStore.getState().fetchData(false);
         finalVersions['型號 (device_models)'] = `${deviceSeq} (無異動)`;
+      }
+
+      // 6. 同步品牌系列 (Brand Series)
+      const bsCached = getBrandSeriesCache();
+      const bsSeq = forceFull ? '0' : (bsCached?.dataVersion || '0');
+
+      const { data: bsVersionData } = await supabase
+        .from('data_versions')
+        .select('version')
+        .eq('table_name', 'brand_series')
+        .maybeSingle();
+      const bsServerVersion = String(bsVersionData?.version || '0');
+
+      if (CacheService.isStale(bsSeq, bsServerVersion)) {
+        const { data: bsData, error: bsError } = await supabase
+          .from('brand_series')
+          .select('*')
+          .order('sort_order')
+          .order('name');
+        if (!bsError && bsData) {
+          setBrandSeriesCache(bsData as any, bsServerVersion);
+          this.logTelemetry('🏷️ 品牌系列更新中', '#e67e22', {
+            '客戶端版本': bsSeq,
+            '伺服器版本': bsServerVersion,
+            '系列筆數': bsData.length
+          });
+          finalVersions['品牌系列 (brand_series)'] = bsServerVersion;
+        } else {
+          finalVersions['品牌系列 (brand_series)'] = `${bsSeq} (查詢失敗)`;
+        }
+      } else {
+        finalVersions['品牌系列 (brand_series)'] = `${bsSeq} (無異動)`;
       }
 
       SyncManager.logTelemetry('✨ 全域快取校驗完成', '#2ecc71', {

@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { filterRowsColsForTab } from '@/lib/order-grid-utils';
+import { getDisplayValue } from '@/lib/order-grid-utils';
 import type { GridCellVariant } from '@/types/order-grid';
 
 interface PreviewTableProps {
@@ -13,6 +14,8 @@ interface PreviewTableProps {
   tabValue: string;
   rowLabel: string;
   colLabel: string;
+  rowValueMap?: Record<string, string>;
+  colValueMap?: Record<string, string>;
 }
 
 function PreviewTable({
@@ -22,6 +25,8 @@ function PreviewTable({
   tabValue,
   rowLabel,
   colLabel,
+  rowValueMap,
+  colValueMap,
 }: PreviewTableProps) {
   return (
     <ScrollArea className="h-full">
@@ -37,17 +42,17 @@ function PreviewTable({
                   key={cv}
                   className="border-b border-r px-2 py-1.5 font-medium text-muted-foreground text-center"
                 >
-                  {cv}
+                  {getDisplayValue(cv, colValueMap)}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rowValues.map((rv) => (
-              <tr key={rv}>
-                <td className="sticky left-0 z-10 bg-background border-b border-r px-2 py-1.5 font-medium text-muted-foreground">
-                  {rv}
-                </td>
+              {rowValues.map((rv) => (
+                <tr key={rv}>
+                  <td className="sticky left-0 z-10 bg-background border-b border-r px-2 py-1.5 font-medium text-muted-foreground">
+                    {getDisplayValue(rv, rowValueMap)}
+                  </td>
                 {colValues.map((cv) => {
                   const key = `${tabValue}|${rv}|${cv}`;
                   const cellItems = cells.get(key) || [];
@@ -89,6 +94,8 @@ interface GridPreviewSidebarProps {
   } | null;
   rowLabel: string;
   colLabel: string;
+  rowValueMap?: Record<string, string>;
+  colValueMap?: Record<string, string>;
 }
 
 export function GridPreviewSidebar({
@@ -97,6 +104,8 @@ export function GridPreviewSidebar({
   grid,
   rowLabel,
   colLabel,
+  rowValueMap,
+  colValueMap,
 }: GridPreviewSidebarProps) {
   if (!open) return null;
 
@@ -131,6 +140,8 @@ export function GridPreviewSidebar({
                   tabValue="__all__"
                   rowLabel={rowLabel}
                   colLabel={colLabel}
+                  rowValueMap={rowValueMap}
+                  colValueMap={colValueMap}
                 />
               ) : (
                 <Tabs defaultValue={grid.tabValues[0]} className="h-full flex flex-col">
@@ -159,6 +170,8 @@ export function GridPreviewSidebar({
                             tabValue={tv}
                             rowLabel={rowLabel}
                             colLabel={colLabel}
+                            rowValueMap={rowValueMap}
+                            colValueMap={colValueMap}
                           />
                         </TabsContent>
                       );

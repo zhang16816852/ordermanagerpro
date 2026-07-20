@@ -14,6 +14,7 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
         mutationFn: async (values: any) => {
             const {
                 category_ids,
+                brand_series_id,
                 device_model_ids,
                 device_model_group_ids = [],
                 device_model_exclusion_ids = [],
@@ -29,6 +30,14 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
             if (category_ids?.length > 0) {
                 const { error } = await supabase.from('product_category_links').insert(
                     category_ids.map((catId: string) => ({ product_id: product.id, category_id: catId }))
+                );
+                if (error) throw error;
+            }
+
+            if (brand_series_id) {
+                const { error } = await supabase.from('product_series_links').upsert(
+                    { product_id: product.id, brand_series_id },
+                    { onConflict: 'product_id,brand_series_id' }
                 );
                 if (error) throw error;
             }
@@ -66,6 +75,7 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
         mutationFn: async ({ id, values }: { id: string, values: any }) => {
             const {
                 category_ids,
+                brand_series_id,
                 device_model_ids,
                 device_model_group_ids = [],
                 device_model_exclusion_ids = [],
@@ -83,6 +93,15 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
                 await supabase.from('product_category_links').insert(
                     category_ids.map((catId: string) => ({ product_id: id, category_id: catId }))
                 );
+            }
+
+            await supabase.from('product_series_links').delete().eq('product_id', id);
+            if (brand_series_id) {
+                const { error } = await supabase.from('product_series_links').upsert(
+                    { product_id: id, brand_series_id },
+                    { onConflict: 'product_id,brand_series_id' }
+                );
+                if (error) throw error;
             }
 
             await entityRelationService.updateRelations('product', id, {

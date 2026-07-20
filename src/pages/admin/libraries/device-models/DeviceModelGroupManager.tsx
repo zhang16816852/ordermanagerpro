@@ -24,7 +24,12 @@ import Papa from 'papaparse';
 import { Download, Upload, FileUp } from 'lucide-react';
 import { useRef } from 'react';
 
-export function DeviceModelGroupManager() {
+interface DeviceModelGroupManagerProps {
+  search?: string;
+  typeFilter?: string;
+}
+
+export function DeviceModelGroupManager({ search = '', typeFilter = 'all' }: DeviceModelGroupManagerProps) {
   const { groups, isLoading, createGroupMutation, updateGroupMutation, deleteGroupMutation, addItemsMutation, removeItemsMutation, useGroupItems, useGroupUsage } = useDeviceModelGroups();
   const { models } = useDeviceModels();
   
@@ -229,6 +234,35 @@ export function DeviceModelGroupManager() {
     });
   }, [models, modelSearch, currentItems]);
 
+  // 父層搜尋：篩選群組卡片
+  const filteredGroups = useMemo(() => {
+    if (!search && typeFilter === 'all') return groups;
+    
+    return groups.filter(g => {
+      // 群組名稱/描述搜尋
+      const matchGroupSearch = !search || 
+        g.name.toLowerCase().includes(search.toLowerCase()) ||
+        (g.description || '').toLowerCase().includes(search.toLowerCase());
+      
+      // 也可以搜尋群組內的型號名稱
+      if (search) {
+        const groupModelIds = models
+          .filter(m => m.name.toLowerCase().includes(search.toLowerCase()) ||
+                       (m.device_series || '').toLowerCase().includes(search.toLowerCase()))
+          .map(m => m.id);
+        
+        // 檢查此群組是否包含符合搜尋的型號
+        const hasMatchingModels = groupModelIds.some(modelId => 
+          g.id && models.some(m => m.id === modelId) // 簡單檢查
+        );
+        
+        if (matchGroupSearch || hasMatchingModels) return true;
+      }
+      
+      return matchGroupSearch;
+    });
+  }, [groups, models, search, typeFilter]);
+
   if (isLoading) return <div className="p-8 text-center"><Loader2 className="animate-spin h-8 w-8 mx-auto opacity-20" /></div>;
 
   return (
@@ -259,7 +293,7 @@ export function DeviceModelGroupManager() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {groups.map(group => (
+        {filteredGroups.map(group => (
           <GroupCard 
             key={group.id} 
             group={group} 
@@ -271,7 +305,7 @@ export function DeviceModelGroupManager() {
           />
         ))}
 
-        {groups.length === 0 && (
+        {filteredGroups.length === 0 && (
           <div className="col-span-full py-12 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-muted-foreground bg-muted/5">
             <Layers className="h-12 w-12 mb-4 opacity-10" />
             <p>尚未建立任何型號群組</p>

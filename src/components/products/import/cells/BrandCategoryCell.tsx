@@ -27,7 +27,7 @@ export function BrandCategoryCell({ row, index, onUpdate, allBrands, categories,
                 <Badge variant="outline" className="text-[10px] w-fit border-emerald-500/30 text-emerald-700 bg-emerald-50/50">
                     {row.brand}
                 </Badge>
-                <span className="text-[9px] text-muted-foreground ml-1">{row.series || '-'}</span>
+                <span className="text-[9px] text-muted-foreground ml-1">{row.series_name || row.series || '-'}</span>
             </div>
         ) : (
             <Popover>

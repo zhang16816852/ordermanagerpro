@@ -12,6 +12,7 @@ export const CACHE = {
   deviceModels: { key: 'ac_device_models_v1', schema: 1, versionKey: 'device_models' },
   storefront: { key: 'ac_storefront_v1', schema: 1, versionKey: 'storefront_items' },
   productImages: { key: 'ac_product_images_v1', schema: 1, versionKey: 'product_images' },
+  brandSeries: { key: 'ac_brand_series_v1', schema: 1, versionKey: 'brand_series' },
 } as const;
 
 const LEGACY_KEYS = [

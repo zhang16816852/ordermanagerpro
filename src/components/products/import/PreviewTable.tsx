@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useColorStore } from '@/store/useColorStore';
 import { useDeviceModelStore } from '@/store/useDeviceModelStore';
+import { useBrandSeriesCache } from '@/hooks/useBrandSeriesCache';
 import { ImportRow } from './useProductImport';
 import { PreviewToolbar } from './PreviewToolbar';
 import { BatchToolbar } from './BatchToolbar';
@@ -27,6 +28,7 @@ export function PreviewTable({
 }: PreviewTableProps) {
     const { colors: allColors, addColor, fetchColors, getColorByName } = useColorStore();
     const { models: allDeviceModels, brands: allDeviceBrands, groups: allDeviceGroups, addModel, fetchData: fetchDeviceData } = useDeviceModelStore();
+    const { allSeries } = useBrandSeriesCache();
 
     const safeData = data || [];
 
@@ -72,6 +74,7 @@ export function PreviewTable({
                     <span className="flex-1 min-w-[120px]">名稱</span>
                     <span className="w-[80px] shrink-0">型號</span>
                     <span className="w-[110px] shrink-0">品牌</span>
+                    <span className="w-[100px] shrink-0">系列</span>
                     <span className="w-[110px] shrink-0">分類</span>
                     <span className="w-[150px] shrink-0 text-right">價格</span>
                     <span className="w-[120px] shrink-0">規格</span>
@@ -95,6 +98,7 @@ export function PreviewTable({
                             allColors={allColors}
                             addModel={addModel}
                             specDefs={specDefs}
+                            allSeries={allSeries}
                         />
                     ))}
                     {groups.length === 0 && (

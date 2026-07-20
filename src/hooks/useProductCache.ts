@@ -44,7 +44,8 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
       .select(`
                     *,
                     variants:product_variants(*),
-                    product_category_links(category_id, categories(name))
+                    product_category_links(category_id, categories(name)),
+                    product_series_links(brand_series_id)
                 `);
 
     if (productsError) throw productsError;
@@ -177,6 +178,7 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
         image_url: coversMap.get(p.id) || null,
         category_ids: p.product_category_links?.map((l: any) => l.category_id) || [],
         category_names: p.product_category_links?.map((l: any) => l.categories?.name).filter(Boolean) || [],
+        brand_series_ids: p.product_series_links?.map((l: any) => l.brand_series_id) || [],
         effective_model_names: modelDataP._expanded_models,
         effective_model_aliases: modelDataP._expanded_model_aliases,
         spec_values: specsMap.get(p.id) || {},

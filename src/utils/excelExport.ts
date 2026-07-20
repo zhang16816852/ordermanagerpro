@@ -31,7 +31,8 @@ export function generateProductExcel(
     categories: any[],
     specDefs: any[],
     specLinks: any[] = [],
-    brandMap: Record<string, string> = {}
+    brandMap: Record<string, string> = {},
+    seriesMap: Record<string, string> = {}
 ) {
     const workbook = XLSX.utils.book_new();
 
@@ -185,10 +186,10 @@ export function generateProductExcel(
         const rows: any[] = [row1Names, row2Instructions, row3Paths, row4Ids];
 
         groupProducts.forEach(p => {
-            rows.push(buildRowV3(p, false, row4Ids, brandMap, specMap));
+            rows.push(buildRowV3(p, false, row4Ids, brandMap, specMap, undefined, seriesMap));
             if (p.variants && p.variants.length > 0) {
                 p.variants.forEach((v: any) => {
-                    rows.push(buildRowV3(v, true, row4Ids, brandMap, specMap, p));
+                    rows.push(buildRowV3(v, true, row4Ids, brandMap, specMap, p, seriesMap));
                 });
             }
         });
@@ -215,7 +216,7 @@ export function generateProductExcel(
     return workbook;
 }
 
-function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap: Record<string, string>, specMap: Map<string, CategorySpec>, parent?: any) {
+function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap: Record<string, string>, specMap: Map<string, CategorySpec>, parent?: any, seriesMap: Record<string, string> = {}) {
     const row: any[] = [];
 
     let categoryName = '';
@@ -243,7 +244,7 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
         description: item.description || parent?.description || '',
         brand: (item.brand_id || parent?.brand_id) ? (brandMap[item.brand_id || parent?.brand_id] || '') : '',
         model: item.model || parent?.model || '',
-        series: item.series || parent?.series || '',
+        series: seriesMap[item.brand_series_ids?.[0] || parent?.brand_series_ids?.[0]] || '',
         wholesale_price: isVariant ? (item.wholesale_price || 0) : (item.base_wholesale_price || 0),
         retail_price: isVariant ? (item.retail_price || 0) : (item.base_retail_price || 0),
         status: STATUS_MAP[item.status || 'active'] || '上架中',

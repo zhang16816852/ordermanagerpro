@@ -19,11 +19,22 @@ function parseDimConfig(row: Record<string, string>, prefix: string): DimensionC
   const field = (row[`${prefix}欄位`] || '').trim();
   const valuesStr = (row[`${prefix}值`] || '').trim();
   const values = valuesStr ? valuesStr.split(',').map(v => v.trim()).filter(Boolean) : undefined;
+  const specId = (row[`${prefix}SpecID`] || '').trim();
+  const valueMapStr = (row[`${prefix}ValueMap`] || '').trim();
+  let valueMap: Record<string, string> | undefined;
+  if (valueMapStr) {
+    try {
+      const parsed = JSON.parse(valueMapStr);
+      if (parsed && typeof parsed === 'object') valueMap = parsed;
+    } catch { /* ignore malformed JSON */ }
+  }
   return {
     type: type as DimensionConfig['type'],
     label: label || type,
     ...(field ? { field: field as DimensionConfig['field'] } : {}),
+    ...(specId ? { spec_id: specId } : {}),
     ...(values?.length ? { values } : {}),
+    ...(valueMap ? { valueMap } : {}),
   };
 }
 

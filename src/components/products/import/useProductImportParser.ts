@@ -42,7 +42,8 @@ export function useProductImportParser(
     specDefs: any[],
     allBrands: any[],
     allColors: any[],
-    categories: any[]
+    categories: any[],
+    allSeries: any[] = []
 ) {
     const parseCondensedSpecs = useCallback((specStr: string) => {
         if (!specStr || specStr.trim() === '') return {};
@@ -147,6 +148,17 @@ export function useProductImportParser(
                 if (matched) baseRow.brand_id = matched.id;
             }
 
+            if (baseRow.series && baseRow.brand_id) {
+                const search = baseRow.series.trim().toLowerCase();
+                const matched = allSeries.find(s =>
+                    s.brand_id === baseRow.brand_id && s.name.trim().toLowerCase() === search
+                );
+                if (matched) {
+                    baseRow.brand_series_id = matched.id;
+                    baseRow.series_name = matched.name;
+                }
+            }
+
             if (baseRow.category) {
                 const names = baseRow.category.split(',').map(s => s.trim()).filter(Boolean);
                 baseRow.category_names = names;
@@ -163,6 +175,6 @@ export function useProductImportParser(
         });
 
         return rawParsed;
-    }, [allBrands, categories]);
+    }, [allBrands, categories, allSeries]);
     return { handleFileUpload, parseCondensedSpecs, normalizeBarcode, parseStatus };
 }

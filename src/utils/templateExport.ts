@@ -14,6 +14,8 @@ function dimConfigToCols(config: DimensionConfig, prefix: string): Record<string
     [`${prefix}欄位`]: config.field || '',
     [`${prefix}標籤`]: config.label,
     [`${prefix}值`]: (config.values || []).join(','),
+    [`${prefix}SpecID`]: config.spec_id || '',
+    [`${prefix}ValueMap`]: config.valueMap ? JSON.stringify(config.valueMap) : '',
   };
 }
 

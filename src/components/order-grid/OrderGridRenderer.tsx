@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { OrderGridCell } from './OrderGridCell';
 import { OrderGridToolbar } from './OrderGridToolbar';
-import { buildGridMatrix, filterRowsColsForTab } from '@/lib/order-grid-utils';
+import { buildGridMatrix, filterRowsColsForTab, getDisplayValue } from '@/lib/order-grid-utils';
 import type {
   OrderGridTemplateWithProducts,
   GridMode,
@@ -124,7 +124,7 @@ export function OrderGridRenderer({
                     key={cv}
                     className="border-b border-r p-2 text-xs font-medium text-muted-foreground text-center break-words"
                   >
-                    {cv}
+                    {getDisplayValue(cv, template.col_config.valueMap)}
                   </th>
                 ))}
               </tr>
@@ -133,7 +133,7 @@ export function OrderGridRenderer({
               {displayRows.map((rv) => (
                 <tr key={rv}>
                   <td className="sticky left-0 z-10 bg-background border-b border-r p-2 text-xs font-medium text-muted-foreground break-words">
-                    {rv}
+                    {getDisplayValue(rv, template.row_config.valueMap)}
                   </td>
                   {displayCols.map((cv) => {
                     const key = `${tabValue || '__all__'}|${rv}|${cv}`;

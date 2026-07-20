@@ -2,16 +2,17 @@ import { useMemo, useState, useEffect } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { ProductWithPricing } from "@/types/product";
 import { Category } from "@/types/product";
-import { ChevronRight, Filter, ChevronDown } from "lucide-react";
+import { ChevronRight, Filter, ChevronDown, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { deserializeSpecs, formatSpecValue } from "@/utils/specLogic";
 import { useBrands } from "@/hooks/useBrands";
 import { useCategorySpecs } from "@/hooks/useCategorySpecs";
 import { useSpecStore } from "@/store/useSpecStore";
+import { useBrandSeriesCache } from "@/hooks/useBrandSeriesCache";
 import { AdvancedSpecFilters } from "@/components/products/catalog/AdvancedSpecFilters";
 
 function getFilterConfig(specDef: any) {
@@ -24,12 +25,16 @@ function getFilterConfig(specDef: any) {
 
 interface CatalogSidebarProps {
     products: ProductWithPricing[];
-    selectedCategory: string | null; // This will now be category ID
+    selectedCategory: string | null;
     onCategoryChange: (categoryId: string | null) => void;
     selectedSpecs: Record<string, string[]>;
     onSpecChange: (key: string, values: string[]) => void;
     selectedBrands?: string[];
     onBrandChange?: (brands: string[]) => void;
+    selectedSeries?: string[];
+    onSeriesChange?: (series: string[]) => void;
+    selectedDeviceModels?: string[];
+    onDeviceModelChange?: (models: string[]) => void;
     onClearFilters: () => void;
 }
 
@@ -41,10 +46,15 @@ export function CatalogSidebar({
     onSpecChange,
     selectedBrands = [],
     onBrandChange,
+    selectedSeries = [],
+    onSeriesChange,
+    selectedDeviceModels = [],
+    onDeviceModelChange,
     onClearFilters,
 }: CatalogSidebarProps) {
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
     const [activeSection, setActiveSection] = useState<string>('categories');
+    const [modelSearch, setModelSearch] = useState('');
 
     const toggleSection = (section: string) => {
         setActiveSection(prev => prev === section ? '' : section);
@@ -52,6 +62,7 @@ export function CatalogSidebar({
 
     const { brands } = useBrands();
     const { fetchSpecs, specDefinitions, categoryLinks, categories, categoryHierarchy } = useSpecStore();
+    const { allSeries } = useBrandSeriesCache();
 
     useEffect(() => {
         if (specDefinitions.length === 0 || categoryLinks.length === 0) {
@@ -59,9 +70,48 @@ export function CatalogSidebar({
         }
     }, [fetchSpecs, specDefinitions.length, categoryLinks.length]);
 
-    //console.log("分類產品", products)
+    // Filter series by selected brands and active status
+    const filteredSeries = useMemo(() => {
+        if (selectedBrands.length === 0) return [];
+        return allSeries.filter(s => s.is_active && selectedBrands.includes(s.brand_id));
+    }, [allSeries, selectedBrands]);
+
+    // Count products per series (from brand_series_ids on each product)
+    const seriesCounts = useMemo(() => {
+        const counts: Record<string, number> = {};
+        products.forEach(p => {
+            (p as any).brand_series_ids?.forEach((sid: string) => {
+                counts[sid] = (counts[sid] || 0) + 1;
+            });
+        });
+        return counts;
+    }, [products]);
+
+    // Collect available device_models from products (effective_model_names + variant models)
+    const { deviceModelCounts, filteredDeviceModels } = useMemo(() => {
+        const counts: Record<string, number> = {};
+        products.forEach(p => {
+            const models = (p as any).effective_model_names || [];
+            models.forEach((m: string) => {
+                if (m) counts[m] = (counts[m] || 0) + 1;
+            });
+            (p as any).variants?.forEach((v: any) => {
+                (v.effective_model_names || []).forEach((m: string) => {
+                    if (m) counts[m] = (counts[m] || 0) + 1;
+                });
+            });
+        });
+        const sorted = Object.entries(counts)
+            .sort((a, b) => b[1] - a[1])
+            .map(([name, count]) => ({ name, count }));
+        const searchLower = modelSearch.toLowerCase();
+        const filtered = searchLower
+            ? sorted.filter(m => m.name.toLowerCase().includes(searchLower))
+            : sorted;
+        return { deviceModelCounts: counts, filteredDeviceModels: filtered };
+    }, [products, modelSearch]);
+
     const categoryTree = useMemo(() => {
-        // Deduplicate hierarchy links
         const seen = new Set<string>();
         const hierarchy = categoryHierarchy.filter((h: any) => {
             const key = `${h.parent_id}-${h.child_id}`;
@@ -69,39 +119,25 @@ export function CatalogSidebar({
             seen.add(key);
             return true;
         });
-
-        // Find nodes that are NOT children in any hierarchy row (Roots)
         const childIds = new Set(hierarchy.map((h: any) => h.child_id));
         const roots = categories.filter((c: any) => !childIds.has(c.id));
-
         const build = (nodeId: string): any[] => {
             const childLinks = hierarchy.filter((h: any) => h.parent_id === nodeId);
             return childLinks
                 .map((link: any) => {
                     const child = categories.find((c: any) => c.id === link.child_id);
                     if (!child) return null;
-                    return {
-                        ...child,
-                        children: build(child.id)
-                    };
+                    return { ...child, children: build(child.id) };
                 })
                 .filter(Boolean);
         };
-
-        return roots.map(root => ({
-            ...root,
-            children: build(root.id)
-        }));
+        return roots.map(root => ({ ...root, children: build(root.id) }));
     }, [categories, categoryHierarchy]);
 
-    // Fetch specs for the selected category from store/cache
     const { data: specFields = [] } = useCategorySpecs(selectedCategory ? [selectedCategory] : []);
 
-    // 根據選中分類，從產品資料中提取可用的規格篩選項
     const availableSpecs = useMemo(() => {
         const specs: Record<string, Set<string>> = {};
-
-        // 步驟一：計算選中分類及其所有子分類的 ID 集合（包含自己）
         const subCategoryIds = new Set<string>();
         if (selectedCategory) {
             subCategoryIds.add(selectedCategory);
@@ -119,133 +155,65 @@ export function CatalogSidebar({
                     });
             }
         }
-
-        /* console.group('🔍 [CatalogSidebar] availableSpecs 計算');
-         console.log('📂 選中分類 ID:', selectedCategory);
-         console.log('📂 子分類 IDs:', Array.from(subCategoryIds));
-         console.log('📋 分類規格定義 (specFields):', specFields.map(f => ({ id: f.id, name: f.name, type: f.type })));
- */
-        // 從 specFields 取出可用的規格 ID 與名稱，用於過濾產品的 spec_values
         const definedSpecIds = specFields.map(f => f.id);
-        let matchedProductCount = 0;
 
         products.forEach((p) => {
-            // 步驟二：檢查產品是否屬於當前選擇的分類或其子分類
             const pCategoryIds = p.category_ids || [];
-
             if (selectedCategory) {
                 const hasMatchInLinks = pCategoryIds.some((id: string) => subCategoryIds.has(id));
                 if (!hasMatchInLinks) return;
             }
-
-            matchedProductCount++;
-
-            // 步驟三：掃描產品層級的 spec_values
-            // spec_values 在快取中已是 {pathKey: value} 格式，直接遍歷即可（不需 deserializeSpecs）
             const pSpecValues: Record<string, any> = p.spec_values && typeof p.spec_values === 'object' && !Array.isArray(p.spec_values)
                 ? p.spec_values
                 : {};
-            // console.log(`  📦 產品 "${p.name}"，spec_values:`, pSpecValues, '(筆數:', Object.keys(pSpecValues).length, ')');
-
             Object.entries(pSpecValues).forEach(([key, value]) => {
                 const parts = key.split(':');
-                // key 格式為 parentId:specId:instanceUuid，取第二段作為 specId
                 const specId = parts.length === 3 ? parts[1] : (parts.length === 2 ? parts[1] : key);
-
-                // 若分類已設定規格定義，則只保留對應的規格（支援 ID 匹配）
-                if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId)) {
-                    // console.log(`    ⛔ key="${key}" specId="${specId}" 不在 definedSpecIds 中，略過`);
-                    return;
-                }
-
+                if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId)) return;
                 if (!specs[key]) specs[key] = new Set();
-
                 if (value !== null && value !== undefined) {
                     const specDef = specFields.find(f => f.id === specId || f.name === specId);
-
-                    // heading / text / table 類型不適合做篩選，直接跳過
-                    if (specDef && (specDef.type === 'heading' || specDef.type === 'text' || specDef.type === 'table')) {
-                        // console.log(`    ⛔ key="${key}" type="${specDef.type}" 不適合篩選，略過`);
-                        return;
-                    }
-
-                    // 讀取 filter_config（相容 array 與 object 兩種 DB 格式）
+                    if (specDef && (specDef.type === 'heading' || specDef.type === 'text' || specDef.type === 'table')) return;
                     const filterConfig = getFilterConfig(specDef);
-
-                    // 只有明確設定 enabled: false 時才排除，未設定視為允許
-                    if (filterConfig && filterConfig.enabled === false) {
-                        // console.log(`    ⛔ key="${key}" filter_config.enabled=false，略過`);
-                        return;
-                    }
-
-                    const formatted = formatSpecValue(value, specDef as any, specFields as any);
-                    // console.log(`    ✅ key="${key}" specId="${specId}" value=${JSON.stringify(value)} → 格式化: "${formatted}"`);
-                    specs[key].add(formatted);
+                    if (filterConfig && filterConfig.enabled === false) return;
+                    specs[key].add(formatSpecValue(value, specDef as any, specFields as any));
                 }
             });
-
-            // 步驟四：掃描變體的 core options 與 spec_values
             p.variants?.forEach(v => {
                 const vSettings = deserializeSpecs(v.spec_values);
-
-                // 4-1. 收集核心規格選項 (option_1 / option_2 / option_3)
-                if (v.option_1) {
-                    if (!specs['core:option_1']) specs['core:option_1'] = new Set();
-                    specs['core:option_1'].add(v.option_1);
-                }
-                if (v.option_2) {
-                    if (!specs['core:option_2']) specs['core:option_2'] = new Set();
-                    specs['core:option_2'].add(v.option_2);
-                }
-                if (v.option_3) {
-                    if (!specs['core:option_3']) specs['core:option_3'] = new Set();
-                    specs['core:option_3'].add(v.option_3);
-                }
-
-                // 4-2. 掃描變體的 spec_values（同樣已是 {pathKey: value} 格式）
+                if (v.option_1) { if (!specs['core:option_1']) specs['core:option_1'] = new Set(); specs['core:option_1'].add(v.option_1); }
+                if (v.option_2) { if (!specs['core:option_2']) specs['core:option_2'] = new Set(); specs['core:option_2'].add(v.option_2); }
+                if (v.option_3) { if (!specs['core:option_3']) specs['core:option_3'] = new Set(); specs['core:option_3'].add(v.option_3); }
                 const vSpecValues: Record<string, any> = v.spec_values && typeof v.spec_values === 'object' && !Array.isArray(v.spec_values)
                     ? v.spec_values
                     : {};
                 Object.entries(vSpecValues).forEach(([key, value]) => {
                     const parts = key.split(':');
                     const specId = parts.length === 3 ? parts[1] : (parts.length === 2 ? parts[1] : key);
-
                     if (definedSpecIds.length > 0 && !definedSpecIds.includes(specId)) return;
-
                     if (!specs[key]) specs[key] = new Set();
-
                     if (value !== null && value !== undefined) {
                         const specDef = specFields.find(f => f.id === specId || f.name === specId);
-
-                        // heading / text / table 類型不適合做篩選
                         if (specDef && (specDef.type === 'heading' || specDef.type === 'text' || specDef.type === 'table')) return;
-
                         const filterConfig = getFilterConfig(specDef);
-                        // 只有明確設定 enabled: false 時才跳過
                         if (filterConfig && filterConfig.enabled === false) return;
-
                         specs[key].add(formatSpecValue(value, specDef as any, specFields as any));
                     }
                 });
             });
         });
-
-        // console.log(`📦 符合分類的產品數: ${matchedProductCount} / ${products.length}`);
-
-        // 步驟五：將 Set 轉為排序後的陣列
         const result: Record<string, string[]> = {};
         Object.entries(specs).forEach(([key, values]) => {
-            if (values.size > 0) {
-                result[key] = Array.from(values).sort();
-            }
+            if (values.size > 0) result[key] = Array.from(values).sort();
         });
-
-        // console.log('🎯 最終 availableSpecs:', result);
-        console.groupEnd();
         return result;
     }, [products, selectedCategory, categories, specFields, categoryHierarchy]);
 
-    const hasActiveFilters = selectedCategory !== null || Object.keys(selectedSpecs).length > 0 || selectedBrands.length > 0;
+    const hasActiveFilters = selectedCategory !== null
+        || Object.keys(selectedSpecs).length > 0
+        || selectedBrands.length > 0
+        || selectedSeries.length > 0
+        || selectedDeviceModels.length > 0;
 
     const toggleExpand = (id: string) => {
         setExpandedCategories(prev => {
@@ -265,12 +233,7 @@ export function CatalogSidebar({
             <div key={uniqueKey} className="space-y-1">
                 <div className="flex items-center gap-1 group">
                     {hasChildren ? (
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 shrink-0"
-                            onClick={() => toggleExpand(node.id)}
-                        >
+                        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => toggleExpand(node.id)}>
                             {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                         </Button>
                     ) : (
@@ -295,6 +258,7 @@ export function CatalogSidebar({
             </div>
         );
     };
+
     return (
         <div className="flex flex-col h-full bg-card border rounded-xl overflow-hidden shadow-sm">
             <div className="p-4 border-b bg-muted/30 flex items-center justify-between">
@@ -303,12 +267,8 @@ export function CatalogSidebar({
                     篩選條件
                 </div>
                 {hasActiveFilters && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onClearFilters}
-                        className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive"
-                    >
+                    <Button variant="ghost" size="sm" onClick={onClearFilters}
+                        className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive">
                         重設
                     </Button>
                 )}
@@ -318,10 +278,8 @@ export function CatalogSidebar({
                 <div className="p-4 space-y-4">
                     {/* Categories */}
                     <div className="border-b pb-3">
-                        <button
-                            onClick={() => toggleSection('categories')}
-                            className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors"
-                        >
+                        <button onClick={() => toggleSection('categories')}
+                            className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors">
                             <span>產品分類</span>
                             {activeSection === 'categories' ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                         </button>
@@ -348,10 +306,8 @@ export function CatalogSidebar({
                     {/* Brands */}
                     {brands.length > 0 && (
                         <div className="border-b pb-3">
-                            <button
-                                onClick={() => toggleSection('brands')}
-                                className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors"
-                            >
+                            <button onClick={() => toggleSection('brands')}
+                                className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors">
                                 <span>品牌</span>
                                 {activeSection === 'brands' ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                             </button>
@@ -372,10 +328,8 @@ export function CatalogSidebar({
                                                     }
                                                 }}
                                             />
-                                            <Label
-                                                htmlFor={`brand-${brand.id}`}
-                                                className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground"
-                                            >
+                                            <Label htmlFor={`brand-${brand.id}`}
+                                                className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground">
                                                 {brand.name}
                                             </Label>
                                         </div>
@@ -385,18 +339,113 @@ export function CatalogSidebar({
                         </div>
                     )}
 
-                    {/* 進階規格：僅在選擇分類後才顯示 */}
+                    {/* Series — only show when brands are selected */}
+                    {selectedBrands.length > 0 && filteredSeries.length > 0 && (
+                        <div className="border-b pb-3">
+                            <button onClick={() => toggleSection('series')}
+                                className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors">
+                                <span className="flex items-center gap-1.5">
+                                    系列
+                                    {selectedSeries.length > 0 && (
+                                        <Badge variant="secondary" className="h-4 px-1 text-[10px]">{selectedSeries.length}</Badge>
+                                    )}
+                                </span>
+                                {activeSection === 'series' ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                            </button>
+                            {activeSection === 'series' && (
+                                <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                                    {filteredSeries.map((s: any) => (
+                                        <div key={s.id} className="flex items-center space-x-2">
+                                            <Checkbox
+                                                id={`series-${s.id}`}
+                                                checked={selectedSeries.includes(s.id)}
+                                                onCheckedChange={(checked) => {
+                                                    if (onSeriesChange) {
+                                                        if (checked) {
+                                                            onSeriesChange([...selectedSeries, s.id]);
+                                                        } else {
+                                                            onSeriesChange(selectedSeries.filter((id) => id !== s.id));
+                                                        }
+                                                    }
+                                                }}
+                                            />
+                                            <Label htmlFor={`series-${s.id}`}
+                                                className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground truncate">
+                                                {s.name}
+                                            </Label>
+                                            {seriesCounts[s.id] !== undefined && (
+                                                <span className="text-[10px] text-muted-foreground tabular-nums">{seriesCounts[s.id]}</span>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Device Models */}
+                    {filteredDeviceModels.length > 0 && (
+                        <div className="border-b pb-3">
+                            <button onClick={() => toggleSection('deviceModels')}
+                                className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors">
+                                <span className="flex items-center gap-1.5">
+                                    裝置型號
+                                    {selectedDeviceModels.length > 0 && (
+                                        <Badge variant="secondary" className="h-4 px-1 text-[10px]">{selectedDeviceModels.length}</Badge>
+                                    )}
+                                </span>
+                                {activeSection === 'deviceModels' ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                            </button>
+                            {activeSection === 'deviceModels' && (
+                                <div className="space-y-2">
+                                    <div className="relative">
+                                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                                        <Input
+                                            value={modelSearch}
+                                            onChange={(e) => setModelSearch(e.target.value)}
+                                            placeholder="搜尋型號..."
+                                            className="h-7 text-xs pl-6"
+                                        />
+                                    </div>
+                                    <div className="max-h-[200px] overflow-y-auto space-y-2">
+                                        {filteredDeviceModels.map(({ name, count }) => (
+                                            <div key={name} className="flex items-center space-x-2">
+                                                <Checkbox
+                                                    id={`model-${name}`}
+                                                    checked={selectedDeviceModels.includes(name)}
+                                                    onCheckedChange={(checked) => {
+                                                        if (onDeviceModelChange) {
+                                                            if (checked) {
+                                                                onDeviceModelChange([...selectedDeviceModels, name]);
+                                                            } else {
+                                                                onDeviceModelChange(selectedDeviceModels.filter((n) => n !== name));
+                                                            }
+                                                        }
+                                                    }}
+                                                />
+                                                <Label htmlFor={`model-${name}`}
+                                                    className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground truncate">
+                                                    {name}
+                                                </Label>
+                                                <span className="text-[10px] text-muted-foreground tabular-nums">{count}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Advanced Specs — only when category selected */}
                     {selectedCategory !== null && (
                         <div>
-                            <button
-                                onClick={() => toggleSection('specs')}
-                                className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors"
-                            >
+                            <button onClick={() => toggleSection('specs')}
+                                className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors">
                                 <span>進階規格</span>
                                 {activeSection === 'specs' ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                             </button>
                             {activeSection === 'specs' && (
-                                <AdvancedSpecFilters 
+                                <AdvancedSpecFilters
                                     availableSpecs={availableSpecs}
                                     specFields={specFields}
                                     selectedSpecs={selectedSpecs}

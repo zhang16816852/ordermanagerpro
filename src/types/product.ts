@@ -48,6 +48,7 @@ export interface ProductWithDetails extends Product {
     category_ids?: string[];
     category_id?: string | null;
     brand_name?: string;
+    brand_series_ids?: string[];
     variants?: ProductVariant[];
     spec_values?: any; // v6 規格架構
     // 裝置模型相關屬性 (相容後台列表)

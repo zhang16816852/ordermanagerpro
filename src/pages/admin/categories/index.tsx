@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FolderTree, Database, Tag } from 'lucide-react';
+import { FolderTree, Database, Tag, Smartphone, Link2 } from 'lucide-react';
 import { CategoryTab } from './components/CategoryTab';
 import { SpecLibraryTab } from './components/SpecLibraryTab';
 import { BrandsTab } from './components/BrandsTab';
+import { DeviceModelManager } from '../libraries/device-models/DeviceModelManager';
+import { CategoryBindingTab } from './components/CategoryBindingTab';
 
 // 規格與分類管理主頁面
 export default function AdminCategories() {
@@ -16,12 +18,12 @@ export default function AdminCategories() {
             {/* 頁面標題 */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight">規格與分類管理</h1>
-                    <p className="text-muted-foreground">管理多層級分類及全域共享的屬性規格庫</p>
+                    <h1 className="text-2xl font-bold tracking-tight">規格、分類與型號管理</h1>
+                    <p className="text-muted-foreground">管理多層級分類、全域共享的屬性規格庫及型號標籤</p>
                 </div>
             </div>
 
-            {/* 三個主要 Tab */}
+            {/* 主要 Tab */}
             <Tabs value={activeTab} onValueChange={(v) => {
                 setActiveTab(v);
                 setSearchParams((prev) => {
@@ -43,6 +45,14 @@ export default function AdminCategories() {
                         <Tag className="h-4 w-4" />
                         品牌管理
                     </TabsTrigger>
+                    <TabsTrigger value="models" className="flex items-center gap-2">
+                        <Smartphone className="h-4 w-4" />
+                        型號標籤庫
+                    </TabsTrigger>
+                    <TabsTrigger value="bindings" className="flex items-center gap-2">
+                        <Link2 className="h-4 w-4" />
+                        分類綁定管理
+                    </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="categories" className="space-y-4">
@@ -55,6 +65,18 @@ export default function AdminCategories() {
 
                 <TabsContent value="brands" className="space-y-4">
                     <BrandsTab />
+                </TabsContent>
+
+                <TabsContent value="models" className="space-y-4">
+                    <div className="rounded-xl border bg-card shadow-sm p-4">
+                        <DeviceModelManager />
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="bindings" className="space-y-4">
+                    <div className="rounded-xl border bg-card shadow-sm p-4">
+                        <CategoryBindingTab />
+                    </div>
                 </TabsContent>
             </Tabs>
         </div>

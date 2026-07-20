@@ -7,7 +7,7 @@ const PRODUCT_DIFF_MAP: Record<string, (keyof ImportRow)[]> = {
     '產品名稱': ['product_name'],
     '描述': ['description'],
     '型號': ['model'],
-    '系列': ['series'],
+    '系列': ['series_name'],
     '品牌': ['brand', 'brand_id'],
     '批發價': ['base_wholesale_price'],
     '零售價': ['base_retail_price'],
@@ -31,7 +31,8 @@ export function useProductImportValidator(
     allColors: any[],
     allDeviceModels: any[],
     allDeviceGroups: any[],
-    categories: any[]
+    categories: any[],
+    allSeries: any[] = []
 ) {
     const validateRow = useCallback((
         row: Omit<ImportRow, 'errors' | 'isValid' | 'is_variant'>
@@ -126,6 +127,19 @@ export function useProductImportValidator(
             if (data) existingProducts.push(...data);
         }
 
+        const productIds = existingProducts.map(p => p.id).filter(Boolean);
+        const productSeriesMap = new Map<string, string[]>();
+        if (productIds.length > 0) {
+            const { data: links } = await supabase.from('product_series_links').select('product_id, brand_series_id').in('product_id', productIds);
+            if (links) {
+                links.forEach(l => {
+                    const arr = productSeriesMap.get(l.product_id) || [];
+                    arr.push(l.brand_series_id);
+                    productSeriesMap.set(l.product_id, arr);
+                });
+            }
+        }
+
         let existingVariants: any[] = [];
         if (allVariantSkus.length > 0) {
             const { data } = await supabase.from('product_variants').select('*').in('sku', allVariantSkus);
@@ -157,7 +171,11 @@ export function useProductImportValidator(
                 if (product.name !== row.product_name) diff.push('產品名稱');
                 if (product.description !== row.description) diff.push('描述');
                 if (product.model !== row.model) diff.push('型號');
-                if (product.series !== row.series) diff.push('系列');
+                const existingSeriesIds = productSeriesMap.get(product.id) || [];
+                const hasSeriesChanged = row.brand_series_id
+                    ? !existingSeriesIds.includes(row.brand_series_id) || existingSeriesIds.length !== 1
+                    : existingSeriesIds.length > 0;
+                if (hasSeriesChanged) diff.push('系列');
                 if (product.brand_id !== row.brand_id) diff.push('品牌');
                 if (Number(product.base_wholesale_price) !== Number(row.base_wholesale_price)) diff.push('批發價');
                 if (Number(product.base_retail_price) !== Number(row.base_retail_price)) diff.push('零售價');

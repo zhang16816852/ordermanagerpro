@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx';
 import { useColorStore } from '@/store/useColorStore';
 import { useDeviceModelStore } from '@/store/useDeviceModelStore';
 import { useSpecStore } from '@/store/useSpecStore';
+import { useBrandSeriesCache } from '@/hooks/useBrandSeriesCache';
 import { useProductImportParser } from './useProductImportParser';
 import { useProductImportValidator } from './useProductImportValidator';
 import { useProductImportUploader } from './useProductImportUploader';
@@ -23,6 +24,8 @@ export interface ImportRow {
     brand_id?: string;
     model: string;
     series: string;
+    brand_series_id?: string;
+    series_name?: string;
     base_wholesale_price: number;
     base_retail_price: number;
     product_status: 'active' | 'discontinued' | 'preorder' | 'sold_out';
@@ -82,8 +85,14 @@ export function useProductImport(onSuccess: () => void) {
         },
     });
 
-    const parser = useProductImportParser(specDefs, allBrands, allColors, categories);
-    const validator = useProductImportValidator(allColors, allDeviceModels, allGroups, categories);
+    const { allSeries } = useBrandSeriesCache();
+
+    const seriesMap = useMemo(() => {
+        return Object.fromEntries(allSeries.map((s: any) => [s.id, s.name]));
+    }, [allSeries]);
+
+    const parser = useProductImportParser(specDefs, allBrands, allColors, categories, allSeries);
+    const validator = useProductImportValidator(allColors, allDeviceModels, allGroups, categories, allSeries);
 
     const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -153,7 +162,7 @@ export function useProductImport(onSuccess: () => void) {
     const downloadTemplate = useCallback(() => {
         const { categoryLinks } = useSpecStore.getState();
         const brandMap = Object.fromEntries(allBrands.map(b => [b.id, b.name]));
-        const workbook = generateProductExcel([], categories, specDefs, categoryLinks, brandMap);
+        const workbook = generateProductExcel([], categories, specDefs, categoryLinks, brandMap, seriesMap);
         const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
         const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = URL.createObjectURL(data);
@@ -162,7 +171,7 @@ export function useProductImport(onSuccess: () => void) {
         a.download = '產品匯入範本.xlsx';
         a.click();
         URL.revokeObjectURL(url);
-    }, [categories, specDefs, allBrands]);
+    }, [categories, specDefs, allBrands, seriesMap]);
 
     useEffect(() => {
         if (importData.length === 0) return;
@@ -193,6 +202,8 @@ export function useProductImport(onSuccess: () => void) {
         downloadTemplate,
         resetState,
         allBrands,
+        allSeries,
+        seriesMap,
         uploadProgress: uploader.uploadProgress,
         processedCount: uploader.processedCount,
         skippedCount: uploader.skippedCount,

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useProductCache } from '@/hooks/useProductCache';
 import { useSpecStore } from '@/store/useSpecStore';
@@ -6,21 +6,27 @@ import { getSubCategoryIds, productMatchesSpecFilters } from '@/utils/treeUtils'
 import { useBrands } from '@/hooks/useBrands';
 import { useProductMutations } from './useProductMutations';
 import { handleBatchExport } from './useProductExport';
+import { useFilterStore } from '@/store/useFilterStore';
 
 import { ProductWithPricing } from '@/types/product';
 
 type Product = ProductWithPricing;
 
-function parseSpecsFromUrl(raw: string | null): Record<string, string[]> {
-    if (!raw) return {};
-    try {
-        return JSON.parse(decodeURIComponent(raw));
-    } catch { return {}; }
-}
-
 function parseSetFromUrl(raw: string | null): Set<string> {
     if (!raw) return new Set();
     return new Set(raw.split(',').filter(Boolean));
+}
+
+function syncUrlFromStore(params: URLSearchParams, setSearchParams: (fn: (p: URLSearchParams) => URLSearchParams, opts?: any) => void) {
+    const sp = useFilterStore.getState().toSearchParams();
+    setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [key, val] of Object.entries(sp)) {
+            if (val) next.set(key, val);
+            else next.delete(key);
+        }
+        return next;
+    }, { replace: true });
 }
 
 export function useProductsList() {
@@ -28,18 +34,25 @@ export function useProductsList() {
     const { products, isLoading, version, forceRefresh } = useProductCache();
     const { brandMap } = useBrands();
 
-    // --- UI States ---
-    const [search, setSearch] = useState(searchParams.get('search') || '');
+    // Initialize filter store from URL on mount
+    useEffect(() => {
+        useFilterStore.getState().fromSearchParams(searchParams);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Subscribe to store for filter state
+    const search = useFilterStore(s => s.search);
+    const selectedCategory = useFilterStore(s => s.selectedCategory);
+    const selectedBrands = useFilterStore(s => s.selectedBrands);
+    const selectedSeries = useFilterStore(s => s.selectedSeries);
+    const selectedDeviceModels = useFilterStore(s => s.selectedDeviceModels);
+    const selectedSpecs = useFilterStore(s => s.selectedSpecs);
+
+    // --- UI States (not filter-related) ---
     const [activeTab, setActiveTab] = useState<'list' | 'variants' | 'models' | 'colors'>(
         (['list', 'variants', 'models', 'colors'].includes(searchParams.get('tab') || '') ? searchParams.get('tab') : 'list') as 'list' | 'variants' | 'models' | 'colors'
     );
     const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
     const [expandedProducts, setExpandedProducts] = useState<Set<string>>(parseSetFromUrl(searchParams.get('expanded')));
-
-    // --- Filter States ---
-    const [selectedCategory, setSelectedCategory] = useState<string | null>(searchParams.get('category') || null);
-    const [selectedSpecs, setSelectedSpecs] = useState<Record<string, string[]>>(parseSpecsFromUrl(searchParams.get('specs')));
-    const [selectedBrands, setSelectedBrands] = useState<string[]>(searchParams.get('brands')?.split(',').filter(Boolean) || []);
 
     // --- Dialog States ---
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -155,11 +168,29 @@ export function useProductsList() {
                 }
             }
 
+            // Series filter (via brand_series_ids from junction table)
+            if (selectedSeries.length > 0) {
+                const pSeriesIds = (p as any).brand_series_ids || [];
+                if (!pSeriesIds.some((id: string) => selectedSeries.includes(id))) {
+                    return false;
+                }
+            }
+
+            // Device model filter
+            if (selectedDeviceModels.length > 0) {
+                const pModels = (p as any).effective_model_names || [];
+                const vModels = (p as any).variants?.flatMap((v: any) => v.effective_model_names || []) || [];
+                const allModels = [...new Set([...pModels, ...vModels])];
+                if (!allModels.some((m: string) => selectedDeviceModels.includes(m))) {
+                    return false;
+                }
+            }
+
             if (!productMatchesSpecFilters(p, selectedSpecs, getProductVariants)) return false;
 
             return true;
         });
-    }, [products, search, brandMap, selectedCategory, subCategoryIds, selectedBrands, selectedSpecs, getProductVariants]);
+    }, [products, search, brandMap, selectedCategory, subCategoryIds, selectedBrands, selectedSeries, selectedDeviceModels, selectedSpecs, getProductVariants]);
 
     // --- Selection Logic ---
     const isAllSelected = filteredProducts && filteredProducts.length > 0 &&
@@ -216,7 +247,7 @@ export function useProductsList() {
     };
 
     const updateSearch = (val: string) => {
-        setSearch(val);
+        useFilterStore.getState().setSearch(val);
         updateUrl(val ? { search: val } : { search: null });
     };
 
@@ -232,18 +263,35 @@ export function useProductsList() {
     };
 
     const updateCategory = (val: string | null) => {
-        setSelectedCategory(val);
+        useFilterStore.getState().setSelectedCategory(val);
         updateUrl(val ? { category: val } : { category: null });
     };
 
     const updateBrands = (val: string[]) => {
-        setSelectedBrands(val);
+        useFilterStore.getState().setSelectedBrands(val);
+        // When brands change, clear series that belong to deselected brands
+        const currentSeries = useFilterStore.getState().selectedSeries;
+        if (currentSeries.length > 0 && val.length > 0) {
+            // We'll let the sidebar handle this by re-filtering series based on new brands
+        }
         const str = val.join(',');
         updateUrl(str ? { brands: str } : { brands: null });
     };
 
+    const updateSeries = (val: string[]) => {
+        useFilterStore.getState().setSelectedSeries(val);
+        const str = val.join(',');
+        updateUrl(str ? { series: str } : { series: null });
+    };
+
+    const updateDeviceModels = (val: string[]) => {
+        useFilterStore.getState().setSelectedDeviceModels(val);
+        const str = val.join(',');
+        updateUrl(str ? { deviceModels: str } : { deviceModels: null });
+    };
+
     const updateSpecs = (val: Record<string, string[]>) => {
-        setSelectedSpecs(val);
+        useFilterStore.getState().setSelectedSpecs(val);
         const keys = Object.keys(val);
         if (keys.length > 0) {
             updateUrl({ specs: encodeURIComponent(JSON.stringify(val)) });
@@ -253,15 +301,15 @@ export function useProductsList() {
     };
 
     const clearFilters = useCallback(() => {
-        setSelectedCategory(null);
-        setSelectedSpecs({});
-        setSelectedBrands([]);
+        useFilterStore.getState().clearAll();
         setSearch('');
         setSearchParams((prev) => {
             const next = new URLSearchParams(prev);
             next.delete('search');
             next.delete('category');
             next.delete('brands');
+            next.delete('series');
+            next.delete('deviceModels');
             next.delete('specs');
             return next;
         }, { replace: true });
@@ -281,6 +329,8 @@ export function useProductsList() {
         selectedCategory, setSelectedCategory: updateCategory,
         selectedSpecs, setSelectedSpecs: updateSpecs,
         selectedBrands, setSelectedBrands: updateBrands,
+        selectedSeries, setSelectedSeries: updateSeries,
+        selectedDeviceModels, setSelectedDeviceModels: updateDeviceModels,
         clearFilters
     };
 }

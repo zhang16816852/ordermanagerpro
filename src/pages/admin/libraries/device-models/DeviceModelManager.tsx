@@ -405,7 +405,10 @@ export function DeviceModelManager() {
         </TabsContent>
 
         <TabsContent value="model-group" className="mt-4">
-          <DeviceModelGroupManager />
+          <DeviceModelGroupManager 
+            search={search}
+            typeFilter={typeFilter}
+          />
         </TabsContent>
       </Tabs>
 

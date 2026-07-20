@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -25,14 +25,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { GripVertical, Plus, Trash2 } from 'lucide-react';
+import { GripVertical, Plus, Trash2, RotateCcw } from 'lucide-react';
+import { useSpecStore } from '@/store/useSpecStore';
 import {
+  extractDimensionValues,
+} from '@/lib/order-grid-utils';
+import type {
   DimensionConfig,
   DimensionType,
   VariantFieldKey,
-  VARIANT_FIELD_LABELS,
 } from '@/types/order-grid';
+import { VARIANT_FIELD_LABELS as FIELD_LABELS, DIMENSION_TYPE_LABELS } from '@/types/order-grid';
+import type { ProductWithPricing } from '@/types/product';
 import { cn } from '@/lib/utils';
+
+// ---------------------------------------------------------------------------
+// Sub-component: DimensionItem (sortable custom value row)
+// ---------------------------------------------------------------------------
 
 interface DimensionItemData {
   id: string;
@@ -44,10 +53,9 @@ interface DimensionItemProps {
   item: DimensionItemData;
   onUpdate: (id: string, value: string, label: string) => void;
   onRemove: (id: string) => void;
-  isCustom: boolean;
 }
 
-function DimensionItem({ item, onUpdate, onRemove, isCustom }: DimensionItemProps) {
+function DimensionItem({ item, onUpdate, onRemove }: DimensionItemProps) {
   const {
     attributes,
     listeners,
@@ -103,17 +111,100 @@ function DimensionItem({ item, onUpdate, onRemove, isCustom }: DimensionItemProp
   );
 }
 
+// ---------------------------------------------------------------------------
+// Sub-component: ValueMapEditor
+// ---------------------------------------------------------------------------
+
+interface ValueMapEditorProps {
+  rawValues: string[];
+  valueMap?: Record<string, string>;
+  onChange: (map: Record<string, string>) => void;
+}
+
+function ValueMapEditor({ rawValues, valueMap, onChange }: ValueMapEditorProps) {
+  const handleRename = useCallback(
+    (raw: string, display: string) => {
+      const next = { ...valueMap };
+      if (display) {
+        next[raw] = display;
+      } else {
+        delete next[raw];
+      }
+      onChange(next);
+    },
+    [valueMap, onChange],
+  );
+
+  const handleReset = useCallback(() => {
+    onChange({});
+  }, [onChange]);
+
+  if (rawValues.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs text-muted-foreground">值顯示名稱 (選填)</Label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 text-xs gap-1"
+          onClick={handleReset}
+        >
+          <RotateCcw className="h-3 w-3" />
+          重設為預設值
+        </Button>
+      </div>
+      <div className="space-y-1.5 max-h-40 overflow-y-auto">
+        {rawValues.map((raw) => (
+          <div key={raw} className="flex items-center gap-2 py-0.5">
+            <span className="text-xs text-muted-foreground flex-1 truncate" title={raw}>
+              {raw}
+            </span>
+            <Input
+              value={valueMap?.[raw] || ''}
+              onChange={(e) => handleRename(raw, e.target.value)}
+              placeholder={raw}
+              className="h-7 text-sm flex-1"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component: OrderGridDimensionPicker
+// ---------------------------------------------------------------------------
+
 interface OrderGridDimensionPickerProps {
   value: DimensionConfig;
   onChange: (config: DimensionConfig) => void;
   label: string;
+  /** Products used to extract available spec values for valueMap */
+  products?: ProductWithPricing[];
 }
 
 export function OrderGridDimensionPicker({
   value,
   onChange,
   label,
+  products,
 }: OrderGridDimensionPickerProps) {
+  const { specDefinitions } = useSpecStore();
+
+  // Suitable specs for dimensions (exclude heading / table)
+  const availableSpecs = useMemo(
+    () =>
+      specDefinitions.filter(
+        (s: { type?: string }) => s.type !== 'heading' && s.type !== 'table',
+      ),
+    [specDefinitions],
+  );
+
+  // Custom value items (for 'custom' type)
   const [items, setItems] = useState<DimensionItemData[]>(() => {
     if (value.type === 'custom' && value.values) {
       return value.values.map((v, i) => ({
@@ -122,99 +213,112 @@ export function OrderGridDimensionPicker({
         label: v,
       }));
     }
-    if (value.type === 'variant_field' && value.field) {
-      return [
-        {
-          id: `field_${value.field}`,
-          value: value.field,
-          label: value.label || VARIANT_FIELD_LABELS[value.field],
-        },
-      ];
-    }
     return [];
   });
 
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor)
+  // Current dimension raw values (for valueMap editor)
+  const dimensionValues = useMemo(() => {
+    if (!products || products.length === 0) return [];
+    return extractDimensionValues(value, products);
+  }, [value, products]);
+
+  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
+
+  // --- Handlers ---
+
+  const handleTypeChange = useCallback(
+    (type: DimensionType) => {
+      if (type === 'variant_field') {
+        onChange({ type, label: value.label, field: 'option_1' });
+        setItems([]);
+      } else if (type === 'spec') {
+        onChange({ type, label: value.label, spec_id: undefined });
+        setItems([]);
+      } else if (type === 'custom') {
+        onChange({ type, label: value.label, values: [] });
+        setItems([]);
+      } else {
+        onChange({ type, label: value.label });
+        setItems([]);
+      }
+    },
+    [value.label, onChange],
   );
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    setItems((prev) => {
-      const oldIndex = prev.findIndex((i) => i.id === active.id);
-      const newIndex = prev.findIndex((i) => i.id === over.id);
-      const next = arrayMove(prev, oldIndex, newIndex);
-      if (value.type === 'custom') {
+  const handleFieldChange = useCallback(
+    (field: VariantFieldKey) => {
+      onChange({ ...value, field });
+    },
+    [value, onChange],
+  );
+
+  const handleSpecChange = useCallback(
+    (specId: string) => {
+      onChange({ ...value, spec_id: specId });
+    },
+    [value, onChange],
+  );
+
+  const handleLabelChange = useCallback(
+    (label: string) => {
+      onChange({ ...value, label });
+    },
+    [value, onChange],
+  );
+
+  const handleValueMapChange = useCallback(
+    (map: Record<string, string>) => {
+      onChange({ ...value, valueMap: Object.keys(map).length > 0 ? map : undefined });
+    },
+    [value, onChange],
+  );
+
+  // Custom value handlers
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      setItems((prev) => {
+        const oldIndex = prev.findIndex((i) => i.id === active.id);
+        const newIndex = prev.findIndex((i) => i.id === over.id);
+        const next = arrayMove(prev, oldIndex, newIndex);
         onChange({ ...value, values: next.map((i) => i.value) });
-      }
-      return next;
-    });
-  };
+        return next;
+      });
+    },
+    [value, onChange],
+  );
 
-  const handleTypeChange = (type: DimensionType) => {
-    if (type === 'variant_field') {
-      onChange({ type, label: value.label, field: 'option_1' });
-      setItems([
-        {
-          id: 'field_option_1',
-          value: 'option_1',
-          label: VARIANT_FIELD_LABELS.option_1,
-        },
-      ]);
-    } else if (type === 'custom') {
-      onChange({ type, label: value.label, values: [] });
-      setItems([]);
-    } else {
-      onChange({ type, label: value.label });
-      setItems([]);
-    }
-  };
-
-  const handleFieldChange = (field: VariantFieldKey) => {
-    onChange({ ...value, field });
-    setItems([
-      {
-        id: `field_${field}`,
-        value: field,
-        label: VARIANT_FIELD_LABELS[field],
-      },
-    ]);
-  };
-
-  const handleLabelChange = (label: string) => {
-    onChange({ ...value, label });
-  };
-
-  const addItem = () => {
+  const addItem = useCallback(() => {
     const id = `dim_${Date.now()}`;
     setItems((prev) => [...prev, { id, value: '', label: '' }]);
-  };
+  }, []);
 
-  const updateItem = (id: string, newValue: string, newLabel: string) => {
-    setItems((prev) => {
-      const next = prev.map((i) =>
-        i.id === id ? { ...i, value: newValue, label: newLabel } : i
-      );
-      if (value.type === 'custom') {
+  const updateItem = useCallback(
+    (id: string, newValue: string, newLabel: string) => {
+      setItems((prev) => {
+        const next = prev.map((i) =>
+          i.id === id ? { ...i, value: newValue, label: newLabel } : i,
+        );
         onChange({ ...value, values: next.map((i) => i.value) });
-      }
-      return next;
-    });
-  };
+        return next;
+      });
+    },
+    [value, onChange],
+  );
 
-  const removeItem = (id: string) => {
-    setItems((prev) => {
-      const next = prev.filter((i) => i.id !== id);
-      if (value.type === 'custom') {
+  const removeItem = useCallback(
+    (id: string) => {
+      setItems((prev) => {
+        const next = prev.filter((i) => i.id !== id);
         onChange({ ...value, values: next.map((i) => i.value) });
-      }
-      return next;
-    });
-  };
+        return next;
+      });
+    },
+    [value, onChange],
+  );
 
-  const isCustom = value.type === 'custom';
+  // --- Render ---
 
   return (
     <div className="space-y-3">
@@ -222,6 +326,7 @@ export function OrderGridDimensionPicker({
         <Label className="text-sm font-medium">{label}</Label>
       </div>
 
+      {/* Type + Label */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">維度類型</Label>
@@ -230,9 +335,13 @@ export function OrderGridDimensionPicker({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="variant_field">Variant 欄位</SelectItem>
-              <SelectItem value="product_list">產品列表</SelectItem>
-              <SelectItem value="custom">自訂名稱</SelectItem>
+              {(Object.entries(DIMENSION_TYPE_LABELS) as [DimensionType, string][]).map(
+                ([key, lbl]) => (
+                  <SelectItem key={key} value={key}>
+                    {lbl}
+                  </SelectItem>
+                ),
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -248,77 +357,107 @@ export function OrderGridDimensionPicker({
         </div>
       </div>
 
+      {/* Variant field selector */}
       {value.type === 'variant_field' && (
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Variant 欄位</Label>
-          <Select value={value.field || 'option_1'} onValueChange={handleFieldChange}>
+          <Select
+            value={value.field || 'option_1'}
+            onValueChange={handleFieldChange}
+          >
             <SelectTrigger className="h-9">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {(Object.entries(VARIANT_FIELD_LABELS) as [VariantFieldKey, string][]).map(
+              {(Object.entries(FIELD_LABELS) as [VariantFieldKey, string][]).map(
                 ([key, lbl]) => (
                   <SelectItem key={key} value={key}>
                     {lbl}
                   </SelectItem>
-                )
+                ),
               )}
             </SelectContent>
           </Select>
         </div>
       )}
 
-      {(value.type === 'custom' || value.type === 'product_list') && (
+      {/* Spec selector */}
+      {value.type === 'spec' && (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">規格定義</Label>
+          <Select
+            value={value.spec_id || ''}
+            onValueChange={handleSpecChange}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="選擇規格..." />
+            </SelectTrigger>
+            <SelectContent>
+              {availableSpecs.map((spec: { id: string; name: string }) => (
+                <SelectItem key={spec.id} value={spec.id}>
+                  {spec.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Custom values editor */}
+      {value.type === 'custom' && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label className="text-xs text-muted-foreground">
-              {value.type === 'custom' ? '自訂維度值' : '已選產品'}
-            </Label>
-            {isCustom && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={addItem}
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                新增
-              </Button>
-            )}
+            <Label className="text-xs text-muted-foreground">自訂維度值</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={addItem}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              新增
+            </Button>
           </div>
 
-          {isCustom && (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={items.map((i) => i.id)}
+              strategy={verticalListSortingStrategy}
             >
-              <SortableContext
-                items={items.map((i) => i.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-1.5">
-                  {items.map((item) => (
-                    <DimensionItem
-                      key={item.id}
-                      item={item}
-                      onUpdate={updateItem}
-                      onRemove={removeItem}
-                      isCustom={isCustom}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
-          )}
-
-          {!isCustom && items.length === 0 && (
-            <p className="text-xs text-muted-foreground py-2">
-              {value.type === 'product_list' && '將自動使用已選產品作為維度'}
-            </p>
-          )}
+              <div className="space-y-1.5">
+                {items.map((item) => (
+                  <DimensionItem
+                    key={item.id}
+                    item={item}
+                    onUpdate={updateItem}
+                    onRemove={removeItem}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         </div>
+      )}
+
+      {/* Product list info */}
+      {value.type === 'product_list' && (
+        <p className="text-xs text-muted-foreground py-1">
+          將自動使用已選產品作為維度
+        </p>
+      )}
+
+      {/* ValueMap editor (shared across all types) */}
+      {value.type !== 'product_list' && (
+        <ValueMapEditor
+          rawValues={dimensionValues}
+          valueMap={value.valueMap}
+          onChange={handleValueMapChange}
+        />
       )}
     </div>
   );

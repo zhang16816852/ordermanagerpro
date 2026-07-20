@@ -1,5 +1,10 @@
 import type { ProductWithPricing, VariantWithPricing } from '@/types/product';
-import type { DimensionConfig, GridCellVariant } from '@/types/order-grid';
+import type { DimensionConfig, GridCellVariant, VariantFieldKey } from '@/types/order-grid';
+import { formatSpecValue } from '@/utils/specLogic';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function collectDeviceNames(variant: VariantWithPricing): string[] {
   const names: string[] = [];
@@ -12,9 +17,59 @@ function collectDeviceNames(variant: VariantWithPricing): string[] {
   return names;
 }
 
+function collectFieldValues(
+  variant: VariantWithPricing,
+  field: VariantFieldKey,
+): string[] {
+  if (field === 'device') return collectDeviceNames(variant);
+  const val = (variant as any)[field];
+  return val && typeof val === 'string' ? [val] : [];
+}
+
+function collectSpecValues(
+  variant: VariantWithPricing,
+  specId: string,
+): string[] {
+  const specVals = (variant as any).spec_values;
+  if (!specVals || typeof specVals !== 'object') return [];
+
+  const results: string[] = [];
+  Object.entries(specVals).forEach(([key, val]) => {
+    const parts = key.split(':');
+    const id = parts.length >= 2 ? parts[1] : key;
+    if (id !== specId || !val) return;
+
+    if (Array.isArray(val)) {
+      val.forEach((item) => {
+        const s = formatSpecValue(item);
+        if (s) results.push(s);
+      });
+    } else {
+      const s = formatSpecValue(val);
+      if (s) results.push(s);
+    }
+  });
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Display helpers
+// ---------------------------------------------------------------------------
+
+export function getDisplayValue(
+  rawValue: string,
+  valueMap?: Record<string, string>,
+): string {
+  return valueMap?.[rawValue] ?? rawValue;
+}
+
+// ---------------------------------------------------------------------------
+// Dimension value extraction
+// ---------------------------------------------------------------------------
+
 export function extractDimensionValues(
   config: DimensionConfig,
-  products: ProductWithPricing[]
+  products: ProductWithPricing[],
 ): string[] {
   if (config.type === 'custom' && config.values) {
     return config.values;
@@ -25,37 +80,41 @@ export function extractDimensionValues(
   }
 
   if (config.type === 'variant_field' && config.field) {
-    const field = config.field;
     const values = new Set<string>();
-
-    if (field === 'device') {
-      products.forEach((p) => {
-        p.variants?.forEach((v) => {
-          collectDeviceNames(v as VariantWithPricing).forEach((n) => values.add(n));
-        });
+    products.forEach((p) => {
+      p.variants?.forEach((v) => {
+        collectFieldValues(v as VariantWithPricing, config.field!).forEach((n) =>
+          values.add(n),
+        );
       });
-    } else {
-      products.forEach((p) => {
-        p.variants?.forEach((v) => {
-          const val = (v as any)[field];
-          if (val && typeof val === 'string') {
-            values.add(val);
-          }
-        });
-      });
-    }
+    });
+    return Array.from(values);
+  }
 
+  if (config.type === 'spec' && config.spec_id) {
+    const values = new Set<string>();
+    products.forEach((p) => {
+      p.variants?.forEach((v) => {
+        collectSpecValues(v as VariantWithPricing, config.spec_id!).forEach((s) =>
+          values.add(s),
+        );
+      });
+    });
     return Array.from(values);
   }
 
   return [];
 }
 
+// ---------------------------------------------------------------------------
+// Variant ↔ dimension matching
+// ---------------------------------------------------------------------------
+
 export function matchVariantToDimension(
   variant: VariantWithPricing,
   config: DimensionConfig,
   value: string,
-  products: ProductWithPricing[]
+  products: ProductWithPricing[],
 ): boolean {
   if (config.type === 'product_list') {
     const product = products.find((p) => p.id === variant.product_id);
@@ -63,18 +122,20 @@ export function matchVariantToDimension(
   }
 
   if (config.type === 'variant_field' && config.field) {
-    const field = config.field;
+    return collectFieldValues(variant, config.field).includes(value);
+  }
 
-    if (field === 'device') {
-      return collectDeviceNames(variant).includes(value);
-    }
-
-    return (variant as any)[field] === value;
+  if (config.type === 'spec' && config.spec_id) {
+    return collectSpecValues(variant, config.spec_id).includes(value);
   }
 
   // custom: always match (values are user-defined)
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Grid matrix builder
+// ---------------------------------------------------------------------------
 
 export function buildGridMatrix(
   template: {
@@ -82,7 +143,7 @@ export function buildGridMatrix(
     col_config: DimensionConfig;
     tab_config?: DimensionConfig | null;
   },
-  products: ProductWithPricing[]
+  products: ProductWithPricing[],
 ): {
   rowValues: string[];
   colValues: string[];
@@ -102,14 +163,14 @@ export function buildGridMatrix(
       const v = variant as VariantWithPricing;
 
       const matchedRow = rowValues.find((rv) =>
-        matchVariantToDimension(v, template.row_config, rv, products)
+        matchVariantToDimension(v, template.row_config, rv, products),
       );
       const matchedCol = colValues.find((cv) =>
-        matchVariantToDimension(v, template.col_config, cv, products)
+        matchVariantToDimension(v, template.col_config, cv, products),
       );
       const matchedTab = template.tab_config
         ? tabValues.find((tv) =>
-            matchVariantToDimension(v, template.tab_config!, tv, products)
+            matchVariantToDimension(v, template.tab_config!, tv, products),
           )
         : '__all__';
 
@@ -126,42 +187,55 @@ export function buildGridMatrix(
     });
   });
 
-  const rowsWithData = rowValues.filter(rv =>
-    colValues.some(cv =>
-      tabValues.some(tv => cells.has(`${tv}|${rv}|${cv}`))
-    )
+  const rowsWithData = rowValues.filter((rv) =>
+    colValues.some((cv) =>
+      tabValues.some((tv) => cells.has(`${tv}|${rv}|${cv}`)),
+    ),
   );
-  const colsWithData = colValues.filter(cv =>
-    rowValues.some(rv =>
-      tabValues.some(tv => cells.has(`${tv}|${rv}|${cv}`))
-    )
+  const colsWithData = colValues.filter((cv) =>
+    rowValues.some((rv) =>
+      tabValues.some((tv) => cells.has(`${tv}|${rv}|${cv}`)),
+    ),
   );
-  const tabsWithData = tabValues.filter(tv =>
-    rowValues.some(rv =>
-      colValues.some(cv => cells.has(`${tv}|${rv}|${cv}`))
-    )
+  const tabsWithData = tabValues.filter((tv) =>
+    rowValues.some((rv) =>
+      colValues.some((cv) => cells.has(`${tv}|${rv}|${cv}`)),
+    ),
   );
 
-  return { rowValues: rowsWithData, colValues: colsWithData, tabValues: tabsWithData, cells };
+  return {
+    rowValues: rowsWithData,
+    colValues: colsWithData,
+    tabValues: tabsWithData,
+    cells,
+  };
 }
+
+// ---------------------------------------------------------------------------
+// Tab filtering
+// ---------------------------------------------------------------------------
 
 export function filterRowsColsForTab(
   rowValues: string[],
   colValues: string[],
   cells: Map<string, GridCellVariant[]>,
-  tabValue: string
+  tabValue: string,
 ): { rowValues: string[]; colValues: string[] } {
-  const rowsWithData = rowValues.filter(rv =>
-    colValues.some(cv => cells.has(`${tabValue}|${rv}|${cv}`))
+  const rowsWithData = rowValues.filter((rv) =>
+    colValues.some((cv) => cells.has(`${tabValue}|${rv}|${cv}`)),
   );
-  const colsWithData = colValues.filter(cv =>
-    rowValues.some(rv => cells.has(`${tabValue}|${rv}|${cv}`))
+  const colsWithData = colValues.filter((cv) =>
+    rowValues.some((rv) => cells.has(`${tabValue}|${rv}|${cv}`)),
   );
   return { rowValues: rowsWithData, colValues: colsWithData };
 }
 
+// ---------------------------------------------------------------------------
+// Variant field summary (for VariantSummaryPanel)
+// ---------------------------------------------------------------------------
+
 export function extractVariantFieldSummary(
-  products: ProductWithPricing[]
+  products: ProductWithPricing[],
 ): Record<string, string[]> {
   const fields: Record<string, Set<string>> = {
     option_1: new Set(),
@@ -174,7 +248,9 @@ export function extractVariantFieldSummary(
     p.variants?.forEach((v) => {
       Object.keys(fields).forEach((field) => {
         if (field === 'device') {
-          collectDeviceNames(v as VariantWithPricing).forEach((n) => fields[field].add(n));
+          collectDeviceNames(v as VariantWithPricing).forEach((n) =>
+            fields[field].add(n),
+          );
         } else {
           const val = (v as any)[field];
           if (val && typeof val === 'string') {

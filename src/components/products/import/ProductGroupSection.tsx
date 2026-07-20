@@ -10,6 +10,7 @@ import { PriceCell } from './cells/PriceCell';
 import { DeviceModelCell } from './cells/DeviceModelCell';
 import { BrandCategoryCell } from './cells/BrandCategoryCell';
 import { ColorCell } from './cells/ColorCell';
+import { SeriesCell } from './cells/SeriesCell';
 import { SpecsCell } from './cells/SpecsCell';
 
 interface ProductGroupSectionProps {
@@ -26,12 +27,13 @@ interface ProductGroupSectionProps {
     allColors: any[];
     addModel: (data: any) => Promise<any>;
     specDefs?: { id: string; name: string }[];
+    allSeries?: any[];
 }
 
 export function ProductGroupSection({
     groupKey, rows, indices, onUpdate, onRemove,
     allBrands, categories, allDeviceModels, allDeviceBrands, allDeviceGroups,
-    allColors, addModel, specDefs = []
+    allColors, addModel, specDefs = [], allSeries = []
 }: ProductGroupSectionProps) {
     const [collapsed, setCollapsed] = useState(false);
     const mainRow = rows[0];
@@ -79,9 +81,11 @@ export function ProductGroupSection({
                 <div className="w-[110px] shrink-0">
                     <BrandCategoryCell row={mainRow} index={mainIdx} onUpdate={onUpdate} allBrands={allBrands} categories={categories} type="brand" />
                 </div>
+                <div className="w-[100px] shrink-0">
+                    <SeriesCell row={mainRow} index={mainIdx} onUpdate={onUpdate} allSeries={allSeries} />
+                </div>
                 <div className="w-[110px] shrink-0 flex items-center gap-1">
                     <BrandCategoryCell row={mainRow} index={mainIdx} onUpdate={onUpdate} allBrands={allBrands} categories={categories} type="category" />
-
                 </div>
                 <div className="w-[150px] shrink-0 text-right">
                     <PriceCell row={mainRow} index={mainIdx} onUpdate={onUpdate} />
@@ -121,6 +125,12 @@ export function ProductGroupSection({
                                         onUpdate={onUpdate} allDeviceModels={allDeviceModels}
                                         allDeviceBrands={allDeviceBrands} allDeviceGroups={allDeviceGroups}
                                         addModel={addModel} />
+                                </div>
+                                <div className="w-[100px] shrink-0">
+                                    <span className="text-[10px] text-muted-foreground/30 pl-2">-</span>
+                                </div>
+                                <div className="w-[110px] shrink-0">
+                                    <BrandCategoryCell row={row} index={idx} onUpdate={onUpdate} allBrands={allBrands} categories={categories} type="category" />
                                 </div>
                                 <div className="w-[150px] shrink-0 text-right">
                                     <PriceCell row={row} index={idx} onUpdate={onUpdate} />

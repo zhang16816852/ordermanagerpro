@@ -197,6 +197,7 @@ export function OrderGridTemplateFormDialog({
                     value={rowConfig}
                     onChange={setRowConfig}
                     label="Row 維度"
+                    products={selectedProducts}
                   />
                 </div>
                 <div className="border rounded-lg p-3">
@@ -204,6 +205,7 @@ export function OrderGridTemplateFormDialog({
                     value={colConfig}
                     onChange={setColConfig}
                     label="Column 維度"
+                    products={selectedProducts}
                   />
                 </div>
               </div>
@@ -225,6 +227,7 @@ export function OrderGridTemplateFormDialog({
                     value={tabConfig}
                     onChange={setTabConfig}
                     label="Tab 維度"
+                    products={selectedProducts}
                   />
                 </div>
               )}
@@ -261,6 +264,8 @@ export function OrderGridTemplateFormDialog({
             grid={grid}
             rowLabel={rowConfig.label}
             colLabel={colConfig.label}
+            rowValueMap={rowConfig.valueMap}
+            colValueMap={colConfig.valueMap}
           />
         </div>
 

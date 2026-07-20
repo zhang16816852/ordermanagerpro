@@ -6,6 +6,7 @@ import { UseFormReturn } from 'react-hook-form';
 import { IdentificationFields } from './sections/IdentificationFields';
 import { CategorySelectField } from './sections/CategorySelectField';
 import { BrandSelectField } from './sections/BrandSelectField';
+import { SeriesSelectField } from './sections/SeriesSelectField';
 import { PricingFields } from './sections/PricingFields';
 import { DynamicSpecsFields } from './sections/DynamicSpecsFields';
 import { DeviceModelSelectField } from './sections/DeviceModelSelectField';
@@ -30,6 +31,9 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
 
                     {/* 品牌選擇 */}
                     <BrandSelectField form={form} />
+
+                    {/* 系列選擇 */}
+                    <SeriesSelectField form={form} />
 
                     {/* 價格與型號 */}
                     <PricingFields form={form} />

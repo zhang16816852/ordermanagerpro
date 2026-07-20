@@ -9,7 +9,6 @@ import { toast } from 'sonner';
 import { useProductsList } from './hooks/useProductsList';
 import { ProductsTable } from './components/ProductsTable';
 import { ProductDialogs } from './components/ProductDialogs';
-import { DeviceModelManager } from '../libraries/device-models/DeviceModelManager';
 import { ColorManager } from '../libraries/colors/ColorManager';
 import { CatalogSidebar } from '@/components/products/catalog/CatalogSidebar';
 import { ProductWithPricing } from '@/types/product';
@@ -31,6 +30,8 @@ export default function AdminProducts() {
         selectedCategory, setSelectedCategory,
         selectedSpecs, setSelectedSpecs,
         selectedBrands, setSelectedBrands,
+        selectedSeries, setSelectedSeries,
+        selectedDeviceModels, setSelectedDeviceModels,
         clearFilters
     } = useProductsList();
 
@@ -122,7 +123,7 @@ export default function AdminProducts() {
                 </div>
             </div>
 
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'list' | 'variants' | 'models' | 'colors')}>
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'list' | 'variants' | 'colors')}>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-muted/20 p-1.5 rounded-xl border border-muted-foreground/10">
                     <TabsList className="bg-transparent h-9 flex-wrap">
                         <TabsTrigger value="list" className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg px-4">
@@ -130,9 +131,6 @@ export default function AdminProducts() {
                         </TabsTrigger>
                         <TabsTrigger value="variants" className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg px-4">
                             全域變體總覽
-                        </TabsTrigger>
-                        <TabsTrigger value="models" className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg px-4">
-                            型號標籤庫
                         </TabsTrigger>
                         <TabsTrigger value="colors" className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg px-4">
                             顏色對照表
@@ -148,9 +146,13 @@ export default function AdminProducts() {
                                 selectedCategory={selectedCategory}
                                 onCategoryChange={setSelectedCategory}
                                 selectedSpecs={selectedSpecs}
-                                onSpecChange={(key, values) => setSelectedSpecs(prev => ({ ...prev, [key]: values }))}
+                                onSpecChange={(key, values) => setSelectedSpecs({ ...selectedSpecs, [key]: values })}
                                 selectedBrands={selectedBrands}
                                 onBrandChange={setSelectedBrands}
+                                selectedSeries={selectedSeries}
+                                onSeriesChange={setSelectedSeries}
+                                selectedDeviceModels={selectedDeviceModels}
+                                onDeviceModelChange={setSelectedDeviceModels}
                                 onClearFilters={clearFilters}
                             />
                         </div>
@@ -190,12 +192,6 @@ export default function AdminProducts() {
                 <TabsContent value="variants" className="mt-6 outline-none">
                     <div className="rounded-xl border bg-card shadow-sm p-1">
                         <VariantManager products={products || []} search={search} />
-                    </div>
-                </TabsContent>
-
-                <TabsContent value="models" className="mt-6 outline-none">
-                    <div className="rounded-xl border bg-card shadow-sm p-4">
-                        <DeviceModelManager />
                     </div>
                 </TabsContent>
 
