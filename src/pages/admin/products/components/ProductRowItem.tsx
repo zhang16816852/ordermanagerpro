@@ -116,7 +116,7 @@ export function ProductRowItem({
 }: ProductRowItemProps) {
     const hasVariants = product.has_variants && variants.length > 0;
     
-    const displayBrand = (product.brand_id ? brandMap[product.brand_id] : null) || '-';
+    const displayBrand = (product as any).primary_brand_name || ((product as any).brand_ids?.length > 0 ? (product as any).brand_ids.map((id: string) => brandMap[id]).filter(Boolean).join(', ') : null) || '-';
 
     return (
         <Collapsible open={isExpanded} onOpenChange={onToggleExpand} asChild>

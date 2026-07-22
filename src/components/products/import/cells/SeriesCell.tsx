@@ -24,17 +24,19 @@ export function SeriesCell({ row, index, onUpdate, allSeries }: SeriesCellProps)
     }
 
     const matchedSeries = allSeries.find(s =>
-        s.brand_id === row.brand_id && s.id === row.brand_series_id
+        row.brand_ids?.includes(s.brand_id) && s.id === row.brand_series_id
     );
 
-    const brandFilteredSeries = allSeries.filter(s => s.brand_id === row.brand_id);
+    const brandFilteredSeries = allSeries.filter(s => row.brand_ids?.includes(s.brand_id));
+
+    const hasBrands = row.brand_ids && row.brand_ids.length > 0;
 
     const handleCreate = async () => {
-        if (!newName.trim() || !row.brand_id) return;
+        if (!newName.trim() || !row.brand_ids?.length) return;
         try {
             const { data, error } = await supabase
                 .from('brand_series')
-                .insert({ brand_id: row.brand_id, name: newName.trim() })
+                .insert({ brand_id: row.brand_ids[0], name: newName.trim() })
                 .select()
                 .single();
             if (error) throw error;
@@ -55,7 +57,7 @@ export function SeriesCell({ row, index, onUpdate, allSeries }: SeriesCellProps)
             <PopoverTrigger asChild>
                 <div className={cn(
                     "flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted/50 transition-all border",
-                    !row.brand_id
+                    !hasBrands
                         ? "border-transparent bg-muted/20 opacity-50"
                         : row.brand_series_id
                             ? "border-emerald-500/30 bg-emerald-50/50"
@@ -130,8 +132,8 @@ export function SeriesCell({ row, index, onUpdate, allSeries }: SeriesCellProps)
                                 找不到系列 "{localSearch}"
                             </CommandEmpty>
                             <CommandGroup heading="現有系列庫">
-                                {!row.brand_id ? (
-                                    <CommandItem disabled className="text-xs text-muted-foreground">請先設定品牌</CommandItem>
+                                    {!hasBrands ? (
+                                        <CommandItem disabled className="text-xs text-muted-foreground">請先設定品牌</CommandItem>
                                 ) : (
                                     brandFilteredSeries.map(s => (
                                         <CommandItem key={s.id}

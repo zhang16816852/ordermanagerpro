@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useStoreProductCache } from "@/hooks/useProductCache";
-import { useStoreCatalogProducts } from "@/hooks/useStoreCatalogProducts";
+import { useProductSearch } from "@/hooks/useProductSearch";
 import ProductCatalog from "@/components/products/catalog/ProductCatalog";
 import CartPanel from "@/components/order/CartPanel";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,8 @@ import { useDeviceModelStore } from "@/store/useDeviceModelStore";
 import { Category } from "@/types/product";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { getSubCategoryIds } from "@/utils/treeUtils";
+
+const PAGE_SIZE = 24;
 
 export default function StoreCatalog() {
   const { storeId } = useAuth();
@@ -63,14 +64,8 @@ export default function StoreCatalog() {
     return categories.find(c => c.name === categoryNameInUrl)?.id || null;
   }, [categoryNameInUrl, categories]);
 
-  const subCategoryIds = useMemo(() => {
-    return getSubCategoryIds(selectedCategory, categoryHierarchy);
-  }, [selectedCategory, categoryHierarchy]);
-
   const page = parseInt(searchParams.get("page") || "1", 10);
   const [viewMode, setViewMode] = useState<'products' | 'variants' | 'gallery' | 'table'>('products');
-
-
 
   // Specs are a bit more complex, stored as JSON in URL for simplicity
   const selectedSpecs = useMemo(() => {
@@ -80,16 +75,23 @@ export default function StoreCatalog() {
     } catch { return {}; }
   }, [searchParams]);
 
-  // 分頁商品資料（伺服端過濾 + 分頁）
-  const subCategoryIdsArray = useMemo(() => Array.from(subCategoryIds), [subCategoryIds]);
-  const { products, totalCount, totalPages, isLoading: isCatalogLoading } = useStoreCatalogProducts({
-    storeId: storeId || '',
-    categoryId: selectedCategory,
-    subCategoryIds: subCategoryIdsArray,
+  // Client-side filtering via unified hook
+  const filteredProducts = useProductSearch({
+    products: allProducts || [],
     search,
-    brands: selectedBrands,
-    page,
+    selectedCategory,
+    categoryHierarchy,
+    selectedBrands,
+    selectedSpecs,
   });
+
+  // Client-side pagination
+  const totalCount = filteredProducts.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const paginatedProducts = useMemo(() => {
+    const from = (page - 1) * PAGE_SIZE;
+    return filteredProducts.slice(from, from + PAGE_SIZE);
+  }, [filteredProducts, page]);
 
   const updateParams = useCallback((updates: Record<string, string | null>) => {
     setSearchParams(prev => {
@@ -251,14 +253,13 @@ export default function StoreCatalog() {
         <div className="space-y-6 mt-4 md:mt-6">
 
         <ProductCatalog
-          products={products}
-          isLoading={isCatalogLoading}
+          products={paginatedProducts}
+          isLoading={isSidebarLoading}
           storeId={storeId}
           viewMode={viewMode}
           search={search}
           onSearchChange={handleSearchChange}
           categoryFilter={selectedCategory}
-          subCategoryIds={subCategoryIds}
           specFilters={selectedSpecs}
           brandFilter={selectedBrands}
         />

@@ -161,6 +161,11 @@ export const useDictionaryCache = () => {
     return brandMap[brandId] || brandId;
   };
 
+  const getBrandNames = (brandIds: string[] | undefined | null) => {
+    if (!brandIds?.length) return '-';
+    return brandIds.map(id => brandMap[id] || id).join(', ');
+  };
+
   return {
     categories: data.categories,
     specs: data.specs,
@@ -168,6 +173,7 @@ export const useDictionaryCache = () => {
     brands: data.brands,
     brandMap,
     getBrandName,
+    getBrandNames,
     isLoading,
     refresh: () => syncDictionary(true),
   };

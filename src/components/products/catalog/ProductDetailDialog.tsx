@@ -348,10 +348,10 @@ export function ProductDetailDialog({
                             <div className="text-2xl font-bold text-primary mt-1">{currentPriceDisplay}</div>
                         </div>
 
-                        {(product.brand_id || product.model) && (
+                        {((product as any).brand_ids?.length > 0 || product.model) && (
                             <div>
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">品牌 / 型號</h3>
-                                <p className="mt-1">{getBrandName(product.brand_id)} / {product.model || '-'}</p>
+                                <p className="mt-1">{(product as any).primary_brand_name || ((product as any).brand_names?.join(', ') || '-')} / {product.model || '-'}</p>
                             </div>
                         )}
 

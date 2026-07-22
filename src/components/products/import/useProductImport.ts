@@ -22,6 +22,7 @@ export interface ImportRow {
     category_id?: string;
     brand: string;
     brand_id?: string;
+    brand_ids?: string[];
     model: string;
     series: string;
     brand_series_id?: string;

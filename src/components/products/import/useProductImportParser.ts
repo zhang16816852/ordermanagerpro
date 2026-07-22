@@ -143,9 +143,19 @@ export function useProductImportParser(
             };
 
             if (baseRow.brand) {
-                const search = baseRow.brand.trim().toLowerCase();
-                const matched = allBrands.find(b => b.name?.trim().toLowerCase() === search);
-                if (matched) baseRow.brand_id = matched.id;
+                const brandNames = baseRow.brand.split(',').map(s => s.trim()).filter(Boolean);
+                const matchedIds: string[] = [];
+                let primaryId: string | undefined;
+                for (const bName of brandNames) {
+                    const search = bName.toLowerCase();
+                    const matched = allBrands.find(b => b.name?.trim().toLowerCase() === search);
+                    if (matched) {
+                        matchedIds.push(matched.id);
+                        if (!primaryId) primaryId = matched.id;
+                    }
+                }
+                baseRow.brand_id = primaryId;
+                baseRow.brand_ids = matchedIds.length > 0 ? matchedIds : undefined;
             }
 
             if (baseRow.series && baseRow.brand_id) {

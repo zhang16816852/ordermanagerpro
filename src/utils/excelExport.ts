@@ -242,7 +242,7 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
         variant_sku: isVariant ? (item.sku || '') : '',
         variant_name: isVariant ? (item.name || '') : '',
         description: item.description || parent?.description || '',
-        brand: (item.brand_id || parent?.brand_id) ? (brandMap[item.brand_id || parent?.brand_id] || '') : '',
+        brand: (item.primary_brand_id || item.brand_ids?.length > 0 || parent?.primary_brand_id || parent?.brand_ids?.length > 0) ? (brandMap[item.primary_brand_id || item.brand_ids?.[0]] || brandMap[parent?.primary_brand_id || parent?.brand_ids?.[0]] || '') : '',
         model: item.model || parent?.model || '',
         series: seriesMap[item.brand_series_ids?.[0] || parent?.brand_series_ids?.[0]] || '',
         wholesale_price: isVariant ? (item.wholesale_price || 0) : (item.base_wholesale_price || 0),

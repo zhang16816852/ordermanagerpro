@@ -47,7 +47,10 @@ export interface ProductWithDetails extends Product {
     category_names?: string[];
     category_ids?: string[];
     category_id?: string | null;
-    brand_name?: string;
+    brand_ids?: string[];
+    primary_brand_id?: string | null;
+    brand_names?: string[];
+    primary_brand_name?: string;
     brand_series_ids?: string[];
     variants?: ProductVariant[];
     spec_values?: any; // v6 規格架構

@@ -72,7 +72,6 @@ export function useProductImportUploader(
                     sku: row.product_sku,
                     name: row.product_name,
                     description: row.description || null,
-                    brand_id: row.brand_id || null,
                     model: row.model || null,
                     base_wholesale_price: row.base_wholesale_price,
                     base_retail_price: row.base_retail_price,
@@ -91,14 +90,22 @@ export function useProductImportUploader(
                 const productIdMap = new Map(insertedProducts?.map(p => [p.sku, p.id]) || []);
 
                 const seriesLinkData: { product_id: string; brand_series_id: string }[] = [];
+                const brandLinkData: { product_id: string; brand_id: string; is_primary: boolean }[] = [];
                 for (const [sku, row] of chunkProductsMap) {
                     const pId = productIdMap.get(sku);
                     if (pId && row.brand_series_id) {
                         seriesLinkData.push({ product_id: pId, brand_series_id: row.brand_series_id });
                     }
+                    const brandIds = row.brand_ids || (row.brand_id ? [row.brand_id] : []);
+                    brandIds.forEach((bid: string, i: number) => {
+                        if (pId) brandLinkData.push({ product_id: pId, brand_id: bid, is_primary: i === 0 });
+                    });
                 }
                 if (seriesLinkData.length > 0) {
                     await supabase.from('product_series_links').upsert(seriesLinkData, { onConflict: 'product_id,brand_series_id' });
+                }
+                if (brandLinkData.length > 0) {
+                    await supabase.from('product_brands').upsert(brandLinkData, { onConflict: 'product_id,brand_id' });
                 }
 
                 const relationPromises: any[] = [];

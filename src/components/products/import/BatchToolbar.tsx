@@ -63,6 +63,7 @@ export function BatchToolbar({ data, onBatchUpdate, allBrands, categories }: Bat
                             const indices = Array.from(selectedIndices);
                             onBatchUpdate(indices, 'brand', brand.name);
                             onBatchUpdate(indices, 'brand_id', brand.id);
+                            onBatchUpdate(indices, 'brand_ids', [brand.id]);
                         }
                     }}>
                         <SelectTrigger className="h-8 text-xs">

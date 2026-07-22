@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useProductCache } from '@/hooks/useProductCache';
 import { useSpecStore } from '@/store/useSpecStore';
-import { getSubCategoryIds, productMatchesSpecFilters } from '@/utils/treeUtils';
+import { useProductSearch } from '@/hooks/useProductSearch';
 import { useBrands } from '@/hooks/useBrands';
 import { useProductMutations } from './useProductMutations';
 import { handleBatchExport } from './useProductExport';
@@ -61,10 +61,6 @@ export function useProductsList() {
     const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
 
     const { categoryHierarchy } = useSpecStore();
-
-    const subCategoryIds = useMemo(() => {
-        return getSubCategoryIds(selectedCategory, categoryHierarchy);
-    }, [selectedCategory, categoryHierarchy]);
 
     // --- Mutations ---
     const mutations = useProductMutations(forceRefresh);
@@ -137,60 +133,18 @@ export function useProductsList() {
     }, [products]);
 
     // --- Filter Logic ---
-    const filteredProducts = useMemo(() => {
-        if (!products) return [];
-        return products.filter((p) => {
-            const brandName = (p.brand_id ? brandMap[p.brand_id] : p.brand_id) || '';
-            const searchLower = search.toLowerCase();
-            const productModels = getProductModelsInfo(p.id);
-            const matchesSearch = !search ||
-                p.name.toLowerCase().includes(searchLower) ||
-                p.sku.toLowerCase().includes(searchLower) ||
-                brandName.toLowerCase().includes(searchLower) ||
-                (p.model && p.model.toLowerCase().includes(searchLower)) ||
-                productModels.some(m =>
-                    m.name.toLowerCase().includes(searchLower) ||
-                    m.aliases.some((a: string) => a.toLowerCase().includes(searchLower))
-                );
-
-            if (!matchesSearch) return false;
-
-            if (selectedCategory) {
-                const pCategoryIds = (p as any).category_ids || [];
-                if (!pCategoryIds.some((id: string) => subCategoryIds.has(id))) {
-                    return false;
-                }
-            }
-
-            if (selectedBrands.length > 0) {
-                if (!p.brand_id || !selectedBrands.includes(p.brand_id)) {
-                    return false;
-                }
-            }
-
-            // Series filter (via brand_series_ids from junction table)
-            if (selectedSeries.length > 0) {
-                const pSeriesIds = (p as any).brand_series_ids || [];
-                if (!pSeriesIds.some((id: string) => selectedSeries.includes(id))) {
-                    return false;
-                }
-            }
-
-            // Device model filter
-            if (selectedDeviceModels.length > 0) {
-                const pModels = (p as any).effective_model_names || [];
-                const vModels = (p as any).variants?.flatMap((v: any) => v.effective_model_names || []) || [];
-                const allModels = [...new Set([...pModels, ...vModels])];
-                if (!allModels.some((m: string) => selectedDeviceModels.includes(m))) {
-                    return false;
-                }
-            }
-
-            if (!productMatchesSpecFilters(p, selectedSpecs, getProductVariants)) return false;
-
-            return true;
-        });
-    }, [products, search, brandMap, selectedCategory, subCategoryIds, selectedBrands, selectedSeries, selectedDeviceModels, selectedSpecs, getProductVariants]);
+    const filteredProducts = useProductSearch({
+        products: products || [],
+        search,
+        selectedCategory,
+        categoryHierarchy,
+        selectedBrands,
+        selectedSeries,
+        selectedDeviceModels,
+        selectedSpecs,
+        brandMap,
+        getVariants: getProductVariants,
+    });
 
     // --- Selection Logic ---
     const isAllSelected = filteredProducts && filteredProducts.length > 0 &&

@@ -416,6 +416,7 @@ export function CatalogSidebar({
                                                     onCheckedChange={(checked) => {
                                                         if (onDeviceModelChange) {
                                                             if (checked) {
+                                                                console.log('Adding model:', selectedDeviceModels);
                                                                 onDeviceModelChange([...selectedDeviceModels, name]);
                                                             } else {
                                                                 onDeviceModelChange(selectedDeviceModels.filter((n) => n !== name));

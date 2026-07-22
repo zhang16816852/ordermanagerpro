@@ -5,9 +5,44 @@ import { Product, ProductWithDetails, ProductWithPricing, VariantWithPricing } f
 import { SyncManager } from '@/services/syncManager';
 import { CacheService, CACHE, type FetchResult } from '@/services/cacheService';
 import { useCache } from '@/hooks/useCache';
+import { buildModelMaps, processEntityModels, fetchReferencedModels } from '@/utils/productModelResolver';
 import type { OrderGridTemplateWithProducts } from '@/types/order-grid';
 
 const PRODUCT_CACHE_CFG = CACHE.products;
+const PAGE_SIZE = 1000;
+
+/**
+ * 分頁抓取 Supabase 資料，突破預設 1000 筆限制
+ */
+async function fetchAllPages(
+  table: string,
+  select: string,
+  options?: { filters?: Record<string, any>; order?: { column: string; ascending?: boolean } },
+): Promise<any[]> {
+  let from = 0;
+  const allData: any[] = [];
+  while (true) {
+    let query = supabase.from(table).select(select).range(from, from + PAGE_SIZE - 1);
+    if (options?.filters) {
+      Object.entries(options.filters).forEach(([col, val]) => {
+        query = query.eq(col, val);
+      });
+    }
+    if (options?.order) {
+      query = query.order(options.order.column, { ascending: options.order.ascending ?? true });
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.error(`[ProductCache] fetchAllPages error on ${table}:`, error);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    allData.push(...data);
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return allData;
+}
 
 export const getProductCache = () => {
   const result = CacheService.get<ProductWithDetails[]>(PRODUCT_CACHE_CFG.key, PRODUCT_CACHE_CFG.schema);
@@ -45,63 +80,31 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
                     *,
                     variants:product_variants(*),
                     product_category_links(category_id, categories(name)),
-                    product_series_links(brand_series_id)
+                    product_series_links(brand_series_id),
+                    product_brands(brand_id, is_primary)
                 `);
 
     if (productsError) throw productsError;
 
-    // 2. 關聯資料全量抓取 (不使用 PostgREST embed，避免 schema cache 問題)
+    // 2. 關聯資料全量抓取（分頁突破 1000 筆限制）
     const [
-      { data: allRelations },
-      { data: allGroupsWithItems },
-      { data: allSpecs },
-      { data: allCovers }
+      allRelations,
+      allGroupsWithItems,
+      allSpecs,
+      allCovers,
     ] = await Promise.all([
-      supabase.from('entity_model_relations').select('product_id, variant_id, model_id, group_id, relation_type, reason'),
-      supabase.from('device_model_groups').select('id, name, device_model_group_items(device_models(id, name, aliases))'),
-      supabase.from('entity_spec_values').select('*'),
-      supabase.from('product_images').select('entity_type, entity_id, url').eq('is_cover', true)
+      fetchAllPages('entity_model_relations', 'product_id, variant_id, model_id, group_id, relation_type, reason'),
+      fetchAllPages('device_model_groups', 'id, name, device_model_group_items(device_models(id, name, aliases))'),
+      fetchAllPages('entity_spec_values', '*'),
+      fetchAllPages('product_images', 'entity_type, entity_id, url', { filters: { is_cover: true } }),
     ]);
 
-    // 只抓取 entity_model_relations 中有參照的 device_models（避開 PostgREST 1000 rows 限制）
-    const referencedModelIds = [...new Set(
-      (allRelations || [])
-        .filter(r => r.model_id)
-        .map(r => r.model_id as string)
-    )];
-    const { data: allModels } = referencedModelIds.length > 0
-      ? await supabase.from('device_models').select('id, name, aliases').in('id', referencedModelIds)
-      : { data: [] };
-
-    // 預先建立 device_models 查找 Map
-    const devModelsMap = new Map<string, any>();
-    allModels?.forEach(m => devModelsMap.set(m.id, m));
-
-    // 預先建立 device_model_groups 查找 Map (含展開的 items)
+    // 3. 建立索引 Map
+    const devModelsMap = await fetchReferencedModels(supabase, allRelations, PAGE_SIZE);
     const devGroupsMap = new Map<string, any>();
     allGroupsWithItems?.forEach(g => devGroupsMap.set(g.id, g));
-
-    // 3. 建立索引 Map (從 entity_model_relations 資料 + 預載的 device_models/device_model_groups 組合)
-    const linksMap = new Map<string, any[]>();
-    const groupsMap = new Map<string, any[]>();
-    const exclusionsMap = new Map<string, any[]>();
-    allRelations?.forEach(r => {
-      const entityId = r.product_id || r.variant_id;
-      if (!entityId) return;
-      if (r.relation_type === 'include') {
-        if (r.model_id) {
-          if (!linksMap.has(entityId)) linksMap.set(entityId, []);
-          linksMap.get(entityId)!.push({ entity_id: entityId, model_id: r.model_id, device_models: devModelsMap.get(r.model_id) });
-        }
-        if (r.group_id) {
-          if (!groupsMap.has(entityId)) groupsMap.set(entityId, []);
-          groupsMap.get(entityId)!.push({ entity_id: entityId, group_id: r.group_id, device_model_groups: devGroupsMap.get(r.group_id) });
-        }
-      } else if (r.relation_type === 'exclude') {
-        if (!exclusionsMap.has(entityId)) exclusionsMap.set(entityId, []);
-        exclusionsMap.get(entityId)!.push({ entity_id: entityId, model_id: r.model_id, device_models: devModelsMap.get(r.model_id) });
-      }
-    });
+    const { linksMap, groupsMap, exclusionsMap } = buildModelMaps(allRelations, devModelsMap, devGroupsMap);
+    const modelMaps = { linksMap, groupsMap, exclusionsMap };
 
     const specsMap = new Map<string, Record<string, any>>();
     allSpecs?.forEach((sv: any) => {
@@ -119,58 +122,7 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
 
     // 4. 資料對映處理
     products = (productsData || []).map((p: any) => {
-      const processModels = (entityId: string) => {
-        const rules: string[] = [];
-        const directLinks = linksMap.get(entityId) || [];
-        const exclusionLinks = exclusionsMap.get(entityId) || [];
-        const groupLinks = groupsMap.get(entityId) || [];
-
-        const exclusions = new Set<string>();
-        exclusionLinks.forEach(l => {
-          if (l.device_models) {
-            exclusions.add(l.device_models.id);
-            rules.push(`exclude:${l.device_models.name}`);
-          }
-        });
-
-        const directModels = directLinks
-          .filter(l => l.device_models && !exclusions.has(l.device_models.id))
-          .map(l => {
-            rules.push(`model:${l.device_models.name}`);
-            return l.device_models;
-          });
-
-        const groups: any[] = [];
-        const expandedFromGroups: any[] = [];
-        groupLinks.forEach(link => {
-          const group = link.device_model_groups;
-          if (group) {
-            const groupItems = (group.device_model_group_items || [])
-              .map((item: any) => {
-                if (item.device_models && !exclusions.has(item.device_models.id)) {
-                  expandedFromGroups.push(item.device_models);
-                  return { id: item.device_models.id, name: item.device_models.name };
-                }
-                return null;
-              })
-              .filter(Boolean);
-
-            groups.push({ id: group.id, name: group.name, items: groupItems });
-            rules.push(`group:${group.name}`);
-          }
-        });
-
-        return {
-          device_models: directModels,
-          device_model_groups: groups,
-          device_model_rules: rules,
-          _expanded_models: Array.from(new Set([...directModels, ...expandedFromGroups].map(m => m.name))),
-          _expanded_model_aliases: Array.from(new Set([...directModels, ...expandedFromGroups].flatMap(m => m.aliases || []))),
-          device_model_exclusions: Array.from(exclusions)
-        };
-      };
-
-      const modelDataP = processModels(p.id);
+      const modelDataP = processEntityModels(p.id, modelMaps);
 
       return {
         ...p,
@@ -179,11 +131,13 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
         category_ids: p.product_category_links?.map((l: any) => l.category_id) || [],
         category_names: p.product_category_links?.map((l: any) => l.categories?.name).filter(Boolean) || [],
         brand_series_ids: p.product_series_links?.map((l: any) => l.brand_series_id) || [],
+        brand_ids: p.product_brands?.map((b: any) => b.brand_id) || [],
+        primary_brand_id: p.product_brands?.find((b: any) => b.is_primary)?.brand_id || p.product_brands?.[0]?.brand_id || null,
         effective_model_names: modelDataP._expanded_models,
         effective_model_aliases: modelDataP._expanded_model_aliases,
         spec_values: specsMap.get(p.id) || {},
         variants: p.variants?.map((v: any) => {
-          const modelDataV = processModels(v.id);
+          const modelDataV = processEntityModels(v.id, modelMaps);
           return {
             ...v,
             ...modelDataV,

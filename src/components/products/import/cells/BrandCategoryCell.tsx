@@ -21,12 +21,20 @@ export function BrandCategoryCell({ row, index, onUpdate, allBrands, categories,
     }
 
     if (type === 'brand') {
-        const hasBrand = row.brand_id;
+        const brandIds = row.brand_ids || (row.brand_id ? [row.brand_id] : []);
+        const hasBrand = brandIds.length > 0;
         return hasBrand ? (
             <div className="flex flex-col gap-1">
-                <Badge variant="outline" className="text-[10px] w-fit border-emerald-500/30 text-emerald-700 bg-emerald-50/50">
-                    {row.brand}
-                </Badge>
+                <div className="flex flex-wrap gap-1">
+                    {(row.brand_ids || (row.brand_id ? [row.brand_id] : [])).map((bid: string) => {
+                        const b = allBrands.find((br: any) => br.id === bid);
+                        return b ? (
+                            <Badge key={bid} variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-700 bg-emerald-50/50">
+                                {b.name}
+                            </Badge>
+                        ) : null;
+                    })}
+                </div>
                 <span className="text-[9px] text-muted-foreground ml-1">{row.series_name || row.series || '-'}</span>
             </div>
         ) : (
@@ -43,8 +51,16 @@ export function BrandCategoryCell({ row, index, onUpdate, allBrands, categories,
                             <CommandEmpty>找不到品牌</CommandEmpty>
                             <CommandGroup>
                                 {allBrands.map(b => (
-                                    <CommandItem key={b.id} onSelect={() => { onUpdate(index, 'brand', b.name); onUpdate(index, 'brand_id', b.id); }} className="text-xs">
-                                        <Check className={cn("mr-2 h-3 w-3", row.brand_id === b.id ? "opacity-100" : "opacity-0")} />
+                                    <CommandItem key={b.id} onSelect={() => {
+                                        const currentIds = row.brand_ids || (row.brand_id ? [row.brand_id] : []);
+                                        const isAlreadySelected = currentIds.includes(b.id);
+                                        const newIds = isAlreadySelected ? currentIds.filter((id: string) => id !== b.id) : [...currentIds, b.id];
+                                        const brandNames = newIds.map((id: string) => allBrands.find((br: any) => br.id === id)?.name).filter(Boolean).join(', ');
+                                        onUpdate(index, 'brand_ids', newIds);
+                                        onUpdate(index, 'brand_id', newIds[0] || null);
+                                        onUpdate(index, 'brand', brandNames);
+                                    }} className="text-xs">
+                                        <Check className={cn("mr-2 h-3 w-3", brandIds.includes(b.id) ? "opacity-100" : "opacity-0")} />
                                         {b.name}
                                     </CommandItem>
                                 ))}

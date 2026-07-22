@@ -14,7 +14,8 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
         mutationFn: async (values: any) => {
             const {
                 category_ids,
-                brand_series_id,
+                brand_ids = [],
+                brand_series_ids = [],
                 device_model_ids,
                 device_model_group_ids = [],
                 device_model_exclusion_ids = [],
@@ -34,11 +35,17 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
                 if (error) throw error;
             }
 
-            if (brand_series_id) {
-                const { error } = await supabase.from('product_series_links').upsert(
-                    { product_id: product.id, brand_series_id },
-                    { onConflict: 'product_id,brand_series_id' }
-                );
+            if (brand_ids.length > 0) {
+                const links = brand_ids.map((bid: string, i: number) => ({
+                    product_id: product.id, brand_id: bid, is_primary: i === 0
+                }));
+                const { error } = await supabase.from('product_brands').upsert(links, { onConflict: 'product_id,brand_id' });
+                if (error) throw error;
+            }
+
+            if (brand_series_ids.length > 0) {
+                const links = brand_series_ids.map((sid: string) => ({ product_id: product.id, brand_series_id: sid }));
+                const { error } = await supabase.from('product_series_links').upsert(links, { onConflict: 'product_id,brand_series_id' });
                 if (error) throw error;
             }
 
@@ -75,7 +82,8 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
         mutationFn: async ({ id, values }: { id: string, values: any }) => {
             const {
                 category_ids,
-                brand_series_id,
+                brand_ids = [],
+                brand_series_ids = [],
                 device_model_ids,
                 device_model_group_ids = [],
                 device_model_exclusion_ids = [],
@@ -95,12 +103,19 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
                 );
             }
 
+            await supabase.from('product_brands').delete().eq('product_id', id);
+            if (brand_ids.length > 0) {
+                const links = brand_ids.map((bid: string, i: number) => ({
+                    product_id: id, brand_id: bid, is_primary: i === 0
+                }));
+                const { error } = await supabase.from('product_brands').upsert(links, { onConflict: 'product_id,brand_id' });
+                if (error) throw error;
+            }
+
             await supabase.from('product_series_links').delete().eq('product_id', id);
-            if (brand_series_id) {
-                const { error } = await supabase.from('product_series_links').upsert(
-                    { product_id: id, brand_series_id },
-                    { onConflict: 'product_id,brand_series_id' }
-                );
+            if (brand_series_ids.length > 0) {
+                const links = brand_series_ids.map((sid: string) => ({ product_id: id, brand_series_id: sid }));
+                const { error } = await supabase.from('product_series_links').upsert(links, { onConflict: 'product_id,brand_series_id' });
                 if (error) throw error;
             }
 

@@ -14,8 +14,6 @@ import {
 } from "@/components/ui/dialog";
 import { ProductWithPricing, VariantWithPricing } from "@/types/product";
 import { useStoreDraft } from "@/store/useOrderDraftStore";
-import { getSpecValue, formatSpecValue } from "@/utils/specLogic";
-import { productMatchesSpecFilters } from "@/utils/treeUtils";
 import { StatusBadge } from "../../ProductStatusBadge";
 import { toast } from 'sonner';
 import { ProductDetailDialog } from "@/components/products/catalog/ProductDetailDialog";
@@ -35,7 +33,6 @@ interface ProductCatalogProps {
   search: string;
   onSearchChange: (val: string) => void;
   categoryFilter?: string | null;
-  subCategoryIds?: Set<string>;
   specFilters?: Record<string, string[]>;
   brandFilter?: string[];
 }
@@ -48,7 +45,6 @@ export default function ProductCatalog({
   search,
   onSearchChange,
   categoryFilter = null,
-  subCategoryIds,
   specFilters = {},
   brandFilter = [],
 }: ProductCatalogProps) {
@@ -106,39 +102,17 @@ export default function ProductCatalog({
     }, { replace: true });
   };
 
-  const effectiveSubCategoryIds = useMemo(() => {
-    return subCategoryIds ?? (categoryFilter ? new Set([categoryFilter]) : new Set<string>());
-  }, [subCategoryIds, categoryFilter]);
-
+  // Variant-level text search (products are already filtered by useProductSearch)
   const keywords = search
     .toLowerCase()
     .trim()
     .split(/\s+/)
     .filter(Boolean);
 
-  const filteredProducts = products
-    .filter((product) => {
-      if (categoryFilter && effectiveSubCategoryIds.size > 0) {
-        const pCategoryIds = (product as any).category_ids || [];
-        if (!pCategoryIds.some((id: string) => effectiveSubCategoryIds.has(id))) {
-          return false;
-        }
-      }
+  const filteredProducts = useMemo(() => {
+    if (keywords.length === 0) return products;
 
-      if (!productMatchesSpecFilters(product, specFilters, (id: string) => product.variants || [])) return false;
-
-      if (brandFilter.length > 0) {
-        const pBrandId = (product as any).brand_id;
-        if (!pBrandId || !brandFilter.includes(pBrandId)) {
-          return false;
-        }
-      }
-
-      return true;
-    })
-    .map((product) => {
-      if (keywords.length === 0) return product;
-
+    return products.map((product) => {
       const allVariantModelNames = (product.variants || []).flatMap(
         (v: any) => v.effective_model_names || []
       );
@@ -181,44 +155,23 @@ export default function ProductCatalog({
           );
         }) ?? [];
 
+      // If product matches or not in variants view, keep all variants
+      if (productMatched && viewMode !== 'variants') {
+        return product;
+      }
+      // Otherwise keep only matching variants
       return {
         ...product,
-        variants: (productMatched && viewMode !== 'variants') ? product.variants : matchedVariants,
+        variants: matchedVariants,
       };
-    })
-    .filter((product) => {
-      if (keywords.length === 0) return true;
-
-      const allVariantModelNames = (product.variants || []).flatMap(
-        (v: any) => v.effective_model_names || []
-      );
-      const allVariantModelAliases = (product.variants || []).flatMap(
-        (v: any) => v.effective_model_aliases || []
-      );
-      const productTexts = [
-        product.name,
-        product.sku,
-        ...(product.category_names || []),
-        ...(product.effective_model_names || []),
-        ...((product as any).effective_model_aliases || []),
-        ...allVariantModelNames,
-        ...allVariantModelAliases
-      ]
-        .filter(Boolean)
-        .map((v) => v!.toLowerCase());
-
-      const productMatched = keywords.every((keyword) =>
-        productTexts.some((text) => text.includes(keyword))
-      );
-
+    }).filter((product) => {
+      // Remove products with no variants when searching in variants view
       if (viewMode === 'variants') {
         return (product.variants?.length ?? 0) > 0;
       }
-
-      if (productMatched) return true;
-
-      return (product.variants?.length ?? 0) > 0;
+      return true;
     });
+  }, [products, keywords, viewMode]);
 
   const filteredVariantIds = useMemo(() => {
     const ids = new Set<string>();

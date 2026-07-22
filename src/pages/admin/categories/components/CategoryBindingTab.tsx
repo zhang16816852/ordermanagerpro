@@ -67,7 +67,7 @@ export function CategoryBindingTab() {
     let result = products;
 
     if (selectedBrandId) {
-      result = result.filter(p => p.brand_id === selectedBrandId);
+      result = result.filter(p => p.brand_ids.includes(selectedBrandId));
     }
 
     if (search) {

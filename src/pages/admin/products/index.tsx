@@ -41,11 +41,6 @@ export default function AdminProducts() {
     const [isSelectionOpen, setIsSelectionOpen] = useState(false);
     const [quickCreateSaving, setQuickCreateSaving] = useState(false);
 
-    const allVariantIds = useMemo(
-        () => filteredProducts.flatMap(p => (p.variants || []).map((v: any) => v.id)),
-        [filteredProducts]
-    );
-
     const handleQuickCreateSave = async (data: {
         name: string;
         description?: string;
@@ -206,7 +201,7 @@ export default function AdminProducts() {
                 open={quickCreateOpen}
                 onOpenChange={setQuickCreateOpen}
                 products={filteredProducts}
-                defaultVariantIds={allVariantIds}
+                defaultVariantIds={[]}
                 onSave={handleQuickCreateSave}
                 isLoading={quickCreateSaving}
             />

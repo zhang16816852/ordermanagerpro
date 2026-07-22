@@ -21,8 +21,8 @@ const productSchema = z.object({
   device_model_ids: z.array(z.string().uuid()).default([]),
   device_model_group_ids: z.array(z.string().uuid()).default([]),
   device_model_exclusion_ids: z.array(z.string().uuid()).default([]),
-  brand_id: z.string().nullable().optional(),
-  brand_series_id: z.string().uuid().nullable().optional(),
+  brand_ids: z.array(z.string().uuid()).default([]),
+  brand_series_ids: z.array(z.string().uuid()).default([]),
   model: z.string().nullable().optional(),
   base_wholesale_price: z.coerce.number().min(0),
   base_retail_price: z.coerce.number().min(0),
@@ -52,7 +52,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
   const form = useForm<z.infer<typeof productSchema>>({
     resolver: zodResolver(productSchema),
     defaultValues: {
-      name: '', sku: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_id: null, brand_series_id: null, model: '',
+            name: '', sku: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_ids: [], brand_series_ids: [], model: '',
       base_wholesale_price: 0, base_retail_price: 0,
       status: 'active', has_variants: false,
       spec_values: {},
@@ -92,7 +92,8 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
             device_model_ids: [],
             device_model_group_ids: [],
             device_model_exclusion_ids: [],
-            brand_series_id: (initialData as any).brand_series_id || null,
+            brand_ids: (initialData as any).brand_ids || [],
+            brand_series_ids: (initialData as any).brand_series_ids || [],
             spec_values: deserializeSpecs(currentSpecValues.length > 0 ? currentSpecValues : (initialData as any).spec_values),
           });
           console.log(form)
@@ -110,7 +111,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
           }
         } else {
           form.reset({
-            name: '', sku: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_id: null, brand_series_id: null, model: '',
+      name: '', sku: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_ids: [], brand_series_ids: [], model: '',
             base_wholesale_price: 0, base_retail_price: 0,
             status: 'active', has_variants: false,
             spec_values: {},

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -195,13 +195,34 @@ export function OrderGridDimensionPicker({
 }: OrderGridDimensionPickerProps) {
   const { specDefinitions } = useSpecStore();
 
-  // Suitable specs for dimensions (exclude heading / table)
+  // Extract spec_ids that have values in selected products
+  const usedSpecIds = useMemo(() => {
+    if (!products || products.length === 0) return null; // null = no filter
+    const ids = new Set<string>();
+    products.forEach((p) => {
+      p.variants?.forEach((v) => {
+        const specVals = (v as any).spec_values;
+        if (!specVals || typeof specVals !== 'object') return;
+        Object.entries(specVals).forEach(([key, val]) => {
+          if (!val) return;
+          const parts = key.split(':');
+          const specId = parts.length >= 2 ? parts[1] : key;
+          ids.add(specId);
+        });
+      });
+    });
+    return ids;
+  }, [products]);
+
+  // Suitable specs: exclude heading/table, and if products provided, only show used specs
   const availableSpecs = useMemo(
     () =>
       specDefinitions.filter(
-        (s: { type?: string }) => s.type !== 'heading' && s.type !== 'table',
+        (s: { id: string; type?: string }) =>
+          s.type !== 'heading' && s.type !== 'table' &&
+          (usedSpecIds === null || usedSpecIds.has(s.id)),
       ),
-    [specDefinitions],
+    [specDefinitions, usedSpecIds],
   );
 
   // Custom value items (for 'custom' type)
@@ -222,55 +243,60 @@ export function OrderGridDimensionPicker({
     return extractDimensionValues(value, products);
   }, [value, products]);
 
+  // Ref to always have latest value (avoids stale closure in callbacks)
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
 
   // --- Handlers ---
 
   const handleTypeChange = useCallback(
     (type: DimensionType) => {
+      const v = valueRef.current;
       if (type === 'variant_field') {
-        onChange({ type, label: value.label, field: 'option_1' });
+        onChange({ type, label: v.label, field: 'option_1' });
         setItems([]);
       } else if (type === 'spec') {
-        onChange({ type, label: value.label, spec_id: undefined });
+        onChange({ type, label: v.label, spec_id: undefined });
         setItems([]);
       } else if (type === 'custom') {
-        onChange({ type, label: value.label, values: [] });
+        onChange({ type, label: v.label, values: [] });
         setItems([]);
       } else {
-        onChange({ type, label: value.label });
+        onChange({ type, label: v.label });
         setItems([]);
       }
     },
-    [value.label, onChange],
+    [onChange],
   );
 
   const handleFieldChange = useCallback(
     (field: VariantFieldKey) => {
-      onChange({ ...value, field });
+      onChange({ ...valueRef.current, field });
     },
-    [value, onChange],
+    [onChange],
   );
 
   const handleSpecChange = useCallback(
     (specId: string) => {
-      onChange({ ...value, spec_id: specId });
+      onChange({ ...valueRef.current, spec_id: specId });
     },
-    [value, onChange],
+    [onChange],
   );
 
   const handleLabelChange = useCallback(
     (label: string) => {
-      onChange({ ...value, label });
+      onChange({ ...valueRef.current, label });
     },
-    [value, onChange],
+    [onChange],
   );
 
   const handleValueMapChange = useCallback(
     (map: Record<string, string>) => {
-      onChange({ ...value, valueMap: Object.keys(map).length > 0 ? map : undefined });
+      onChange({ ...valueRef.current, valueMap: Object.keys(map).length > 0 ? map : undefined });
     },
-    [value, onChange],
+    [onChange],
   );
 
   // Custom value handlers
@@ -282,11 +308,11 @@ export function OrderGridDimensionPicker({
         const oldIndex = prev.findIndex((i) => i.id === active.id);
         const newIndex = prev.findIndex((i) => i.id === over.id);
         const next = arrayMove(prev, oldIndex, newIndex);
-        onChange({ ...value, values: next.map((i) => i.value) });
+        onChange({ ...valueRef.current, values: next.map((i) => i.value) });
         return next;
       });
     },
-    [value, onChange],
+    [onChange],
   );
 
   const addItem = useCallback(() => {
@@ -300,22 +326,22 @@ export function OrderGridDimensionPicker({
         const next = prev.map((i) =>
           i.id === id ? { ...i, value: newValue, label: newLabel } : i,
         );
-        onChange({ ...value, values: next.map((i) => i.value) });
+        onChange({ ...valueRef.current, values: next.map((i) => i.value) });
         return next;
       });
     },
-    [value, onChange],
+    [onChange],
   );
 
   const removeItem = useCallback(
     (id: string) => {
       setItems((prev) => {
         const next = prev.filter((i) => i.id !== id);
-        onChange({ ...value, values: next.map((i) => i.value) });
+        onChange({ ...valueRef.current, values: next.map((i) => i.value) });
         return next;
       });
     },
-    [value, onChange],
+    [onChange],
   );
 
   // --- Render ---

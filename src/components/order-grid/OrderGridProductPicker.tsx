@@ -39,9 +39,16 @@ export function OrderGridProductPicker({
       if (!productVariantMap[p.id]) return false;
       if (!search.trim()) return true;
       const q = search.toLowerCase();
-      return (
-        p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q)
+      // 產品層級
+      if (p.name.toLowerCase().includes(q)) return true;
+      if (p.sku.toLowerCase().includes(q)) return true;
+      // 變體層級
+      return (p.variants || []).some((v: any) =>
+        v.name?.toLowerCase().includes(q) ||
+        v.sku?.toLowerCase().includes(q) ||
+        v.option_1?.toLowerCase().includes(q) ||
+        v.option_2?.toLowerCase().includes(q) ||
+        v.option_3?.toLowerCase().includes(q)
       );
     });
   }, [products, search, productVariantMap]);
@@ -123,7 +130,7 @@ export function OrderGridProductPicker({
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="搜尋產品名稱或 SKU..."
+          placeholder="搜尋產品名稱、SKU、變體、選項..."
           className="pl-8 h-9"
         />
       </div>

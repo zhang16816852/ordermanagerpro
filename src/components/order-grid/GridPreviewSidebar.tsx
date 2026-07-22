@@ -1,7 +1,7 @@
 import React from 'react';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { X } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { filterRowsColsForTab } from '@/lib/order-grid-utils';
 import { getDisplayValue } from '@/lib/order-grid-utils';
@@ -131,6 +131,12 @@ export function GridPreviewSidebar({
                 <> × {grid.tabValues.length} tabs</>
               )}
             </div>
+            {(grid.rowValues.some(v => !v) || grid.colValues.some(v => !v)) && (
+              <div className="px-3 py-2 text-xs bg-yellow-500/10 border-b flex items-center gap-1.5 text-yellow-700 dark:text-yellow-500 shrink-0">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                部分變體缺少維度值，這些變體會出現在「空白」欄
+              </div>
+            )}
             <div className="flex-1 min-h-0 overflow-hidden">
               {grid.tabValues.length <= 1 || grid.tabValues[0] === '__all__' ? (
                 <PreviewTable

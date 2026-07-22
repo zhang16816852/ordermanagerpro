@@ -13,7 +13,7 @@ export interface ProductBinding {
   product_id: string;
   product_name: string;
   product_sku: string;
-  brand_id: string | null;
+  brand_ids: string[];
   brand_name: string;
   has_variants: boolean;
   category_ids: string[];
@@ -66,8 +66,9 @@ export function useCategoryBindings() {
       const { data, error } = await supabase
         .from('products')
         .select(`
-          id, name, sku, brand_id, has_variants, status,
+          id, name, sku, has_variants, status,
           product_category_links(category_id),
+          product_brands(brand_id),
           variants:product_variants(id)
         `)
         .eq('status', 'active')
@@ -78,8 +79,8 @@ export function useCategoryBindings() {
         product_id: p.id,
         product_name: p.name,
         product_sku: p.sku,
-        brand_id: p.brand_id,
-        brand_name: brands.find((b: any) => b.id === p.brand_id)?.name || '',
+        brand_ids: p.product_brands?.map((b: any) => b.brand_id) || [],
+        brand_name: p.product_brands?.map((b: any) => brands.find((br: any) => br.id === b.brand_id)?.name).filter(Boolean).join(', ') || '',
         has_variants: p.has_variants,
         category_ids: (p.product_category_links || []).map((l: any) => l.category_id),
         variant_count: (p.variants || []).length,

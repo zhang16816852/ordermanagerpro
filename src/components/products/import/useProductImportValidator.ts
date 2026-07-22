@@ -8,7 +8,7 @@ const PRODUCT_DIFF_MAP: Record<string, (keyof ImportRow)[]> = {
     '描述': ['description'],
     '型號': ['model'],
     '系列': ['series_name'],
-    '品牌': ['brand', 'brand_id'],
+    '品牌': ['brand', 'brand_ids'],
     '批發價': ['base_wholesale_price'],
     '零售價': ['base_retail_price'],
     '狀態': ['product_status'],
@@ -50,7 +50,7 @@ export function useProductImportValidator(
             if (!row.variant_name) errors.push('變體名稱為必填');
         }
 
-        if (row.brand && !row.brand_id) {
+        if (row.brand && !row.brand_id && (!row.brand_ids || row.brand_ids.length === 0)) {
             errors.push(`找不到品牌 "${row.brand}"`);
         }
 
@@ -129,13 +129,24 @@ export function useProductImportValidator(
 
         const productIds = existingProducts.map(p => p.id).filter(Boolean);
         const productSeriesMap = new Map<string, string[]>();
+        const productBrandsMap = new Map<string, string[]>();
         if (productIds.length > 0) {
-            const { data: links } = await supabase.from('product_series_links').select('product_id, brand_series_id').in('product_id', productIds);
-            if (links) {
-                links.forEach(l => {
+            const [{ data: seriesLinks }, { data: brandLinks }] = await Promise.all([
+                supabase.from('product_series_links').select('product_id, brand_series_id').in('product_id', productIds),
+                supabase.from('product_brands').select('product_id, brand_id').in('product_id', productIds)
+            ]);
+            if (seriesLinks) {
+                seriesLinks.forEach(l => {
                     const arr = productSeriesMap.get(l.product_id) || [];
                     arr.push(l.brand_series_id);
                     productSeriesMap.set(l.product_id, arr);
+                });
+            }
+            if (brandLinks) {
+                brandLinks.forEach(l => {
+                    const arr = productBrandsMap.get(l.product_id) || [];
+                    arr.push(l.brand_id);
+                    productBrandsMap.set(l.product_id, arr);
                 });
             }
         }
@@ -176,7 +187,11 @@ export function useProductImportValidator(
                     ? !existingSeriesIds.includes(row.brand_series_id) || existingSeriesIds.length !== 1
                     : existingSeriesIds.length > 0;
                 if (hasSeriesChanged) diff.push('系列');
-                if (product.brand_id !== row.brand_id) diff.push('品牌');
+                const existingBrandIds = productBrandsMap.get(product.id) || [];
+                const incomingBrandIds = row.brand_ids || (row.brand_id ? [row.brand_id] : []);
+                const hasBrandChanged = incomingBrandIds.length !== existingBrandIds.length
+                    || !incomingBrandIds.every((id: string) => existingBrandIds.includes(id));
+                if (hasBrandChanged) diff.push('品牌');
                 if (Number(product.base_wholesale_price) !== Number(row.base_wholesale_price)) diff.push('批發價');
                 if (Number(product.base_retail_price) !== Number(row.base_retail_price)) diff.push('零售價');
                 if (product.status !== row.product_status) diff.push('狀態');

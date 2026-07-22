@@ -250,7 +250,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
               <h3 className="font-semibold text-lg">{selectedProduct.name}</h3>
               <p className="text-sm text-muted-foreground">
                 SKU: {selectedProduct.sku}
-                {selectedProduct.brand_id && ` | 廠牌: ${getBrandName(selectedProduct.brand_id)}`}
+                {(selectedProduct as any).primary_brand_name && ` | 廠牌: ${(selectedProduct as any).primary_brand_name}`}
                 {selectedProduct.model && ` | 型號: ${selectedProduct.model}`}
               </p>
             </div>

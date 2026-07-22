@@ -85,21 +85,9 @@ Deno.serve(async (req: Request) => {
         snapshotSequenceId: snapshotSeq
       };
       
-      // [FIX V8.2] 優先查此表的最新 change log；若無，fallback 至 data_versions
-      const { data: maxLog } = await supabase
-        .from('data_change_logs')
-        .select('version_tag')
-        .eq('table_name', tableName)
-        .order('version_tag', { descending: true })
-        .limit(1)
-        .maybeSingle();
-
-      if (maxLog?.version_tag) {
-        serverSequenceId = maxLog.version_tag;
-      } else {
-        serverSequenceId = await getVersionFromDataVersions(supabase, tableName, snapshotSeq);
-        console.log(`[DiffEngine] ℹ️ ${tableName} 無 change log，fallback data_versions: ${serverSequenceId}`);
-      }
+      // [V8.3] data_versions 是版本權威來源，data_change_logs 只負責提供 diff 數據
+      serverSequenceId = await getVersionFromDataVersions(supabase, tableName, snapshotSeq);
+      console.log(`[DiffEngine] 📌 ${tableName} 全量版本 (from data_versions): ${serverSequenceId}`);
 
     } else {
       // [Case B] 增量模式：僅 Diff
@@ -119,26 +107,15 @@ Deno.serve(async (req: Request) => {
         deletedIds: diffResult.deletedIds
       };
       
-      // 更新 Server 序號為最新的 Log ID
-      if (logs && logs.length > 0) {
-        serverSequenceId = logs[logs.length - 1].version_tag;
-      } else {
-        // [FIX V8.2] 若無新日誌，查此表最新 log；若仍無，fallback data_versions
-        const { data: maxLog } = await supabase
-          .from('data_change_logs')
-          .select('version_tag')
-          .eq('table_name', tableName)
-          .order('version_tag', { descending: true })
-          .limit(1)
-          .maybeSingle();
+      // 增量 diff 的邊界仍用 data_change_logs（如果有的話）
+      const diffBoundary = (logs && logs.length > 0)
+        ? logs[logs.length - 1].version_tag
+        : String(lastSequenceId);
 
-        if (maxLog?.version_tag) {
-          serverSequenceId = maxLog.version_tag;
-        } else {
-          serverSequenceId = await getVersionFromDataVersions(supabase, tableName, String(lastSequenceId));
-          console.log(`[DiffEngine] ℹ️ ${tableName} 無 change log，fallback data_versions: ${serverSequenceId}`);
-        }
-      }
+      // [V8.3] 最終版本以 data_versions 為準（可能比 change log 更新）
+      const dbVersion = await getVersionFromDataVersions(supabase, tableName, diffBoundary);
+      serverSequenceId = dbVersion > diffBoundary ? dbVersion : diffBoundary;
+      console.log(`[DiffEngine] 📌 ${tableName} 增量版本: diff=${diffBoundary}, db=${dbVersion}, final=${serverSequenceId}`);
     }
 
     return new Response(
