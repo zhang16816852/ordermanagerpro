@@ -16,6 +16,7 @@ import {
 import { useStoreDraft } from "@/store/useOrderDraftStore";
 import { CatalogSidebar } from "@/components/products/catalog/CatalogSidebar";
 import { useDeviceModelStore } from "@/store/useDeviceModelStore";
+import { useBrands } from "@/hooks/useBrands";
 import { Category } from "@/types/product";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,14 +24,16 @@ import { supabase } from "@/integrations/supabase/client";
 const PAGE_SIZE = 24;
 
 export default function StoreCatalog() {
-  const { storeId } = useAuth();
+  const { storeId, isAuthReady } = useAuth();
   const { totalItems } = useStoreDraft(storeId || '');
   const { products: allProducts, isLoading: isSidebarLoading } = useStoreProductCache(storeId ?? null);
   const { fetchData: fetchDeviceData } = useDeviceModelStore();
 
   useEffect(() => {
-    fetchDeviceData();
-  }, [fetchDeviceData]);
+    if (isAuthReady) {
+      fetchDeviceData();
+    }
+  }, [fetchDeviceData, isAuthReady]);
 
   // Fetch categories for ID <-> Name mapping
   const { data: categories = [] } = useQuery<Category[]>({
@@ -58,6 +61,9 @@ export default function StoreCatalog() {
   const search = searchParams.get("search") || "";
   const categoryNameInUrl = searchParams.get("category");
   const selectedBrands = searchParams.get("brands")?.split(",").filter(Boolean) || [];
+  const selectedSeries = searchParams.get("series")?.split(",").filter(Boolean) || [];
+  const selectedDeviceModels = searchParams.get("device_models")?.split(",").filter(Boolean) || [];
+  const { brandMap } = useBrands();
 
   const selectedCategory = useMemo(() => {
     if (!categoryNameInUrl || categories.length === 0) return null;
@@ -66,6 +72,17 @@ export default function StoreCatalog() {
 
   const page = parseInt(searchParams.get("page") || "1", 10);
   const [viewMode, setViewMode] = useState<'products' | 'variants' | 'gallery' | 'table'>('products');
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+
+  const catalogFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedCategory) count++;
+    count += selectedBrands.length;
+    count += selectedSeries.length;
+    count += selectedDeviceModels.length;
+    count += Object.values(selectedSpecs).reduce((sum, arr) => sum + arr.length, 0);
+    return count;
+  }, [selectedCategory, selectedBrands, selectedSeries, selectedDeviceModels, selectedSpecs]);
 
   // Specs are a bit more complex, stored as JSON in URL for simplicity
   const selectedSpecs = useMemo(() => {
@@ -82,7 +99,10 @@ export default function StoreCatalog() {
     selectedCategory,
     categoryHierarchy,
     selectedBrands,
+    selectedSeries,
+    selectedDeviceModels,
     selectedSpecs,
+    brandMap,
   });
 
   // Client-side pagination
@@ -115,6 +135,14 @@ export default function StoreCatalog() {
 
   const setSelectedBrands = (val: string[]) => {
     updateParams({ brands: val.join(","), page: "1" });
+  };
+
+  const setSelectedSeries = (val: string[]) => {
+    updateParams({ series: val.join(","), page: "1" });
+  };
+
+  const setSelectedDeviceModels = (val: string[]) => {
+    updateParams({ device_models: val.join(","), page: "1" });
   };
 
   const handleSpecChange = useCallback((key: string, values: string[]) => {
@@ -152,6 +180,10 @@ export default function StoreCatalog() {
           onSpecChange={handleSpecChange}
           selectedBrands={selectedBrands}
           onBrandChange={setSelectedBrands}
+          selectedSeries={selectedSeries}
+          onSeriesChange={setSelectedSeries}
+          selectedDeviceModels={selectedDeviceModels}
+          onDeviceModelChange={setSelectedDeviceModels}
           onClearFilters={clearFilters}
         />
       </aside>
@@ -166,23 +198,30 @@ export default function StoreCatalog() {
 
             <div className="flex items-center gap-2 self-start sm:self-auto">
               {/* Mobile Filter Toggle */}
-              <Sheet>
+              <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
                 <SheetTrigger asChild>
                   <Button variant="outline" size="sm" className="md:hidden">
                     <Filter className="h-4 w-4 mr-2" />
                     篩選
+                    {catalogFilterCount > 0 && (
+                      <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">{catalogFilterCount}</Badge>
+                    )}
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="p-0 w-72">
                   <CatalogSidebar
                     products={allProducts}
                     selectedCategory={selectedCategory}
-                    onCategoryChange={setSelectedCategory}
+                    onCategoryChange={(v) => { setSelectedCategory(v); setFilterSheetOpen(false); }}
                     selectedSpecs={selectedSpecs}
-                    onSpecChange={handleSpecChange}
+                    onSpecChange={(key, values) => { handleSpecChange(key, values); setFilterSheetOpen(false); }}
                     selectedBrands={selectedBrands}
-                    onBrandChange={setSelectedBrands}
-                    onClearFilters={clearFilters}
+                    onBrandChange={(v) => { setSelectedBrands(v); setFilterSheetOpen(false); }}
+                    selectedSeries={selectedSeries}
+                    onSeriesChange={(v) => { setSelectedSeries(v); setFilterSheetOpen(false); }}
+                    selectedDeviceModels={selectedDeviceModels}
+                    onDeviceModelChange={(v) => { setSelectedDeviceModels(v); setFilterSheetOpen(false); }}
+                    onClearFilters={() => { clearFilters(); setFilterSheetOpen(false); }}
                   />
                 </SheetContent>
               </Sheet>

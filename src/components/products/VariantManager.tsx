@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Tables, TablesInsert } from '@/integrations/supabase/types';
+import { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -101,7 +101,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
 
       return variants.map(v => ({
         ...v,
-        device_model_links: linksData?.filter(link => link.variant_id === v.id) || []
+        device_model_links: linksData?.filter((link) => link.variant_id === v.id) || []
       }));
     },
     enabled: !!selectedProductId,
@@ -138,7 +138,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
 
   const batchEditMutation = useMutation({
     mutationFn: async ({ ids, updates }: { ids: string[]; updates: Record<string, any> }) => {
-      const { error } = await supabase.from('product_variants').update(updates).in('id', ids);
+      const { error } = await supabase.from('product_variants').update(updates as TablesUpdate<'product_variants'>).in('id', ids);
       if (error) throw error;
     },
     onSuccess: () => {

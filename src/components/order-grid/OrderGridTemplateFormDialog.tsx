@@ -235,8 +235,8 @@ export function OrderGridTemplateFormDialog({
           </div>
 
           {/* Middle: Product Picker */}
-          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b shrink-0">
+          <div className="flex-1 min-w-0 flex flex-col overflow-y-auto">
+            <div className="px-6 py-4 border-b">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="text-sm font-medium">選擇產品變體 *</h4>
                 <Button

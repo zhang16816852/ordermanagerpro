@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { CacheService } from '@/services/cacheService';
 import { fetchAllRows } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 const CACHE_KEY = 'ac_dictionary_v1';
 const SCHEMA_VERSION = 1;
@@ -60,10 +61,13 @@ export const setDictionaryCache = (cache: DictionaryCacheData) => {
 };
 
 export const useDictionaryCache = () => {
+  const { isAuthReady } = useAuth();
   const [data, setData] = useState<DictionaryCacheData>(getDictionaryCache());
   const [isLoading, setIsLoading] = useState(true);
+  const mountedRef = useRef(true);
 
-  const syncDictionary = async (force = false) => {
+  const syncDictionary = useCallback(async (force = false, isRetry = false) => {
+    if (!isAuthReady && !isRetry) return;
     setIsLoading(true);
     try {
       const local = getDictionaryCache();
@@ -135,18 +139,27 @@ export const useDictionaryCache = () => {
 
       if (updated) {
         setDictionaryCache(local);
-        setData(local);
+        if (mountedRef.current) setData(local);
       }
     } catch (error) {
       console.error('[DictionaryCache] 🔴 同步失敗:', error);
+      if (!isRetry) {
+        await new Promise(r => setTimeout(r, 500));
+        return syncDictionary(force, true);
+      }
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) setIsLoading(false);
     }
-  };
+  }, [isAuthReady]);
 
   useEffect(() => {
-    syncDictionary();
-  }, []);
+    mountedRef.current = true;
+    if (isAuthReady) {
+      const timer = setTimeout(() => syncDictionary(), 0);
+      return () => { clearTimeout(timer); mountedRef.current = false; };
+    }
+    return () => { mountedRef.current = false; };
+  }, [isAuthReady, syncDictionary]);
 
   const brandMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -161,7 +174,7 @@ export const useDictionaryCache = () => {
     return brandMap[brandId] || brandId;
   };
 
-  const getBrandNames = (brandIds: string[] | undefined | null) => {
+  const getBrandNames = (brandIds: string[] | null | undefined) => {
     if (!brandIds?.length) return '-';
     return brandIds.map(id => brandMap[id] || id).join(', ');
   };

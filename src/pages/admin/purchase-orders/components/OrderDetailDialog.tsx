@@ -188,6 +188,7 @@ export function OrderDetailDialog({
                 </DialogHeader>
                 <ExcelImportDialog 
                   supplierId={order.supplier_id} 
+                  supplierName={order.supplier?.name || '未知供應商'}
                   isLoading={isLoading} 
                   onImport={(items) => { onImportItems(items); setExcelImportOpen(false); }} 
                 />

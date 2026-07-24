@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Search, RefreshCw, Upload, Download, Table2, ShoppingCart } from 'lucide-react';
+import { Plus, Search, RefreshCw, Upload, Download, Table2, ShoppingCart, Filter } from 'lucide-react';
 import { VariantManager } from '@/components/products/VariantManager';
 import { toast } from 'sonner';
 
@@ -40,6 +42,25 @@ export default function AdminProducts() {
     const [quickCreateOpen, setQuickCreateOpen] = useState(false);
     const [isSelectionOpen, setIsSelectionOpen] = useState(false);
     const [quickCreateSaving, setQuickCreateSaving] = useState(false);
+    const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+
+    const adminFilterCount = useMemo(() => {
+        let count = 0;
+        if (selectedCategory) count++;
+        count += selectedBrands.length;
+        count += selectedSeries.length;
+        count += selectedDeviceModels.length;
+        count += Object.values(selectedSpecs).reduce((sum, arr) => sum + arr.length, 0);
+        return count;
+    }, [selectedCategory, selectedBrands, selectedSeries, selectedDeviceModels, selectedSpecs]);
+
+    const selectedVariantIds = useMemo(
+        () =>
+            filteredProducts
+                .filter((p) => selectedProductIds.has(p.id))
+                .flatMap((p) => (p.variants || []).map((v: any) => v.id)),
+        [filteredProducts, selectedProductIds]
+    );
 
     const handleQuickCreateSave = async (data: {
         name: string;
@@ -134,8 +155,8 @@ export default function AdminProducts() {
                 </div>
 
                 <TabsContent value="list" className="mt-6 outline-none">
-                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                        <div className="lg:col-span-1">
+                    <div className="flex flex-col md:flex-row gap-6">
+                        <aside className="hidden md:block w-64 flex-shrink-0">
                             <CatalogSidebar
                                 products={(products || []) as any}
                                 selectedCategory={selectedCategory}
@@ -150,16 +171,45 @@ export default function AdminProducts() {
                                 onDeviceModelChange={setSelectedDeviceModels}
                                 onClearFilters={clearFilters}
                             />
-                        </div>
-                        <div className="lg:col-span-3 space-y-4">
-                            <div className="relative w-full hidden md:block">
-                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-50" />
-                                <Input
-                                    placeholder="在目前的篩選結果中搜尋..."
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    className="pl-9 bg-background border-none shadow-inner h-10 rounded-lg"
-                                />
+                        </aside>
+                        <div className="flex-1 min-w-0 space-y-4">
+                            <div className="flex items-center gap-2">
+                                <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
+                                    <SheetTrigger asChild>
+                                        <Button variant="outline" size="sm" className="md:hidden h-8">
+                                            <Filter className="h-4 w-4 mr-1.5" />
+                                            篩選
+                                            {adminFilterCount > 0 && (
+                                                <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">{adminFilterCount}</Badge>
+                                            )}
+                                        </Button>
+                                    </SheetTrigger>
+                                    <SheetContent side="left" className="p-0 w-72">
+                                        <CatalogSidebar
+                                            products={(products || []) as any}
+                                            selectedCategory={selectedCategory}
+                                            onCategoryChange={(v) => { setSelectedCategory(v); setFilterSheetOpen(false); }}
+                                            selectedSpecs={selectedSpecs}
+                                            onSpecChange={(key, values) => { setSelectedSpecs({ ...selectedSpecs, [key]: values }); setFilterSheetOpen(false); }}
+                                            selectedBrands={selectedBrands}
+                                            onBrandChange={(v) => { setSelectedBrands(v); setFilterSheetOpen(false); }}
+                                            selectedSeries={selectedSeries}
+                                            onSeriesChange={(v) => { setSelectedSeries(v); setFilterSheetOpen(false); }}
+                                            selectedDeviceModels={selectedDeviceModels}
+                                            onDeviceModelChange={(v) => { setSelectedDeviceModels(v); setFilterSheetOpen(false); }}
+                                            onClearFilters={() => { clearFilters(); setFilterSheetOpen(false); }}
+                                        />
+                                    </SheetContent>
+                                </Sheet>
+                                <div className="relative w-full hidden md:block">
+                                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-50" />
+                                    <Input
+                                        placeholder="在目前的篩選結果中搜尋..."
+                                        value={search}
+                                        onChange={(e) => setSearch(e.target.value)}
+                                        className="pl-9 bg-background border-none shadow-inner h-10 rounded-lg"
+                                    />
+                                </div>
                             </div>
                             <ProductsTable
                                 products={filteredProducts}
@@ -201,7 +251,7 @@ export default function AdminProducts() {
                 open={quickCreateOpen}
                 onOpenChange={setQuickCreateOpen}
                 products={filteredProducts}
-                defaultVariantIds={[]}
+                defaultVariantIds={selectedVariantIds}
                 onSave={handleQuickCreateSave}
                 isLoading={quickCreateSaving}
             />

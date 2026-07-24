@@ -4,10 +4,16 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ProductWithPricing } from "@/types/product";
-import { Category } from "@/types/product";
-import { ChevronRight, Filter, ChevronDown, Search } from "lucide-react";
+import {
+    ChevronRight, ChevronDown, Filter, Search,
+    FolderOpen, Tag, Smartphone, SlidersHorizontal,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { deserializeSpecs, formatSpecValue } from "@/utils/specLogic";
 import { useBrands } from "@/hooks/useBrands";
 import { useCategorySpecs } from "@/hooks/useCategorySpecs";
@@ -38,6 +44,67 @@ interface CatalogSidebarProps {
     onClearFilters: () => void;
 }
 
+function SectionHeader({
+    label,
+    isOpen,
+    count,
+    selectedCount,
+    icon: Icon,
+}: {
+    label: string;
+    isOpen: boolean;
+    count?: number;
+    selectedCount?: number;
+    icon: React.ElementType;
+}) {
+    return (
+        <CollapsibleTrigger asChild>
+            <button
+                className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors group py-1"
+            >
+                <span className="flex items-center gap-1.5">
+                    <Icon className="h-3.5 w-3.5 opacity-60" />
+                    {label}
+                    {selectedCount !== undefined && selectedCount > 0 && (
+                        <Badge variant="secondary" className="h-4 px-1 text-[10px]">{selectedCount}</Badge>
+                    )}
+                    {count !== undefined && !isOpen && (
+                        <span className="text-[10px] font-normal text-muted-foreground/60 tabular-nums">{count}</span>
+                    )}
+                </span>
+                <ChevronDown
+                    className={cn(
+                        "h-3.5 w-3.5 transition-transform duration-200 text-muted-foreground/50 group-hover:text-foreground",
+                        isOpen && "rotate-180"
+                    )}
+                />
+            </button>
+        </CollapsibleTrigger>
+    );
+}
+
+function SectionSkeleton({ rows = 4 }: { rows?: number }) {
+    return (
+        <div className="space-y-2.5 py-1">
+            {Array.from({ length: rows }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2">
+                    <Skeleton className="h-4 w-4 rounded" />
+                    <Skeleton className={cn("h-3.5 rounded", i % 2 === 0 ? "w-20" : "w-16")} />
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function EmptyState({ icon: Icon, text }: { icon: React.ElementType; text: string }) {
+    return (
+        <div className="flex flex-col items-center gap-1.5 py-4 text-muted-foreground/50">
+            <Icon className="h-5 w-5" />
+            <p className="text-[11px] italic">{text}</p>
+        </div>
+    );
+}
+
 export function CatalogSidebar({
     products,
     selectedCategory,
@@ -53,16 +120,21 @@ export function CatalogSidebar({
     onClearFilters,
 }: CatalogSidebarProps) {
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
-    const [activeSection, setActiveSection] = useState<string>('categories');
+    const [openSections, setOpenSections] = useState<Set<string>>(new Set(['categories']));
     const [modelSearch, setModelSearch] = useState('');
 
     const toggleSection = (section: string) => {
-        setActiveSection(prev => prev === section ? '' : section);
+        setOpenSections(prev => {
+            const next = new Set(prev);
+            if (next.has(section)) next.delete(section);
+            else next.add(section);
+            return next;
+        });
     };
 
-    const { brands } = useBrands();
-    const { fetchSpecs, specDefinitions, categoryLinks, categories, categoryHierarchy } = useSpecStore();
-    const { allSeries } = useBrandSeriesCache();
+    const { brands, isLoading: brandsLoading } = useBrands();
+    const { fetchSpecs, specDefinitions, categoryLinks, categories, categoryHierarchy, isLoading: specsLoading } = useSpecStore();
+    const { allSeries, isLoading: seriesLoading } = useBrandSeriesCache();
 
     useEffect(() => {
         if (specDefinitions.length === 0 || categoryLinks.length === 0) {
@@ -70,13 +142,11 @@ export function CatalogSidebar({
         }
     }, [fetchSpecs, specDefinitions.length, categoryLinks.length]);
 
-    // Filter series by selected brands and active status
     const filteredSeries = useMemo(() => {
         if (selectedBrands.length === 0) return [];
         return allSeries.filter(s => s.is_active && selectedBrands.includes(s.brand_id));
     }, [allSeries, selectedBrands]);
 
-    // Count products per series (from brand_series_ids on each product)
     const seriesCounts = useMemo(() => {
         const counts: Record<string, number> = {};
         products.forEach(p => {
@@ -87,8 +157,7 @@ export function CatalogSidebar({
         return counts;
     }, [products]);
 
-    // Collect available device_models from products (effective_model_names + variant models)
-    const { deviceModelCounts, filteredDeviceModels } = useMemo(() => {
+    const filteredDeviceModels = useMemo(() => {
         const counts: Record<string, number> = {};
         products.forEach(p => {
             const models = (p as any).effective_model_names || [];
@@ -105,10 +174,9 @@ export function CatalogSidebar({
             .sort((a, b) => b[1] - a[1])
             .map(([name, count]) => ({ name, count }));
         const searchLower = modelSearch.toLowerCase();
-        const filtered = searchLower
+        return searchLower
             ? sorted.filter(m => m.name.toLowerCase().includes(searchLower))
             : sorted;
-        return { deviceModelCounts: counts, filteredDeviceModels: filtered };
     }, [products, modelSearch]);
 
     const categoryTree = useMemo(() => {
@@ -180,7 +248,6 @@ export function CatalogSidebar({
                 }
             });
             p.variants?.forEach(v => {
-                const vSettings = deserializeSpecs(v.spec_values);
                 if (v.option_1) { if (!specs['core:option_1']) specs['core:option_1'] = new Set(); specs['core:option_1'].add(v.option_1); }
                 if (v.option_2) { if (!specs['core:option_2']) specs['core:option_2'] = new Set(); specs['core:option_2'].add(v.option_2); }
                 if (v.option_3) { if (!specs['core:option_3']) specs['core:option_3'] = new Set(); specs['core:option_3'].add(v.option_3); }
@@ -234,17 +301,19 @@ export function CatalogSidebar({
                 <div className="flex items-center gap-1 group">
                     {hasChildren ? (
                         <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => toggleExpand(node.id)}>
-                            {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                            <ChevronDown className={cn("h-3 w-3 transition-transform duration-200", !isExpanded && "-rotate-90")} />
                         </Button>
                     ) : (
                         <div className="w-6" />
                     )}
                     <button
                         onClick={() => onCategoryChange(node.id)}
-                        className={`flex-1 flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${isSelected
-                            ? "bg-primary text-primary-foreground font-medium"
-                            : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                            }`}
+                        className={cn(
+                            "flex-1 flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors",
+                            isSelected
+                                ? "bg-primary text-primary-foreground font-medium"
+                                : "hover:bg-muted/60 text-muted-foreground hover:text-foreground"
+                        )}
                     >
                         <span className="truncate">{node.name}</span>
                         {isSelected && <ChevronRight className="h-3 w-3" />}
@@ -262,59 +331,75 @@ export function CatalogSidebar({
     return (
         <div className="flex flex-col h-full bg-card border rounded-xl overflow-hidden shadow-sm">
             <div className="p-4 border-b bg-muted/30 flex items-center justify-between">
-                <div className="flex items-center gap-2 font-semibold">
+                <div className="flex items-center gap-2 font-semibold text-sm">
                     <Filter className="h-4 w-4" />
                     篩選條件
                 </div>
                 {hasActiveFilters && (
                     <Button variant="ghost" size="sm" onClick={onClearFilters}
-                        className="h-8 px-2 text-xs text-muted-foreground hover:text-destructive">
+                        className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive transition-colors">
                         重設
                     </Button>
                 )}
             </div>
 
             <ScrollArea className="flex-1">
-                <div className="p-4 space-y-4">
+                <div className="p-4 space-y-1">
                     {/* Categories */}
-                    <div className="border-b pb-3">
-                        <button onClick={() => toggleSection('categories')}
-                            className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors">
-                            <span>產品分類</span>
-                            {activeSection === 'categories' ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                        </button>
-                        {activeSection === 'categories' && (
-                            <div className="space-y-1">
-                                <button
-                                    onClick={() => onCategoryChange(null)}
-                                    className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors mb-2 ${selectedCategory === null
-                                        ? "bg-primary text-primary-foreground font-medium"
-                                        : "hover:bg-muted text-muted-foreground hover:text-foreground border border-transparent"
-                                        }`}
-                                >
-                                    <span>全部產品</span>
-                                    {selectedCategory === null && <ChevronRight className="h-3 w-3" />}
-                                </button>
-                                {categoryTree.map((node) => renderCategoryNode(node))}
-                                {categories.length === 0 && (
-                                    <p className="text-xs text-muted-foreground italic px-2">尚未建立分類</p>
-                                )}
-                            </div>
-                        )}
-                    </div>
+                    <Collapsible open={openSections.has('categories')} onOpenChange={() => toggleSection('categories')}>
+                        <div className="pb-2">
+                            <SectionHeader
+                                label="產品分類"
+                                isOpen={openSections.has('categories')}
+                                icon={FolderOpen}
+                            />
+                        </div>
+                        <CollapsibleContent>
+                            {specsLoading && categories.length === 0 ? (
+                                <SectionSkeleton rows={5} />
+                            ) : (
+                                <div className="space-y-1 pb-3">
+                                    <button
+                                        onClick={() => onCategoryChange(null)}
+                                        className={cn(
+                                            "w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors mb-1",
+                                            selectedCategory === null
+                                                ? "bg-primary text-primary-foreground font-medium"
+                                                : "hover:bg-muted/60 text-muted-foreground hover:text-foreground border border-transparent"
+                                        )}
+                                    >
+                                        <span>全部產品</span>
+                                        {selectedCategory === null && <ChevronRight className="h-3 w-3" />}
+                                    </button>
+                                    {categoryTree.map((node) => renderCategoryNode(node))}
+                                    {categories.length === 0 && (
+                                        <EmptyState icon={FolderOpen} text="尚未建立分類" />
+                                    )}
+                                </div>
+                            )}
+                        </CollapsibleContent>
+                        <Separator />
+                    </Collapsible>
 
                     {/* Brands */}
-                    {brands.length > 0 && (
-                        <div className="border-b pb-3">
-                            <button onClick={() => toggleSection('brands')}
-                                className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors">
-                                <span>品牌</span>
-                                {activeSection === 'brands' ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                            </button>
-                            {activeSection === 'brands' && (
-                                <div className="space-y-2">
+                    <Collapsible open={openSections.has('brands')} onOpenChange={() => toggleSection('brands')}>
+                        <div className="py-2">
+                            <SectionHeader
+                                label="品牌"
+                                isOpen={openSections.has('brands')}
+                                count={brands.length}
+                                icon={Tag}
+                            />
+                        </div>
+                        <CollapsibleContent>
+                            {brandsLoading ? (
+                                <SectionSkeleton rows={4} />
+                            ) : brands.length === 0 ? (
+                                <EmptyState icon={Tag} text="尚未建立品牌" />
+                            ) : (
+                                <div className="space-y-1 pb-3">
                                     {brands.map((brand: any) => (
-                                        <div key={brand.id} className="flex items-center space-x-2">
+                                        <div key={brand.id} className="flex items-center space-x-2 rounded-md px-1 py-0.5 hover:bg-muted/50 transition-colors">
                                             <Checkbox
                                                 id={`brand-${brand.id}`}
                                                 checked={selectedBrands.includes(brand.id)}
@@ -329,75 +414,84 @@ export function CatalogSidebar({
                                                 }}
                                             />
                                             <Label htmlFor={`brand-${brand.id}`}
-                                                className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground">
+                                                className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground transition-colors">
                                                 {brand.name}
                                             </Label>
                                         </div>
                                     ))}
                                 </div>
                             )}
-                        </div>
-                    )}
+                        </CollapsibleContent>
+                        <Separator />
+                    </Collapsible>
 
-                    {/* Series — only show when brands are selected */}
-                    {selectedBrands.length > 0 && filteredSeries.length > 0 && (
-                        <div className="border-b pb-3">
-                            <button onClick={() => toggleSection('series')}
-                                className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors">
-                                <span className="flex items-center gap-1.5">
-                                    系列
-                                    {selectedSeries.length > 0 && (
-                                        <Badge variant="secondary" className="h-4 px-1 text-[10px]">{selectedSeries.length}</Badge>
-                                    )}
-                                </span>
-                                {activeSection === 'series' ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                            </button>
-                            {activeSection === 'series' && (
-                                <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                                    {filteredSeries.map((s: any) => (
-                                        <div key={s.id} className="flex items-center space-x-2">
-                                            <Checkbox
-                                                id={`series-${s.id}`}
-                                                checked={selectedSeries.includes(s.id)}
-                                                onCheckedChange={(checked) => {
-                                                    if (onSeriesChange) {
-                                                        if (checked) {
-                                                            onSeriesChange([...selectedSeries, s.id]);
-                                                        } else {
-                                                            onSeriesChange(selectedSeries.filter((id) => id !== s.id));
+                    {/* Series */}
+                    {selectedBrands.length > 0 && (
+                        <Collapsible open={openSections.has('series')} onOpenChange={() => toggleSection('series')}>
+                            <div className="py-2">
+                                <SectionHeader
+                                    label="系列"
+                                    isOpen={openSections.has('series')}
+                                    count={filteredSeries.length}
+                                    selectedCount={selectedSeries.length}
+                                    icon={Tag}
+                                />
+                            </div>
+                            <CollapsibleContent>
+                                {seriesLoading ? (
+                                    <SectionSkeleton rows={3} />
+                                ) : filteredSeries.length === 0 ? (
+                                    <EmptyState icon={Tag} text="此品牌下無系列" />
+                                ) : (
+                                    <div className="space-y-1 pb-3 max-h-[200px] overflow-y-auto">
+                                        {filteredSeries.map((s: any) => (
+                                            <div key={s.id} className={cn(
+                                                "flex items-center space-x-2 rounded-md px-1 py-0.5 transition-colors",
+                                                selectedSeries.includes(s.id) ? "bg-primary/5" : "hover:bg-muted/50"
+                                            )}>
+                                                <Checkbox
+                                                    id={`series-${s.id}`}
+                                                    checked={selectedSeries.includes(s.id)}
+                                                    onCheckedChange={(checked) => {
+                                                        if (onSeriesChange) {
+                                                            if (checked) {
+                                                                onSeriesChange([...selectedSeries, s.id]);
+                                                            } else {
+                                                                onSeriesChange(selectedSeries.filter((id) => id !== s.id));
+                                                            }
                                                         }
-                                                    }
-                                                }}
-                                            />
-                                            <Label htmlFor={`series-${s.id}`}
-                                                className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground truncate">
-                                                {s.name}
-                                            </Label>
-                                            {seriesCounts[s.id] !== undefined && (
-                                                <span className="text-[10px] text-muted-foreground tabular-nums">{seriesCounts[s.id]}</span>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                                                    }}
+                                                />
+                                                <Label htmlFor={`series-${s.id}`}
+                                                    className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground truncate transition-colors">
+                                                    {s.name}
+                                                </Label>
+                                                {seriesCounts[s.id] !== undefined && (
+                                                    <span className="text-[10px] text-muted-foreground tabular-nums">{seriesCounts[s.id]}</span>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </CollapsibleContent>
+                            <Separator />
+                        </Collapsible>
                     )}
 
                     {/* Device Models */}
                     {filteredDeviceModels.length > 0 && (
-                        <div className="border-b pb-3">
-                            <button onClick={() => toggleSection('deviceModels')}
-                                className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors">
-                                <span className="flex items-center gap-1.5">
-                                    裝置型號
-                                    {selectedDeviceModels.length > 0 && (
-                                        <Badge variant="secondary" className="h-4 px-1 text-[10px]">{selectedDeviceModels.length}</Badge>
-                                    )}
-                                </span>
-                                {activeSection === 'deviceModels' ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                            </button>
-                            {activeSection === 'deviceModels' && (
-                                <div className="space-y-2">
+                        <Collapsible open={openSections.has('deviceModels')} onOpenChange={() => toggleSection('deviceModels')}>
+                            <div className="py-2">
+                                <SectionHeader
+                                    label="裝置型號"
+                                    isOpen={openSections.has('deviceModels')}
+                                    count={filteredDeviceModels.length}
+                                    selectedCount={selectedDeviceModels.length}
+                                    icon={Smartphone}
+                                />
+                            </div>
+                            <CollapsibleContent>
+                                <div className="space-y-2 pb-3">
                                     <div className="relative">
                                         <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
                                         <Input
@@ -407,16 +501,18 @@ export function CatalogSidebar({
                                             className="h-7 text-xs pl-6"
                                         />
                                     </div>
-                                    <div className="max-h-[200px] overflow-y-auto space-y-2">
+                                    <div className="max-h-[200px] overflow-y-auto space-y-1">
                                         {filteredDeviceModels.map(({ name, count }) => (
-                                            <div key={name} className="flex items-center space-x-2">
+                                            <div key={name} className={cn(
+                                                "flex items-center space-x-2 rounded-md px-1 py-0.5 transition-colors",
+                                                selectedDeviceModels.includes(name) ? "bg-primary/5" : "hover:bg-muted/50"
+                                            )}>
                                                 <Checkbox
                                                     id={`model-${name}`}
                                                     checked={selectedDeviceModels.includes(name)}
                                                     onCheckedChange={(checked) => {
                                                         if (onDeviceModelChange) {
                                                             if (checked) {
-                                                                console.log('Adding model:', selectedDeviceModels);
                                                                 onDeviceModelChange([...selectedDeviceModels, name]);
                                                             } else {
                                                                 onDeviceModelChange(selectedDeviceModels.filter((n) => n !== name));
@@ -425,7 +521,7 @@ export function CatalogSidebar({
                                                     }}
                                                 />
                                                 <Label htmlFor={`model-${name}`}
-                                                    className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground truncate">
+                                                    className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground truncate transition-colors">
                                                     {name}
                                                 </Label>
                                                 <span className="text-[10px] text-muted-foreground tabular-nums">{count}</span>
@@ -433,27 +529,30 @@ export function CatalogSidebar({
                                         ))}
                                     </div>
                                 </div>
-                            )}
-                        </div>
+                            </CollapsibleContent>
+                            <Separator />
+                        </Collapsible>
                     )}
 
-                    {/* Advanced Specs — only when category selected */}
+                    {/* Advanced Specs */}
                     {selectedCategory !== null && (
-                        <div>
-                            <button onClick={() => toggleSection('specs')}
-                                className="flex items-center justify-between w-full text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors">
-                                <span>進階規格</span>
-                                {activeSection === 'specs' ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                            </button>
-                            {activeSection === 'specs' && (
+                        <Collapsible open={openSections.has('specs')} onOpenChange={() => toggleSection('specs')}>
+                            <div className="py-2">
+                                <SectionHeader
+                                    label="進階規格"
+                                    isOpen={openSections.has('specs')}
+                                    icon={SlidersHorizontal}
+                                />
+                            </div>
+                            <CollapsibleContent>
                                 <AdvancedSpecFilters
                                     availableSpecs={availableSpecs}
                                     specFields={specFields}
                                     selectedSpecs={selectedSpecs}
                                     onSpecChange={onSpecChange}
                                 />
-                            )}
-                        </div>
+                            </CollapsibleContent>
+                        </Collapsible>
                     )}
                 </div>
             </ScrollArea>

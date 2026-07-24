@@ -39,25 +39,33 @@ export class SyncManager {
    * 向 Edge Function 校驗資料序列版本點
    */
   static async checkServerSequence(tableName: string, lastSequenceId: string) {
-    try {
-      const { data, error } = await supabase.functions.invoke('check-data-version', {
-        body: { tableName, lastSequenceId }
-      });
+    const maxRetries = 2;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const { data, error } = await supabase.functions.invoke('check-data-version', {
+          body: { tableName, lastSequenceId }
+        });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      const needsUpdate = data.syncMode === 'full' || data.serverSequenceId > lastSequenceId;
+        const needsUpdate = data.syncMode === 'full' || data.serverSequenceId > lastSequenceId;
 
-      return {
-        needsUpdate,
-        syncMode: data.syncMode,
-        data: data,
-        serverSequenceId: data.serverSequenceId
-      };
-    } catch (err) {
-      console.error(`[SyncManager] 🔴 ${tableName} 版本校驗失敗:`, err);
-      return null;
+        return {
+          needsUpdate,
+          syncMode: data.syncMode,
+          data: data,
+          serverSequenceId: data.serverSequenceId
+        };
+      } catch (err) {
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+        console.error(`[SyncManager] 🔴 ${tableName} 版本校驗失敗:`, err);
+        return null;
+      }
     }
+    return null;
   }
 
   static logTelemetry(title: string, color: string, details: Record<string, any>) {

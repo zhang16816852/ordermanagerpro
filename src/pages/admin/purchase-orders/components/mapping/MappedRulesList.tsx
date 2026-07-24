@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, Pencil, Check, X, Download, Plus } from 'lucide-react';
+import { Trash2, Pencil, Check, X, Download, Plus, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { SupplierProductMapping } from '../../hooks/useSupplierMappings';
 import { MappingExportDialog } from './MappingExportDialog';
+import { MappingImportDialog } from './MappingImportDialog';
 import { InternalProductSelector } from './InternalProductSelector';
 
 interface MappedRulesListProps {
@@ -27,6 +28,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
     vendor_unit_cost: '',
   });
   const [exportOpen, setExportOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addValues, setAddValues] = useState<{
     vendor_product_id: string;
@@ -97,9 +99,12 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
   if (mappings.length === 0) {
     return (
       <div className="space-y-4">
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
           <Button variant="default" size="sm" onClick={() => { resetAddForm(); setAddOpen(true); }}>
             <Plus className="h-4 w-4 mr-1" /> 新增對照
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+            <Upload className="h-4 w-4 mr-1" /> 匯入對照
           </Button>
         </div>
         <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
@@ -176,6 +181,16 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <MappingImportDialog
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          supplierId={supplierId}
+          supplierName={supplierName}
+          onImportComplete={() => {
+            window.location.reload();
+          }}
+        />
       </div>
     );
   }
@@ -185,6 +200,9 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
       <div className="flex justify-end gap-2">
         <Button variant="default" size="sm" onClick={() => { resetAddForm(); setAddOpen(true); }}>
           <Plus className="h-4 w-4 mr-1" /> 新增對照
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+          <Upload className="h-4 w-4 mr-1" /> 匯入對照
         </Button>
         <Button variant="outline" size="sm" onClick={() => setExportOpen(true)}>
           <Download className="h-4 w-4 mr-1" /> 匯出對照
@@ -306,6 +324,16 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
         onOpenChange={setExportOpen}
         mappings={mappings}
         supplierName={supplierName}
+      />
+
+      <MappingImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        supplierId={supplierId}
+        supplierName={supplierName}
+        onImportComplete={() => {
+          window.location.reload();
+        }}
       />
 
       {/* Add New Mapping Dialog */}

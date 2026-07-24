@@ -18,6 +18,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  isAuthReady: boolean;
   systemRoles: SystemRole[];
   storeRoles: StoreRole[];
   isAdmin: boolean;
@@ -36,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [systemRoles, setSystemRoles] = useState<SystemRole[]>([]);
   const [storeRoles, setStoreRoles] = useState<StoreRole[]>([]);
   const [currentStoreId, setCurrentStoreId] = useState<string | null>(null);
@@ -122,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         
         setLoading(false);
+        setIsAuthReady(true);
       }
     );
 
@@ -135,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       setLoading(false);
+      setIsAuthReady(true);
     });
 
     return () => subscription.unsubscribe();
@@ -199,6 +203,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         session,
         loading,
+        isAuthReady,
         systemRoles,
         storeRoles,
         isAdmin,

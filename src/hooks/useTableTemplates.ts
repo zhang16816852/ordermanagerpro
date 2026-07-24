@@ -199,6 +199,31 @@ export function useTableTemplates() {
     [deleteMutation, templates]
   );
 
+  const deleteTemplateAsync = useCallback(
+    async (id: string): Promise<boolean> => {
+      const exists = templates.some((t) => t.id === id);
+      if (!exists) return false;
+      await deleteMutation.mutateAsync(id);
+      return true;
+    },
+    [deleteMutation, templates]
+  );
+
+  const createTemplateAsync = useCallback(
+    async (data: {
+      name: string;
+      description?: string;
+      row_config: DimensionConfig;
+      col_config: DimensionConfig;
+      tab_config?: DimensionConfig | null;
+      variant_ids: string[];
+    }): Promise<OrderGridTemplateWithProducts> => {
+      const result = await createMutation.mutateAsync(data);
+      return result as OrderGridTemplateWithProducts;
+    },
+    [createMutation]
+  );
+
   const getTemplateById = useCallback(
     (id: string): OrderGridTemplateWithProducts | undefined => {
       return templates.find((t) => t.id === id);
@@ -210,8 +235,10 @@ export function useTableTemplates() {
     templates,
     isLoading,
     createTemplate,
+    createTemplateAsync,
     updateTemplate,
     deleteTemplate,
+    deleteTemplateAsync,
     getTemplateById,
   };
 }

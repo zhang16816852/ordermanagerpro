@@ -9,11 +9,12 @@ import { ImportPreviewDialog, ImportColumn } from '@/components/shared/ImportPre
 
 interface ExcelImportDialogProps {
   supplierId: string;
+  supplierName: string;
   onImport: (items: any[]) => void;
   isLoading?: boolean;
 }
 
-export function ExcelImportDialog({ supplierId, onImport, isLoading }: ExcelImportDialogProps) {
+export function ExcelImportDialog({ supplierId, supplierName, onImport, isLoading }: ExcelImportDialogProps) {
   const { config, mappings, isLoadingConfig, isLoadingMappings } = useSupplierMappings(supplierId);
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<any[]>([]);
@@ -180,6 +181,7 @@ export function ExcelImportDialog({ supplierId, onImport, isLoading }: ExcelImpo
             <div className="border rounded-md p-4 bg-muted/20">
               <SupplierMappingManager 
                 supplierId={supplierId} 
+                supplierName={supplierName}
                 unmappedItems={unmappedItems}
                 onAllUnmappedResolved={() => {
                   alert('對應成功，請按下重試按鈕重新解析 Excel 以套用新對應！');

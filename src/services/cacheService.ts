@@ -77,6 +77,12 @@ export class CacheService {
       // 2. 從 Supabase 預載入版本資訊
       await versionCache.preload();
 
+      // 3. 預載所有 IDB stores → MemoryStorage (非 fire-and-forget)
+      const stores = Object.values(CACHE).map(c => c.idbStore);
+      await Promise.allSettled(
+        stores.map(store => this.ensureStoreLoaded(store))
+      );
+
       this.initialized = true;
     })();
 

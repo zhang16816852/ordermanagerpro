@@ -78,11 +78,11 @@ export function ProductDetailDialog({
             return;
         }
 
-        const entityIds = [product.id, ...(product.variants?.map(v => v.id) || [])];
-        supabase
-            .from('product_images')
-            .select('*')
-            .in('entity_id', entityIds)
+        const entityIds = [product.id, ...(product.variants?.map(v => v.id) || [])] as string[];
+        (supabase
+            .from('product_images' as any)
+            .select('*') as any)
+            .in('entity_id', entityIds as any)
             .order('sort_order', { ascending: true })
             .then(({ data }) => {
                 if (!data) return;

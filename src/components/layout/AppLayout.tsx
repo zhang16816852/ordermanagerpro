@@ -129,7 +129,7 @@ function SideNavLink({
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const { user, isAdmin, signOut, storeRoles, currentStoreId } = useAuth();
+  const { user, isAdmin, signOut, storeRoles, currentStoreId, isAuthReady } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
@@ -167,8 +167,10 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   // [v6] 啟動全域版本同步 (邏輯已封裝至 versionCheck.ts)
   useEffect(() => {
-    performGlobalDataSync();
-  }, []);
+    if (isAuthReady) {
+      performGlobalDataSync();
+    }
+  }, [isAuthReady]);
   const storeId = currentStoreId || storeRoles?.[0]?.store_id;
   const { totalItems: totalCartItems } = useStoreDraft(storeId);
   const baseStoreNavItems: NavItem[] = [

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { OrderGridTemplateList } from '@/components/order-grid/OrderGridTemplateList';
 import { useProductCache } from '@/hooks/useProductCache';
 import type { ProductWithPricing } from '@/types/order-grid';
@@ -6,10 +6,7 @@ import type { ProductWithPricing } from '@/types/order-grid';
 export default function AdminOrderGridTemplates() {
   const { products: allProducts } = useProductCache();
 
-  const products = useMemo(
-    () => (allProducts || []).filter((p: any) => p.status === 'active') as ProductWithPricing[],
-    [allProducts]
-  );
+  const products = (allProducts || []) as ProductWithPricing[];
 
   return (
     <div className="space-y-6">

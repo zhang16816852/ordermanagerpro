@@ -163,9 +163,17 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
 };
 
 async function fetchProductsWithVersion(): Promise<FetchResult<ProductWithDetails[]>> {
-  const data = await syncProducts();
+  // 先從 data_versions 取得伺服器版本，避免 syncProducts() 以 '0' 為預設版本
+  const { data: versionRow } = await supabase
+    .from('data_versions')
+    .select('version')
+    .eq('table_name', 'products')
+    .maybeSingle();
+  const serverVersion = String(versionRow?.version || '0');
+
+  const data = await syncProducts(undefined, serverVersion);
   const cache = getProductCache();
-  return { data, version: cache?.version || '0' };
+  return { data, version: cache?.version || serverVersion };
 }
 
 /**
@@ -260,14 +268,14 @@ export const useStoreProductCache = (storeId?: string | null) => {
       return {
         ...p,
         wholesale_price: mainStoreProduct?.wholesale_price || p.base_wholesale_price || 0,
-        retail_price: mainStoreProduct?.retail_price || p.base_retail_price || 0,
+        retail_price: p.base_retail_price || 0,
         has_store_price: !!mainStoreProduct,
         variants: (p.variants || []).map((v: any) => {
           const variantStoreProduct = storeSettings.find((sp: any) => sp.variant_id === v.id);
           return {
             ...v,
             effective_wholesale_price: variantStoreProduct?.wholesale_price || v.wholesale_price || p.base_wholesale_price || 0,
-            effective_retail_price: variantStoreProduct?.retail_price || v.retail_price || p.base_retail_price || 0,
+            effective_retail_price: v.retail_price || p.base_retail_price || 0,
             has_brand_price: !!variantStoreProduct,
             spec_values: v.spec_values
           } as VariantWithPricing;

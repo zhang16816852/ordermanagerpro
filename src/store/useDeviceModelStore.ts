@@ -86,40 +86,48 @@ export const useDeviceModelStore = create<DeviceModelStore>((set, get) => ({
   fetchData: async (force = false, serverVersion?: string) => {
     if (!force && get().isInitialized) return;
 
-    set({ isLoading: true });
-    try {
-      const results = await Promise.all([
-        fetchAllRows<any>('device_models', '*', { order: [{ column: 'name' }] }),
-        supabase.from('device_brands').select('*').order('name'),
-        supabase.from('device_model_groups').select('*').is('deleted_at', null).order('name'),
-        supabase.from('device_model_group_items').select('group_id, model_id').order('position')
-      ]);
+    const maxRetries = 2;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      set({ isLoading: true });
+      try {
+        const results = await Promise.all([
+          fetchAllRows<any>('device_models', '*', { order: [{ column: 'name' }] }),
+          supabase.from('device_brands').select('*').order('name'),
+          supabase.from('device_model_groups').select('*').is('deleted_at', null).order('name'),
+          supabase.from('device_model_group_items').select('group_id, model_id').order('position')
+        ]);
 
-      const [models, brandsRes, groupsRes, groupItemsRes] = results;
+        const [models, brandsRes, groupsRes, groupItemsRes] = results;
 
-      if (brandsRes.error) throw brandsRes.error;
-      if (groupsRes.error) throw groupsRes.error;
-      if (groupItemsRes.error) throw groupItemsRes.error;
+        if (brandsRes.error) throw brandsRes.error;
+        if (groupsRes.error) throw groupsRes.error;
+        if (groupItemsRes.error) throw groupItemsRes.error;
 
-      const brands = brandsRes.data || [];
-      const groups = groupsRes.data || [];
-      const groupItems = groupItemsRes.data || [];
+        const brands = brandsRes.data || [];
+        const groups = groupsRes.data || [];
+        const groupItems = groupItemsRes.data || [];
 
-      const version = serverVersion || initialVersion || '260529-0001';
-      writeCache({ models, brands, groups, groupItems }, version);
+        const version = serverVersion || initialVersion || '260529-0001';
+        writeCache({ models, brands, groups, groupItems }, version);
 
-      set({
-        models,
-        brands,
-        groups,
-        groupItems,
-        isLoading: false,
-        isInitialized: true,
-        dataVersion: version,
-      });
-    } catch (err) {
-      console.error('[DeviceModelStore] Fetch failed:', err);
-      set({ isLoading: false });
+        set({
+          models,
+          brands,
+          groups,
+          groupItems,
+          isLoading: false,
+          isInitialized: true,
+          dataVersion: version,
+        });
+        return;
+      } catch (err) {
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+          continue;
+        }
+        console.error('[DeviceModelStore] Fetch failed:', err);
+        set({ isLoading: false });
+      }
     }
   },
 

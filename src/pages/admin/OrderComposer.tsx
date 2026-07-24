@@ -56,6 +56,15 @@ export default function AdminOrderComposer() {
       ? viewModeParam
       : "products") as "products" | "variants" | "gallery" | "table"
   );
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+
+  const composerFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedCategory) count++;
+    count += selectedBrands.length;
+    count += Object.values(selectedSpecs).reduce((sum, arr) => sum + arr.length, 0);
+    return count;
+  }, [selectedCategory, selectedBrands, selectedSpecs]);
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["categories"],
@@ -200,23 +209,26 @@ export default function AdminOrderComposer() {
               </div>
 
               <div className="flex items-center gap-2 self-start sm:self-auto">
-                <Sheet>
+                <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
                   <SheetTrigger asChild>
                     <Button variant="outline" size="sm" className="md:hidden">
                       <Filter className="h-4 w-4 mr-2" />
                       篩選
+                      {composerFilterCount > 0 && (
+                        <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">{composerFilterCount}</Badge>
+                      )}
                     </Button>
                   </SheetTrigger>
                   <SheetContent side="left" className="p-0 w-72">
                     <CatalogSidebar
                       products={products}
                       selectedCategory={selectedCategory}
-                      onCategoryChange={setSelectedCategory}
+                      onCategoryChange={(v) => { setSelectedCategory(v); setFilterSheetOpen(false); }}
                       selectedSpecs={selectedSpecs}
-                      onSpecChange={handleSpecChange}
+                      onSpecChange={(key, values) => { handleSpecChange(key, values); setFilterSheetOpen(false); }}
                       selectedBrands={selectedBrands}
-                      onBrandChange={setSelectedBrands}
-                      onClearFilters={clearFilters}
+                      onBrandChange={(v) => { setSelectedBrands(v); setFilterSheetOpen(false); }}
+                      onClearFilters={() => { clearFilters(); setFilterSheetOpen(false); }}
                     />
                   </SheetContent>
                 </Sheet>

@@ -18,6 +18,7 @@ import {
   Upload, Download,
 } from 'lucide-react';
 import { useTableTemplates } from '@/hooks/useTableTemplates';
+import { useSpecStore } from '@/store/useSpecStore';
 import { OrderGridTemplateFormDialog } from './OrderGridTemplateFormDialog';
 import { ImportPreviewDialog } from '@/components/shared/ImportPreviewDialog';
 import { exportTemplatesToExcel } from '@/utils/templateExport';
@@ -40,9 +41,13 @@ export function OrderGridTemplateList({
     templates,
     isLoading,
     createTemplate,
+    createTemplateAsync,
     updateTemplate,
     deleteTemplate,
+    deleteTemplateAsync,
   } = useTableTemplates();
+
+  const { specMap } = useSpecStore();
 
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -127,9 +132,9 @@ export function OrderGridTemplateList({
     for (const pt of importData) {
       try {
         if (!pt.isNew && pt.uuid) {
-          deleteTemplate(pt.uuid);
+          await deleteTemplateAsync(pt.uuid);
         }
-        createTemplate({
+        await createTemplateAsync({
           name: pt.name,
           description: pt.description,
           row_config: pt.rowConfig,
@@ -183,6 +188,10 @@ export function OrderGridTemplateList({
   const formatDimensions = (config: DimensionConfig) => {
     if (config.type === 'variant_field') {
       return `${config.label} (${config.field})`;
+    }
+    if (config.type === 'spec') {
+      const specName = config.spec_id ? specMap.get(config.spec_id)?.name : undefined;
+      return `${config.label} (${specName || config.spec_id || '未指定規格'})`;
     }
     if (config.type === 'custom') {
       return `${config.label} (${config.values?.length || 0} 個值)`;

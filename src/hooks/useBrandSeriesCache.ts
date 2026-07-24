@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { CacheService, CACHE } from '@/services/cacheService';
 import { SyncManager } from '@/services/syncManager';
+import { useAuth } from '@/hooks/useAuth';
 
 const CACHE_CFG = CACHE.brandSeries;
 
@@ -50,11 +51,14 @@ async function fetchAllBrandSeries(): Promise<BrandSeriesItem[]> {
  * instead of calling supabase directly.
  */
 export const useBrandSeriesCache = () => {
+  const { isAuthReady } = useAuth();
   const [items, setItems] = useState<BrandSeriesItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [version, setVersion] = useState('0');
+  const mountedRef = useRef(true);
 
-  const syncBrandSeries = useCallback(async (force = false) => {
+  const syncBrandSeries = useCallback(async (force = false, isRetry = false) => {
+    if (!isAuthReady && !isRetry) return;
     setIsLoading(true);
     try {
       const cached = getBrandSeriesCache();
@@ -74,8 +78,10 @@ export const useBrandSeriesCache = () => {
         const freshItems = await fetchAllBrandSeries();
 
         setBrandSeriesCache(freshItems, serverVersion);
-        setItems(freshItems);
-        setVersion(serverVersion);
+        if (mountedRef.current) {
+          setItems(freshItems);
+          setVersion(serverVersion);
+        }
 
         SyncManager.logTelemetry('🏷️ 品牌系列快取已更新', '#e67e22', {
           '同步模式': force ? '強制全量' : '版本異動',
@@ -84,8 +90,10 @@ export const useBrandSeriesCache = () => {
           '系列筆數': freshItems.length
         });
       } else if (cached) {
-        setItems(cached.items);
-        setVersion(localVersion);
+        if (mountedRef.current) {
+          setItems(cached.items);
+          setVersion(localVersion);
+        }
       }
 
       // Stale-while-revalidate: background check
@@ -99,14 +107,23 @@ export const useBrandSeriesCache = () => {
       }
     } catch (error) {
       console.error('[BrandSeriesCache] 同步失敗:', error);
+      if (!isRetry) {
+        await new Promise(r => setTimeout(r, 500));
+        return syncBrandSeries(force, true);
+      }
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) setIsLoading(false);
     }
-  }, []);
+  }, [isAuthReady]);
 
   useEffect(() => {
-    syncBrandSeries();
-  }, [syncBrandSeries]);
+    mountedRef.current = true;
+    if (isAuthReady) {
+      const timer = setTimeout(() => syncBrandSeries(), 200);
+      return () => { clearTimeout(timer); mountedRef.current = false; };
+    }
+    return () => { mountedRef.current = false; };
+  }, [isAuthReady, syncBrandSeries]);
 
   const refresh = useCallback(() => syncBrandSeries(true), [syncBrandSeries]);
 
