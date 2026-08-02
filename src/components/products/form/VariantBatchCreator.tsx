@@ -16,10 +16,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
-import { Layers, Sparkles, AlertCircle, Palette, X } from 'lucide-react';
-import { ColorSelectField } from './ColorSelectField';
-import { ColorManagementDialog } from './ColorManagementDialog';
-import { useColorStore } from '@/store/useColorStore';
+import { Layers, Sparkles, AlertCircle, Plus, X, GripVertical } from 'lucide-react';
 import { StandaloneDeviceModelSelectField } from '../StandaloneDeviceModelSelectField';
 import { useDeviceModelStore } from '@/store/useDeviceModelStore';
 
@@ -32,107 +29,138 @@ interface VariantBatchCreatorProps {
   onSuccess: () => void;
 }
 
+interface OptionValueInput {
+  id: string;
+  label: string;
+  value: string;
+  wholesalePrice: string;
+  retailPrice: string;
+  hexCode: string;
+}
+
+interface OptionGroupInput {
+  id: string;
+  name: string;
+  values: OptionValueInput[];
+}
+
 interface GeneratedVariant {
   sku: string;
   name: string;
   barcode: string;
-  option_1: string | null;
-  option_2: string | null;
-  option_3: string | null;
   wholesale_price: number;
   retail_price: number;
-  spec_values: any;
-  /** 批次對話內部用，不進資料庫 */
+  sort_order: number;
+  optionValueIds: string[];
   _modelGroupId?: string;
   _modelGroupType?: 'model' | 'group';
 }
 
-interface OptionValueRow {
-  id: string;
-  name: string;
-  skuValue: string;
-  wholesalePrice: string;
-  retailPrice: string;
+function createOptionValue(
+  label = '',
+  value = '',
+  wholesalePrice = '',
+  retailPrice = '',
+  hexCode = '',
+): OptionValueInput {
+  return { id: crypto.randomUUID(), label, value, wholesalePrice, retailPrice, hexCode };
 }
 
-function createOptionRow(name = '', skuValue = '', wholesalePrice = '', retailPrice = ''): OptionValueRow {
-  return { id: crypto.randomUUID(), name, skuValue, wholesalePrice, retailPrice };
+function createOptionGroup(name = ''): OptionGroupInput {
+  return { id: crypto.randomUUID(), name, values: [] };
 }
 
-interface OptionsTableProps {
-  rows: OptionValueRow[];
-  onUpdate: (id: string, field: keyof OptionValueRow, value: string) => void;
+interface OptionValueTableProps {
+  values: OptionValueInput[];
+  onUpdate: (id: string, field: keyof OptionValueInput, value: string) => void;
   onRemove: (id: string) => void;
   onAdd: () => void;
   onBulkPaste: () => void;
-  placeholder: string;
 }
 
-function OptionsTable({ rows, onUpdate, onRemove, onAdd, onBulkPaste, placeholder }: OptionsTableProps) {
+function OptionValueTable({ values, onUpdate, onRemove, onAdd, onBulkPaste }: OptionValueTableProps) {
   return (
     <div className="space-y-2">
       <div className="border rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-muted">
             <tr>
-              <th className="px-3 py-1.5 text-left">名稱</th>
-              <th className="px-3 py-1.5 text-left w-[100px]">SKU 值</th>
-              <th className="px-3 py-1.5 text-right w-[100px]">批發價</th>
-              <th className="px-3 py-1.5 text-right w-[100px]">零售價</th>
-              <th className="px-3 py-1.5 w-10"></th>
+              <th className="px-2 py-1.5 text-left">名稱 (Label)</th>
+              <th className="px-2 py-1.5 text-left w-[90px]">SKU 值</th>
+              <th className="px-2 py-1.5 text-right w-[80px]">批發價</th>
+              <th className="px-2 py-1.5 text-right w-[80px]">零售價</th>
+              <th className="px-2 py-1.5 w-[60px]">色碼</th>
+              <th className="px-2 py-1.5 w-10"></th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {values.length === 0 ? (
               <tr className="border-t">
-                <td colSpan={5} className="px-3 py-4 text-center text-muted-foreground text-sm">
+                <td colSpan={6} className="px-3 py-4 text-center text-muted-foreground text-sm">
                   尚無選項值，請按下方按鈕新增，或使用批量貼上
                 </td>
               </tr>
-            ) : rows.map(row => (
-              <tr key={row.id} className="border-t">
-                <td className="px-3 py-1">
+            ) : values.map(v => (
+              <tr key={v.id} className="border-t">
+                <td className="px-2 py-1">
                   <Input
-                    value={row.name}
-                    onChange={e => onUpdate(row.id, 'name', e.target.value)}
+                    value={v.label}
+                    onChange={e => onUpdate(v.id, 'label', e.target.value)}
                     className="h-8"
-                    placeholder={placeholder}
+                    placeholder="顯示名稱"
                   />
                 </td>
-                <td className="px-3 py-1">
+                <td className="px-2 py-1">
                   <Input
-                    value={row.skuValue}
-                    onChange={e => onUpdate(row.id, 'skuValue', e.target.value)}
+                    value={v.value}
+                    onChange={e => onUpdate(v.id, 'value', e.target.value)}
                     className="h-8"
                     placeholder="留空=名稱"
                   />
                 </td>
-                <td className="px-3 py-1">
+                <td className="px-2 py-1">
                   <Input
                     type="number"
                     step="0.01"
-                    value={row.wholesalePrice}
-                    onChange={e => onUpdate(row.id, 'wholesalePrice', e.target.value)}
+                    value={v.wholesalePrice}
+                    onChange={e => onUpdate(v.id, 'wholesalePrice', e.target.value)}
                     className="h-8 text-right"
                     placeholder="選填"
                   />
                 </td>
-                <td className="px-3 py-1">
+                <td className="px-2 py-1">
                   <Input
                     type="number"
                     step="0.01"
-                    value={row.retailPrice}
-                    onChange={e => onUpdate(row.id, 'retailPrice', e.target.value)}
+                    value={v.retailPrice}
+                    onChange={e => onUpdate(v.id, 'retailPrice', e.target.value)}
                     className="h-8 text-right"
                     placeholder="選填"
                   />
                 </td>
-                <td className="px-3 py-1">
+                <td className="px-2 py-1">
+                  <div className="flex items-center gap-1">
+                    <Input
+                      value={v.hexCode}
+                      onChange={e => onUpdate(v.id, 'hexCode', e.target.value)}
+                      className="h-8 w-[36px] font-mono text-xs px-1"
+                      placeholder="#"
+                      maxLength={7}
+                    />
+                    {v.hexCode && /^#[0-9a-fA-F]{6}$/.test(v.hexCode) && (
+                      <div
+                        className="w-5 h-5 rounded border shrink-0"
+                        style={{ backgroundColor: v.hexCode }}
+                      />
+                    )}
+                  </div>
+                </td>
+                <td className="px-2 py-1">
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-8 w-8 p-0 text-destructive"
-                    onClick={() => onRemove(row.id)}
+                    onClick={() => onRemove(v.id)}
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -155,114 +183,85 @@ function OptionsTable({ rows, onUpdate, onRemove, onAdd, onBulkPaste, placeholde
 }
 
 export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: VariantBatchCreatorProps) {
-  const [option1Rows, setOption1Rows] = useState<OptionValueRow[]>([]);
-  const [option2Rows, setOption2Rows] = useState<OptionValueRow[]>([]);
-  const [bulkPasteTarget, setBulkPasteTarget] = useState<'option1' | 'option2' | null>(null);
+  const [optionGroups, setOptionGroups] = useState<OptionGroupInput[]>([]);
+  const [bulkPasteTargetGroupId, setBulkPasteTargetGroupId] = useState<string | null>(null);
   const [bulkPasteText, setBulkPasteText] = useState('');
   const [barcodeList, setBarcodeList] = useState('');
-  const [selectedColorIds, setSelectedColorIds] = useState<string[]>([]);
-  const [isColorManageOpen, setIsColorManageOpen] = useState(false);
-  const [wholesalePrice, setWholesalePrice] = useState(product.base_wholesale_price.toString());
-  const [retailPrice, setRetailPrice] = useState(product.base_retail_price.toString());
-  const [generatedVariants, setGeneratedVariants] = useState<GeneratedVariant[]>([]);
-
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [defaultWholesalePrice, setDefaultWholesalePrice] = useState('');
+  const [defaultRetailPrice, setDefaultRetailPrice] = useState('');
+  const [generatedVariants, setGeneratedVariants] = useState<GeneratedVariant[]>([]);
 
-  const { colors, fetchColors } = useColorStore();
   const { models: deviceModels, groups: deviceGroups, fetchData: fetchDeviceData } = useDeviceModelStore();
 
   useEffect(() => {
     const init = async () => {
       if (open) {
-        const [latestColors] = await Promise.all([
-          fetchColors(),
+        await Promise.all([
           fetchDeviceData(),
         ]);
-        await loadExistingVariants(latestColors);
+        await loadExistingData();
       }
     };
     init();
-  }, [open, fetchColors, fetchDeviceData]);
+  }, [open, fetchDeviceData]);
 
-  const loadExistingVariants = async (currentColors = colors) => {
+  const loadExistingData = async () => {
     try {
-      const { data: variants, error } = await supabase
+      // 1. Load existing option groups with values
+      const { data: groups, error: gErr } = await supabase
+        .from('product_option_groups')
+        .select('*, product_option_values(*)')
+        .eq('product_id', product.id)
+        .order('sort_order', { ascending: true });
+
+      if (gErr) throw gErr;
+
+      if (groups && groups.length > 0) {
+        const loaded: OptionGroupInput[] = groups.map(g => ({
+          id: g.id,
+          name: g.name,
+          values: (g.product_option_values || [])
+            .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
+            .map((v: any) => ({
+              id: v.id,
+              label: v.label,
+              value: v.value,
+              wholesalePrice: '',
+              retailPrice: '',
+              hexCode: v.hex_code || '',
+            })),
+        }));
+        setOptionGroups(loaded);
+      }
+
+      // 2. Load existing variants
+      const { data: variants, error: vErr } = await supabase
         .from('product_variants')
         .select('*')
-        .eq('product_id', product.id);
+        .eq('product_id', product.id)
+        .order('sort_order', { ascending: true });
 
-      if (error) throw error;
+      if (vErr) throw vErr;
+
       if (!variants || variants.length === 0) return;
 
-      // 反解析輔助函式
-      const groupVariants = (field: string) => {
-        const map = new Map<string, typeof variants>();
-        (variants as any[]).forEach((v: any) => {
-          const val = v[field];
-          if (val) {
-            const group = map.get(val) || [];
-            group.push(v);
-            map.set(val, group);
-          }
-        });
-        return map;
-      };
-
-      const getCommonPrice = (group: any[], getPrice: (v: any) => number): number | undefined => {
-        if (group.length === 0) return undefined;
-        const first = getPrice(group[0]);
-        return group.every(v => getPrice(v) === first) ? first : undefined;
-      };
-
-      const extractSkuValue = (group: any[], precedingFields: string[]): string => {
-        const v = group[0];
-        if (!v?.sku) return '';
-        let suffix: string = v.sku;
-        if (suffix.startsWith(product.sku + '-')) {
-          suffix = suffix.slice(product.sku.length + 1);
-        } else {
-          return '';
-        }
-        const segments = suffix.split('-');
-        let offset = 0;
-        for (const field of precedingFields) {
-          if (v[field]) offset++;
-        }
-        return segments[offset] || '';
-      };
-
-      // 提取選項 1 的唯一值（反解析 SKU 值 & 價格）
-      const opt1Groups = groupVariants('option_1');
-      const parsedOpt1: OptionValueRow[] = [];
-      for (const [name, group] of opt1Groups) {
-        const wp = getCommonPrice(group, v => v.wholesale_price);
-        const rp = getCommonPrice(group, v => v.retail_price);
-        const skuVal = extractSkuValue(group, []);
-        parsedOpt1.push(createOptionRow(name, skuVal, wp !== undefined ? wp.toString() : '', rp !== undefined ? rp.toString() : ''));
-      }
-      setOption1Rows(parsedOpt1);
-
-      // 提取選項 2 的唯一值（反解析 SKU 值 & 價格）
-      const opt2Groups = groupVariants('option_2');
-      const parsedOpt2: OptionValueRow[] = [];
-      for (const [name, group] of opt2Groups) {
-        const wp = getCommonPrice(group, v => v.wholesale_price);
-        const rp = getCommonPrice(group, v => v.retail_price);
-        const skuVal = extractSkuValue(group, ['option_1']);
-        parsedOpt2.push(createOptionRow(name, skuVal, wp !== undefined ? wp.toString() : '', rp !== undefined ? rp.toString() : ''));
-      }
-      setOption2Rows(parsedOpt2);
-
-      // 提取顏色的唯一 ID (透過名稱匹配)
-      const colorNames = new Set(variants.map(v => v.option_3).filter(Boolean));
-      const colorIds = Array.from(colorNames)
-        .map(name => currentColors.find(c => c.name === name)?.id)
-        .filter(Boolean) as string[];
-      setSelectedColorIds(colorIds);
-
-      // 載入既有 entity_model_relations 取得已關聯的型號/群組
+      // 3. Load variant-option links
       const variantIds = variants.map(v => v.id);
+      const { data: variantOptions } = await supabase
+        .from('product_variant_options')
+        .select('*')
+        .in('variant_id', variantIds);
+
+      const variantOptionMap = new Map<string, string[]>();
+      variantOptions?.forEach(vo => {
+        const list = variantOptionMap.get(vo.variant_id) || [];
+        list.push(vo.option_value_id);
+        variantOptionMap.set(vo.variant_id, list);
+      });
+
+      // 4. Load device model relations
       const { data: relations } = await supabase
         .from('entity_model_relations')
         .select('variant_id, model_id, group_id')
@@ -293,12 +292,11 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
       setSelectedModelIds(Array.from(modelIdSet));
       setSelectedGroupIds(Array.from(groupIdSet));
 
-      // 判斷是否為逐一關聯（每個變體剛好一個關聯）
       const isPerVariant = relations && relations.length > 0 &&
         relations.length === variantIds.length &&
         Array.from(variantModelMap.values()).every(list => list.length === 1);
 
-      // 填入預覽表格（含型號/群組對應）
+      // 5. Populate preview
       setGeneratedVariants(variants.map(v => {
         const mappings = variantModelMap.get(v.id);
         const singleMapping = isPerVariant && mappings?.length === 1 ? mappings[0] : undefined;
@@ -306,239 +304,336 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
           sku: v.sku,
           name: v.name,
           barcode: v.barcode || '',
-          option_1: v.option_1,
-          option_2: v.option_2,
-          option_3: v.option_3,
           wholesale_price: v.wholesale_price,
           retail_price: v.retail_price,
-          spec_values: (v as any).spec_values || {},
+          sort_order: v.sort_order,
+          optionValueIds: variantOptionMap.get(v.id) || [],
           _modelGroupId: singleMapping?.id,
           _modelGroupType: singleMapping?.type,
         };
       }));
 
-      toast.success(`已載入 ${variants.length} 個現有變體`);
+      if (variants.length > 0) {
+        toast.success(`已載入 ${variants.length} 個現有變體`);
+      }
     } catch (err) {
-      console.error('載入變體失敗:', err);
+      console.error('載入資料失敗:', err);
     }
   };
 
   const generateVariants = () => {
-    const opt1 = [...new Set(option1Rows.filter(r => r.name.trim()).map(r => r.name.trim()))];
-    const opt2 = [...new Set(option2Rows.filter(r => r.name.trim()).map(r => r.name.trim()))];
+    // Collect non-empty groups (at least one value with a label)
+    const activeGroups = optionGroups.filter(g =>
+      g.values.some(v => v.label.trim()),
+    );
 
-    const selectedColors = selectedColorIds
-      .map(id => colors.find(c => c.id === id))
-      .filter(Boolean);
+    if (activeGroups.length === 0) {
+      // No option groups — only device models path
+      const hasModelsOrGroups = selectedModelIds.length > 0 || selectedGroupIds.length > 0;
+      if (!hasModelsOrGroups) {
+        toast.error('請至少建立一個選項群組並輸入值，或選擇型號/群組');
+        return;
+      }
+      const defaultWholesale = parseFloat(defaultWholesalePrice) || 0;
+      const defaultRetail = parseFloat(defaultRetailPrice) || 0;
 
-    const hasOptions = opt1.length > 0 || opt2.length > 0 || selectedColors.length > 0;
-    const hasModelsOrGroups = selectedModelIds.length > 0 || selectedGroupIds.length > 0;
-
-    const defaultPrice = parseFloat(wholesalePrice) || product.base_wholesale_price;
-    const defaultRetail = parseFloat(retailPrice) || product.base_retail_price;
-
-    // 建立各維度價格查詢表（值名稱 → { wholesale, retail }）
-    const buildPriceMap = (rows: OptionValueRow[]) => {
-      const map = new Map<string, { wholesale: number; retail: number }>();
-      rows.forEach(r => {
-        const name = r.name.trim();
-        if (name && r.wholesalePrice) {
-          const wp = parseFloat(r.wholesalePrice);
-          const rp = parseFloat(r.retailPrice) || wp;
-          if (!isNaN(wp)) map.set(name, { wholesale: wp, retail: rp });
-        }
-      });
-      return map;
-    };
-    const opt1PriceMap = buildPriceMap(option1Rows);
-    const opt2PriceMap = buildPriceMap(option2Rows);
-
-    // 依維度優先順序決定價格：選項1 → 選項2 → 預設
-    const resolvePrice = (v1: string | null, v2: string | null): { wholesale: number; retail: number } => {
-      if (v1 && opt1PriceMap.has(v1)) return opt1PriceMap.get(v1)!;
-      if (v2 && opt2PriceMap.has(v2)) return opt2PriceMap.get(v2)!;
-      return { wholesale: defaultPrice, retail: defaultRetail };
-    };
-
-    // 取得選項值在 SKU 中使用的代碼（若無 skuValue 則回退到名稱）
-    const getSkuPart = (rows: OptionValueRow[], name: string): string => {
-      const row = rows.find(r => r.name.trim() === name);
-      return row?.skuValue?.trim() || name;
-    };
-
-    // 解析條碼列表（按行）
-    const barcodeLines = barcodeList
-      .split('\n')
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
-
-    let variants: GeneratedVariant[];
-
-    if (!hasOptions && hasModelsOrGroups) {
-      // 純型號/群組生成路徑：每個型號/群組一個變體，option 全為 null
       const modelGroupNames: { name: string; id: string; type: 'model' | 'group' }[] = [
         ...selectedModelIds.map(id => {
           const m = deviceModels.find(m => m.id === id);
           return m ? { name: m.name, id: m.id, type: 'model' as const } : null;
-        }).filter(Boolean),
+        }).filter(Boolean) as any,
         ...selectedGroupIds.map(id => {
           const g = deviceGroups.find(g => g.id === id);
           return g ? { name: g.name, id: g.id, type: 'group' as const } : null;
-        }).filter(Boolean),
+        }).filter(Boolean) as any,
       ];
 
-      variants = modelGroupNames.map((item, idx) => ({
-        sku: `${product.sku}-${item.name}`.toUpperCase().replace(/\s+/g, '-'),
+      const codePrefix = product.code || 'PROD';
+      const variants: GeneratedVariant[] = modelGroupNames.map((item, idx) => ({
+        sku: `${codePrefix}-${item.name}`.toUpperCase().replace(/\s+/g, '-'),
         name: `${product.name} - ${item.name}`,
-        barcode: barcodeLines[idx] || '',
-        option_1: null,
-        option_2: null,
-        option_3: null,
-        wholesale_price: defaultPrice,
+        barcode: '',
+        wholesale_price: defaultWholesale,
         retail_price: defaultRetail,
-        spec_values: {},
+        sort_order: idx,
+        optionValueIds: [],
         _modelGroupId: item.id,
         _modelGroupType: item.type,
       }));
-    } else {
-      if (!hasOptions) {
-        toast.error('請至少輸入或選擇一個選項維度 (選項1、選項2 或 顏色)');
-        return;
-      }
 
-      variants = [];
+      setGeneratedVariants(mergeWithExisting(variants));
+      return;
+    }
 
-      // 準備三個維度的資料
-      const dim1 = opt1.length > 0 ? opt1 : [null];
-      const dim2 = opt2.length > 0 ? opt2 : [null];
-      const dim3 = selectedColors.length > 0 ? selectedColors : [null];
-
-      // 準備型號/群組維度（交叉生成）
-      const modelGroupItems: { name: string; id: string; type: 'model' | 'group' }[] = [
-        ...selectedModelIds.map(id => {
-          const m = deviceModels.find(m => m.id === id);
-          return m ? { name: m.name, id: m.id, type: 'model' as const } : null;
-        }).filter(Boolean),
-        ...selectedGroupIds.map(id => {
-          const g = deviceGroups.find(g => g.id === id);
-          return g ? { name: g.name, id: g.id, type: 'group' as const } : null;
-        }).filter(Boolean),
-      ];
-      const dim4 = modelGroupItems.length > 0 ? modelGroupItems : [null];
-
-      // 生成所有維度的組合
-      let variantIndex = 0;
-      for (const v1 of dim1) {
-        for (const v2 of dim2) {
-          for (const v3 of dim3) {
-            for (const v4 of dim4) {
-              if (!v1 && !v2 && !v3 && !v4) continue;
-
-              const { wholesale: finalWholesale, retail: finalRetail } = resolvePrice(v1, v2);
-
-              const skuParts = [product.sku];
-              if (v1) skuParts.push(getSkuPart(option1Rows, v1));
-              if (v2) skuParts.push(getSkuPart(option2Rows, v2));
-              if (v3) skuParts.push((v3 as any).code || (v3 as any).name);
-              if (v4) skuParts.push(v4.name);
-              const sku = skuParts.join('-').toUpperCase().replace(/\s+/g, '-');
-
-              const nameParts = [];
-              if (v1) nameParts.push(v1);
-              if (v2) nameParts.push(v2);
-              if (v3) nameParts.push((v3 as any).name);
-              if (v4) nameParts.push(v4.name);
-              const variantName = `${product.name}${nameParts.length > 0 ? ' - ' + nameParts.join(' / ') : ''}`;
-
-              const barcode = variantIndex < barcodeLines.length ? barcodeLines[variantIndex] : '';
-
-              variants.push({
-                sku,
-                name: variantName,
-                barcode,
-                option_1: v1,
-                option_2: v2,
-                option_3: v3 ? (v3 as any).name : null,
-                wholesale_price: finalWholesale,
-                retail_price: finalRetail,
-                spec_values: {},
-                _modelGroupId: v4?.id,
-                _modelGroupType: v4?.type,
-              });
-              variantIndex++;
-            }
+    // Build price map: value client id → { wholesale, retail }
+    const priceMap = new Map<string, { wholesale: number; retail: number }>();
+    for (const group of activeGroups) {
+      for (const v of group.values) {
+        if (v.label.trim() && v.wholesalePrice) {
+          const wp = parseFloat(v.wholesalePrice);
+          const rp = parseFloat(v.retailPrice) || wp;
+          if (!isNaN(wp)) {
+            priceMap.set(v.id, { wholesale: wp, retail: rp });
           }
         }
       }
     }
 
-    if (variants.length === 0) {
+    const defaultWholesale = parseFloat(defaultWholesalePrice) || 0;
+    const defaultRetail = parseFloat(defaultRetailPrice) || 0;
+
+    // Build price resolution: try value prices in group order, fall back to default
+    const resolvePrice = (valueIds: string[]): { wholesale: number; retail: number } => {
+      for (const vid of valueIds) {
+        if (priceMap.has(vid)) return priceMap.get(vid)!;
+      }
+      return { wholesale: defaultWholesale, retail: defaultRetail };
+    };
+
+    const getSkuPart = (v: OptionValueInput): string => v.value.trim() || v.label.trim();
+
+    const valueLists = activeGroups.map(g =>
+      g.values.filter(v => v.label.trim()),
+    );
+
+    const modelGroupItems: { name: string; id: string; type: 'model' | 'group' }[] = [
+      ...selectedModelIds.map(id => {
+        const m = deviceModels.find(m => m.id === id);
+        return m ? { name: m.name, id: m.id, type: 'model' as const } : null;
+      }).filter(Boolean) as any,
+      ...selectedGroupIds.map(id => {
+        const g = deviceGroups.find(g => g.id === id);
+        return g ? { name: g.name, id: g.id, type: 'group' as const } : null;
+      }).filter(Boolean) as any,
+    ];
+    const modelDim = modelGroupItems.length > 0 ? modelGroupItems : [null];
+
+    const codePrefix = product.code || 'PROD';
+    let variantIndex = 0;
+    const newVariants: GeneratedVariant[] = [];
+
+    // Build name lookup for each value id
+    const valueNameMap = new Map<string, string>();
+    for (const g of activeGroups) {
+      for (const v of g.values) {
+        valueNameMap.set(v.id, v.label.trim());
+      }
+    }
+
+    function cartesianProduct(
+      lists: OptionValueInput[][],
+      groupRefs: OptionGroupInput[],
+      prefixValues: OptionValueInput[],
+      depth: number,
+    ): { values: OptionValueInput[] }[] {
+      if (depth >= lists.length) return [{ values: prefixValues }];
+      const result: { values: OptionValueInput[] }[] = [];
+      for (const item of lists[depth]) {
+        result.push(...cartesianProduct(lists, groupRefs, [...prefixValues, item], depth + 1));
+      }
+      return result;
+    }
+
+    const combinations = cartesianProduct(valueLists, activeGroups, [], 0);
+
+    const barcodeLines = barcodeList
+      .split('\n')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const combo of combinations) {
+      for (const modelItem of modelDim) {
+        const comboValues = combo.values;
+        const valueIds = comboValues.map(v => v.id);
+
+        const { wholesale: finalWholesale, retail: finalRetail } = resolvePrice(valueIds);
+        const nameLabels = comboValues.map(v => v.label.trim()).filter(Boolean);
+        const skuParts = [codePrefix, ...comboValues.map(getSkuPart)];
+        if (modelItem) skuParts.push(modelItem.name);
+        const sku = skuParts.join('-').toUpperCase().replace(/\s+/g, '-');
+
+        const variantName = modelItem
+          ? `${product.name} - ${nameLabels.join(' / ')} (${modelItem.name})`
+          : `${product.name}${nameLabels.length > 0 ? ' - ' + nameLabels.join(' / ') : ''}`;
+
+        const barcode = variantIndex < barcodeLines.length ? barcodeLines[variantIndex] : '';
+
+        newVariants.push({
+          sku,
+          name: variantName,
+          barcode,
+          wholesale_price: finalWholesale,
+          retail_price: finalRetail,
+          sort_order: variantIndex,
+          optionValueIds: valueIds,
+          _modelGroupId: modelItem?.id,
+          _modelGroupType: modelItem?.type,
+        });
+        variantIndex++;
+      }
+    }
+
+    if (newVariants.length === 0) {
       toast.error('無法生成變體，請檢查輸入');
       return;
     }
 
-    // 智慧合併：保留既有的手動編輯（價格、條碼），內部追蹤欄位以新值為準
-    const mergedVariants = variants.map(newV => {
+    setGeneratedVariants(mergeWithExisting(newVariants));
+  };
+
+  const mergeWithExisting = (newVariants: GeneratedVariant[]): GeneratedVariant[] => {
+    return newVariants.map(newV => {
       const existing = generatedVariants.find(ev => ev.sku === newV.sku);
       if (existing) {
         return { ...existing, _modelGroupId: newV._modelGroupId, _modelGroupType: newV._modelGroupType };
       }
       return newV;
     });
-
-    setGeneratedVariants(mergedVariants);
   };
 
   const createMutation = useMutation({
     mutationFn: async () => {
       if (generatedVariants.length === 0) throw new Error('請先生成變體');
 
+      // 1. Delete old product_variant_options for this product's variants
+      const { data: oldVariants } = await supabase
+        .from('product_variants')
+        .select('id')
+        .eq('product_id', product.id);
+
+      const oldVariantIds = oldVariants?.map(v => v.id) || [];
+      if (oldVariantIds.length > 0) {
+        await (supabase.from('product_variant_options') as any).delete().in('variant_id', oldVariantIds);
+      }
+
+      // 2. Delete old option values and groups for this product
+      const { data: existingGroups } = await supabase
+        .from('product_option_groups')
+        .select('id')
+        .eq('product_id', product.id);
+
+      if (existingGroups && existingGroups.length > 0) {
+        const groupIds = existingGroups.map(g => g.id);
+        await (supabase.from('product_option_values') as any).delete().in('group_id', groupIds);
+        await (supabase.from('product_option_groups') as any).delete().in('id', groupIds);
+      }
+
+      // 3. Insert new option groups & values, building client-ID → real-ID maps
+      const groupIdMap = new Map<string, string>();
+      const valueIdMap = new Map<string, string>();
+
+      for (let gi = 0; gi < optionGroups.length; gi++) {
+        const g = optionGroups[gi];
+        if (!g.name.trim()) continue;
+
+        const { data: newGroup, error: gErr } = await supabase
+          .from('product_option_groups')
+          .insert({ product_id: product.id, name: g.name.trim(), sort_order: gi })
+          .select('id')
+          .single();
+
+        if (gErr) throw gErr;
+        groupIdMap.set(g.id, newGroup.id);
+
+        const validValues = g.values.filter(v => v.label.trim());
+        for (let vi = 0; vi < validValues.length; vi++) {
+          const v = validValues[vi];
+          const { data: newVal, error: valErr } = await supabase
+            .from('product_option_values')
+            .insert({
+              group_id: newGroup.id,
+              label: v.label.trim(),
+              value: v.value.trim() || v.label.trim(),
+              hex_code: v.hexCode || null,
+              sort_order: vi,
+            })
+            .select('id')
+            .single();
+
+          if (valErr) throw valErr;
+          valueIdMap.set(v.id, newVal.id);
+        }
+      }
+
+      // 4. Upsert variants
       const variantsToInsert = generatedVariants.map(v => ({
         product_id: product.id,
         sku: v.sku,
         name: v.name,
         barcode: v.barcode || undefined,
-        option_1: v.option_1 || null,
-        option_2: v.option_2 || null,
-        option_3: v.option_3 || null,
         wholesale_price: v.wholesale_price,
         retail_price: v.retail_price,
+        sort_order: v.sort_order,
         status: 'active' as const,
       }));
 
-      // 1. 依 SKU 去重（同 SKU 保留最後一筆）
       const dedupedVariants = [...new Map(variantsToInsert.map(v => [v.sku, v])).values()];
 
-      // 2. Upsert 變體並取回 ID
-      const { data: upsertedVariants, error } = await supabase
+      const { data: upsertedVariants, error: upsertErr } = await supabase
         .from('product_variants')
         .upsert(dedupedVariants, { onConflict: 'sku' })
         .select('id, sku');
 
-      if (error) throw error;
+      if (upsertErr) throw upsertErr;
       if (!upsertedVariants || upsertedVariants.length === 0) return;
 
-      // 2. 建立 SKU → ID 映射
       const skuToId = new Map(upsertedVariants.map(v => [v.sku, v.id]));
       const upsertedIds = upsertedVariants.map(v => v.id);
 
-      // 3. 刪除此批變體的現有 model relations (include)
-      const { error: delErr } = await supabase
+      // 5. Insert product_variant_options
+      const variantOptions: { variant_id: string; option_group_id: string; option_value_id: string }[] = [];
+
+      for (const v of upsertedVariants) {
+        const genVariant = generatedVariants.find(gv => gv.sku === v.sku);
+        if (!genVariant) continue;
+
+        for (const clientValueId of genVariant.optionValueIds) {
+          const realValueId = valueIdMap.get(clientValueId);
+          if (!realValueId) continue;
+
+          // Find which group this value belongs to
+          let foundGroupId = '';
+          for (const g of optionGroups) {
+            if (g.values.some(val => val.id === clientValueId)) {
+              const realGroupId = groupIdMap.get(g.id);
+              if (realGroupId) {
+                foundGroupId = realGroupId;
+              }
+              break;
+            }
+          }
+          if (!foundGroupId) continue;
+
+          variantOptions.push({
+            variant_id: v.id,
+            option_group_id: foundGroupId,
+            option_value_id: realValueId,
+          });
+        }
+      }
+
+      if (variantOptions.length > 0) {
+        const { error: voErr } = await supabase
+          .from('product_variant_options')
+          .insert(variantOptions);
+        if (voErr) throw voErr;
+      }
+
+      // 6. Delete old device model relations and re-insert
+      const { error: delRelErr } = await supabase
         .from('entity_model_relations')
         .delete()
         .in('variant_id', upsertedIds)
         .eq('relation_type', 'include');
-      if (delErr) throw delErr;
+      if (delRelErr) throw delRelErr;
 
-      // 4. 批次關聯型號/群組
       if (selectedModelIds.length > 0 || selectedGroupIds.length > 0) {
         const relations: any[] = [];
         const hasPerVariantMapping = generatedVariants.some(v => v._modelGroupId && v._modelGroupType);
 
         if (hasPerVariantMapping) {
-          // 逐一關聯：每個變體只關聯對應的型號或群組
           upsertedVariants.forEach(({ id, sku }) => {
-            const v = generatedVariants.find(v => v.sku === sku);
+            const v = generatedVariants.find(gv => gv.sku === sku);
             if (!v?._modelGroupId || !v._modelGroupType) return;
             if (v._modelGroupType === 'model') {
               relations.push({ variant_id: id, model_id: v._modelGroupId, relation_type: 'include' });
@@ -547,18 +642,17 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
             }
           });
         } else {
-          // 共用關聯：所有型號/群組關聯到所有變體
           upsertedIds.forEach(vId => {
             selectedModelIds.forEach(mId => relations.push({ variant_id: vId, model_id: mId, relation_type: 'include' }));
             selectedGroupIds.forEach(gId => relations.push({ variant_id: vId, group_id: gId, relation_type: 'include' }));
           });
         }
 
-        const { error: relErr } = await supabase.from('entity_model_relations').insert(relations);
+        const { error: relErr } = await (supabase.from('entity_model_relations') as any).insert(relations);
         if (relErr) throw relErr;
       }
 
-      // 5. 同步前台展示
+      // 7. Sync storefront
       const { error: syncErr } = await supabase.rpc('sync_storefront_items', { p_product_id: product.id });
       if (syncErr) throw syncErr;
     },
@@ -574,31 +668,55 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
   });
 
   const resetForm = () => {
-    setOption1Rows([]);
-    setOption2Rows([]);
-    setSelectedColorIds([]);
+    setOptionGroups([]);
     setSelectedModelIds([]);
     setSelectedGroupIds([]);
-    setWholesalePrice(product.base_wholesale_price.toString());
-    setRetailPrice(product.base_retail_price.toString());
+    setDefaultWholesalePrice('');
+    setDefaultRetailPrice('');
     setBarcodeList('');
     setGeneratedVariants([]);
   };
 
-  const updateOptionRow = (
-    setter: React.Dispatch<React.SetStateAction<OptionValueRow[]>>,
-    id: string,
-    field: keyof OptionValueRow,
-    value: string,
-  ) => {
-    setter(prev => prev.map(r => (r.id === id ? { ...r, [field]: value } : r)));
+  const updateGroupName = (groupId: string, name: string) => {
+    setOptionGroups(prev => prev.map(g => (g.id === groupId ? { ...g, name } : g)));
   };
 
-  const removeOptionRow = (
-    setter: React.Dispatch<React.SetStateAction<OptionValueRow[]>>,
-    id: string,
-  ) => {
-    setter(prev => prev.filter(r => r.id !== id));
+  const removeGroup = (groupId: string) => {
+    setOptionGroups(prev => prev.filter(g => g.id !== groupId));
+  };
+
+  const addGroup = () => {
+    setOptionGroups(prev => [...prev, createOptionGroup()]);
+  };
+
+  const updateValue = (groupId: string, valueId: string, field: keyof OptionValueInput, value: string) => {
+    setOptionGroups(prev =>
+      prev.map(g =>
+        g.id === groupId
+          ? { ...g, values: g.values.map(v => (v.id === valueId ? { ...v, [field]: value } : v)) }
+          : g,
+      ),
+    );
+  };
+
+  const removeValue = (groupId: string, valueId: string) => {
+    setOptionGroups(prev =>
+      prev.map(g =>
+        g.id === groupId
+          ? { ...g, values: g.values.filter(v => v.id !== valueId) }
+          : g,
+      ),
+    );
+  };
+
+  const addValue = (groupId: string) => {
+    setOptionGroups(prev =>
+      prev.map(g =>
+        g.id === groupId
+          ? { ...g, values: [...g.values, createOptionValue()] }
+          : g,
+      ),
+    );
   };
 
   const handleConfirmBulkPaste = () => {
@@ -608,36 +726,40 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
       .filter(s => s.length > 0)
       .map(s => {
         const parts = s.split(':');
-        const name = parts[0].trim();
+        const label = parts[0].trim();
         if (parts.length === 3) {
-          // 名稱:SKU值:批發價,零售價
-          const skuValue = parts[1].trim();
+          const value = parts[1].trim();
           const prices = parts[2].split(/[,，]/).map(p => p.trim());
-          return createOptionRow(name, skuValue, prices[0] || '', prices[1] || '');
+          return createOptionValue(label, value, prices[0] || '', prices[1] || '');
         }
         if (parts.length === 2) {
-          // 名稱:批發價,零售價
           const prices = parts[1].split(/[,，]/).map(p => p.trim());
-          return createOptionRow(name, '', prices[0] || '', prices[1] || '');
+          return createOptionValue(label, '', prices[0] || '', prices[1] || '');
         }
-        return createOptionRow(name);
+        return createOptionValue(label);
       });
 
-    if (bulkPasteTarget === 'option1') {
-      setOption1Rows(prev => [...prev, ...rows]);
-    } else if (bulkPasteTarget === 'option2') {
-      setOption2Rows(prev => [...prev, ...rows]);
+    if (bulkPasteTargetGroupId) {
+      setOptionGroups(prev =>
+        prev.map(g =>
+          g.id === bulkPasteTargetGroupId
+            ? { ...g, values: [...g.values, ...rows] }
+            : g,
+        ),
+      );
     }
 
-    setBulkPasteTarget(null);
+    setBulkPasteTargetGroupId(null);
     setBulkPasteText('');
   };
 
   const updateVariantField = (index: number, field: keyof GeneratedVariant, value: string) => {
     setGeneratedVariants(prev =>
       prev.map((v, i) =>
-        i === index ? { ...v, [field]: (field === 'wholesale_price' || field === 'retail_price') ? parseFloat(value) || 0 : value } : v
-      )
+        i === index
+          ? { ...v, [field]: (field === 'wholesale_price' || field === 'retail_price') ? parseFloat(value) || 0 : value }
+          : v,
+      ),
     );
   };
 
@@ -647,75 +769,78 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Layers className="h-5 w-5" />
             批次建立變體
           </DialogTitle>
           <DialogDescription>
-             在下方表格輸入各選項值，可選填批發價／零售價（也可後續在預覽表格編輯），系統會自動生成排列組合
+            在下方定義選項群組與各選項值，可選填批發價／零售價，系統會自動生成所有排列組合
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* 選項輸入 */}
+          {/* Option Groups */}
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>選項1（必填）</Label>
-              <OptionsTable
-                rows={option1Rows}
-                onUpdate={(id, field, value) => updateOptionRow(setOption1Rows, id, field, value)}
-                onRemove={(id) => removeOptionRow(setOption1Rows, id)}
-                onAdd={() => setOption1Rows(prev => [...prev, createOptionRow()])}
-                onBulkPaste={() => { setBulkPasteText(''); setBulkPasteTarget('option1'); }}
-                placeholder="輸入選項值"
-              />
+            <div className="flex items-center justify-between">
+              <Label className="text-base font-semibold">選項群組</Label>
+              <Button variant="outline" size="sm" onClick={addGroup}>
+                <Plus className="h-4 w-4 mr-1" />新增群組
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label>選項2（選填）</Label>
-              <OptionsTable
-                rows={option2Rows}
-                onUpdate={(id, field, value) => updateOptionRow(setOption2Rows, id, field, value)}
-                onRemove={(id) => removeOptionRow(setOption2Rows, id)}
-                onAdd={() => setOption2Rows(prev => [...prev, createOptionRow()])}
-                onBulkPaste={() => { setBulkPasteText(''); setBulkPasteTarget('option2'); }}
-                placeholder="輸入選項值"
-              />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>顏色</Label>
+
+            {optionGroups.length === 0 && (
+              <div className="text-center py-6 text-muted-foreground text-sm border rounded-lg">
+                尚未建立任何選項群組，請點擊「新增群組」開始定義（例如：顏色、尺寸、規格...）
+              </div>
+            )}
+
+            {optionGroups.map((group) => (
+              <div key={group.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                <div className="flex items-center gap-2">
+                  <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <Input
+                    value={group.name}
+                    onChange={e => updateGroupName(group.id, e.target.value)}
+                    className="h-8 max-w-[200px] font-medium"
+                    placeholder="群組名稱（如：顏色、尺寸）"
+                  />
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 px-2 text-[10px]"
-                    onClick={() => setIsColorManageOpen(true)}
+                    className="h-8 w-8 p-0 text-destructive ml-auto"
+                    onClick={() => removeGroup(group.id)}
                   >
-                    <Palette className="h-3 w-3 mr-1" /> 管理顏色
+                    <X className="h-4 w-4" />
                   </Button>
                 </div>
-                <ColorSelectField
-                  selectedColorIds={selectedColorIds}
-                  onChange={setSelectedColorIds}
+
+                <OptionValueTable
+                  values={group.values}
+                  onUpdate={(id, field, value) => updateValue(group.id, id, field, value)}
+                  onRemove={(id) => removeValue(group.id, id)}
+                  onAdd={() => addValue(group.id)}
+                  onBulkPaste={() => { setBulkPasteText(''); setBulkPasteTargetGroupId(group.id); }}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>型號 / 群組（選填）</Label>
-                <StandaloneDeviceModelSelectField
-                  modelIds={selectedModelIds}
-                  groupIds={selectedGroupIds}
-                  onChange={({ modelIds, groupIds }) => {
-                    setSelectedModelIds(modelIds);
-                    setSelectedGroupIds(groupIds);
-                  }}
-                />
-              </div>
-            </div>
+            ))}
           </div>
 
-          {/* 條碼列表 */}
+          {/* Device Models */}
+          <div className="space-y-2">
+            <Label>型號 / 群組（選填）</Label>
+            <StandaloneDeviceModelSelectField
+              modelIds={selectedModelIds}
+              groupIds={selectedGroupIds}
+              onChange={({ modelIds, groupIds }) => {
+                setSelectedModelIds(modelIds);
+                setSelectedGroupIds(groupIds);
+              }}
+            />
+          </div>
+
+          {/* Barcode List */}
           <div className="space-y-2">
             <Label htmlFor="barcodeList">條碼列表（選填）</Label>
             <Textarea
@@ -727,13 +852,11 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
             />
           </div>
 
-          <ColorManagementDialog
-            open={isColorManageOpen}
-            onOpenChange={setIsColorManageOpen}
-          />
-
-          {/* 批量貼上對話框 */}
-          <Dialog open={bulkPasteTarget !== null} onOpenChange={(open) => { if (!open) setBulkPasteTarget(null); }}>
+          {/* Bulk Paste Dialog */}
+          <Dialog
+            open={bulkPasteTargetGroupId !== null}
+            onOpenChange={(open) => { if (!open) setBulkPasteTargetGroupId(null); }}
+          >
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>批量貼上</DialogTitle>
@@ -748,13 +871,13 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                 className="min-h-[200px]"
               />
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setBulkPasteTarget(null)}>取消</Button>
+                <Button variant="outline" onClick={() => setBulkPasteTargetGroupId(null)}>取消</Button>
                 <Button onClick={handleConfirmBulkPaste}>確認新增</Button>
               </div>
             </DialogContent>
           </Dialog>
 
-          {/* 預設價格 */}
+          {/* Default Prices */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="defaultWholesale">預設批發價</Label>
@@ -762,8 +885,9 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                 id="defaultWholesale"
                 type="number"
                 step="0.01"
-                value={wholesalePrice}
-                onChange={(e) => setWholesalePrice(e.target.value)}
+                value={defaultWholesalePrice}
+                onChange={(e) => setDefaultWholesalePrice(e.target.value)}
+                placeholder="0"
               />
             </div>
             <div className="space-y-2">
@@ -772,8 +896,9 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                 id="defaultRetail"
                 type="number"
                 step="0.01"
-                value={retailPrice}
-                onChange={(e) => setRetailPrice(e.target.value)}
+                value={defaultRetailPrice}
+                onChange={(e) => setDefaultRetailPrice(e.target.value)}
+                placeholder="0"
               />
             </div>
           </div>
@@ -783,7 +908,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
             生成變體預覽
           </Button>
 
-          {/* 預覽結果 */}
+          {/* Preview */}
           {generatedVariants.length > 0 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -791,7 +916,6 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                 <Badge variant="outline">點擊可編輯價格</Badge>
               </div>
 
-              {/* 型號/群組關聯提示 */}
               {(selectedModelIds.length > 0 || selectedGroupIds.length > 0) && (
                 <div className="flex items-center gap-2 p-2.5 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg text-sm">
                   <Layers className="h-4 w-4 text-blue-600 shrink-0" />
@@ -886,7 +1010,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
             </div>
           )}
 
-          {/* 操作按鈕 */}
+          {/* Actions */}
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button variant="outline" onClick={() => { onOpenChange(false); resetForm(); }}>
               取消

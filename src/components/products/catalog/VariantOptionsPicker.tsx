@@ -1,8 +1,6 @@
-// src/components/order/VariantOptionsPicker.tsx
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { useProductColors } from "@/hooks/useProductColors";
 
 interface VariantOptionsPickerProps {
     product: any;
@@ -11,20 +9,18 @@ interface VariantOptionsPickerProps {
     getVariantQuantity?: (variantId: string) => number;
 }
 
-/**
- * [V7.5] 多層級規格選擇器組件
- * 封裝了自動選取、可用性檢查與多維度標籤渲染邏輯
- */
 export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChange, getVariantQuantity }: VariantOptionsPickerProps) {
-    const { colors } = useProductColors();
-    const [selectedOptions, setSelectedOptions] = useState<{ [key: string]: string | null }>({
-        option_1: null,
-        option_2: null,
-        option_3: null,
-        modelDisplay: null
-    });
+    const [selectedOptions, setSelectedOptions] = useState<Record<string, string | null>>({});
 
-    // 1. 預處理變體資料 (計算 modelDisplay)
+    const optionDimensions = useMemo(() => {
+        if (!product?.option_groups) return [];
+        return product.option_groups.map((group: any) => ({
+            groupId: group.id,
+            groupName: group.name,
+            values: group.values || [],
+        }));
+    }, [product?.option_groups]);
+
     const variants = useMemo(() => {
         if (!product?.variants) return [];
         return product.variants.map((v: any) => {
@@ -35,64 +31,73 @@ export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChan
             if (groupNames.length > 0) modelDisplay = groupNames.join(', ');
             else if (modelNames.length > 0) modelDisplay = modelNames.join(', ');
             else {
-                const hasOptions = !!(v.option_1 || v.option_2 || v.option_3);
+                const hasOptions = !!(v.option_values?.length > 0);
                 modelDisplay = hasOptions ? '' : v.name;
             }
             return { ...v, modelDisplay };
         });
     }, [product?.variants]);
 
-    // 2. 提取維度資訊
-    const optionDimensions = useMemo(() => {
-        const dims: { [key: string]: string[] } = { option_1: [], option_2: [], option_3: [] };
-        variants.forEach((v: any) => {
-            if (v.option_1 && !dims.option_1.includes(v.option_1)) dims.option_1.push(v.option_1);
-            if (v.option_2 && !dims.option_2.includes(v.option_2)) dims.option_2.push(v.option_2);
-            if (v.option_3 && !dims.option_3.includes(v.option_3)) dims.option_3.push(v.option_3);
-        });
-        const filteredDims = Object.entries(dims).filter(([_, values]) => values.length > 0);
+    const allDimensions = useMemo(() => {
+        const results: { key: string; name: string; values: { id?: string; label: string; hex_code?: string | null }[] }[] = [];
         const modelNames = Array.from(new Set(variants.map((v: any) => v.modelDisplay))).filter(Boolean) as string[];
-        
-        const results: [string, string[]][] = [];
-        if (modelNames.length > 0) results.push(['modelDisplay', modelNames]);
-        filteredDims.forEach(([k, v]) => results.push([k, v]));
-        
-        return results;
-    }, [variants]);
-
-    // 3. 檢查選項可用性
-    const isOptionAvailable = useCallback((dimKey: string, value: string) => {
-        const testOptions = { ...selectedOptions, [dimKey]: value };
-        return variants.some((v: any) => {
-            const mModel = !testOptions.modelDisplay || v.modelDisplay === testOptions.modelDisplay;
-            const mO1 = !testOptions.option_1 || v.option_1 === testOptions.option_1;
-            const mO2 = !testOptions.option_2 || v.option_2 === testOptions.option_2;
-            const mO3 = !testOptions.option_3 || v.option_3 === testOptions.option_3;
-            return mModel && mO1 && mO2 && mO3;
-        });
-    }, [selectedOptions, variants]);
-
-    // 4. 重置與自動選取邏輯
-    useEffect(() => {
-        if (product) {
-            setSelectedOptions({
-                option_1: null,
-                option_2: null,
-                option_3: null,
-                modelDisplay: null
+        if (modelNames.length > 0) {
+            results.push({
+                key: 'modelDisplay',
+                name: '型號 / 名稱',
+                values: modelNames.map(n => ({ label: n }))
             });
         }
+        optionDimensions.forEach(dim => {
+            results.push({
+                key: dim.groupId,
+                name: dim.groupName,
+                values: dim.values.map((v: any) => ({
+                    id: v.id,
+                    label: v.label || v.value,
+                    hex_code: v.hex_code
+                }))
+            });
+        });
+        return results;
+    }, [optionDimensions, variants]);
+
+    useEffect(() => {
+        if (product) {
+            const initial: Record<string, string | null> = { modelDisplay: null };
+            optionDimensions.forEach(dim => {
+                initial[dim.groupId] = null;
+            });
+            setSelectedOptions(initial);
+        }
     }, [product?.id]);
+
+    const isOptionAvailable = useCallback((dimKey: string, valueIdOrLabel: string) => {
+        const testOptions = { ...selectedOptions, [dimKey]: valueIdOrLabel };
+        return variants.some((v: any) => {
+            const mModel = !testOptions.modelDisplay || v.modelDisplay === testOptions.modelDisplay;
+            const optionEntries = Object.entries(testOptions).filter(([k, val]) => k !== 'modelDisplay' && val != null);
+            if (optionEntries.length === 0) return mModel;
+            const mOptions = optionEntries.every(([groupId, valueId]) =>
+                v.option_values?.some((ov: any) => ov.group_id === groupId && ov.id === valueId)
+            );
+            return mModel && mOptions;
+        });
+    }, [selectedOptions, variants]);
 
     useEffect(() => {
         const nextOptions = { ...selectedOptions };
         let changed = false;
 
-        optionDimensions.forEach(([dimKey, values]) => {
-            if (!nextOptions[dimKey]) {
-                const availableValues = values.filter(v => isOptionAvailable(dimKey, v));
+        allDimensions.forEach(({ key, values }) => {
+            if (!nextOptions[key]) {
+                const useId = !!values[0]?.id;
+                const availableValues = values.filter(v => {
+                    const val = useId ? v.id : v.label;
+                    return val && isOptionAvailable(key, val);
+                });
                 if (availableValues.length === 1) {
-                    nextOptions[dimKey] = availableValues[0];
+                    nextOptions[key] = (useId ? availableValues[0].id : availableValues[0].label) ?? null;
                     changed = true;
                 }
             }
@@ -101,18 +106,19 @@ export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChan
         if (changed) {
             setSelectedOptions(nextOptions);
         }
-    }, [optionDimensions, selectedOptions, isOptionAvailable]);
+    }, [allDimensions, selectedOptions, isOptionAvailable]);
 
-    // 5. 匹配變體並回傳 + 通知外部當前選項
     useEffect(() => {
         onSelectionChange?.(selectedOptions);
         const match = variants.find((v: any) => {
             const vModel = v.modelDisplay || null;
             const sModel = selectedOptions.modelDisplay || null;
-            return vModel === sModel &&
-                v.option_1 === selectedOptions.option_1 &&
-                v.option_2 === selectedOptions.option_2 &&
-                v.option_3 === selectedOptions.option_3;
+            if (vModel !== sModel) return false;
+            const optionEntries = Object.entries(selectedOptions).filter(([k, val]) => k !== 'modelDisplay' && val != null);
+            if (optionEntries.length === 0) return !vModel && (!v.option_values || v.option_values.length === 0);
+            return optionEntries.every(([groupId, valueId]) =>
+                v.option_values?.some((ov: any) => ov.group_id === groupId && ov.id === valueId)
+            );
         });
         onVariantSelect(match || null);
     }, [selectedOptions, variants, onVariantSelect, onSelectionChange]);
@@ -126,8 +132,8 @@ export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChan
 
     const badgeQuantity = useCallback((dimKey: string, value: string) => {
         if (!getVariantQuantity) return 0;
-        const hasSelectionInOtherDim = optionDimensions.some(([dk]) =>
-            dk !== dimKey && selectedOptions[dk] != null
+        const hasSelectionInOtherDim = allDimensions.some(({ key }) =>
+            key !== dimKey && selectedOptions[key] != null
         );
         const isThisSelected = selectedOptions[dimKey] === value;
         if (!hasSelectionInOtherDim && !isThisSelected) return 0;
@@ -135,56 +141,50 @@ export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChan
         const match = variants.find((v: any) => {
             const vModel = v.modelDisplay || null;
             const sModel = testOptions.modelDisplay || null;
-            return vModel === sModel &&
-                v.option_1 === testOptions.option_1 &&
-                v.option_2 === testOptions.option_2 &&
-                v.option_3 === testOptions.option_3;
+            if (vModel !== sModel) return false;
+            const optionEntries = Object.entries(testOptions).filter(([k, val]) => k !== 'modelDisplay' && val != null);
+            if (optionEntries.length === 0) return !vModel && (!v.option_values || v.option_values.length === 0);
+            return optionEntries.every(([groupId, valueId]) =>
+                v.option_values?.some((ov: any) => ov.group_id === groupId && ov.id === valueId)
+            );
         });
         if (!match) return 0;
         return getVariantQuantity(match.id);
-    }, [getVariantQuantity, optionDimensions, selectedOptions, variants]);
+    }, [getVariantQuantity, allDimensions, selectedOptions, variants]);
 
-    if (!product.has_variants || variants.length === 0) return null;
+    if (!product?.variants || variants.length === 0) return null;
 
     return (
         <div className="space-y-6">
-            {optionDimensions.map(([dimKey, values]) => (
-                <div key={dimKey} className="space-y-3">
+            {allDimensions.map(({ key, name, values }) => (
+                <div key={key} className="space-y-3">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
-                        {dimKey === 'modelDisplay' ? '型號 / 名稱' :
-                            dimKey === 'option_1' ? '規格 / 屬性' :
-                                dimKey === 'option_2' ? '類型 / 附加規格' :
-                                    dimKey === 'option_3' ? '顏色 / 樣式' : '規格選項'}
+                        {name}
                     </h3>
                     <div className="flex flex-wrap gap-2">
-                        {values.map((val: string) => {
-                            const isSelected = selectedOptions[dimKey] === val;
-                            const isAvailable = isOptionAvailable(dimKey, val);
-                            const qty = badgeQuantity(dimKey, val);
+                        {values.map((val) => {
+                            const valueKey = val.id || val.label;
+                            const isSelected = selectedOptions[key] === valueKey;
+                            const isAvailable = isOptionAvailable(key, valueKey);
+                            const qty = badgeQuantity(key, valueKey);
                             return (
                                 <Badge
-                                    key={val}
+                                    key={valueKey}
                                     variant={isSelected ? "default" : "outline"}
                                     className={cn(
                                         "px-3 py-1.5 cursor-pointer transition-all text-sm flex items-center gap-2",
                                         !isSelected && !isAvailable && "opacity-30 grayscale cursor-not-allowed pointer-events-none",
                                         isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
                                     )}
-                                    onClick={() => isAvailable && handleOptionClick(dimKey, val)}
+                                    onClick={() => isAvailable && handleOptionClick(key, valueKey)}
                                 >
-                                    {dimKey === 'option_3' && (() => {
-                                        const color = colors.find(c => c.name === val);
-                                        if (color) {
-                                            return (
-                                                <div
-                                                    className="w-3.5 h-3.5 rounded-full border border-black/10 shadow-sm"
-                                                    style={{ backgroundColor: color.hex_code }}
-                                                />
-                                            );
-                                        }
-                                        return null;
-                                    })()}
-                                    {val}
+                                    {val.hex_code && (
+                                        <div
+                                            className="w-3.5 h-3.5 rounded-full border border-black/10 shadow-sm"
+                                            style={{ backgroundColor: val.hex_code }}
+                                        />
+                                    )}
+                                    {val.label}
                                     {qty > 0 && (
                                         <span className="ml-1 text-[10px] font-bold text-primary bg-primary/10 rounded-full px-1.5 py-0.5 leading-none">
                                             {qty}

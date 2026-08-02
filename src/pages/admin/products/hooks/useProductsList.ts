@@ -18,7 +18,7 @@ function parseSetFromUrl(raw: string | null): Set<string> {
 }
 
 function syncUrlFromStore(params: URLSearchParams, setSearchParams: (fn: (p: URLSearchParams) => URLSearchParams, opts?: any) => void) {
-    const sp = useFilterStore.getState().toSearchParams();
+    const sp = useFilterStore.getState().toSearchParams() as Record<string, string>;
     setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         for (const [key, val] of Object.entries(sp)) {
@@ -180,7 +180,7 @@ export function useProductsList() {
     const handleCopy = (product: Product) => mutations.handleCopy(product, setEditingProduct, setIsDialogOpen);
 
     const handleBatchExportWrapper = () => handleBatchExport(
-        products, selectedProductIds, getProductVariants, brandMap,
+        products as any, selectedProductIds, getProductVariants, brandMap,
         () => setSelectedProductIds(new Set())
     );
 
@@ -256,7 +256,7 @@ export function useProductsList() {
 
     const clearFilters = useCallback(() => {
         useFilterStore.getState().clearAll();
-        setSearch('');
+        updateSearch('');
         setSearchParams((prev) => {
             const next = new URLSearchParams(prev);
             next.delete('search');
@@ -273,7 +273,7 @@ export function useProductsList() {
         products, isLoading, version, forceRefresh,
         brandMap,
         search, setSearch: updateSearch, activeTab, setActiveTab: updateActiveTab,
-        selectedProductIds, toggleSelect, toggleSelectAll, isAllSelected,
+        selectedProductIds, setSelectedProductIds, toggleSelect, toggleSelectAll, isAllSelected,
         expandedProducts, toggleExpanded, filteredProducts,
         isDialogOpen, setIsDialogOpen, isImportOpen, setIsImportOpen,
         editingProduct, setEditingProduct, deleteProduct, setDeleteProduct,

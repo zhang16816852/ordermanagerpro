@@ -124,7 +124,7 @@ export function EntityBindingManager({ productId }: EntityBindingManagerProps) {
                         </div>
                         <div>
                           <div className="font-medium text-sm">{bp.name}</div>
-                          <div className="text-xs text-muted-foreground font-mono">{bp.sku}</div>
+                          <div className="text-xs text-muted-foreground font-mono">{bp.code}</div>
                         </div>
                       </div>
                       <Button
@@ -155,7 +155,7 @@ export function EntityBindingManager({ productId }: EntityBindingManagerProps) {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="搜尋產品名稱或 SKU..."
+                placeholder="搜尋產品名稱或代碼..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
@@ -179,7 +179,7 @@ export function EntityBindingManager({ productId }: EntityBindingManagerProps) {
                     >
                       <div>
                         <div className="text-sm font-medium">{r.name}</div>
-                        <div className="text-xs text-muted-foreground font-mono">{r.sku}</div>
+                        <div className="text-xs text-muted-foreground font-mono">{r.code}</div>
                       </div>
                       {isAlreadyBound(r.id) ? (
                         <Badge variant="secondary" className="text-xs">已綁定</Badge>
@@ -205,7 +205,7 @@ export function EntityBindingManager({ productId }: EntityBindingManagerProps) {
             <ul className="text-xs text-muted-foreground space-y-1">
               <li className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[9px] h-4 px-1">自動</Badge>
-                價格 (<code className="text-[10px]">base_wholesale_price</code>、<code className="text-[10px]">base_retail_price</code>)
+                價格 (批發價、零售價)
               </li>
               <li className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[9px] h-4 px-1">自動</Badge>
@@ -213,7 +213,7 @@ export function EntityBindingManager({ productId }: EntityBindingManagerProps) {
               </li>
               <li className="flex items-center gap-2 mt-2">
                 <Badge variant="secondary" className="text-[9px] h-4 px-1">各自獨立</Badge>
-                名稱、SKU、圖片、變體、品牌、型號關聯、分類
+                名稱、代碼、圖片、變體、品牌、型號關聯、分類
               </li>
             </ul>
           </div>

@@ -9,7 +9,6 @@ import { EditableTextCell } from './cells/EditableTextCell';
 import { PriceCell } from './cells/PriceCell';
 import { DeviceModelCell } from './cells/DeviceModelCell';
 import { BrandCategoryCell } from './cells/BrandCategoryCell';
-import { ColorCell } from './cells/ColorCell';
 import { SeriesCell } from './cells/SeriesCell';
 import { SpecsCell } from './cells/SpecsCell';
 
@@ -24,7 +23,6 @@ interface ProductGroupSectionProps {
     allDeviceModels: any[];
     allDeviceBrands: any[];
     allDeviceGroups: any[];
-    allColors: any[];
     addModel: (data: any) => Promise<any>;
     specDefs?: { id: string; name: string }[];
     allSeries?: any[];
@@ -33,7 +31,7 @@ interface ProductGroupSectionProps {
 export function ProductGroupSection({
     groupKey, rows, indices, onUpdate, onRemove,
     allBrands, categories, allDeviceModels, allDeviceBrands, allDeviceGroups,
-    allColors, addModel, specDefs = [], allSeries = []
+    addModel, specDefs = [], allSeries = []
 }: ProductGroupSectionProps) {
     const [collapsed, setCollapsed] = useState(false);
     const mainRow = rows[0];
@@ -58,8 +56,8 @@ export function ProductGroupSection({
 
                 <div className="w-[120px] shrink-0">
                     <EditableTextCell
-                        value={mainRow.product_sku}
-                        onChange={(v) => onUpdate(mainIdx, 'product_sku', v)}
+                        value={mainRow.product_code}
+                        onChange={(v) => onUpdate(mainIdx, 'product_code', v)}
                         mono
                     />
                 </div>
@@ -68,14 +66,6 @@ export function ProductGroupSection({
                         value={mainRow.product_name}
                         onChange={(v) => onUpdate(mainIdx, 'product_name', v)}
                         isDiff={mainRow.diff?.includes('產品名稱')}
-                    />
-                </div>
-                <div className="w-[80px] shrink-0">
-                    <EditableTextCell
-                        value={mainRow.model}
-                        placeholder="型號"
-                        onChange={(v) => onUpdate(mainIdx, 'model', v)}
-                        isDiff={mainRow.diff?.includes('型號')}
                     />
                 </div>
                 <div className="w-[110px] shrink-0">
@@ -118,7 +108,7 @@ export function ProductGroupSection({
                                         isDiff={row.diff?.includes('變體名稱')} />
                                 </div>
                                 <div className="w-[80px] shrink-0 text-[10px] text-muted-foreground">
-                                    <ColorCell row={row} index={idx} onUpdate={onUpdate} allColors={allColors} />
+                                    <span className="text-[10px] text-muted-foreground/30">-</span>
                                 </div>
                                 <div className="w-[110px] shrink-0">
                                     <DeviceModelCell value={row.variant_device_models} isVariant index={idx}

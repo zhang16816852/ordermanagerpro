@@ -96,7 +96,7 @@ export function getVisibleSpecsTree(
             const val = settings[pathKey] !== undefined ? settings[pathKey] : '';
             const isHeading = spec.type === 'heading';
 
-            let activeTriggers = specTriggers.filter(t => t.source_spec_id === specId);
+            const activeTriggers = specTriggers.filter(t => t.source_spec_id === specId);
 
             activeTriggers.forEach(t => {
                 const isMatch = isHeading ? true : checkSpecTriggerMatch(

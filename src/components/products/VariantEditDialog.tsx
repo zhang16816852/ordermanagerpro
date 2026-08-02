@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables, TablesInsert } from '@/integrations/supabase/types';
+import { OptionGroupWithValues } from '@/types/product';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,8 +32,7 @@ import {
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { StandaloneDeviceModelSelectField } from './StandaloneDeviceModelSelectField';
-import { ColorSelectField } from './form/ColorSelectField';
-import { useColorStore } from '@/store/useColorStore';
+import { OptionValueCombobox } from './form/OptionValueCombobox';
 import { DynamicSpecsFields } from './form/sections/DynamicSpecsFields';
 import { serializeSpecs, deserializeSpecs } from '@/utils/specLogic';
 import { useSpecStore } from '@/store/useSpecStore';
@@ -56,34 +56,30 @@ export function VariantEditDialog({
     open,
     onOpenChange,
     product,
-    variant, // variant to edit, if null then create new
+    variant,
     onSuccess,
 }: VariantEditDialogProps) {
     const queryClient = useQueryClient();
-    const { colors } = useColorStore();
     const { specMap } = useSpecStore();
+    const [optionGroups, setOptionGroups] = useState<OptionGroupWithValues[]>([]);
 
     const form = useForm({
         defaultValues: {
             sku: '',
             name: '',
-            option_1: '',
-            option_2: '',
-            color: '',
             barcode: '',
             wholesale_price: 0,
             retail_price: 0,
             status: 'active' as any,
             spec_values: {} as Record<string, any>,
-            selectedColorIds: [] as string[],
             selectedModelIds: [] as string[],
             selectedGroupIds: [] as string[],
             selectedExclusionIds: [] as string[],
             category_ids: [] as string[],
+            optionValues: {} as Record<string, string>,
         }
     });
 
-    // 初始化模型的 state
     const initializedRef = useRef<string | null>(null);
     useEffect(() => {
         if (!open) {
@@ -95,64 +91,121 @@ export function VariantEditDialog({
         initializedRef.current = variantId;
 
         const init = async () => {
-            const latestColors = await useColorStore.getState().fetchColors();
             useSpecStore.getState().fetchSpecs();
 
+            const { data: groups, error: groupsError } = await supabase
+                .from('product_option_groups')
+                .select('*')
+                .eq('product_id', product!.id)
+                .order('sort_order');
+
+            if (groupsError) {
+                toast.error(`選項群組載入失敗：${getErrorMessage(groupsError)}`);
+                return;
+            }
+
+            const groupsWithValues: OptionGroupWithValues[] = [];
+            if (groups) {
+                for (const group of groups) {
+                    const { data: values } = await supabase
+                        .from('product_option_values')
+                        .select('*')
+                        .eq('group_id', group.id)
+                        .order('sort_order');
+                    groupsWithValues.push({ ...group, values: values || [] });
+                }
+            }
+            setOptionGroups(groupsWithValues);
+
+            const valueIdToLabel: Record<string, string> = {};
+            for (const g of groupsWithValues) {
+                for (const v of g.values) {
+                    valueIdToLabel[v.id] = v.label || v.value || '';
+                }
+            }
+
             if (variant) {
-                // 取得設備型號連結與群組連結與排除
-                const [links, groupLinks, exclusions, specValues] = await Promise.all([
-                    supabase.from('entity_model_relations').select('model_id').eq('variant_id', variant.id).eq('relation_type', 'include').not('model_id', 'is', null),
-                    supabase.from('entity_model_relations').select('group_id').eq('variant_id', variant.id).eq('relation_type', 'include').not('group_id', 'is', null),
-                    supabase.from('entity_model_relations').select('model_id').eq('variant_id', variant.id).eq('relation_type', 'exclude').not('model_id', 'is', null),
-                    supabase.from('entity_spec_values').select('*').eq('entity_id', variant.id).eq('entity_type', 'variant').is('deleted_at', null)
+                const [links, groupLinks, exclusions, specValues, variantOptions] = await Promise.all([
+                    (supabase.from('entity_model_relations') as any).select('model_id').eq('variant_id', variant.id).eq('relation_type', 'include').not('model_id', 'is', null),
+                    (supabase.from('entity_model_relations') as any).select('group_id').eq('variant_id', variant.id).eq('relation_type', 'include').not('group_id', 'is', null),
+                    (supabase.from('entity_model_relations') as any).select('model_id').eq('variant_id', variant.id).eq('relation_type', 'exclude').not('model_id', 'is', null),
+                    (supabase.from('entity_spec_values') as any).select('*').eq('entity_id', variant.id).eq('entity_type', 'variant').is('deleted_at', null),
+                    (supabase.from('product_variant_options') as any).select('option_group_id, option_value_id').eq('variant_id', variant.id),
                 ]);
 
-                // 根據 option_3 的名稱找回顏色 ID
-                let colorIds: string[] = [];
-                if (variant.option_3) {
-                    const color = latestColors.find(c => c.name === variant.option_3);
-                    if (color) colorIds = [color.id];
+                const optionValues: Record<string, string> = {};
+                if (variantOptions.data) {
+                    for (const opt of variantOptions.data) {
+                        optionValues[opt.option_group_id] = valueIdToLabel[opt.option_value_id] || '';
+                    }
                 }
 
                 form.reset({
                     sku: variant.sku,
                     name: variant.name,
-                    option_1: variant.option_1 || '',
-                    option_2: variant.option_2 || '',
-                    color: variant.color || '',
                     barcode: variant.barcode || '',
                     wholesale_price: variant.wholesale_price,
                     retail_price: variant.retail_price,
                     status: variant.status as any,
                     spec_values: deserializeSpecs(specValues.data || []),
-                    selectedColorIds: colorIds,
                     selectedModelIds: links.data?.map(l => l.model_id) || [],
                     selectedGroupIds: groupLinks.data?.map(l => l.group_id) || [],
                     selectedExclusionIds: exclusions.data?.map(l => l.model_id) || [],
                     category_ids: (product as any)?.category_ids || [],
+                    optionValues,
                 });
             } else {
                 form.reset({
-                    sku: product ? `${product.sku}-` : '',
+                    sku: product ? `${product.code || ''}-` : '',
                     name: '',
-                    option_1: '',
-                    option_2: '',
-                    color: '',
                     barcode: '',
-                    wholesale_price: product?.base_wholesale_price || 0,
-                    retail_price: product?.base_retail_price || 0,
+                    wholesale_price: 0,
+                    retail_price: 0,
                     status: 'active',
                     spec_values: {},
-                    selectedColorIds: [],
                     selectedModelIds: [],
                     selectedGroupIds: [],
                     selectedExclusionIds: [],
                     category_ids: (product as any)?.category_ids || [],
+                    optionValues: {},
                 });
             }
         };
         init();
     }, [open, variant?.id, product?.id]);
+
+    const resolveOptionValueId = async (groupId: string, label: string): Promise<string | null> => {
+        if (!label) return null;
+        const existing = optionGroups.find(g => g.id === groupId)?.values.find(v => (v.label || v.value) === label);
+        if (existing) return existing.id;
+        const { data, error } = await (supabase.from('product_option_values') as any).insert({
+            group_id: groupId,
+            label,
+            value: label,
+        }).select().single();
+        if (error) throw error;
+        return data.id;
+    };
+
+    const manageVariantOptions = async (variantId: string, optionValues: Record<string, string>) => {
+        await (supabase.from('product_variant_options') as any).delete().eq('variant_id', variantId);
+
+        const resolved: { groupId: string; valueId: string }[] = [];
+        for (const [groupId, label] of Object.entries(optionValues)) {
+            const valueId = await resolveOptionValueId(groupId, label);
+            if (valueId) resolved.push({ groupId, valueId });
+        }
+
+        const inserts = resolved.map(({ groupId, valueId }) => ({
+            variant_id: variantId,
+            option_group_id: groupId,
+            option_value_id: valueId,
+        }));
+        if (inserts.length > 0) {
+            const { error } = await (supabase.from('product_variant_options') as any).insert(inserts);
+            if (error) throw error;
+        }
+    };
 
     const createMutation = useMutation({
         mutationFn: async (values: any) => {
@@ -160,27 +213,24 @@ export function VariantEditDialog({
                 selectedModelIds,
                 selectedGroupIds,
                 selectedExclusionIds,
-                selectedColorIds,
                 category_ids,
                 spec_values,
+                optionValues,
                 ...dataToInsert
             } = values;
 
-            const selectedColor = colors.find(c => c.id === selectedColorIds[0]);
             const finalData = {
                 ...dataToInsert,
                 product_id: product?.id,
-                option_3: selectedColor?.name || null,
                 barcode: dataToInsert.barcode || null,
-                color: dataToInsert.color || null,
-                option_1: dataToInsert.option_1 || null,
-                option_2: dataToInsert.option_2 || null,
+                sort_order: 0,
             };
 
-            const { data, error } = await supabase.from('product_variants').insert(finalData).select().single();
+            const { data, error } = await (supabase.from('product_variants') as any).insert(finalData).select().single();
             if (error) throw error;
 
-            // v6 規格同步
+            await manageVariantOptions(data.id, optionValues || {});
+
             if (values.spec_values && (product as any)?.category_ids?.length > 0) {
                 const serializedSpecsData = serializeSpecs(values.spec_values, specMap);
                 await supabase.rpc('sync_product_specs_v6', {
@@ -191,7 +241,6 @@ export function VariantEditDialog({
                 });
             }
 
-            // 使用統一服務建立型號關聯
             await entityRelationService.updateRelations('variant', data.id, {
                 modelIds: selectedModelIds,
                 groupIds: selectedGroupIds,
@@ -210,32 +259,29 @@ export function VariantEditDialog({
             toast.error(`新增失敗：${getErrorMessage(error)}`);
         },
     });
+
     const updateMutation = useMutation({
         mutationFn: async (values: any) => {
             const {
                 selectedModelIds,
                 selectedGroupIds,
                 selectedExclusionIds,
-                selectedColorIds,
                 category_ids,
                 spec_values,
+                optionValues,
                 ...updates
             } = values;
 
-            const selectedColor = colors.find(c => c.id === selectedColorIds[0]);
             const finalUpdates = {
                 ...updates,
-                option_3: selectedColor?.name || null,
                 barcode: updates.barcode || null,
-                color: updates.color || null,
-                option_1: updates.option_1 || null,
-                option_2: updates.option_2 || null,
             };
 
-            const { error } = await supabase.from('product_variants').update(finalUpdates).eq('id', variant!.id);
+            const { error } = await (supabase.from('product_variants') as any).update(finalUpdates).eq('id', variant!.id);
             if (error) throw error;
 
-            // v6 規格同步
+            await manageVariantOptions(variant!.id, optionValues || {});
+
             if (values.spec_values && (product as any)?.category_ids?.length > 0) {
                 const serializedSpecsData = serializeSpecs(values.spec_values, specMap);
                 await supabase.rpc('sync_product_specs_v6', {
@@ -246,7 +292,6 @@ export function VariantEditDialog({
                 });
             }
 
-            // 使用統一服務更新型號關聯
             await entityRelationService.updateRelations('variant', variant!.id, {
                 modelIds: selectedModelIds,
                 groupIds: selectedGroupIds,
@@ -316,48 +361,34 @@ export function VariantEditDialog({
                             />
                         </div>
 
-                        <div className="grid gap-4 sm:grid-cols-3">
-                            <FormField
-                                control={form.control}
-                                name="option_1"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>選項1</FormLabel>
-                                        <FormControl>
-                                            <Input {...field} placeholder="如：霧面" />
-                                        </FormControl>
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="option_2"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>選項2</FormLabel>
-                                        <FormControl>
-                                            <Input {...field} placeholder="如：256GB" />
-                                        </FormControl>
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="selectedColorIds"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>顏色</FormLabel>
-                                        <FormControl>
-                                            <ColorSelectField
-                                                selectedColorIds={field.value}
-                                                onChange={field.onChange}
-                                                multiple={false}
-                                            />
-                                        </FormControl>
-                                    </FormItem>
-                                )}
-                            />
-                        </div>
+                        {optionGroups.length > 0 && (
+                            <div className="space-y-4">
+                                <Label className="text-sm font-medium">選項</Label>
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                    {optionGroups.map((group) => (
+                                        <FormField
+                                            key={group.id}
+                                            control={form.control}
+                                            name={`optionValues.${group.id}`}
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>{group.name}</FormLabel>
+                                                    <FormControl>
+                                                        <OptionValueCombobox
+                                                            group={group}
+                                                            value={field.value || ''}
+                                                            onChange={field.onChange}
+                                                            placeholder={`輸入或選擇${group.name}`}
+                                                        />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="grid gap-4 sm:grid-cols-2">
                             <FormField
@@ -369,24 +400,10 @@ export function VariantEditDialog({
                                         <FormControl>
                                             <Input {...field} />
                                         </FormControl>
+                                        <FormMessage />
                                     </FormItem>
                                 )}
                             />
-                            <FormField
-                                control={form.control}
-                                name="color"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>顏色備註</FormLabel>
-                                        <FormControl>
-                                            <Input {...field} />
-                                        </FormControl>
-                                    </FormItem>
-                                )}
-                            />
-                        </div>
-
-                        <div className="grid gap-4 sm:grid-cols-3">
                             <FormField
                                 control={form.control}
                                 name="wholesale_price"
@@ -401,9 +418,13 @@ export function VariantEditDialog({
                                                 onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                                             />
                                         </FormControl>
+                                        <FormMessage />
                                     </FormItem>
                                 )}
                             />
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-3">
                             <FormField
                                 control={form.control}
                                 name="retail_price"
@@ -418,6 +439,7 @@ export function VariantEditDialog({
                                                 onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                                             />
                                         </FormControl>
+                                        <FormMessage />
                                     </FormItem>
                                 )}
                             />
@@ -440,6 +462,7 @@ export function VariantEditDialog({
                                                 <SelectItem value="discontinued">已停售</SelectItem>
                                             </SelectContent>
                                         </Select>
+                                        <FormMessage />
                                     </FormItem>
                                 )}
                             />
@@ -466,7 +489,6 @@ export function VariantEditDialog({
                             )}
                         />
 
-                        {/* 變體圖片管理（僅編輯模式顯示） */}
                         {variant && (
                             <div className="space-y-2 border-t pt-4">
                                 <div>

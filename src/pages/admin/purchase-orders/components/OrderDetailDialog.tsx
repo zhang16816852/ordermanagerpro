@@ -67,7 +67,7 @@ export function OrderDetailDialog({
     const data = orderItems.map(item => {
       const mapping = supplierMappingMap[getMappingKey(item)];
       return {
-        'SKU': item.variant?.sku || item.product?.sku || '',
+        'SKU': item.variant?.sku || item.product?.code || '',
         '產品名稱': item.product?.name || '',
         '變體': item.variant?.name || '',
         '廠商代碼': mapping?.vendor_product_id || '',
@@ -86,7 +86,7 @@ export function OrderDetailDialog({
     const data = orderItems.map(item => {
       const mapping = supplierMappingMap[getMappingKey(item)];
       return {
-        'SKU': item.variant?.sku || item.product?.sku || '',
+        'SKU': item.variant?.sku || item.product?.code || '',
         '產品名稱': item.product?.name || '',
         '變體': item.variant?.name || '',
         '廠商代碼': mapping?.vendor_product_id || '',
@@ -218,7 +218,7 @@ export function OrderDetailDialog({
               const mapping = supplierMappingMap[getMappingKey(item)];
               return (
                 <TableRow key={item.id}>
-                  <TableCell className="font-mono text-xs">{item.variant?.sku || item.product?.sku}</TableCell>
+                  <TableCell className="font-mono text-xs">{item.variant?.sku || item.product?.code}</TableCell>
                   <TableCell>
                     <p className="text-sm font-medium">{item.product?.name}</p>
                     {item.variant?.name && <p className="text-xs text-muted-foreground">{item.variant.name}</p>}
@@ -273,7 +273,7 @@ export function OrderDetailDialog({
                   請核對收到的實物數量，錄入系統以增加庫存。支援部分收貨。
                 </DialogDescription>
               </DialogHeader>
-              <ReceiveForm items={orderItems} isLoading={isLoading} onSubmit={(data) => { onReceiveItems(data); setReceiveOpen(false); }} />
+              <ReceiveForm items={orderItems} isLoading={isLoading} onSubmit={(data) => { onReceiveItems({ items: data }); setReceiveOpen(false); }} />
             </DialogContent>
           </Dialog>
 

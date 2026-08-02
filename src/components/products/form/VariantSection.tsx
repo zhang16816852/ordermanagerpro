@@ -46,7 +46,7 @@ export function VariantSection({ product }: { product: any }) {
   const [replaceScope, setReplaceScope] = useState<'all' | 'selected'>('selected');
   const [replaceFind, setReplaceFind] = useState('');
   const [replaceWith, setReplaceWith] = useState('');
-  const [replaceFields, setReplaceFields] = useState<Set<string>>(new Set(['name', 'option_1', 'option_2', 'option_3', 'sku']));
+  const [replaceFields, setReplaceFields] = useState<Set<string>>(new Set(['name', 'sku']));
   const queryClient = useQueryClient();
   const store = useOrderDraftStore();
 
@@ -60,19 +60,61 @@ export function VariantSection({ product }: { product: any }) {
 
   const firstStoreId = Object.keys(store.drafts)[0];
 
-  // 取得變體資料
+  // 取得變體資料與選項資訊
   const { data: variants, isLoading } = useQuery({
     queryKey: ['product-variants', product.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('product_variants')
+      const { data, error } = await (supabase.from('product_variants') as any)
         .select('*')
         .eq('product_id', product.id)
         .order('sku');
       if (error) throw error;
-      return data;
+
+      if (!data || data.length === 0) return [];
+
+      const variantIds = data.map(v => v.id);
+
+      // 取得選項群組與值
+      const { data: groupsData } = await (supabase.from('product_option_groups') as any)
+        .select('*, product_option_values(*)')
+        .eq('product_id', product.id)
+        .order('sort_order');
+
+      // 取得變體選項關聯
+      const { data: variantOptsData } = await (supabase.from('product_variant_options') as any)
+        .select('*')
+        .in('variant_id', variantIds);
+
+      // 建立值查詢表
+      const valueMap: Record<string, { label: string; hexCode: string | null; groupName: string }> = {};
+      for (const group of (groupsData ?? [])) {
+        const values = (group as any).product_option_values ?? [];
+        for (const val of values) {
+          valueMap[val.id] = {
+            label: val.label,
+            hexCode: val.hex_code,
+            groupName: group.name,
+          };
+        }
+      }
+
+      // 建立各變體的選項顯示資料
+      const variantOptionsMap: Record<string, Array<{ label: string; hexCode: string | null; groupName: string }>> = {};
+      for (const opt of (variantOptsData ?? [])) {
+        const vId = opt.variant_id;
+        if (!variantOptionsMap[vId]) variantOptionsMap[vId] = [];
+        const valInfo = valueMap[opt.option_value_id];
+        if (valInfo) {
+          variantOptionsMap[vId].push(valInfo);
+        }
+      }
+
+      return data.map(v => ({
+        ...v,
+        optionDisplays: variantOptionsMap[v.id] || [],
+      }));
     },
-    enabled: !!product.id, // 確保有 ID 才抓取
+    enabled: !!product.id,
   });
 
   // 刷新函數
@@ -94,7 +136,7 @@ export function VariantSection({ product }: { product: any }) {
   // 處理刪除 (範例)
   const handleDelete = async (id: string) => {
     if (!confirm('確定要刪除此規格變體嗎？')) return;
-    const { error } = await supabase.from('product_variants').delete().eq('id', id);
+    const { error } = await (supabase.from('product_variants') as any).delete().eq('id', id);
     if (error) {
       toast.error('刪除失敗');
     } else {
@@ -106,7 +148,7 @@ export function VariantSection({ product }: { product: any }) {
   const handleBatchDelete = async () => {
     if (selectedVariantIds.size === 0) return;
     if (!confirm(`確定要刪除所選的 ${selectedVariantIds.size} 個變體？`)) return;
-    const { error } = await supabase.from('product_variants').delete().in('id', Array.from(selectedVariantIds));
+    const { error } = await (supabase.from('product_variants') as any).delete().in('id', Array.from(selectedVariantIds));
     if (error) {
       toast.error('批量刪除失敗');
     } else {
@@ -121,16 +163,11 @@ export function VariantSection({ product }: { product: any }) {
     { value: 'retail_price', label: '零售價', type: 'number' },
     { value: 'status', label: '狀態', type: 'select' },
     { value: 'name', label: '變體名稱', type: 'text' },
-    { value: 'option_1', label: '選項1', type: 'text' },
-    { value: 'option_2', label: '選項2', type: 'text' },
     { value: 'barcode', label: '條碼', type: 'text' },
   ];
 
   const REPLACE_FIELDS: Array<{ value: string; label: string }> = [
     { value: 'name', label: '變體名稱' },
-    { value: 'option_1', label: '選項1' },
-    { value: 'option_2', label: '選項2' },
-    { value: 'option_3', label: '顏色' },
     { value: 'sku', label: 'SKU' },
     { value: 'barcode', label: '條碼' },
   ];
@@ -178,7 +215,7 @@ export function VariantSection({ product }: { product: any }) {
       return;
     }
 
-    const { error } = await supabase.from('product_variants').upsert(changedVariants, { onConflict: 'id' });
+    const { error } = await (supabase.from('product_variants') as any).upsert(changedVariants, { onConflict: 'id' });
     if (error) {
       toast.error(`取代失敗：${getErrorMessage(error)}`);
     } else {
@@ -201,7 +238,7 @@ export function VariantSection({ product }: { product: any }) {
       toast.error('請至少填寫一個欄位');
       return;
     }
-    const { error } = await supabase.from('product_variants').update(updates).in('id', Array.from(selectedVariantIds));
+    const { error } = await (supabase.from('product_variants') as any).update(updates).in('id', Array.from(selectedVariantIds));
     if (error) {
       toast.error(`批量更新失敗：${getErrorMessage(error)}`);
     } else {
@@ -285,9 +322,7 @@ export function VariantSection({ product }: { product: any }) {
               </TableHead>
               <TableHead className="w-[120px]">SKU</TableHead>
               <TableHead>規格名稱</TableHead>
-              <TableHead>選項1</TableHead>
-              <TableHead>選項2</TableHead>
-              <TableHead>顏色</TableHead>
+              <TableHead>選項</TableHead>
               <TableHead>狀態</TableHead>
               <TableHead className="text-right">批發價</TableHead>
               <TableHead className="text-right">零售價</TableHead>
@@ -312,7 +347,7 @@ export function VariantSection({ product }: { product: any }) {
               ))
             ) : variants?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Layers className="h-8 w-8 opacity-20" />
                     <p>尚未建立任何變體，請點擊「批次產生」快速建立。</p>
@@ -334,9 +369,24 @@ export function VariantSection({ product }: { product: any }) {
                     {v.sku}
                   </TableCell>
                   <TableCell className="font-medium">{v.name}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{v.option_1 || '-'}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{v.option_2 || '-'}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{v.option_3 || '-'}</TableCell>
+                  <TableCell>
+                    {((v as any).optionDisplays?.length > 0) ? (
+                      <div className="flex flex-wrap gap-1">
+                        {((v as any).optionDisplays || []).map((opt: any, i: number) => (
+                          opt.hexCode ? (
+                            <div key={i} className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-secondary text-xs" title={opt.groupName}>
+                              <div className="w-2.5 h-2.5 rounded-full border border-black/10 shadow-sm" style={{ backgroundColor: opt.hexCode }} />
+                              <span>{opt.label}</span>
+                            </div>
+                          ) : (
+                            <Badge key={i} variant="secondary" className="text-xs">
+                              {opt.groupName}: {opt.label}
+                            </Badge>
+                          )
+                        ))}
+                      </div>
+                    ) : '-'}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={v.status === 'active' ? 'default' : 'secondary'}>
                       {STATUS_LABELS[v.status]}

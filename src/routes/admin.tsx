@@ -9,6 +9,7 @@ import AdminShippingPool from "@/pages/admin/ShippingPool";
 import AdminStorePricing from "@/pages/admin/BrandPricing";
 import AdminAccounting from "@/pages/admin/accounting/index";
 import AdminPurchaseOrders from "@/pages/admin/purchase-orders/index";
+import AdminConsignment from "@/pages/admin/consignment/index";
 import AdminCategories from "@/pages/admin/categories/index";
 import AdminInventory from "@/pages/admin/inventory/index";
 import AdminAuditLogs from "@/pages/admin/audit-logs/index";
@@ -33,6 +34,7 @@ export const adminRoutes = [
     { path: "/admin/brand-pricing", element: <AdminStorePricing /> },
     { path: "/admin/accounting", element: <AdminAccounting /> },
     { path: "/admin/purchase-orders", element: <AdminPurchaseOrders /> },
+    { path: "/admin/consignment", element: <AdminConsignment /> },
     { path: "/admin/audit-logs", element: <AdminAuditLogs /> },
     { path: "/admin/order-grid-templates", element: <AdminOrderGridTemplates /> },
     { path: "/admin/repair-orders", element: <AdminRepairOrders /> },

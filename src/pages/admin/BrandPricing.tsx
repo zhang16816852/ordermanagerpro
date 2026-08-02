@@ -40,8 +40,8 @@ export default function AdminStorePricing() {
   const { data: stores = [], isLoading: storesLoading } = useQuery({
     queryKey: ['chain-stores'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('stores')
+      const { data, error } = await (supabase
+        .from('stores') as any)
         .select('id, name, brand')
         .not('brand', 'is', null)
         .order('name');
@@ -55,8 +55,8 @@ export default function AdminStorePricing() {
     queryKey: ['store-prices', selectedStore],
     queryFn: async () => {
       if (!selectedStore) return [];
-      const { data, error } = await supabase
-        .from('store_products')
+      const { data, error } = await (supabase
+        .from('store_products') as any)
         .select('product_id, variant_id, wholesale_price')
         .eq('brand', selectedStore);
       if (error) throw error;
@@ -69,8 +69,8 @@ export default function AdminStorePricing() {
   const { data: allVariants = [], isLoading: variantsLoading } = useQuery({
     queryKey: ['all-product-variants'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('product_variants')
+      const { data, error } = await (supabase
+        .from('product_variants') as any)
         .select('*')
         .order('sku');
       if (error) throw error;
@@ -97,14 +97,12 @@ export default function AdminStorePricing() {
     }
   }, [existingPrices]);
 
-  const activeProducts = products.filter(p => p.status === 'active');
-
-  const filteredProducts = activeProducts.filter(p => {
+  const filteredProducts = products.filter(p => {
     if (!search) return true;
     const searchLower = search.toLowerCase();
     return (
       p.name.toLowerCase().includes(searchLower) ||
-      p.sku.toLowerCase().includes(searchLower)
+      p.code?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -135,7 +133,7 @@ export default function AdminStorePricing() {
           variant_id: variantId,
           wholesale_price: entry?.wholesalePrice
             ? parseFloat(entry.wholesalePrice)
-            : (variant?.wholesale_price ?? product?.base_wholesale_price ?? 0),
+            : (variant?.wholesale_price ?? 0),
         };
       });
 
@@ -408,7 +406,7 @@ export default function AdminStorePricing() {
                             </CollapsibleTrigger>
                           )}
                         </TableCell>
-                        <TableCell className="font-mono text-sm">{product.sku}</TableCell>
+                        <TableCell className="font-mono text-sm">{product.code}</TableCell>
                         <TableCell className="font-medium">
                           {product.name}
                           {hasVariants && (
@@ -422,16 +420,16 @@ export default function AdminStorePricing() {
                           )}
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground">
-                          {calculatePriceRange(product.base_wholesale_price, variants.map(v => v.wholesale_price)).display}
+                          {calculatePriceRange(undefined, variants.map(v => v.wholesale_price)).display}
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground">
-                          {calculatePriceRange(product.base_retail_price, variants.map(v => v.retail_price)).display}
+                          {calculatePriceRange(undefined, variants.map(v => v.retail_price)).display}
                         </TableCell>
                         <TableCell className="text-right">
                           {!hasVariants ? (
                             <Input
                               type="number"
-                              placeholder={product.base_wholesale_price.toString()}
+                              placeholder="輸入批發價"
                               value={productEntry?.wholesalePrice || ''}
                               onChange={(e) => handlePriceChange(product.id, product.id, undefined, e.target.value)}
                               className="w-24 text-right ml-auto"

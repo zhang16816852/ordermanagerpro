@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { useSpecStore } from '@/store/useSpecStore';
 import { useBrandSeriesCache } from '@/hooks/useBrandSeriesCache';
+import { useProductCache } from '@/hooks/useProductCache';
 import { Category, CategoryHierarchy } from '../types';
 
 // 分類綁定管理：支援產品和變體層級的分類綁定
@@ -12,12 +13,12 @@ import { Category, CategoryHierarchy } from '../types';
 export interface ProductBinding {
   product_id: string;
   product_name: string;
-  product_sku: string;
+  product_code: string;
   brand_ids: string[];
   brand_name: string;
-  has_variants: boolean;
   category_ids: string[];
   variant_count: number;
+  variants?: { id: string; sku: string }[];
 }
 
 export interface VariantBinding {
@@ -26,29 +27,25 @@ export interface VariantBinding {
   variant_sku: string;
   product_id: string;
   product_name: string;
-  option_1: string | null;
-  option_2: string | null;
-  color: string | null;
   category_ids: string[];
 }
 
 export interface ImportBindingRow {
-  product_sku: string;
+  product_code: string;
   variant_sku?: string;
   category_path: string;
   device_model?: string;
 }
 
 export function useCategoryBindings() {
-  const queryClient = useQueryClient();
   const { categories, categoryHierarchy } = useSpecStore();
 
-  // 取得所有品牌
+  // 取得所有產品品牌
   const { data: brands = [] } = useQuery({
-    queryKey: ['device_brands'],
+    queryKey: ['brands'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('device_brands')
+      const { data, error } = await (supabase
+        .from('brands') as any)
         .select('*')
         .order('name');
       if (error) throw error;
@@ -59,42 +56,28 @@ export function useCategoryBindings() {
   // 取得所有品牌系列（產品品牌的系列，如犀牛盾→CLEAR系列）
   const { allSeries: brandSeries } = useBrandSeriesCache();
 
-  // 取得所有產品（含分類綁定）
-  const { data: products = [], isLoading: isLoadingProducts } = useQuery({
-    queryKey: ['products_with_bindings'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('products')
-        .select(`
-          id, name, sku, has_variants, status,
-          product_category_links(category_id),
-          product_brands(brand_id),
-          variants:product_variants(id)
-        `)
-        .eq('status', 'active')
-        .order('name');
-      if (error) throw error;
+  // 透過產品快取取得產品（與產品頁面共用同一份資料）
+  const { products: cachedProducts, isLoading: isLoadingProducts, refresh: refreshProducts } = useProductCache();
 
-      return (data || []).map((p: any) => ({
-        product_id: p.id,
-        product_name: p.name,
-        product_sku: p.sku,
-        brand_ids: p.product_brands?.map((b: any) => b.brand_id) || [],
-        brand_name: p.product_brands?.map((b: any) => brands.find((br: any) => br.id === b.brand_id)?.name).filter(Boolean).join(', ') || '',
-        has_variants: p.has_variants,
-        category_ids: (p.product_category_links || []).map((l: any) => l.category_id),
-        variant_count: (p.variants || []).length,
-      })) as ProductBinding[];
-    },
-    enabled: brands.length > 0,
-  });
+  const products = useMemo(() => {
+    return (cachedProducts || []).map((p: any) => ({
+      product_id: p.id,
+      product_name: p.name,
+      product_code: p.code,
+      brand_ids: p.brand_ids || [],
+      brand_name: (p.brand_ids || []).map((bid: string) => brands.find((br: any) => br.id === bid)?.name).filter(Boolean).join(', ') || '',
+      category_ids: p.category_ids || [],
+      variant_count: (p.variants || []).length,
+      variants: (p.variants || []).map((v: any) => ({ id: v.id, sku: v.sku })),
+    })) as ProductBinding[];
+  }, [cachedProducts, brands]);
 
   // 取得指定產品的變體（含分類綁定）
   const fetchVariants = async (productId: string): Promise<VariantBinding[]> => {
-    const { data, error } = await supabase
-      .from('product_variants')
+    const { data, error } = await (supabase
+      .from('product_variants') as any)
       .select(`
-        id, name, sku, product_id, option_1, option_2, color,
+        id, name, sku, product_id,
         product_category_links(category_id)
       `)
       .eq('product_id', productId)
@@ -109,9 +92,6 @@ export function useCategoryBindings() {
       variant_sku: v.sku,
       product_id: v.product_id,
       product_name: product?.product_name || '',
-      option_1: v.option_1,
-      option_2: v.option_2,
-      color: v.color,
       category_ids: (v.product_category_links || []).map((l: any) => l.category_id),
     }));
   };
@@ -120,8 +100,8 @@ export function useCategoryBindings() {
   const updateProductBinding = useMutation({
     mutationFn: async ({ productId, categoryIds }: { productId: string; categoryIds: string[] }) => {
       // 先刪除舊的綁定
-      await supabase
-        .from('product_category_links')
+      await (supabase
+        .from('product_category_links') as any)
         .delete()
         .eq('product_id', productId)
         .is('variant_id', null);
@@ -132,14 +112,14 @@ export function useCategoryBindings() {
           product_id: productId,
           category_id: catId,
         }));
-        const { error } = await supabase
-          .from('product_category_links')
+        const { error } = await (supabase
+          .from('product_category_links') as any)
           .insert(links);
         if (error) throw error;
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products_with_bindings'] });
+      refreshProducts();
       toast.success('分類綁定已更新');
     },
     onError: (err) => toast.error(getErrorMessage(err)),
@@ -149,8 +129,8 @@ export function useCategoryBindings() {
   const updateVariantBinding = useMutation({
     mutationFn: async ({ variantId, categoryIds }: { variantId: string; categoryIds: string[] }) => {
       // 先刪除舊的綁定
-      await supabase
-        .from('product_category_links')
+      await (supabase
+        .from('product_category_links') as any)
         .delete()
         .eq('variant_id', variantId);
 
@@ -160,14 +140,14 @@ export function useCategoryBindings() {
           variant_id: variantId,
           category_id: catId,
         }));
-        const { error } = await supabase
-          .from('product_category_links')
+        const { error } = await (supabase
+          .from('product_category_links') as any)
           .insert(links);
         if (error) throw error;
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products_with_bindings'] });
+      refreshProducts();
       toast.success('變體分類綁定已更新');
     },
     onError: (err) => toast.error(getErrorMessage(err)),
@@ -189,7 +169,7 @@ export function useCategoryBindings() {
           }
 
           // 找到產品
-          const product = products.find(p => p.product_sku === row.product_sku);
+          const product = products.find(p => p.product_code === row.product_code);
           if (!product) {
             errorCount++;
             continue;
@@ -198,15 +178,15 @@ export function useCategoryBindings() {
           // 綁定分類
           if (row.variant_sku) {
             // 變體層級綁定
-            const { data: variant } = await supabase
-              .from('product_variants')
+            const { data: variant } = await (supabase
+              .from('product_variants') as any)
               .select('id')
               .eq('sku', row.variant_sku)
               .single();
             
             if (variant) {
-              await supabase
-                .from('product_category_links')
+              await (supabase
+                .from('product_category_links') as any)
                 .delete()
                 .eq('variant_id', variant.id);
               
@@ -215,7 +195,7 @@ export function useCategoryBindings() {
                   variant_id: variant.id,
                   category_id: catId,
                 }));
-                await supabase.from('product_category_links').insert(links);
+                await (supabase.from('product_category_links') as any).insert(links);
               }
               successCount++;
             } else {
@@ -223,8 +203,8 @@ export function useCategoryBindings() {
             }
           } else {
             // 產品層級綁定
-            await supabase
-              .from('product_category_links')
+            await (supabase
+              .from('product_category_links') as any)
               .delete()
               .eq('product_id', product.product_id)
               .is('variant_id', null);
@@ -234,7 +214,7 @@ export function useCategoryBindings() {
                 product_id: product.product_id,
                 category_id: catId,
               }));
-              await supabase.from('product_category_links').insert(links);
+              await (supabase.from('product_category_links') as any).insert(links);
             }
             successCount++;
           }
@@ -246,7 +226,7 @@ export function useCategoryBindings() {
       return { successCount, errorCount };
     },
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['products_with_bindings'] });
+      refreshProducts();
       toast.success(`匯入完成：成功 ${result.successCount} 筆，失敗 ${result.errorCount} 筆`);
     },
     onError: (err) => toast.error(getErrorMessage(err)),
@@ -258,6 +238,7 @@ export function useCategoryBindings() {
     products,
     isLoadingProducts,
     fetchVariants,
+    refreshProducts,
     updateProductBinding,
     updateVariantBinding,
     batchImportBindings,

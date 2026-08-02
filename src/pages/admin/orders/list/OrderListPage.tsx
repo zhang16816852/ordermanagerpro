@@ -4,7 +4,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Plus, Package, FileText, Send } from 'lucide-react';
+import { WarehouseSelector } from "@/components/WarehouseSelector";
+import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
 import { OrderDetailDialog } from '@/components/order/OrderDetailDialog';
 import { OrdersCardView } from '@/components/order/OrdersCardView';
 import { ItemsCardView } from '@/components/order/ItemsCardView';
@@ -17,6 +20,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { format } from 'date-fns';
 
 import { useOrdersList } from './hooks/useOrdersList';
 import { OrderFilters } from './components/OrderFilters';
@@ -33,6 +37,7 @@ export default function AdminOrderList() {
 
   // Basic UI States
   const [searchParams, setSearchParams] = useSearchParams();
+  const { defaultWarehouse } = useWarehouses();
   const validTabs = ['pending', 'processing', 'shipped'] as const;
   const urlTab = searchParams.get('tab') as typeof validTabs[number] | null;
   const [statusTab, setStatusTab] = useState<'pending' | 'processing' | 'shipped'>(
@@ -59,6 +64,10 @@ export default function AdminOrderList() {
   const [shipToPoolOpen, setShipToPoolOpen] = useState(false);
   const [directShipDialogOpen, setDirectShipDialogOpen] = useState(false);
   const [directShipNotes, setDirectShipNotes] = useState('');
+  const [directShipAt, setDirectShipAt] = useState<string>(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const [itemWarehouses, setItemWarehouses] = useState<Record<string, string>>({});
+
+  const getItemWarehouse = (itemId: string) => itemWarehouses[itemId] || defaultWarehouse?.id || '';
   const [convertToPOOpen, setConvertToPOOpen] = useState(false);
   const [selectedAggregateItems, setSelectedAggregateItems] = useState<Map<string, { productId: string; variantId: string | null; quantity: number; maxQuantity: number; productName: string; sku: string; sourceOrderIds: string[] }>>(new Map());
   const { user } = useAuth();
@@ -82,15 +91,26 @@ export default function AdminOrderList() {
       orderIds, notes,
     }: { orderIds: string[]; notes: string }) => {
       if (!user) throw new Error('未登入');
-      const results = [];
+      const results: any[] = [];
       for (const orderId of orderIds) {
+        const order = orders.find(o => o.id === orderId);
+        const warehouseMap: Record<string, string> = {};
+        if (order?.order_items) {
+          for (const item of order.order_items) {
+            const wh = getItemWarehouse(item.id);
+            if (wh) warehouseMap[item.id] = wh;
+          }
+        }
         const { data, error } = await supabase.rpc('direct_ship_order', {
           p_order_id: orderId,
           p_created_by: user.id,
-          p_notes: notes || null,
+          p_notes: notes || undefined,
+          p_shipped_at: directShipAt ? new Date(directShipAt).toISOString() : null,
+          p_warehouse_id: null,
+          p_warehouse_map: warehouseMap as any,
         });
         if (error) throw error;
-        results.push(data);
+        results.push(data as any);
       }
       return results;
     },
@@ -117,6 +137,49 @@ export default function AdminOrderList() {
     onError: (error: Error) => toast.error(getErrorMessage(error)),
   });
 
+  // Fetch inventory and auto-select best warehouse per item when dialog opens
+  useEffect(() => {
+    if (!directShipDialogOpen || !defaultWarehouse) return;
+
+    const items = orders
+      .filter(o => selectedOrderIds.has(o.id))
+      .flatMap(o => o.order_items)
+      .filter(item =>
+        item.status !== 'cancelled' &&
+        item.status !== 'discontinued' &&
+        (item.quantity - item.shipped_quantity) > 0
+      );
+    if (items.length === 0) return;
+
+    const productIds = [...new Set(items.map(i => i.product_id))];
+
+    (supabase
+      .from('product_inventory') as any)
+      .select('product_id, variant_id, warehouse_id, quantity')
+      .in('product_id', productIds)
+      .then(({ data: inventory }: any) => {
+        const whMap: Record<string, string> = {};
+        for (const item of items) {
+          const inv = (inventory || []).filter(i =>
+            i.product_id === item.product_id &&
+            (i.variant_id === item.variant_id || (!i.variant_id && !item.variant_id))
+          );
+          const defaultStocked = inv.find(i => i.warehouse_id === defaultWarehouse.id && i.quantity > 0);
+          if (defaultStocked) {
+            whMap[item.id] = defaultStocked.warehouse_id;
+            continue;
+          }
+          const anyStocked = inv.find(i => i.quantity > 0);
+          if (anyStocked) {
+            whMap[item.id] = anyStocked.warehouse_id;
+            continue;
+          }
+          whMap[item.id] = defaultWarehouse.id;
+        }
+        setItemWarehouses(whMap);
+      });
+  }, [directShipDialogOpen, selectedOrderIds, orders, defaultWarehouse]);
+
   // Filtering Logic (Orders)
   const filteredOrders = useMemo(() => {
     return orders?.filter((order) => {
@@ -142,7 +205,7 @@ export default function AdminOrderList() {
           const searchLower = search.toLowerCase();
           return (
             item.product?.name.toLowerCase().includes(searchLower) ||
-            item.product?.sku.toLowerCase().includes(searchLower)
+            item.product?.code.toLowerCase().includes(searchLower)
           );
         })
         .map(item => ({
@@ -169,7 +232,7 @@ export default function AdminOrderList() {
           const searchLower = search.toLowerCase();
           return (
             item.product?.name.toLowerCase().includes(searchLower) ||
-            item.product?.sku.toLowerCase().includes(searchLower)
+            item.product?.code.toLowerCase().includes(searchLower)
           );
         })
         .map(item => ({
@@ -198,7 +261,7 @@ export default function AdminOrderList() {
           const searchLower = search.toLowerCase();
           return (
             item.product?.name.toLowerCase().includes(searchLower) ||
-            item.product?.sku.toLowerCase().includes(searchLower)
+            item.product?.code.toLowerCase().includes(searchLower)
           );
         })
         .map(item => ({
@@ -238,7 +301,7 @@ export default function AdminOrderList() {
           variantId: item.variant_id || null,
           productName: item.product?.name || '',
           variantName: item.product_variant?.name || null,
-          sku: item.product?.sku || '',
+          sku: item.product?.code || '',
           totalPendingQuantity: item.pendingQuantity,
           sourceOrderIds: [item.orderId],
           storeBreakdown: [{
@@ -514,7 +577,7 @@ export default function AdminOrderList() {
                     next.set(item.id, {
                       itemId: item.id,
                       productName: item.product?.name || '',
-                      sku: item.product?.sku || '',
+                      sku: item.product?.code || '',
                       quantity: item.pendingQuantity,
                       maxQuantity: item.pendingQuantity,
                       storeId: item.storeId,
@@ -531,7 +594,7 @@ export default function AdminOrderList() {
                       next.set(item.id, {
                         itemId: item.id,
                         productName: item.product?.name || '',
-                        sku: item.product?.sku || '',
+                        sku: item.product?.code || '',
                         quantity: item.pendingQuantity,
                         maxQuantity: item.pendingQuantity,
                         storeId: item.storeId,
@@ -629,32 +692,67 @@ export default function AdminOrderList() {
       />
 
       {/* Direct Ship Dialog */}
-      <Dialog open={directShipDialogOpen} onOpenChange={setDirectShipDialogOpen}>
-        <DialogContent>
+      <Dialog open={directShipDialogOpen} onOpenChange={(open) => {
+        if (!open) setItemWarehouses({});
+        setDirectShipDialogOpen(open);
+      }}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Send className="h-5 w-5" />
               直接轉銷貨單
             </DialogTitle>
             <DialogDescription>
-              將 {selectedOrderIds.size} 個訂單的所有剩餘品項直接出貨，跳過出貨池。
-              品項將全額出貨，無法部分出貨。
+              為每個品項選擇出貨倉庫，所有剩餘數量將全額出貨。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="rounded-lg border p-4 bg-muted/50">
-              <div className="text-sm flex gap-4">
-                <span><span className="text-muted-foreground">選擇訂單：</span><span className="font-medium">{selectedOrderIds.size}</span></span>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">出貨時間</label>
+                <Input
+                  type="datetime-local"
+                  value={directShipAt}
+                  onChange={(e) => setDirectShipAt(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">備註（選填）</label>
+                <Textarea
+                  value={directShipNotes}
+                  onChange={(e) => setDirectShipNotes(e.target.value)}
+                  placeholder="輸入出貨備註..."
+                  className="mt-1"
+                />
               </div>
             </div>
-            <div>
-              <label className="text-sm font-medium">備註（選填）</label>
-              <Textarea
-                value={directShipNotes}
-                onChange={(e) => setDirectShipNotes(e.target.value)}
-                placeholder="輸入出貨備註..."
-                className="mt-1"
-              />
+            <div className="rounded-lg border divide-y max-h-96 overflow-y-auto">
+              {orders.filter(o => selectedOrderIds.has(o.id)).map(order => (
+                <div key={order.id}>
+                  <div className="px-3 py-2 bg-muted/30 font-medium text-sm">{order.code} - {order.stores?.name || '未知店家'}</div>
+                  <div className="divide-y">
+                    {order.order_items
+                      .filter(item => item.status !== 'cancelled' && item.status !== 'discontinued' && (item.quantity - item.shipped_quantity) > 0)
+                      .map(item => (
+                        <div key={item.id} className="flex items-center gap-3 px-3 py-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm truncate">{item.product?.name || '未知商品'}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {item.product?.code}{item.product_variant?.name ? ` / ${item.product_variant.name}` : ''} × {item.quantity - item.shipped_quantity}
+                            </div>
+                          </div>
+                          <WarehouseSelector
+                            value={getItemWarehouse(item.id)}
+                            onChange={(w) => setItemWarehouses(prev => ({ ...prev, [item.id]: w }))}
+                            productId={item.product_id}
+                            variantId={item.variant_id}
+                          />
+                        </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
           <DialogFooter>

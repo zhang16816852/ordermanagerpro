@@ -40,7 +40,7 @@ export function useSpecData() {
             const { logic_config, created_at, updated_at, ...dbPayload } = spec as any;
 
             if (editingSpecId) {
-                const { error } = await supabase.from('specification_definitions')
+                const { error } = await (supabase.from('specification_definitions') as any)
                     .update({
                         ...dbPayload,
                         quantity_source_id: dbPayload.quantity_source_id || null
@@ -56,7 +56,7 @@ export function useSpecData() {
                     sort_order: dbPayload.sort_order ?? 0,
                     quantity_source_id: dbPayload.quantity_source_id || null
                 };
-                const { data: newSpec, error } = await supabase.from('specification_definitions')
+                const { data: newSpec, error } = await (supabase.from('specification_definitions') as any)
                     .insert([finalSpec])
                     .select('id')
                     .single();
@@ -67,7 +67,7 @@ export function useSpecData() {
             // [v6] 同步規格連動規則 (Triggers)
             if (targetId && spec.logic_config?.triggers && spec.logic_config.triggers.length > 0) {
                 // 先刪除舊規則
-                await supabase.from('specification_triggers').delete().eq('source_spec_id', targetId);
+                await (supabase.from('specification_triggers') as any).delete().eq('source_spec_id', targetId);
 
                 // 將 logic_config.triggers 陣列轉換成資料庫列格式
                 const triggerRows = spec.logic_config.triggers.flatMap((t: any) => {
@@ -84,7 +84,7 @@ export function useSpecData() {
                 });
 
                 if (triggerRows.length > 0) {
-                    const { error: triggerError } = await supabase.from('specification_triggers').insert(triggerRows as any);
+                    const { error: triggerError } = await (supabase.from('specification_triggers') as any).insert(triggerRows as any);
                     if (triggerError) {
                         console.error('觸發規則同步失敗:', triggerError);
                         toast.error('連動規則同步失敗');
@@ -97,7 +97,7 @@ export function useSpecData() {
                 // 如果有設定 rpc 則優先使用，否則退回直接 update
                 const { error: rpcError } = await supabase.rpc('bump_data_version', { p_table_name: 'specs', p_source_table: 'specification_definitions' });
                 if (rpcError) {
-                    await supabase.from('data_versions')
+                    await (supabase.from('data_versions') as any)
                         .update({ 
                             version: Date.now(),
                             updated_at: new Date().toISOString(),
@@ -125,9 +125,9 @@ export function useSpecData() {
                 complete: async (results) => {
                     const rows = results.data as any[];
                     try {
-                        const { data: existingSpecs } = await supabase
-                            .from('specification_definitions')
-                            .select('id, name');
+                    const { data: existingSpecs } = await (supabase
+                        .from('specification_definitions' as any) as any)
+                        .select('id, name');
 
                         const finalItems = rows.map(row => {
                             const name = row.name?.trim();
@@ -182,8 +182,8 @@ export function useSpecData() {
 
     // --- 確認匯入（CSV）---
     const confirmSpecImport = async (items: any[]) => {
-        const { error } = await supabase
-            .from('specification_definitions')
+        const { error } = await (supabase
+            .from('specification_definitions' as any) as any)
             .upsert(items, { onConflict: 'id' });
         if (error) throw error;
         queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
@@ -192,8 +192,8 @@ export function useSpecData() {
 
     // --- 確認匯入（JSON）---
     const confirmSpecImportJSON = async (items: any[]) => {
-        const { error } = await supabase
-            .from('specification_definitions')
+        const { error } = await (supabase
+            .from('specification_definitions' as any) as any)
             .upsert(items, { onConflict: 'id' });
         if (error) throw error;
         queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
@@ -230,8 +230,8 @@ export function useSpecData() {
                 }));
 
                 // 批次 Upsert，以 ID 或名稱為基準
-                const { error } = await supabase
-                    .from('specification_definitions')
+                const { error } = await (supabase
+                    .from('specification_definitions' as any) as any)
                     .upsert(cleanedItems, { onConflict: 'id' });
 
                 if (error) throw error;
@@ -281,8 +281,8 @@ export function useSpecData() {
             complete: async (results) => {
                 const rows = results.data as any[];
                 try {
-                    const { data: existingSpecs } = await supabase
-                        .from('specification_definitions')
+                    const { data: existingSpecs } = await (supabase
+                        .from('specification_definitions' as any) as any)
                         .select('id, name');
 
                     const finalItems = rows.map(row => {
@@ -298,7 +298,7 @@ export function useSpecData() {
                         let logic_config = { triggers: [] };
                         try {
                             if (row.logic_config) logic_config = JSON.parse(row.logic_config);
-                        } catch (e) { }
+                        } catch (e) { /* ignore parse error */ }
 
                         return {
                             id: targetId || undefined,
@@ -311,8 +311,8 @@ export function useSpecData() {
                         };
                     }).filter(Boolean);
 
-                    const { error } = await supabase
-                        .from('specification_definitions')
+                    const { error } = await (supabase
+                        .from('specification_definitions' as any) as any)
                         .upsert(finalItems, { onConflict: 'id' });
 
                     if (error) throw error;

@@ -19,6 +19,7 @@ import { useBrands } from "@/hooks/useBrands";
 import { useCategorySpecs } from "@/hooks/useCategorySpecs";
 import { useSpecStore } from "@/store/useSpecStore";
 import { useBrandSeriesCache } from "@/hooks/useBrandSeriesCache";
+import { useDeviceModelStore } from "@/store/useDeviceModelStore";
 import { AdvancedSpecFilters } from "@/components/products/catalog/AdvancedSpecFilters";
 
 function getFilterConfig(specDef: any) {
@@ -122,6 +123,9 @@ export function CatalogSidebar({
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
     const [openSections, setOpenSections] = useState<Set<string>>(new Set(['categories']));
     const [modelSearch, setModelSearch] = useState('');
+    const [expandedBrands, setExpandedBrands] = useState<Set<string>>(new Set());
+    const [expandedDeviceBrands, setExpandedDeviceBrands] = useState<Set<string>>(new Set());
+    const [expandedDeviceSeries, setExpandedDeviceSeries] = useState<Set<string>>(new Set());
 
     const toggleSection = (section: string) => {
         setOpenSections(prev => {
@@ -134,7 +138,8 @@ export function CatalogSidebar({
 
     const { brands, isLoading: brandsLoading } = useBrands();
     const { fetchSpecs, specDefinitions, categoryLinks, categories, categoryHierarchy, isLoading: specsLoading } = useSpecStore();
-    const { allSeries, isLoading: seriesLoading } = useBrandSeriesCache();
+    const { allSeries } = useBrandSeriesCache();
+    const { models: deviceModels, brands: deviceBrands } = useDeviceModelStore();
 
     useEffect(() => {
         if (specDefinitions.length === 0 || categoryLinks.length === 0) {
@@ -147,6 +152,16 @@ export function CatalogSidebar({
         return allSeries.filter(s => s.is_active && selectedBrands.includes(s.brand_id));
     }, [allSeries, selectedBrands]);
 
+    const seriesByBrand = useMemo(() => {
+        const map: Record<string, typeof allSeries> = {};
+        allSeries.forEach(s => {
+            if (!s.is_active) return;
+            if (!map[s.brand_id]) map[s.brand_id] = [];
+            map[s.brand_id].push(s);
+        });
+        return map;
+    }, [allSeries]);
+
     const seriesCounts = useMemo(() => {
         const counts: Record<string, number> = {};
         products.forEach(p => {
@@ -157,27 +172,82 @@ export function CatalogSidebar({
         return counts;
     }, [products]);
 
-    const filteredDeviceModels = useMemo(() => {
-        const counts: Record<string, number> = {};
+    const deviceModelLookup = useMemo(() => {
+        const map: Record<string, { brand_id: string | null; device_series: string | null }> = {};
+        deviceModels.forEach((m: any) => {
+            map[m.name] = { brand_id: m.brand_id, device_series: m.device_series };
+            (m.aliases || []).forEach((a: string) => {
+                map[a] = { brand_id: m.brand_id, device_series: m.device_series };
+            });
+        });
+        return map;
+    }, [deviceModels]);
+
+    const deviceModelTree = useMemo(() => {
+        const modelCounts: Record<string, number> = {};
         products.forEach(p => {
             const models = (p as any).effective_model_names || [];
             models.forEach((m: string) => {
-                if (m) counts[m] = (counts[m] || 0) + 1;
+                if (m) modelCounts[m] = (modelCounts[m] || 0) + 1;
             });
             (p as any).variants?.forEach((v: any) => {
                 (v.effective_model_names || []).forEach((m: string) => {
-                    if (m) counts[m] = (counts[m] || 0) + 1;
+                    if (m) modelCounts[m] = (modelCounts[m] || 0) + 1;
                 });
             });
         });
-        const sorted = Object.entries(counts)
-            .sort((a, b) => b[1] - a[1])
-            .map(([name, count]) => ({ name, count }));
+
         const searchLower = modelSearch.toLowerCase();
-        return searchLower
-            ? sorted.filter(m => m.name.toLowerCase().includes(searchLower))
-            : sorted;
-    }, [products, modelSearch]);
+        const tree: Record<string, Record<string, { name: string; count: number }[]>> = {};
+
+        Object.entries(modelCounts).forEach(([name, count]) => {
+            if (searchLower && !name.toLowerCase().includes(searchLower)) return;
+            const lookup = deviceModelLookup[name];
+            const brandId = lookup?.brand_id || '__unassigned__';
+            const series = lookup?.device_series || '__unassigned__';
+            if (!tree[brandId]) tree[brandId] = {};
+            if (!tree[brandId][series]) tree[brandId][series] = [];
+            tree[brandId][series].push({ name, count });
+        });
+
+        Object.values(tree).forEach(seriesMap => {
+            Object.keys(seriesMap).forEach(series => {
+                seriesMap[series].sort((a, b) => b.count - a.count);
+            });
+        });
+
+        return tree;
+    }, [products, modelSearch, deviceModelLookup]);
+
+    useEffect(() => {
+        if (modelSearch) {
+            const brands = new Set<string>();
+            const series = new Set<string>();
+            Object.entries(deviceModelTree).forEach(([brandId, seriesMap]) => {
+                brands.add(brandId);
+                Object.keys(seriesMap).forEach(s => series.add(`${brandId}:${s}`));
+            });
+            setExpandedDeviceBrands(brands);
+            setExpandedDeviceSeries(series);
+        } else {
+            setExpandedDeviceBrands(new Set());
+            setExpandedDeviceSeries(new Set());
+        }
+    }, [modelSearch, deviceModelTree]);
+
+    const totalDeviceModelCount = useMemo(() => {
+        let total = 0;
+        Object.values(deviceModelTree).forEach(seriesMap => {
+            Object.values(seriesMap).forEach(models => { total += models.length; });
+        });
+        return total;
+    }, [deviceModelTree]);
+
+    const deviceBrandNameMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        deviceBrands.forEach((b: any) => { map[b.id] = b.name; });
+        return map;
+    }, [deviceBrands]);
 
     const categoryTree = useMemo(() => {
         const seen = new Set<string>();
@@ -248,9 +318,13 @@ export function CatalogSidebar({
                 }
             });
             p.variants?.forEach(v => {
-                if (v.option_1) { if (!specs['core:option_1']) specs['core:option_1'] = new Set(); specs['core:option_1'].add(v.option_1); }
-                if (v.option_2) { if (!specs['core:option_2']) specs['core:option_2'] = new Set(); specs['core:option_2'].add(v.option_2); }
-                if (v.option_3) { if (!specs['core:option_3']) specs['core:option_3'] = new Set(); specs['core:option_3'].add(v.option_3); }
+                v.option_values?.forEach(ov => {
+                    const group = p.option_groups?.find((og: any) => og.id === ov.group_id);
+                    const groupName = group?.name || ov.group_id;
+                    const key = `core:${groupName}`;
+                    if (!specs[key]) specs[key] = new Set();
+                    specs[key].add(ov.label || ov.value);
+                });
                 const vSpecValues: Record<string, any> = v.spec_values && typeof v.spec_values === 'object' && !Array.isArray(v.spec_values)
                     ? v.spec_values
                     : {};
@@ -287,6 +361,33 @@ export function CatalogSidebar({
             const next = new Set(prev);
             if (next.has(id)) next.delete(id);
             else next.add(id);
+            return next;
+        });
+    };
+
+    const toggleBrandExpand = (brandId: string) => {
+        setExpandedBrands(prev => {
+            const next = new Set(prev);
+            if (next.has(brandId)) next.delete(brandId);
+            else next.add(brandId);
+            return next;
+        });
+    };
+
+    const toggleDeviceBrandExpand = (brandId: string) => {
+        setExpandedDeviceBrands(prev => {
+            const next = new Set(prev);
+            if (next.has(brandId)) next.delete(brandId);
+            else next.add(brandId);
+            return next;
+        });
+    };
+
+    const toggleDeviceSeriesExpand = (key: string) => {
+        setExpandedDeviceSeries(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
             return next;
         });
     };
@@ -381,13 +482,14 @@ export function CatalogSidebar({
                         <Separator />
                     </Collapsible>
 
-                    {/* Brands */}
+                    {/* Brands + Series Tree */}
                     <Collapsible open={openSections.has('brands')} onOpenChange={() => toggleSection('brands')}>
                         <div className="py-2">
                             <SectionHeader
-                                label="品牌"
+                                label="品牌 / 系列"
                                 isOpen={openSections.has('brands')}
                                 count={brands.length}
+                                selectedCount={selectedBrands.length + selectedSeries.length}
                                 icon={Tag}
                             />
                         </div>
@@ -397,102 +499,111 @@ export function CatalogSidebar({
                             ) : brands.length === 0 ? (
                                 <EmptyState icon={Tag} text="尚未建立品牌" />
                             ) : (
-                                <div className="space-y-1 pb-3">
-                                    {brands.map((brand: any) => (
-                                        <div key={brand.id} className="flex items-center space-x-2 rounded-md px-1 py-0.5 hover:bg-muted/50 transition-colors">
-                                            <Checkbox
-                                                id={`brand-${brand.id}`}
-                                                checked={selectedBrands.includes(brand.id)}
-                                                onCheckedChange={(checked) => {
-                                                    if (onBrandChange) {
-                                                        if (checked) {
-                                                            onBrandChange([...selectedBrands, brand.id]);
-                                                        } else {
-                                                            onBrandChange(selectedBrands.filter((id) => id !== brand.id));
-                                                        }
-                                                    }
-                                                }}
-                                            />
-                                            <Label htmlFor={`brand-${brand.id}`}
-                                                className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground transition-colors">
-                                                {brand.name}
-                                            </Label>
-                                        </div>
-                                    ))}
+                                <div className="pb-3 max-h-[300px] overflow-y-auto space-y-0.5">
+                                    {brands.map((brand: any) => {
+                                        const brandSeries = seriesByBrand[brand.id] || [];
+                                        const hasSeries = brandSeries.length > 0;
+                                        const isExpanded = expandedBrands.has(brand.id);
+                                        return (
+                                            <div key={brand.id}>
+                                                <div className={cn(
+                                                    "flex items-center rounded-md px-1 py-0.5 transition-colors",
+                                                    selectedBrands.includes(brand.id) ? "bg-primary/5" : "hover:bg-muted/50"
+                                                )}>
+                                                    {hasSeries ? (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-5 w-5 shrink-0"
+                                                            onClick={() => toggleBrandExpand(brand.id)}
+                                                        >
+                                                            <ChevronDown className={cn(
+                                                                "h-3 w-3 transition-transform duration-200",
+                                                                !isExpanded && "-rotate-90"
+                                                            )} />
+                                                        </Button>
+                                                    ) : (
+                                                        <div className="w-5" />
+                                                    )}
+                                                    <Checkbox
+                                                        id={`brand-${brand.id}`}
+                                                        checked={selectedBrands.includes(brand.id)}
+                                                        onCheckedChange={(checked) => {
+                                                            if (onBrandChange) {
+                                                                if (checked) {
+                                                                    onBrandChange([...selectedBrands, brand.id]);
+                                                                } else {
+                                                                    onBrandChange(selectedBrands.filter((id) => id !== brand.id));
+                                                                }
+                                                            }
+                                                        }}
+                                                    />
+                                                    <Label htmlFor={`brand-${brand.id}`}
+                                                        className="text-sm font-medium cursor-pointer flex-1 py-0.5 text-foreground transition-colors">
+                                                        {brand.name}
+                                                    </Label>
+                                                    {hasSeries && (
+                                                        <span className="text-[10px] text-muted-foreground/60 tabular-nums mr-1">
+                                                            {brandSeries.length}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {hasSeries && isExpanded && (
+                                                    <div className="pl-5 ml-2.5 border-l space-y-0.5">
+                                                        {brandSeries.map((s: any) => (
+                                                            <div key={s.id} className={cn(
+                                                                "flex items-center rounded-md px-1 py-0.5 transition-colors",
+                                                                selectedSeries.includes(s.id) ? "bg-primary/5" : "hover:bg-muted/50"
+                                                            )}>
+                                                                <div className="w-5" />
+                                                                <Checkbox
+                                                                    id={`series-${s.id}`}
+                                                                    checked={selectedSeries.includes(s.id)}
+                                                                    onCheckedChange={(checked) => {
+                                                                        if (onSeriesChange) {
+                                                                            if (checked) {
+                                                                                onSeriesChange([...selectedSeries, s.id]);
+                                                                            } else {
+                                                                                onSeriesChange(selectedSeries.filter((id) => id !== s.id));
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <Label htmlFor={`series-${s.id}`}
+                                                                    className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground truncate transition-colors">
+                                                                    {s.name}
+                                                                </Label>
+                                                                {seriesCounts[s.id] !== undefined && (
+                                                                    <span className="text-[10px] text-muted-foreground tabular-nums">{seriesCounts[s.id]}</span>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             )}
                         </CollapsibleContent>
                         <Separator />
                     </Collapsible>
 
-                    {/* Series */}
-                    {selectedBrands.length > 0 && (
-                        <Collapsible open={openSections.has('series')} onOpenChange={() => toggleSection('series')}>
-                            <div className="py-2">
-                                <SectionHeader
-                                    label="系列"
-                                    isOpen={openSections.has('series')}
-                                    count={filteredSeries.length}
-                                    selectedCount={selectedSeries.length}
-                                    icon={Tag}
-                                />
-                            </div>
-                            <CollapsibleContent>
-                                {seriesLoading ? (
-                                    <SectionSkeleton rows={3} />
-                                ) : filteredSeries.length === 0 ? (
-                                    <EmptyState icon={Tag} text="此品牌下無系列" />
-                                ) : (
-                                    <div className="space-y-1 pb-3 max-h-[200px] overflow-y-auto">
-                                        {filteredSeries.map((s: any) => (
-                                            <div key={s.id} className={cn(
-                                                "flex items-center space-x-2 rounded-md px-1 py-0.5 transition-colors",
-                                                selectedSeries.includes(s.id) ? "bg-primary/5" : "hover:bg-muted/50"
-                                            )}>
-                                                <Checkbox
-                                                    id={`series-${s.id}`}
-                                                    checked={selectedSeries.includes(s.id)}
-                                                    onCheckedChange={(checked) => {
-                                                        if (onSeriesChange) {
-                                                            if (checked) {
-                                                                onSeriesChange([...selectedSeries, s.id]);
-                                                            } else {
-                                                                onSeriesChange(selectedSeries.filter((id) => id !== s.id));
-                                                            }
-                                                        }
-                                                    }}
-                                                />
-                                                <Label htmlFor={`series-${s.id}`}
-                                                    className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground truncate transition-colors">
-                                                    {s.name}
-                                                </Label>
-                                                {seriesCounts[s.id] !== undefined && (
-                                                    <span className="text-[10px] text-muted-foreground tabular-nums">{seriesCounts[s.id]}</span>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </CollapsibleContent>
-                            <Separator />
-                        </Collapsible>
-                    )}
-
-                    {/* Device Models */}
-                    {filteredDeviceModels.length > 0 && (
+                    {/* Device Models Tree */}
+                    {(totalDeviceModelCount > 0 || modelSearch) && (
                         <Collapsible open={openSections.has('deviceModels')} onOpenChange={() => toggleSection('deviceModels')}>
                             <div className="py-2">
                                 <SectionHeader
                                     label="裝置型號"
                                     isOpen={openSections.has('deviceModels')}
-                                    count={filteredDeviceModels.length}
+                                    count={totalDeviceModelCount}
                                     selectedCount={selectedDeviceModels.length}
                                     icon={Smartphone}
                                 />
                             </div>
                             <CollapsibleContent>
-                                <div className="space-y-2 pb-3">
-                                    <div className="relative">
+                                <div className="space-y-1 pb-3">
+                                    <div className="relative mb-1">
                                         <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
                                         <Input
                                             value={modelSearch}
@@ -501,32 +612,178 @@ export function CatalogSidebar({
                                             className="h-7 text-xs pl-6"
                                         />
                                     </div>
-                                    <div className="max-h-[200px] overflow-y-auto space-y-1">
-                                        {filteredDeviceModels.map(({ name, count }) => (
-                                            <div key={name} className={cn(
-                                                "flex items-center space-x-2 rounded-md px-1 py-0.5 transition-colors",
-                                                selectedDeviceModels.includes(name) ? "bg-primary/5" : "hover:bg-muted/50"
-                                            )}>
-                                                <Checkbox
-                                                    id={`model-${name}`}
-                                                    checked={selectedDeviceModels.includes(name)}
-                                                    onCheckedChange={(checked) => {
-                                                        if (onDeviceModelChange) {
-                                                            if (checked) {
-                                                                onDeviceModelChange([...selectedDeviceModels, name]);
-                                                            } else {
-                                                                onDeviceModelChange(selectedDeviceModels.filter((n) => n !== name));
-                                                            }
-                                                        }
-                                                    }}
-                                                />
-                                                <Label htmlFor={`model-${name}`}
-                                                    className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground truncate transition-colors">
-                                                    {name}
-                                                </Label>
-                                                <span className="text-[10px] text-muted-foreground tabular-nums">{count}</span>
-                                            </div>
-                                        ))}
+                                    <div className="max-h-[300px] overflow-y-auto space-y-0.5">
+                                        {Object.keys(deviceModelTree).length === 0 && modelSearch && (
+                                            <EmptyState icon={Smartphone} text="找不到符合的型號" />
+                                        )}
+                                        {Object.entries(deviceModelTree)
+                                            .sort(([a], [b]) => {
+                                                if (a === '__unassigned__') return 1;
+                                                if (b === '__unassigned__') return -1;
+                                                return (deviceBrandNameMap[a] || a).localeCompare(deviceBrandNameMap[b] || b);
+                                            })
+                                            .map(([brandId, seriesMap]) => {
+                                                const brandLabel = brandId === '__unassigned__'
+                                                    ? '其他'
+                                                    : (deviceBrandNameMap[brandId] || brandId);
+                                                const brandModelCount = Object.values(seriesMap).reduce((sum, arr) => sum + arr.length, 0);
+                                                const isBrandExpanded = expandedDeviceBrands.has(brandId);
+                                                const seriesEntries = Object.entries(seriesMap).sort(([a], [b]) => {
+                                                    if (a === '__unassigned__') return 1;
+                                                    if (b === '__unassigned__') return -1;
+                                                    return a.localeCompare(b);
+                                                });
+                                                const hasSingleUnnamedSeries = seriesEntries.length === 1 && seriesEntries[0][0] === '__unassigned__';
+
+                                                if (hasSingleUnnamedSeries) {
+                                                    return (
+                                                        <div key={brandId}>
+                                                            {brandId !== '__unassigned__' && (
+                                                                <div className="flex items-center rounded-md px-1 py-0.5 hover:bg-muted/50 transition-colors">
+                                                                    <div className="w-5" />
+                                                                    <Smartphone className="h-3 w-3 mr-1.5 text-muted-foreground/60" />
+                                                                    <span className="text-xs font-medium text-foreground">{brandLabel}</span>
+                                                                    <span className="text-[10px] text-muted-foreground/60 tabular-nums ml-auto mr-1">{brandModelCount}</span>
+                                                                </div>
+                                                            )}
+                                                            <div className={brandId !== '__unassigned__' ? "pl-5 ml-2.5 border-l" : ""}>
+                                                                {seriesEntries[0][1].map(({ name, count }) => (
+                                                                    <div key={name} className={cn(
+                                                                        "flex items-center rounded-md px-1 py-0.5 transition-colors",
+                                                                        selectedDeviceModels.includes(name) ? "bg-primary/5" : "hover:bg-muted/50"
+                                                                    )}>
+                                                                        <div className="w-5" />
+                                                                        <Checkbox
+                                                                            id={`model-${name}`}
+                                                                            checked={selectedDeviceModels.includes(name)}
+                                                                            onCheckedChange={(checked) => {
+                                                                                if (onDeviceModelChange) {
+                                                                                    if (checked) {
+                                                                                        onDeviceModelChange([...selectedDeviceModels, name]);
+                                                                                    } else {
+                                                                                        onDeviceModelChange(selectedDeviceModels.filter((n) => n !== name));
+                                                                                    }
+                                                                                }
+                                                                            }}
+                                                                        />
+                                                                        <Label htmlFor={`model-${name}`}
+                                                                            className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground truncate transition-colors">
+                                                                            {name}
+                                                                        </Label>
+                                                                        <span className="text-[10px] text-muted-foreground tabular-nums">{count}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                }
+
+                                                return (
+                                                    <div key={brandId}>
+                                                        <div
+                                                            className="flex items-center rounded-md px-1 py-0.5 hover:bg-muted/50 transition-colors cursor-pointer"
+                                                            onClick={() => toggleDeviceBrandExpand(brandId)}
+                                                        >
+                                                            <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0">
+                                                                <ChevronDown className={cn(
+                                                                    "h-3 w-3 transition-transform duration-200",
+                                                                    !isBrandExpanded && "-rotate-90"
+                                                                )} />
+                                                            </Button>
+                                                            <Smartphone className="h-3 w-3 mr-1.5 text-muted-foreground/60" />
+                                                            <span className="text-xs font-medium text-foreground flex-1">{brandLabel}</span>
+                                                            <span className="text-[10px] text-muted-foreground/60 tabular-nums mr-1">{brandModelCount}</span>
+                                                        </div>
+                                                        {isBrandExpanded && (
+                                                            <div className="pl-5 ml-2.5 border-l space-y-0.5">
+                                                                {seriesEntries.map(([seriesKey, models]) => {
+                                                                    const seriesLabel = seriesKey === '__unassigned__' ? '未分類系列' : seriesKey;
+                                                                    const seriesKeyFull = `${brandId}:${seriesKey}`;
+                                                                    const isSeriesExpanded = expandedDeviceSeries.has(seriesKeyFull);
+
+                                                                    if (models.length === 1) {
+                                                                        const model = models[0];
+                                                                        return (
+                                                                            <div key={seriesKeyFull} className={cn(
+                                                                                "flex items-center rounded-md px-1 py-0.5 transition-colors",
+                                                                                selectedDeviceModels.includes(model.name) ? "bg-primary/5" : "hover:bg-muted/50"
+                                                                            )}>
+                                                                                <div className="w-5" />
+                                                                                <Checkbox
+                                                                                    id={`model-${model.name}`}
+                                                                                    checked={selectedDeviceModels.includes(model.name)}
+                                                                                    onCheckedChange={(checked) => {
+                                                                                        if (onDeviceModelChange) {
+                                                                                            if (checked) {
+                                                                                                onDeviceModelChange([...selectedDeviceModels, model.name]);
+                                                                                            } else {
+                                                                                                onDeviceModelChange(selectedDeviceModels.filter((n) => n !== model.name));
+                                                                                            }
+                                                                                        }
+                                                                                    }}
+                                                                                />
+                                                                                <Label htmlFor={`model-${model.name}`}
+                                                                                    className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground truncate transition-colors">
+                                                                                    {model.name}
+                                                                                </Label>
+                                                                                <span className="text-[10px] text-muted-foreground tabular-nums">{model.count}</span>
+                                                                            </div>
+                                                                        );
+                                                                    }
+
+                                                                    return (
+                                                                        <div key={seriesKeyFull}>
+                                                                            <div
+                                                                                className="flex items-center rounded-md px-1 py-0.5 hover:bg-muted/50 transition-colors cursor-pointer"
+                                                                                onClick={() => toggleDeviceSeriesExpand(seriesKeyFull)}
+                                                                            >
+                                                                                <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0">
+                                                                                    <ChevronDown className={cn(
+                                                                                        "h-3 w-3 transition-transform duration-200",
+                                                                                        !isSeriesExpanded && "-rotate-90"
+                                                                                    )} />
+                                                                                </Button>
+                                                                                <span className="text-xs text-muted-foreground flex-1">{seriesLabel}</span>
+                                                                                <span className="text-[10px] text-muted-foreground/60 tabular-nums mr-1">{models.length}</span>
+                                                                            </div>
+                                                                            {isSeriesExpanded && (
+                                                                                <div className="pl-5 ml-2.5 border-l space-y-0.5">
+                                                                                    {models.map(({ name, count }) => (
+                                                                                        <div key={name} className={cn(
+                                                                                            "flex items-center rounded-md px-1 py-0.5 transition-colors",
+                                                                                            selectedDeviceModels.includes(name) ? "bg-primary/5" : "hover:bg-muted/50"
+                                                                                        )}>
+                                                                                            <div className="w-5" />
+                                                                                            <Checkbox
+                                                                                                id={`model-${name}`}
+                                                                                                checked={selectedDeviceModels.includes(name)}
+                                                                                                onCheckedChange={(checked) => {
+                                                                                                    if (onDeviceModelChange) {
+                                                                                                        if (checked) {
+                                                                                                            onDeviceModelChange([...selectedDeviceModels, name]);
+                                                                                                        } else {
+                                                                                                            onDeviceModelChange(selectedDeviceModels.filter((n) => n !== name));
+                                                                                                        }
+                                                                                                    }
+                                                                                                }}
+                                                                                            />
+                                                                                            <Label htmlFor={`model-${name}`}
+                                                                                                className="text-sm font-normal cursor-pointer flex-1 py-0.5 text-muted-foreground hover:text-foreground truncate transition-colors">
+                                                                                                {name}
+                                                                                            </Label>
+                                                                                            <span className="text-[10px] text-muted-foreground tabular-nums">{count}</span>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                     </div>
                                 </div>
                             </CollapsibleContent>

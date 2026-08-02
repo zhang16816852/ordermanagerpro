@@ -137,7 +137,7 @@ export function VariantModelMatrix({ productId }: VariantModelMatrixProps) {
                 });
             });
             if (newLinks.length > 0) {
-                const { error } = await supabase.from('entity_model_relations').insert(newLinks);
+                const { error } = await (supabase.from('entity_model_relations') as any).insert(newLinks);
                 if (error) throw error;
             }
 

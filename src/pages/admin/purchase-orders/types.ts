@@ -35,17 +35,14 @@ export interface PurchaseOrderItem {
   received_quantity: number;
   unit_cost: number;
   source_order_ids?: string[] | null;
-  product?: { id: string; name: string; sku: string };
+  product?: { id: string; name: string; code: string };
   variant?: { id: string; name: string; sku: string };
 }
 
 export interface Product {
   id: string;
   name: string;
-  sku: string;
-  has_variants: boolean;
+  code: string;
 }
 
-export interface ProductWithPrice extends Product {
-  base_wholesale_price: number;
-}
+export type ProductWithPrice = Product;

@@ -91,7 +91,7 @@ export default function AdminPurchaseOrders() {
             onView={(order) => setViewingOrder(order)}
             onEdit={(order) => { setEditingOrder(order); setCreateOrderOpen(true); }}
             onDelete={(id) => { if (confirm('確定要刪除此採購單嗎？')) deleteOrderMutation.mutate(id); }}
-            onStatusChange={(id, status) => updateOrderMutation.mutate({ id, status })}
+            onStatusChange={(id, status: any) => updateOrderMutation.mutate({ id, status })}
             isLoading={ordersLoading}
           />
         </TabsContent>

@@ -22,8 +22,8 @@ export default function StoreReceiving() {
     queryFn: async () => {
       if (!storeId) return [];
 
-      const { data, error } = await supabase
-        .from("sales_notes")
+      const { data, error } = await (supabase
+        .from("sales_notes") as any)
         .select(`
           *,
           sales_note_items(
@@ -33,7 +33,7 @@ export default function StoreReceiving() {
               id,
               quantity,
               unit_price,
-              product:products(name, sku)
+              product:products(name, code)
             )
           )
         `)
@@ -51,8 +51,8 @@ export default function StoreReceiving() {
     mutationFn: async (noteId: string) => {
       if (!user) throw new Error("未登入");
 
-      const { error } = await supabase
-        .from("sales_notes")
+      const { error } = await (supabase
+        .from("sales_notes") as any)
         .update({
           status: "received",
           received_at: new Date().toISOString(),
@@ -190,7 +190,7 @@ export default function StoreReceiving() {
                       <TableRow key={item.id}>
                         <TableCell>{item.order_item?.product?.name}</TableCell>
                         <TableCell className="font-mono text-sm">
-                          {item.order_item?.product?.sku}
+                          {item.order_item?.product?.code}
                         </TableCell>
                         <TableCell className="text-right">{item.quantity}</TableCell>
                       </TableRow>

@@ -4,6 +4,9 @@ type Tables<T extends keyof Database['public']['Tables']> = Database['public']['
 
 export type Product = Tables<'products'>;
 export type ProductVariant = Tables<'product_variants'>;
+export type ProductOptionGroup = Tables<'product_option_groups'>;
+export type ProductOptionValue = Tables<'product_option_values'>;
+export type ProductVariantOption = Tables<'product_variant_options'>;
 
 export interface Category {
     id: string;
@@ -22,6 +25,10 @@ export interface Brand {
     code?: string | null;
 }
 
+export interface OptionGroupWithValues extends ProductOptionGroup {
+    values: ProductOptionValue[];
+}
+
 export interface SpecDefinition {
     id: string;
     name: string;
@@ -33,13 +40,13 @@ export interface SpecDefinition {
             id: string;
             name: string;
             type: 'text' | 'select' | 'multiselect' | 'link';
-            linkedSpecId?: string; // 連結到其他規格的 ID
-            prefix?: string;       // 欄位前綴
-            suffix?: string;       // 欄位後綴
+            linkedSpecId?: string;
+            prefix?: string;
+            suffix?: string;
             options?: string[];
         }[];
-        columnSeparator?: string; // 欄位間連接符 (預設 '/')
-        rowSeparator?: string;    // 行間連接符 (預設 ', ')
+        columnSeparator?: string;
+        rowSeparator?: string;
     } | null;
 }
 
@@ -53,8 +60,8 @@ export interface ProductWithDetails extends Product {
     primary_brand_name?: string;
     brand_series_ids?: string[];
     variants?: ProductVariant[];
-    spec_values?: any; // v6 規格架構
-    // 裝置模型相關屬性 (相容後台列表)
+    option_groups?: OptionGroupWithValues[];
+    spec_values?: any;
     device_models?: any[];
     device_model_groups?: any[];
     device_model_exclusions?: any[];
@@ -74,4 +81,5 @@ export interface VariantWithPricing extends ProductVariant {
     effective_retail_price: number;
     has_brand_price: boolean;
     spec_values?: any;
+    option_values?: ProductOptionValue[];
 }

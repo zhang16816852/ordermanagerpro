@@ -37,15 +37,16 @@ export function StandaloneDeviceModelSelectField({
 
     const addModelMutation = useMutation({
         mutationFn: async (name: string) => {
-            const { data, error } = await supabase
-                .from('device_models')
-                .insert([{ name, is_active: true }])
-                .select()
+            const { data, error } = await (supabase
+                .from('device_models' as any)
+                .insert([{ name, is_active: true }] as any)
+                .select('*' as any) as any)
                 .single();
             if (error) throw error;
-            return data;
+            return (data as { id: string; name: string } | null);
         },
         onSuccess: (data) => {
+            if (!data) return;
             queryClient.invalidateQueries({ queryKey: ['device_models_active'] });
             toggleModel(data.id);
             setNewModelName('');
@@ -58,15 +59,16 @@ export function StandaloneDeviceModelSelectField({
     const addGroupMutation = useMutation({
         mutationFn: async (name: string) => {
             const clean = name.replace(/\s+/g, ' ').trim();
-            const { data, error } = await supabase
-                .from('device_model_groups')
-                .insert([{ name: clean }])
-                .select()
+            const { data, error } = await (supabase
+                .from('device_model_groups' as any)
+                .insert([{ name: clean }] as any)
+                .select('*' as any) as any)
                 .single();
             if (error) throw error;
-            return data;
+            return (data as { id: string; name: string } | null);
         },
         onSuccess: (data) => {
+            if (!data) return;
             queryClient.invalidateQueries({ queryKey: ['device_model_groups'] });
             toggleGroup(data.id);
             setNewGroupName('');

@@ -61,8 +61,8 @@ export default function AdminOrderEdit() {
     queryKey: ['order-detail', orderId],
     queryFn: async () => {
       if (!orderId) return null;
-      const { data, error } = await supabase
-        .from('orders')
+      const { data, error } = await (supabase
+        .from('orders') as any)
         .select(`
           *,
           stores (name, code, brand),
@@ -73,7 +73,7 @@ export default function AdminOrderEdit() {
             unit_price,
             shipped_quantity,
             status,
-            products (name, sku)
+            products (name, code)
           )
         `)
         .eq('id', orderId)
@@ -101,8 +101,8 @@ export default function AdminOrderEdit() {
       if (!orderId || !order) throw new Error('訂單不存在');
 
       // 更新訂單備註
-      const { error: orderError } = await supabase
-        .from('orders')
+      const { error: orderError } = await (supabase
+        .from('orders') as any)
         .update({ notes: notes || null })
         .eq('id', orderId);
       if (orderError) throw orderError;
@@ -111,8 +111,8 @@ export default function AdminOrderEdit() {
       for (const item of orderItems) {
         if (item.isNew) {
           // 新增項目
-          const { error } = await supabase
-            .from('order_items')
+          const { error } = await (supabase
+            .from('order_items') as any)
             .insert({
               order_id: orderId,
               product_id: item.productId,
@@ -123,8 +123,8 @@ export default function AdminOrderEdit() {
           if (error) throw error;
         } else {
           // 更新現有項目
-          const { error } = await supabase
-            .from('order_items')
+          const { error } = await (supabase
+            .from('order_items') as any)
             .update({
               quantity: item.quantity,
               unit_price: item.unitPrice,
@@ -140,8 +140,8 @@ export default function AdminOrderEdit() {
       const toDelete = existingIds.filter((id: string) => !currentIds.includes(id));
 
       if (toDelete.length > 0) {
-        const { error } = await supabase
-          .from('order_items')
+        const { error } = await (supabase
+          .from('order_items') as any)
           .delete()
           .in('id', toDelete);
         if (error) throw error;
@@ -161,8 +161,8 @@ export default function AdminOrderEdit() {
     mutationFn: async () => {
       if (!orderId || !order) throw new Error('訂單不存在');
       const newStatus = order.status === 'pending' ? 'processing' : 'pending';
-      const { error } = await supabase
-        .from('orders')
+      const { error } = await (supabase
+        .from('orders') as any)
         .update({ status: newStatus })
         .eq('id', orderId);
       if (error) throw error;
@@ -208,7 +208,7 @@ export default function AdminOrderEdit() {
         id: `new-${Date.now()}`,
         productId: product.id,
         quantity: 1,
-        unitPrice: product.base_wholesale_price,
+        unitPrice: 0,
         isNew: true,
       },
     ]);
@@ -222,7 +222,7 @@ export default function AdminOrderEdit() {
 
   const getProductSku = (productId: string) => {
     const product = products.find(p => p.id === productId);
-    return product?.sku || '';
+    return product?.code || '';
   };
 
   /* Helper functions removed as they are now handled in OrderItemsTable or unused */
@@ -249,7 +249,7 @@ export default function AdminOrderEdit() {
 
   const statusInfo = statusLabels[order.status] || { label: order.status, className: 'bg-muted text-muted-foreground' };
   const availableProducts = products.filter(
-    p => p.status === 'active' && !orderItems.some(item => item.productId === p.id)
+    p => !orderItems.some(item => item.productId === p.id)
   );
 
   return (
@@ -354,7 +354,7 @@ export default function AdminOrderEdit() {
               <SelectContent>
                 {availableProducts.map(product => (
                   <SelectItem key={product.id} value={product.id}>
-                    {product.sku} - {product.name}
+                    {product.code} - {product.name}
                   </SelectItem>
                 ))}
               </SelectContent>

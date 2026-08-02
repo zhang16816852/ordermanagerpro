@@ -70,8 +70,8 @@ const AcceptInvite = () => {
       }
 
       try {
-        const { data, error: fetchError } = await supabase
-          .from('invitations')
+        const { data, error: fetchError } = await (supabase
+          .from('invitations') as any)
           .select(`
             id,
             email,
@@ -212,8 +212,8 @@ const AcceptInvite = () => {
         if (rpcUpdateError) {
           console.error('RPC failed to update invitation status:', rpcUpdateError);
           // Fallback
-          await supabase
-            .from('invitations')
+          await (supabase
+            .from('invitations') as any)
             .update({ status: 'accepted' })
             .eq('id', invitation.id);
         }
@@ -234,8 +234,8 @@ const AcceptInvite = () => {
       }
 
       // 登入成功後，以完整 Session 將用戶綁定到店鋪
-      const { error: insertError } = await supabase
-        .from('store_users')
+      const { error: insertError } = await (supabase
+        .from('store_users') as any)
         .insert({
           store_id: invitation.store?.id,
           user_id: signInData.user.id,
@@ -273,7 +273,7 @@ const AcceptInvite = () => {
     if (!user || !invitation || !invitation.store) return;
 
     // Verify user email matches invitation email
-    if (user.email?.toLowerCase() !== invitation.email.toLowerCase()) {
+  if (invitation && user.email?.toLowerCase() !== invitation.email.toLowerCase()) {
       toast.error('您的帳號 Email 與邀請 Email 不符');
       return;
     }
@@ -282,8 +282,8 @@ const AcceptInvite = () => {
 
     try {
       // Add user to store_users
-      const { error: insertError } = await supabase
-        .from('store_users')
+      const { error: insertError } = await (supabase
+        .from('store_users') as any)
         .insert({
           store_id: invitation.store.id,
           user_id: user.id,
@@ -308,8 +308,8 @@ const AcceptInvite = () => {
       if (rpcUpdateError) {
         console.error('Failed to update invitation status via RPC:', rpcUpdateError);
         // Fallback
-        const { error: updateError } = await supabase
-          .from('invitations')
+        const { error: updateError } = await (supabase
+          .from('invitations') as any)
           .update({ status: 'accepted' })
           .eq('id', invitation.id);
         if (updateError) {
@@ -450,14 +450,14 @@ const AcceptInvite = () => {
               </div>
               <CardTitle>設定您的帳號</CardTitle>
               <CardDescription>
-                填寫姓名與密碼，即可加入 {invitation.store?.name}
+                填寫姓名與密碼，即可加入 {invitation!.store?.name}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSignUpAndAccept} className="space-y-4">
                 <div className="rounded-lg border p-3 bg-muted/50">
                   <p className="text-sm text-muted-foreground">邀請 Email</p>
-                  <p className="font-medium">{invitation.email}</p>
+                   <p className="font-medium">{invitation!.email}</p>
                 </div>
 
                 <div className="space-y-2">
@@ -512,12 +512,12 @@ const AcceptInvite = () => {
                   <div className="flex items-center gap-2 text-sm">
                     <Store className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">將加入店鋪：</span>
-                    <span className="font-medium">{invitation.store?.name}</span>
+                    <span className="font-medium">{invitation!.store?.name}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm mt-1">
                     <UserPlus className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">職位：</span>
-                    <span className="font-medium">{getRoleLabel(invitation.role)}</span>
+                    <span className="font-medium">{getRoleLabel(invitation!.role)}</span>
                   </div>
                 </div>
 
@@ -584,7 +584,7 @@ const AcceptInvite = () => {
   }
 
   // User logged in but email doesn't match
-  if (user.email?.toLowerCase() !== invitation.email.toLowerCase()) {
+  if (invitation && user.email?.toLowerCase() !== invitation.email.toLowerCase()) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
@@ -635,18 +635,18 @@ const AcceptInvite = () => {
           </div>
           <CardTitle>接受邀請</CardTitle>
           <CardDescription>
-            您已被邀請加入 {invitation.store.name}
+             您已被邀請加入 {invitation!.store!.name}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-lg border p-4 space-y-3">
             <div>
               <p className="text-sm text-muted-foreground">店鋪名稱</p>
-              <p className="font-medium">{invitation.store.name}</p>
+              <p className="font-medium">{invitation!.store!.name}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">職位</p>
-              <p className="font-medium">{getRoleLabel(invitation.role)}</p>
+              <p className="font-medium">{getRoleLabel(invitation!.role)}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">您的帳號</p>

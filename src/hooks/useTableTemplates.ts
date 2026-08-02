@@ -15,8 +15,8 @@ export function useTableTemplates() {
   const { data: templates = [], isLoading } = useQuery<OrderGridTemplateWithProducts[]>({
     queryKey: QUERY_KEY,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('table_templates')
+      const { data, error } = await (supabase
+        .from('table_templates') as any)
         .select('*, template_variants:table_template_variants(*)')
         .order('name');
       if (error) throw error;
@@ -34,8 +34,8 @@ export function useTableTemplates() {
       variant_ids: string[];
     }) => {
       const now = new Date().toISOString();
-      const { data: template, error: templateError } = await supabase
-        .from('table_templates')
+      const { data: template, error: templateError } = await (supabase
+        .from('table_templates') as any)
         .insert({
           name: data.name,
           description: data.description || null,
@@ -56,8 +56,8 @@ export function useTableTemplates() {
           variant_id: vid,
           sort_order: idx,
         }));
-        const { error: variantsError } = await supabase
-          .from('table_template_variants')
+        const { error: variantsError } = await (supabase
+          .from('table_template_variants') as any)
           .insert(variants);
         if (variantsError) throw variantsError;
       }
@@ -96,15 +96,15 @@ export function useTableTemplates() {
       if (data.col_config !== undefined) updates.col_config = data.col_config;
       if (data.tab_config !== undefined) updates.tab_config = data.tab_config ?? null;
 
-      const { error: updateError } = await supabase
-        .from('table_templates')
+      const { error: updateError } = await (supabase
+        .from('table_templates') as any)
         .update(updates)
         .eq('id', id);
       if (updateError) throw updateError;
 
       if (data.variant_ids !== undefined) {
-        const { error: deleteError } = await supabase
-          .from('table_template_variants')
+        const { error: deleteError } = await (supabase
+          .from('table_template_variants') as any)
           .delete()
           .eq('template_id', id);
         if (deleteError) throw deleteError;
@@ -115,8 +115,8 @@ export function useTableTemplates() {
             variant_id: vid,
             sort_order: idx,
           }));
-          const { error: insertError } = await supabase
-            .from('table_template_variants')
+          const { error: insertError } = await (supabase
+            .from('table_template_variants') as any)
             .insert(variants);
           if (insertError) throw insertError;
         }
@@ -129,7 +129,7 @@ export function useTableTemplates() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('table_templates').delete().eq('id', id);
+      const { error } = await (supabase.from('table_templates') as any).delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {

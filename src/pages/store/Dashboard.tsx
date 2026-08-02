@@ -15,17 +15,17 @@ export default function StoreDashboard() {
       if (!storeId) return null;
 
       const [orders, pending, salesNotes] = await Promise.all([
-        supabase
-          .from('orders')
+        (supabase
+          .from('orders') as any)
           .select('id', { count: 'exact', head: true })
           .eq('store_id', storeId),
-        supabase
-          .from('order_items')
+        (supabase
+          .from('order_items') as any)
           .select('id', { count: 'exact', head: true })
           .eq('store_id', storeId)
           .in('status', ['waiting', 'partial']),
-        supabase
-          .from('sales_notes')
+        (supabase
+          .from('sales_notes') as any)
           .select('id', { count: 'exact', head: true })
           .eq('store_id', storeId)
           .eq('status', 'shipped'),

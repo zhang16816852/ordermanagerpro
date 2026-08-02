@@ -70,8 +70,8 @@ export function SalesNoteDetailDialog({
     const { data: accounts = [] } = useQuery({
         queryKey: ['accounts-for-sales-note-payment'],
         queryFn: async () => {
-            const { data, error } = await supabase
-                .from('accounts')
+            const { data, error } = await (supabase
+                .from('accounts') as any)
                 .select('id, name, balance')
                 .eq('is_active', true)
                 .order('name');
@@ -84,8 +84,8 @@ export function SalesNoteDetailDialog({
     const { data: categories = [] } = useQuery({
         queryKey: ['accounting-categories'],
         queryFn: async () => {
-            const { data, error } = await supabase
-                .from('accounting_categories')
+            const { data, error } = await (supabase
+                .from('accounting_categories') as any)
                 .select('id, name, type')
                 .eq('is_active', true);
             if (error) throw error;
@@ -98,8 +98,8 @@ export function SalesNoteDetailDialog({
         queryKey: ['sales-note-payment', note?.id],
         queryFn: async () => {
             if (!note) return null;
-            const { data, error } = await supabase
-                .from('accounting_entries')
+            const { data, error } = await (supabase
+                .from('accounting_entries') as any)
                 .select('id, amount, transaction_date')
                 .eq('reference_id', note.id)
                 .eq('reference_type', 'sales_note')
@@ -125,8 +125,8 @@ export function SalesNoteDetailDialog({
                 categoryId = salesCategory?.id || categories.find((c: any) => c.type === 'income')?.id;
             }
 
-            const { error: entryError } = await supabase
-                .from('accounting_entries')
+            const { error: entryError } = await (supabase
+                .from('accounting_entries') as any)
                 .insert({
                     type: 'income',
                     amount,
@@ -145,8 +145,8 @@ export function SalesNoteDetailDialog({
 
             const account = accounts.find((a: any) => a.id === accountId);
             if (account) {
-                const { error: accError } = await supabase
-                    .from('accounts')
+                const { error: accError } = await (supabase
+                    .from('accounts') as any)
                     .update({ balance: account.balance + amount })
                     .eq('id', accountId);
                 if (accError) throw accError;

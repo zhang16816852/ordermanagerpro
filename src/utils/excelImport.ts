@@ -3,30 +3,25 @@ import * as XLSX from 'xlsx';
 const BASE_COLUMNS = {
     'ID': 'id',
     '產品類型': 'is_variant',
-    'SKU': 'sku',
+    'SKU': 'code',
     '產品名稱': 'name',
     '變體 SKU': 'variant_sku',
     '變體名稱': 'variant_name',
     '描述': 'description',
     '品牌': 'brand',
-    '型號': 'model',
     '系列': 'series',
     '適用型號': 'device_models',
     '批發價': 'wholesale_price',
     '零售價': 'retail_price',
-    '狀態': 'status',
-    '條碼': 'barcode',
     '分類': 'category',
-    '規格 1': 'option_1',
-    '規格 2': 'option_2',
-    '顏色 (規格 3)': 'option_3',
 } as const;
 
 type BaseColumnKey = keyof typeof BASE_COLUMNS;
 
-export function parseProductExcel(buffer: ArrayBuffer) {
+export function parseProductExcel(buffer: ArrayBuffer): { rows: any[]; presentColumns: Set<string> } {
     const workbook = XLSX.read(buffer, { type: 'array' });
     const allData: any[] = [];
+    const presentColumns = new Set<string>();
 
     workbook.SheetNames.forEach(sheetName => {
         const worksheet = workbook.Sheets[sheetName];
@@ -36,7 +31,7 @@ export function parseProductExcel(buffer: ArrayBuffer) {
 
         let headerRowIndex = 2;
         for (let i = 0; i < Math.min(5, rows.length); i++) {
-            if (String(rows[i][0]).trim() === 'id' && String(rows[i][2]).trim() === 'sku') {
+            if (String(rows[i][0]).trim() === 'id' && String(rows[i][2]).trim() === 'code') {
                 headerRowIndex = i;
                 break;
             }
@@ -44,6 +39,12 @@ export function parseProductExcel(buffer: ArrayBuffer) {
 
         const headerKeys = rows[headerRowIndex].map(h => String(h).trim());
         const dataRows = rows.slice(headerRowIndex + 1);
+
+        // 偵測哪些 base column 存在於 header
+        headerKeys.forEach(h => {
+            const mapped = BASE_COLUMNS[h as keyof typeof BASE_COLUMNS];
+            if (mapped) presentColumns.add(mapped);
+        });
 
         dataRows.forEach(row => {
             if (!row || row.length === 0) return;
@@ -71,11 +72,11 @@ export function parseProductExcel(buffer: ArrayBuffer) {
                 }
             });
 
-            if (item.sku) {
+            if (item.code) {
                 allData.push(item);
             }
         });
     });
 
-    return allData;
+    return { rows: allData, presentColumns };
 }

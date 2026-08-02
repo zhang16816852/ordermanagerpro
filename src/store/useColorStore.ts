@@ -59,8 +59,8 @@ export const useColorStore = create<ColorStore>((set, get) => ({
     addColor: async (newColor) => {
         set({ isAdding: true });
         try {
-            const { data, error } = await supabase
-                .from('product_colors' as any)
+            const { data, error } = await (supabase
+                .from('product_colors') as any)
                 .insert([newColor])
                 .select()
                 .single();
@@ -82,8 +82,8 @@ export const useColorStore = create<ColorStore>((set, get) => ({
         set({ isAdding: true });
         try {
             // Upsert: 有 id 時以 id 配對更新，無 id 時新增
-            const { error } = await supabase
-                .from('product_colors' as any)
+            const { error } = await (supabase
+                .from('product_colors') as any)
                 .upsert(newColors, { 
                     onConflict: 'id',
                     ignoreDuplicates: false 
@@ -103,8 +103,8 @@ export const useColorStore = create<ColorStore>((set, get) => ({
 
     updateColor: async (color) => {
         try {
-            const { error } = await supabase
-                .from('product_colors' as any)
+            const { error } = await (supabase
+                .from('product_colors') as any)
                 .update(color)
                 .eq('id', color.id);
                 
@@ -123,8 +123,8 @@ export const useColorStore = create<ColorStore>((set, get) => ({
 
     deleteColor: async (id) => {
         try {
-            const { error } = await supabase
-                .from('product_colors' as any)
+            const { error } = await (supabase
+                .from('product_colors') as any)
                 .delete()
                 .eq('id', id);
                 

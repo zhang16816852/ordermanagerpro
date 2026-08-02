@@ -62,7 +62,7 @@ export function CategoryBindingImport({
       }
 
       // 驗證欄位
-      const requiredColumns = ['product_sku', 'category_path'];
+      const requiredColumns = ['product_code', 'category_path'];
       const headers = Object.keys(result[0] || {});
       const missingColumns = requiredColumns.filter(col => !headers.includes(col));
 
@@ -72,11 +72,11 @@ export function CategoryBindingImport({
 
       // 預覽資料
       const previewRows = result.map((row: any) => {
-        const productSku = row['product_sku'] || row['產品SKU'] || '';
+        const productCode = row['product_code'] || row['產品代碼'] || row['product_sku'] || row['產品SKU'] || '';
         const variantSku = row['variant_sku'] || row['變體SKU'] || '';
         const categoryPath = row['category_path'] || row['分類路徑'] || '';
 
-        const product = products.find(p => p.product_sku === productSku);
+        const product = products.find(p => p.product_code === productCode);
         const productMatch = !!product;
 
         // 檢查分類路徑是否存在
@@ -106,7 +106,7 @@ export function CategoryBindingImport({
 
         if (!productMatch) {
           status = 'error';
-          reason = `找不到產品 SKU：${productSku}`;
+          reason = `找不到產品代碼：${productCode}`;
         } else if (!pathMatch) {
           status = 'error';
           reason = `分類路徑不存在：${categoryPath}`;
@@ -121,7 +121,7 @@ export function CategoryBindingImport({
         return {
           _status: status,
           _reason: reason,
-          product_sku: productSku,
+          product_code: productCode,
           variant_sku: variantSku,
           category_path: categoryPath,
           product_name: product?.product_name || '',
@@ -130,7 +130,7 @@ export function CategoryBindingImport({
 
       setPreviewData(previewRows);
       setParseResult(result.map((row: any) => ({
-        product_sku: row['product_sku'] || row['產品SKU'] || '',
+        product_code: row['product_code'] || row['產品代碼'] || row['product_sku'] || row['產品SKU'] || '',
         variant_sku: row['variant_sku'] || row['變體SKU'] || '',
         category_path: row['category_path'] || row['分類路徑'] || '',
       })));
@@ -159,8 +159,8 @@ export function CategoryBindingImport({
   // 匯出 CSV 範本
   const handleExportTemplate = () => {
     const template = [
-      { product_sku: 'IMOS_GLA_CN', variant_sku: '', category_path: '玻璃保護貼/康寧系列' },
-      { product_sku: 'IMOS_GLA_CN', variant_sku: 'IMOS_GLA_CN_18P_25D', category_path: '玻璃保護貼/康寧系列' },
+      { product_code: 'IMOS_GLA_CN', variant_sku: '', category_path: '玻璃保護貼/康寧系列' },
+      { product_code: 'IMOS_GLA_CN', variant_sku: 'IMOS_GLA_CN_18P_25D', category_path: '玻璃保護貼/康寧系列' },
     ];
 
     const csv = Papa.unparse(template);
@@ -184,7 +184,7 @@ export function CategoryBindingImport({
         return <Badge variant={m.variant}>{m.label}</Badge>;
       },
     },
-    { key: 'product_sku', header: '產品 SKU', width: '140px' },
+    { key: 'product_code', header: '產品代碼', width: '140px' },
     { key: 'product_name', header: '產品名稱', width: '160px' },
     { key: 'variant_sku', header: '變體 SKU', width: '140px' },
     { key: 'category_path', header: '分類路徑', width: '200px' },
@@ -214,7 +214,7 @@ export function CategoryBindingImport({
             <div className="text-sm text-muted-foreground">
               <p className="font-medium mb-2">CSV 欄位格式：</p>
               <ul className="list-disc list-inside space-y-1">
-                <li><code>product_sku</code>（必要）- 產品 SKU</li>
+                <li><code>product_code</code>（必要）- 產品代碼（或 <code>product_sku</code> 相容）</li>
                 <li><code>variant_sku</code>（選填）- 變體 SKU，留空則綁定到產品層級</li>
                 <li><code>category_path</code>（必要）- 分類路徑，例如「玻璃保護貼/康寧系列」</li>
               </ul>

@@ -34,9 +34,6 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VariantBatchCreator } from './form/VariantBatchCreator';
 import { VariantEditDialog } from './VariantEditDialog';
-import { useProductColors } from '@/hooks/useProductColors';
-import { getContrastColor } from '@/utils/colorUtils';
-import { useBrands } from '@/hooks/useBrands';
 
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;
@@ -56,8 +53,6 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function VariantManager({ products, search }: VariantManagerProps) {
   const queryClient = useQueryClient();
-  const { colors } = useProductColors();
-  const { getBrandName } = useBrands();
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isBatchOpen, setIsBatchOpen] = useState(false);
@@ -66,42 +61,83 @@ export function VariantManager({ products, search }: VariantManagerProps) {
   const [isBatchEditOpen, setIsBatchEditOpen] = useState(false);
   const [batchEditEntries, setBatchEditEntries] = useState<Array<{ field: string; value: string }>>([]);
 
-  // 篩選有變體的產品
+  // 篩選產品（所有產品皆有變體）
   const productsWithVariants = products.filter(p =>
-    p.has_variants &&
-    (p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku.toLowerCase().includes(search.toLowerCase()))
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    (p.code || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const selectedProduct = products.find(p => p.id === selectedProductId);
 
-  // 取得選定產品的變體
+  // 取得選定產品的變體與選項資料
   const { data: variants = [], isLoading: variantsLoading } = useQuery({
     queryKey: ['product-variants', selectedProductId],
     queryFn: async () => {
       if (!selectedProductId) return [];
-      const { data: variants, error: variantsError } = await supabase
-        .from('product_variants')
-        .select('*')
-        .eq('product_id', selectedProductId)
+      const { data: variantsData, error: variantsError } = await (supabase
+        .from('product_variants' as any)
+        .select('*' as any) as any)
+        .eq('product_id' as any, selectedProductId as any)
         .order('sku');
-      
-      if (variantsError) throw variantsError;
-      if (!variants || variants.length === 0) return [];
 
-      const variantIds = variants.map(v => v.id);
-      const { data: linksData, error: linksError } = await supabase
-        .from('entity_model_relations')
-        .select('variant_id, model_id, device_models(name)')
-        .eq('relation_type', 'include')
-        .not('model_id', 'is', null)
-        .in('variant_id', variantIds);
-      
+      if (variantsError) throw variantsError;
+
+      const normalizedVariants = (variantsData ?? []) as unknown as ProductVariant[];
+      if (normalizedVariants.length === 0) return [];
+
+      const variantIds = normalizedVariants.map(v => v.id);
+      const { data: linksData, error: linksError } = await (supabase
+        .from('entity_model_relations' as any)
+        .select('variant_id, model_id, device_models(name)' as any) as any)
+        .eq('relation_type' as any, 'include' as any)
+        .not('model_id' as any, 'is' as any, null as any)
+        .in('variant_id' as any, variantIds as any);
+
       if (linksError) throw linksError;
 
-      return variants.map(v => ({
+      // 取得此產品的選項群組與值
+      const { data: groupsData } = await (supabase
+        .from('product_option_groups' as any)
+        .select('*, product_option_values(*)' as any) as any)
+        .eq('product_id' as any, selectedProductId as any)
+        .order('sort_order');
+
+      // 取得變體的選項關聯
+      const { data: variantOptsData } = await (supabase
+        .from('product_variant_options' as any)
+        .select('*' as any) as any)
+        .in('variant_id' as any, variantIds as any);
+
+      // 建立值查詢表
+      const valueMap: Record<string, { label: string; hexCode: string | null; groupName: string }> = {};
+      const groups = (groupsData ?? []) as any[];
+      for (const group of groups) {
+        const values = (group as any).product_option_values ?? [];
+        for (const val of values) {
+          valueMap[val.id] = {
+            label: val.label,
+            hexCode: val.hex_code,
+            groupName: group.name,
+          };
+        }
+      }
+
+      // 建立各變體的選項顯示資料
+      const variantOptionsMap: Record<string, Array<{ label: string; hexCode: string | null; groupName: string }>> = {};
+      const opts = (variantOptsData ?? []) as any[];
+      for (const opt of opts) {
+        const vId = opt.variant_id;
+        if (!variantOptionsMap[vId]) variantOptionsMap[vId] = [];
+        const valInfo = valueMap[opt.option_value_id];
+        if (valInfo) {
+          variantOptionsMap[vId].push(valInfo);
+        }
+      }
+
+      return normalizedVariants.map(v => ({
         ...v,
-        device_model_links: linksData?.filter((link) => link.variant_id === v.id) || []
+        device_model_links: ((linksData ?? []) as Array<{ variant_id: string; model_id: string; device_models?: { name?: string | null } | null }>).filter((link) => link.variant_id === v.id),
+        optionDisplays: variantOptionsMap[v.id] || [],
       }));
     },
     enabled: !!selectedProductId,
@@ -109,7 +145,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('product_variants').delete().eq('id', id);
+      const { error } = await supabase.from('product_variants').delete().eq('id' as any, id as any);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -123,7 +159,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
 
   const batchDeleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
-      const { error } = await supabase.from('product_variants').delete().in('id', ids);
+      const { error } = await supabase.from('product_variants').delete().in('id' as any, ids as any);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -138,7 +174,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
 
   const batchEditMutation = useMutation({
     mutationFn: async ({ ids, updates }: { ids: string[]; updates: Record<string, any> }) => {
-      const { error } = await supabase.from('product_variants').update(updates as TablesUpdate<'product_variants'>).in('id', ids);
+      const { error } = await supabase.from('product_variants').update(updates as any).in('id' as any, ids as any);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -157,8 +193,6 @@ export function VariantManager({ products, search }: VariantManagerProps) {
     { value: 'retail_price', label: '零售價', type: 'number' },
     { value: 'status', label: '狀態', type: 'select' },
     { value: 'name', label: '變體名稱', type: 'text' },
-    { value: 'option_1', label: '選項1', type: 'text' },
-    { value: 'option_2', label: '選項2', type: 'text' },
     { value: 'barcode', label: '條碼', type: 'text' },
   ];
 
@@ -210,17 +244,17 @@ export function VariantManager({ products, search }: VariantManagerProps) {
         <Label className="text-sm font-medium whitespace-nowrap">選擇產品：</Label>
         <Select value={selectedProductId || ''} onValueChange={(v) => { setSelectedProductId(v); setSelectedVariantIds(new Set()); }}>
           <SelectTrigger className="flex-1 max-w-md">
-            <SelectValue placeholder="選擇有變體的產品" />
+            <SelectValue placeholder="選擇產品" />
           </SelectTrigger>
           <SelectContent>
             {productsWithVariants.length === 0 ? (
               <div className="p-4 text-sm text-muted-foreground text-center">
-                沒有啟用變體的產品
+                沒有符合的產品
               </div>
             ) : (
               productsWithVariants.map((product) => (
                 <SelectItem key={product.id} value={product.id}>
-                  <span className="font-mono text-xs mr-2">{product.sku}</span>
+                  <span className="font-mono text-xs mr-2">{product.code}</span>
                   {product.name}
                 </SelectItem>
               ))
@@ -249,9 +283,8 @@ export function VariantManager({ products, search }: VariantManagerProps) {
             <div>
               <h3 className="font-semibold text-lg">{selectedProduct.name}</h3>
               <p className="text-sm text-muted-foreground">
-                SKU: {selectedProduct.sku}
+                代碼: {selectedProduct.code}
                 {(selectedProduct as any).primary_brand_name && ` | 廠牌: ${(selectedProduct as any).primary_brand_name}`}
-                {selectedProduct.model && ` | 型號: ${selectedProduct.model}`}
               </p>
             </div>
             <Badge variant="secondary">{variants.length} 個變體</Badge>
@@ -303,9 +336,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
                 </TableHead>
                 <TableHead>SKU</TableHead>
                 <TableHead>名稱</TableHead>
-                <TableHead>選項1</TableHead>
-                <TableHead>選項2</TableHead>
-                <TableHead>選項3</TableHead>
+                <TableHead>選項</TableHead>
                 <TableHead className="text-right">批發價</TableHead>
                 <TableHead className="text-right">零售價</TableHead>
                 <TableHead>狀態</TableHead>
@@ -316,14 +347,14 @@ export function VariantManager({ products, search }: VariantManagerProps) {
               {variantsLoading ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 10 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <TableCell key={j}><Skeleton className="h-4 w-16" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : variants.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     此產品尚無變體，點擊「新增變體」或「批次建立」開始
                   </TableCell>
                 </TableRow>
@@ -340,25 +371,22 @@ export function VariantManager({ products, search }: VariantManagerProps) {
                     </TableCell>
                     <TableCell className="font-mono text-sm">{variant.sku}</TableCell>
                     <TableCell className="font-medium">{variant.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{variant.option_1 || '-'}</TableCell>
-                    <TableCell className="text-muted-foreground">{variant.option_2 || '-'}</TableCell>
                     <TableCell>
-                      {variant.option_3 ? (
-                        (() => {
-                          const color = colors.find(c => c.name === variant.option_3);
-                          if (color) {
-                            return (
-                              <div className="flex items-center gap-1.5">
-                                <div 
-                                  className="w-3 h-3 rounded-full border border-black/10 shadow-sm" 
-                                  style={{ backgroundColor: color.hex_code }} 
-                                />
-                                <span>{variant.option_3}</span>
+                      {((variant as any).optionDisplays?.length > 0) ? (
+                        <div className="flex flex-wrap gap-1">
+                          {((variant as any).optionDisplays || []).map((opt: any, i: number) => (
+                            opt.hexCode ? (
+                              <div key={i} className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-secondary text-xs" title={opt.groupName}>
+                                <div className="w-2.5 h-2.5 rounded-full border border-black/10 shadow-sm" style={{ backgroundColor: opt.hexCode }} />
+                                <span>{opt.label}</span>
                               </div>
-                            );
-                          }
-                          return variant.option_3;
-                        })()
+                            ) : (
+                              <Badge key={i} variant="secondary" className="text-xs">
+                                {opt.groupName}: {opt.label}
+                              </Badge>
+                            )
+                          ))}
+                        </div>
                       ) : '-'}
                     </TableCell>
                     <TableCell className="text-right">${variant.wholesale_price}</TableCell>
@@ -473,10 +501,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
       {!selectedProductId && (
         <div className="rounded-lg border bg-card p-12 text-center text-muted-foreground">
           <Layers className="h-12 w-12 mx-auto mb-4 opacity-50" />
-          <p className="text-lg">請先選擇一個有變體的產品</p>
-          <p className="text-sm mt-2">
-            如果沒有產品顯示，請先在產品列表中啟用「有變體選項」
-          </p>
+          <p className="text-lg">請先選擇一個產品</p>
         </div>
       )}
 

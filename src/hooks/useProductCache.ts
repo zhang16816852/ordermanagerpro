@@ -22,7 +22,7 @@ async function fetchAllPages(
   let from = 0;
   const allData: any[] = [];
   while (true) {
-    let query = supabase.from(table).select(select).range(from, from + PAGE_SIZE - 1);
+    let query = (supabase.from(table as any) as any).select(select).range(from, from + PAGE_SIZE - 1);
     if (options?.filters) {
       Object.entries(options.filters).forEach(([col, val]) => {
         query = query.eq(col, val);
@@ -51,6 +51,9 @@ export const getProductCache = () => {
 
 export const setProductCache = (cache: { version: string; data: ProductWithDetails[] }) => {
   CacheService.set(PRODUCT_CACHE_CFG.key, cache.data, cache.version, PRODUCT_CACHE_CFG.schema);
+  window.dispatchEvent(new CustomEvent('optimistic-product-cache-update', {
+    detail: { version: cache.version, data: cache.data }
+  }));
 };
 
 // 自訂事件名稱：當 syncProducts 完成後通知所有已掛載的 useProductCache 實例
@@ -75,7 +78,7 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
     }
 
     // 1. 基本資料抓取 (Products + Variants)
-    const { data: productsData, error: productsError } = await supabase.from('products')
+    const { data: productsData, error: productsError } = await (supabase.from('products') as any)
       .select(`
                     *,
                     variants:product_variants(*),
@@ -92,11 +95,15 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
       allGroupsWithItems,
       allSpecs,
       allCovers,
+      allOptionGroups,
+      allVariantOptions,
     ] = await Promise.all([
       fetchAllPages('entity_model_relations', 'product_id, variant_id, model_id, group_id, relation_type, reason'),
       fetchAllPages('device_model_groups', 'id, name, device_model_group_items(device_models(id, name, aliases))'),
       fetchAllPages('entity_spec_values', '*'),
       fetchAllPages('product_images', 'entity_type, entity_id, url', { filters: { is_cover: true } }),
+      fetchAllPages('product_option_groups', '*, product_option_values(*)'),
+      fetchAllPages('product_variant_options', '*'),
     ]);
 
     // 3. 建立索引 Map
@@ -120,6 +127,26 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
       coversMap.set(img.entity_id, img.url);
     });
 
+    // 3b. 選項資料索引
+    const optionGroupsByProduct = new Map<string, any[]>();
+    const optionValueById = new Map<string, any>();
+    allOptionGroups?.forEach((og: any) => {
+      if (!optionGroupsByProduct.has(og.product_id)) optionGroupsByProduct.set(og.product_id, []);
+      optionGroupsByProduct.get(og.product_id)!.push({
+        ...og,
+        values: og.product_option_values || [],
+      });
+      (og.product_option_values || []).forEach((ov: any) => {
+        optionValueById.set(ov.id, ov);
+      });
+    });
+
+    const variantOptionsMap = new Map<string, any[]>();
+    allVariantOptions?.forEach((vo: any) => {
+      if (!variantOptionsMap.has(vo.variant_id)) variantOptionsMap.set(vo.variant_id, []);
+      variantOptionsMap.get(vo.variant_id)!.push(vo);
+    });
+
     // 4. 資料對映處理
     products = (productsData || []).map((p: any) => {
       const modelDataP = processEntityModels(p.id, modelMaps);
@@ -136,6 +163,7 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
         effective_model_names: modelDataP._expanded_models,
         effective_model_aliases: modelDataP._expanded_model_aliases,
         spec_values: specsMap.get(p.id) || {},
+        option_groups: optionGroupsByProduct.get(p.id) || [],
         variants: p.variants?.map((v: any) => {
           const modelDataV = processEntityModels(v.id, modelMaps);
           return {
@@ -144,7 +172,8 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
             image_url: coversMap.get(v.id) || null,
             effective_model_names: modelDataV._expanded_models,
             effective_model_aliases: modelDataV._expanded_model_aliases,
-            spec_values: specsMap.get(v.id) || {}
+            spec_values: specsMap.get(v.id) || {},
+            option_values: (variantOptionsMap.get(v.id) || []).map((vo: any) => optionValueById.get(vo.option_value_id)).filter(Boolean)
           };
         })
       };
@@ -164,8 +193,8 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
 
 async function fetchProductsWithVersion(): Promise<FetchResult<ProductWithDetails[]>> {
   // 先從 data_versions 取得伺服器版本，避免 syncProducts() 以 '0' 為預設版本
-  const { data: versionRow } = await supabase
-    .from('data_versions')
+  const { data: versionRow } = await (supabase
+    .from('data_versions') as any)
     .select('version')
     .eq('table_name', 'products')
     .maybeSingle();
@@ -195,8 +224,8 @@ export const useProductCache = (storeId?: string | null) => {
   const { data: templates = [] } = useQuery<OrderGridTemplateWithProducts[]>({
     queryKey: ['table_templates'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('table_templates')
+      const { data, error } = await (supabase
+        .from('table_templates') as any)
         .select('*, template_variants:table_template_variants(*)')
         .order('name');
       if (error) throw error;
@@ -248,8 +277,8 @@ export const useStoreProductCache = (storeId?: string | null) => {
   const { data: storeProducts = [], isLoading: isStoreLoading } = useQuery({
     queryKey: ['store_products'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('store_products')
+      const { data, error } = await (supabase
+        .from('store_products') as any)
         .select('*');
       if (error) throw error;
       return data;
@@ -261,21 +290,29 @@ export const useStoreProductCache = (storeId?: string | null) => {
   const productsWithPricing = useMemo<ProductWithPricing[]>(() => {
     if (!rawProducts) return [];
 
-    return rawProducts.map(p => {
+    // 過濾：隱藏停售/售完的變體
+    const visibleProducts = rawProducts
+      .map(p => {
+        const sellableVariants = (p.variants || []).filter((v: any) => v.status === 'active' || v.status === 'preorder');
+        return { ...p, variants: sellableVariants };
+      })
+      .filter(p => (p.variants?.length ?? 0) > 0);
+
+    return visibleProducts.map(p => {
       const storeSettings = storeProducts.filter((sp: any) => sp.product_id === p.id);
       const mainStoreProduct = storeSettings.find((sp: any) => !sp.variant_id);
 
       return {
         ...p,
-        wholesale_price: mainStoreProduct?.wholesale_price || p.base_wholesale_price || 0,
-        retail_price: p.base_retail_price || 0,
+        wholesale_price: mainStoreProduct?.wholesale_price || 0,
+        retail_price: 0,
         has_store_price: !!mainStoreProduct,
         variants: (p.variants || []).map((v: any) => {
           const variantStoreProduct = storeSettings.find((sp: any) => sp.variant_id === v.id);
           return {
             ...v,
-            effective_wholesale_price: variantStoreProduct?.wholesale_price || v.wholesale_price || p.base_wholesale_price || 0,
-            effective_retail_price: v.retail_price || p.base_retail_price || 0,
+            effective_wholesale_price: variantStoreProduct?.wholesale_price || v.wholesale_price || 0,
+            effective_retail_price: v.retail_price || 0,
             has_brand_price: !!variantStoreProduct,
             spec_values: v.spec_values
           } as VariantWithPricing;

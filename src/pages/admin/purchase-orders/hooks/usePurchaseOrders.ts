@@ -43,10 +43,9 @@ export function usePurchaseOrders(viewingOrderId?: string) {
   const { data: products = [] } = useQuery({
     queryKey: ['products-for-purchase'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('products')
-        .select('id, name, sku, has_variants, base_wholesale_price')
-        .eq('status', 'active')
+      const { data, error } = await (supabase
+        .from('products') as any)
+        .select('id, name, code')
         .order('name');
       if (error) throw error;
       return data as ProductWithPrice[];
@@ -67,9 +66,9 @@ export function usePurchaseOrders(viewingOrderId?: string) {
       const productIds = (data || []).map((item: any) => item.product_id).filter(Boolean);
       let productMap: Record<string, any> = {};
       if (productIds.length > 0) {
-        const { data: prods } = await supabase
-          .from('products')
-          .select('id, name, sku')
+        const { data: prods } = await (supabase
+          .from('products') as any)
+          .select('id, name, code')
           .in('id', productIds);
         productMap = (prods || []).reduce((acc, p) => ({ ...acc, [p.id]: p }), {});
       }
@@ -78,8 +77,8 @@ export function usePurchaseOrders(viewingOrderId?: string) {
       const variantIds = (data || []).map((item: any) => item.variant_id).filter(Boolean);
       let variantMap: Record<string, any> = {};
       if (variantIds.length > 0) {
-        const { data: variants } = await supabase
-          .from('product_variants')
+        const { data: variants } = await (supabase
+          .from('product_variants') as any)
           .select('id, name, sku')
           .in('id', variantIds);
         variantMap = (variants || []).reduce((acc, v) => ({ ...acc, [v.id]: v }), {});
@@ -214,59 +213,36 @@ export function usePurchaseOrders(viewingOrderId?: string) {
   });
 
   const receiveItemsMutation = useMutation({
-    mutationFn: async (items: { id: string; received_quantity: number }[]) => {
-      for (const item of items) {
-        const { error } = await (supabase as any)
-          .from('purchase_order_items')
-          .update({ received_quantity: item.received_quantity })
-          .eq('id', item.id);
-        if (error) throw error;
+    mutationFn: async (params: { items: { id: string; received_quantity: number; warehouse_id?: string }[] }) => {
+      const { items } = params;
 
-        // Inventory update
+      // Build payload for receive_purchase_items RPC (now handles UPDATE + status atomically)
+      const po = orders.find(o => o.id === viewingOrderId);
+      const poCode = po?.supplier_order_number || viewingOrderId || '';
+      const rpcItems = items.map(item => {
         const orderItem = orderItems.find(i => i.id === item.id);
-        if (orderItem && orderItem.product_id) {
-          const { data: existing } = await (supabase as any)
-            .from('product_inventory')
-            .select('quantity')
-            .eq('product_id', orderItem.product_id)
-            .maybeSingle();
-
-          const currentQty = existing?.quantity || 0;
-          const { error: invError } = await (supabase as any)
-            .from('product_inventory')
-            .upsert({
-              product_id: orderItem.product_id,
-              variant_id: orderItem.variant_id,
-              quantity: currentQty + item.received_quantity,
-            }, {
-              onConflict: 'product_id,variant_id',
-            });
-          if (invError) console.error('Inventory update error:', invError);
-        }
-      }
-
-      // Update status
-      const allReceived = orderItems.every(item => {
-        const received = items.find(i => i.id === item.id);
-        return received ? received.received_quantity >= item.quantity : item.received_quantity >= item.quantity;
+        return {
+          id: item.id,
+          product_id: orderItem?.product_id,
+          variant_id: orderItem?.variant_id || null,
+          received_quantity: item.received_quantity,
+          purchase_order_id: viewingOrderId,
+          purchase_order_code: poCode,
+          warehouse_id: item.warehouse_id || null,
+        };
       });
 
-      const anyReceived = items.some(i => i.received_quantity > 0);
-      const newStatus: PurchaseOrderStatus = allReceived ? 'received' : anyReceived ? 'partial_received' : 'ordered';
-
-      if (viewingOrderId) {
-        await (supabase as any)
-          .from('purchase_orders')
-          .update({
-            status: newStatus,
-            received_date: allReceived ? new Date().toISOString().split('T')[0] : null,
-          })
-          .eq('id', viewingOrderId);
-      }
+      const { error: rpcError } = await (supabase as any)
+        .rpc('receive_purchase_items', {
+          p_items: rpcItems,
+          p_warehouse_id: null,
+        });
+      if (rpcError) throw rpcError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchase-order-items', viewingOrderId] });
       queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
       toast.success('收貨已記錄');
     },
     onError: () => toast.error('記錄失敗'),

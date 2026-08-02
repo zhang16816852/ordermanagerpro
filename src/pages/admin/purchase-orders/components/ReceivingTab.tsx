@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { PackageCheck, ChevronDown, ChevronRight, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
+import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
 
 interface ReceivingItem {
   id: string;
@@ -35,8 +36,12 @@ interface ReceivingOrder {
 export function ReceivingTab() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { defaultWarehouse, warehouses } = useWarehouses();
   const [expandedPO, setExpandedPO] = useState<string | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [itemWarehouses, setItemWarehouses] = useState<Record<string, string>>({});
+
+  const getItemWarehouse = (itemId: string) => itemWarehouses[itemId] || defaultWarehouse?.id || '';
 
   const { data: receivingOrders = [], isLoading } = useQuery({
     queryKey: ['receiving-orders'],
@@ -48,7 +53,7 @@ export function ReceivingTab() {
           supplier:suppliers(name),
           items:purchase_order_items(
             id, product_id, variant_id, quantity, received_quantity, unit_cost,
-            product:products(name, sku),
+            product:products(name, code),
             variant:product_variants(name, sku)
           )
         `)
@@ -60,47 +65,27 @@ export function ReceivingTab() {
   });
 
   const receiveMutation = useMutation({
-    mutationFn: async (items: { id: string; received_quantity: number }[]) => {
-      for (const item of items) {
-        const { error } = await (supabase as any)
-          .from('purchase_order_items')
-          .update({ received_quantity: item.received_quantity })
-          .eq('id', item.id);
-        if (error) throw error;
-
-        // Update inventory
-        const { data: orderItem } = await (supabase as any)
-          .from('purchase_order_items')
-          .select('product_id, variant_id')
-          .eq('id', item.id)
-          .single();
-
-        if (orderItem?.product_id) {
-          const { data: existing } = await (supabase as any)
-            .from('product_inventory')
-            .select('quantity')
-            .eq('product_id', orderItem.product_id)
-            .eq('variant_id', orderItem.variant_id || null)
-            .maybeSingle();
-
-          const currentQty = existing?.quantity || 0;
-          const newQty = currentQty + item.received_quantity;
-
-          await (supabase as any)
-            .from('product_inventory')
-            .upsert({
-              product_id: orderItem.product_id,
-              variant_id: orderItem.variant_id || null,
-              quantity: newQty,
-              updated_at: new Date().toISOString(),
-            }, { onConflict: 'product_id, variant_id' });
-        }
-      }
+    mutationFn: async (payload: { poId: string; poCode: string; items: { id: string; product_id: string; variant_id: string | null; received_quantity: number; warehouse_id: string }[] }) => {
+      const { error: rpcError } = await (supabase as any)
+        .rpc('receive_purchase_items', {
+          p_items: payload.items.map(item => ({
+            id: item.id,
+            product_id: item.product_id,
+            variant_id: item.variant_id,
+            received_quantity: item.received_quantity,
+            purchase_order_id: payload.poId,
+            purchase_order_code: payload.poCode,
+            warehouse_id: item.warehouse_id || null,
+          })),
+          p_warehouse_id: null,
+        });
+      if (rpcError) throw rpcError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['receiving-orders'] });
       queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
       queryClient.invalidateQueries({ queryKey: ['purchase-order-items'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
       toast.success('收貨已記錄，庫存已更新');
       setExpandedPO(null);
       setQuantities({});
@@ -108,51 +93,29 @@ export function ReceivingTab() {
     onError: (error: Error) => toast.error(getErrorMessage(error)),
   });
 
-  const updatePOStatus = useMutation({
-    mutationFn: async ({ poId, items }: { poId: string; items: ReceivingItem[] }) => {
-      const allReceived = items.every(i => i.received_quantity >= i.quantity);
-      const anyReceived = items.some(i => i.received_quantity > 0);
-      const newStatus = allReceived ? 'received' : anyReceived ? 'partial_received' : 'ordered';
-
-      await (supabase as any)
-        .from('purchase_orders')
-        .update({
-          status: newStatus,
-          received_date: allReceived ? new Date().toISOString().split('T')[0] : null,
-        })
-        .eq('id', poId);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['receiving-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
-    },
-  });
-
   const handleReceive = (po: ReceivingOrder) => {
-    const updates = po.items
-      .filter(item => {
-        const qty = quantities[item.id];
-        return qty !== undefined && qty !== item.received_quantity;
-      })
-      .map(item => ({
-        id: item.id,
-        received_quantity: quantities[item.id] ?? item.received_quantity,
-      }));
+    const filteredItems = po.items.filter(item => {
+      const qty = quantities[item.id];
+      return qty !== undefined && qty !== item.received_quantity && qty > 0;
+    });
 
-    if (updates.length === 0) {
+    if (filteredItems.length === 0) {
       toast.warning('請先輸入收貨數量');
       return;
     }
 
-    receiveMutation.mutate(updates, {
-      onSuccess: () => {
-        // After receiving, check if we should update PO status
-        const updatedItems = po.items.map(item => {
-          const update = updates.find(u => u.id === item.id);
-          return update ? { ...item, received_quantity: update.received_quantity } : item;
-        });
-        updatePOStatus.mutate({ poId: po.id, items: updatedItems });
-      },
+    const updates = filteredItems.map(item => ({
+      id: item.id,
+      product_id: item.product_id!,
+      variant_id: item.variant_id,
+      received_quantity: quantities[item.id] ?? item.received_quantity,
+      warehouse_id: getItemWarehouse(item.id),
+    }));
+
+    receiveMutation.mutate({
+      poId: po.id,
+      poCode: po.supplier_order_number || po.id,
+      items: updates,
     });
   };
 
@@ -232,6 +195,7 @@ export function ReceivingTab() {
                         <th className="text-right py-2 px-3 font-medium w-20">訂購</th>
                         <th className="text-right py-2 px-3 font-medium w-20">已收</th>
                         <th className="text-right py-2 px-3 font-medium w-24">本次收貨</th>
+                        <th className="text-left py-2 px-3 font-medium w-40">入庫倉</th>
                         <th className="text-right py-2 px-3 font-medium w-24">單價</th>
                       </tr>
                     </thead>
@@ -267,6 +231,17 @@ export function ReceivingTab() {
                                 }}
                                 className="w-20 h-8 text-right inline-block"
                               />
+                            </td>
+                            <td className="py-2 px-3">
+                              <select
+                                value={getItemWarehouse(item.id)}
+                                onChange={(e) => setItemWarehouses(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                className="h-8 text-xs border rounded px-1 w-full"
+                              >
+                                {warehouses.filter(w => w.is_active !== false).map(w => (
+                                  <option key={w.id} value={w.id}>{w.name}</option>
+                                ))}
+                              </select>
                             </td>
                             <td className="text-right py-2 px-3 text-muted-foreground">
                               ${item.unit_cost.toLocaleString()}

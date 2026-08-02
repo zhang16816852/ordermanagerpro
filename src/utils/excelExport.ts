@@ -5,13 +5,12 @@ import { formatSpecValue } from './specLogic';
 export const BASE_COLUMNS = {
     'ID': 'id',
     '產品類型': 'is_variant',
-    'SKU': 'sku',
+    'SKU': 'code',
     '產品名稱': 'name',
     '變體 SKU': 'variant_sku',
     '變體名稱': 'variant_name',
     '描述': 'description',
     '品牌': 'brand',
-    '型號': 'model',
     '系列': 'series',
     '適用型號': 'device_models',
     '批發價': 'wholesale_price',
@@ -19,9 +18,6 @@ export const BASE_COLUMNS = {
     '狀態': 'status',
     '條碼': 'barcode',
     '分類': 'category',
-    '規格 1': 'option_1',
-    '規格 2': 'option_2',
-    '顏色 (規格 3)': 'option_3',
 } as const;
 
 export type BaseColumnKey = keyof typeof BASE_COLUMNS;
@@ -161,9 +157,6 @@ export function generateProductExcel(
 
         const baseKeys = Object.keys(BASE_COLUMNS);
 
-        const statusColIndex = baseKeys.indexOf('狀態');
-        if (statusColIndex >= 0) row2Instructions[statusColIndex] = '上架中, 已停售, 預購中, 售完停產';
-
         const modelColIndex = baseKeys.indexOf('適用型號');
         if (modelColIndex >= 0) row2Instructions[modelColIndex] = '多個用逗號分隔。\n特定寫法:\ngroup:名稱\nexclude:名稱';
 
@@ -209,7 +202,7 @@ export function generateProductExcel(
 
         worksheet['!view'] = [{ state: 'frozen', ySplit: 4 }];
 
-        const sanitizedCatName = catName.replace(/[:\\/?*\[\]]/g, '_').substring(0, 31);
+        const sanitizedCatName = catName.replace(/[:\\/?*[\]]/g, '_').substring(0, 31);
         XLSX.utils.book_append_sheet(workbook, worksheet, sanitizedCatName);
     });
 
@@ -237,23 +230,19 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
     const baseValues: Record<string, any> = {
         id: item.id || '',
         is_variant: isVariant ? '變體' : '主商品',
-        sku: isVariant ? (parent?.sku || '') : (item.sku || ''),
+        code: isVariant ? (parent?.code || '') : (item.code || ''),
         name: isVariant ? (parent?.name || '') : (item.name || ''),
         variant_sku: isVariant ? (item.sku || '') : '',
         variant_name: isVariant ? (item.name || '') : '',
         description: item.description || parent?.description || '',
         brand: (item.primary_brand_id || item.brand_ids?.length > 0 || parent?.primary_brand_id || parent?.brand_ids?.length > 0) ? (brandMap[item.primary_brand_id || item.brand_ids?.[0]] || brandMap[parent?.primary_brand_id || parent?.brand_ids?.[0]] || '') : '',
-        model: item.model || parent?.model || '',
         series: seriesMap[item.brand_series_ids?.[0] || parent?.brand_series_ids?.[0]] || '',
-        wholesale_price: isVariant ? (item.wholesale_price || 0) : (item.base_wholesale_price || 0),
-        retail_price: isVariant ? (item.retail_price || 0) : (item.base_retail_price || 0),
-        status: STATUS_MAP[item.status || 'active'] || '上架中',
-        barcode: item.barcode || '',
+        wholesale_price: item.wholesale_price || 0,
+        retail_price: item.retail_price || 0,
+        status: isVariant ? (STATUS_MAP[item.status || 'active'] || '上架中') : '',
+        barcode: isVariant ? (item.barcode || '') : '',
         category: categoryName,
         device_models: '',
-        option_1: item.option_1 || '',
-        option_2: item.option_2 || '',
-        option_3: item.color || item.option_3 || '',
     };
 
     let deviceModelValue = '';

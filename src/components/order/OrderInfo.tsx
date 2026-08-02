@@ -1,4 +1,5 @@
 import { OrderSourceType } from '@/types/order';
+import { Badge } from '@/components/ui/badge';
 
 interface OrderInfoProps {
     orderId: string;
@@ -6,9 +7,10 @@ interface OrderInfoProps {
     createdAt: string;
     sourceType?: OrderSourceType;
     notes?: string | null;
+    consignmentMode?: boolean;
 }
 
-export function OrderInfo({ orderId, storeName, createdAt, sourceType, notes }: OrderInfoProps) {
+export function OrderInfo({ orderId, storeName, createdAt, sourceType, notes, consignmentMode }: OrderInfoProps) {
     return (
         <>
             {/* Order Info Grid */}
@@ -16,6 +18,9 @@ export function OrderInfo({ orderId, storeName, createdAt, sourceType, notes }: 
                 <div>
                     <span className="text-muted-foreground mr-2">訂單編號：</span>
                     <span className="font-mono">{orderId}</span>
+                    {consignmentMode && (
+                        <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
+                    )}
                 </div>
 
                 {storeName && (

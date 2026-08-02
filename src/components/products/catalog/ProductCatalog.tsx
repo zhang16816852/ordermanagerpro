@@ -84,7 +84,7 @@ export default function ProductCatalog({
   useEffect(() => {
     const pName = searchParams.get("p");
     if (pName && products.length > 0) {
-      const found = products.find(p => p.name === pName || p.sku === pName);
+      const found = products.find(p => p.name === pName || p.code === pName);
       if (found) {
         setDetailProduct(found);
       }
@@ -121,7 +121,7 @@ export default function ProductCatalog({
       );
       const productTexts = [
         product.name, 
-        product.sku, 
+        product.code, 
         ...(product.category_names || []),
         ...(product.effective_model_names || []),
         ...((product as any).effective_model_aliases || []),
@@ -141,9 +141,7 @@ export default function ProductCatalog({
             variant.name,
             variant.sku,
             variant.barcode,
-            variant.option_1,
-            variant.option_2,
-            variant.option_3,
+            ...(variant.option_values?.map((ov: any) => ov.label || ov.value) || []),
             ...((variant as any).effective_model_names || []),
             ...((variant as any).effective_model_aliases || [])
           ]
@@ -186,7 +184,7 @@ export default function ProductCatalog({
   }, [allTemplates, filteredVariantIds]);
 
   const handleProductClick = (product: ProductWithPricing) => {
-    if (product.has_variants && product.variants && product.variants.length > 1) {
+    if (product.variants && product.variants.length > 1) {
       setVariantDialogProduct(product);
     } else {
       handleOpenDetail(product);
@@ -244,7 +242,7 @@ export default function ProductCatalog({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredProducts.map((product) => {
                 const totalInCart = getTotalProductQuantity(product.id);
-                const hasVariants = product.has_variants && product.variants && product.variants.length > 0;
+                const hasVariants = product.variants && product.variants.length > 0;
 
                 return (
                   <div
@@ -263,7 +261,7 @@ export default function ProductCatalog({
                           )}
                         </div>
                         <div className="text-sm text-muted-foreground font-mono">
-                          {product.sku}
+                          {product.code}
                         </div>
                       </div>
                       <div className="text-right flex items-center gap-2">
@@ -299,7 +297,7 @@ export default function ProductCatalog({
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {filteredProducts.map((product) => {
                 const totalInCart = getTotalProductQuantity(product.id);
-                const hasVariants = product.has_variants && product.variants && product.variants.length > 0;
+                const hasVariants = product.variants && product.variants.length > 0;
 
                 return (
                   <div
@@ -347,12 +345,12 @@ export default function ProductCatalog({
             </div>
           ) : viewMode === 'variants' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {filteredProducts.flatMap(product => {
-                if (product.has_variants && product.variants && product.variants.length > 0) {
-                  return product.variants.map(variant => ({ product, variant }));
+              {(filteredProducts as any).flatMap((product: any) => {
+                if (product.variants && product.variants.length > 0) {
+                  return product.variants.map((variant: any) => ({ product, variant }));
                 }
                 return [{ product, variant: null }];
-              }).map(({ product, variant }) => {
+              }).map(({ product, variant }: any) => {
                 const key = variant ? `${product.id}-${variant.id}` : product.id;
                 const qty = variant ? getItemQuantity(product.id, variant.id) : getItemQuantity(product.id);
                 const price = variant ? ((variant as VariantWithPricing).effective_wholesale_price ?? variant.wholesale_price) : product.wholesale_price;
@@ -380,27 +378,19 @@ export default function ProductCatalog({
                           </div>
                         )}
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {variant && (
-                            <>
-                              {variant.option_1 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_1}</Badge>}
-                              {variant.option_2 && <Badge variant="secondary" className="text-[10px] h-5 px-1">{variant.option_2}</Badge>}
-                              {variant.option_3 && (() => {
-                                const colorData = colors.find(c => c.name === variant.option_3);
-                                return (
-                                  <Badge 
-                                    variant="secondary" 
-                                    className="text-[10px] h-5 px-1 border-none shadow-sm"
-                                    style={colorData?.hex_code ? {
-                                      backgroundColor: colorData.hex_code,
-                                      color: getContrastColor(colorData.hex_code)
-                                    } : {}}
-                                  >
-                                    {variant.option_3}
-                                  </Badge>
-                                );
-                              })()}
-                            </>
-                          )}
+                          {variant?.option_values?.map((ov: any) => (
+                            <Badge 
+                              key={ov.id}
+                              variant="secondary" 
+                              className="text-[10px] h-5 px-1"
+                              style={ov.hex_code ? {
+                                backgroundColor: ov.hex_code,
+                                color: getContrastColor(ov.hex_code)
+                              } : {}}
+                            >
+                              {ov.label || ov.value}
+                            </Badge>
+                          ))}
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
@@ -409,7 +399,7 @@ export default function ProductCatalog({
                           <div className="text-sm text-primary font-medium">已選 x{qty}</div>
                         )}
                       </div>
-                      <StatusBadge status={variant?.status ?? product.status} />
+                      <StatusBadge status={variant?.status} />
                     </div>
                   </div>
                 );

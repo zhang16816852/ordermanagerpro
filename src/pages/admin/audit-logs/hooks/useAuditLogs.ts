@@ -57,8 +57,8 @@ export function useAuditLogs(filters: {
                 const userIds = [...new Set(logsWithProfiles.map(log => log.performed_by).filter(Boolean))];
                 
                 if (userIds.length > 0) {
-                    const { data: profilesData } = await supabase
-                        .from('profiles')
+                    const { data: profilesData } = await (supabase
+                        .from('profiles') as any)
                         .select('id, full_name, email')
                         .in('id', userIds);
                         

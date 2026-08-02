@@ -139,7 +139,7 @@ export function ProductVariantSection({
                             <div key={v.id} className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
                                 <div className="flex-1 min-w-0 pr-3">
                                     <div className="text-sm font-medium truncate">{v.name}</div>
-                                    <div className="text-xs text-muted-foreground font-mono truncate">{v.sku || product.sku}</div>
+                                    <div className="text-xs text-muted-foreground font-mono truncate">{v.sku || product.code}</div>
                                 </div>
                                 <div className="text-sm font-semibold text-right mr-4 w-16 shrink-0">
                                     ${Number(price)}

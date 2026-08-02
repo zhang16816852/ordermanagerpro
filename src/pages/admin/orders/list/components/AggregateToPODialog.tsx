@@ -82,9 +82,9 @@ export function AggregateToPODialog({
     queryKey: ['products-for-aggregate-po'],
     queryFn: async () => {
       const productIds = [...new Set(selectedItems.map(i => i.productId))];
-      const { data, error } = await supabase
-        .from('products')
-        .select('id, base_wholesale_price')
+      const { data, error } = await (supabase
+        .from('products') as any)
+        .select('id')
         .in('id', productIds);
       if (error) throw error;
       return data || [];
@@ -100,9 +100,7 @@ export function AggregateToPODialog({
       );
       if (mapping?.vendor_unit_cost) return mapping.vendor_unit_cost;
     }
-    // Fallback to product base wholesale price
-    const product = products.find((p: any) => p.id === productId);
-    return product?.base_wholesale_price || 0;
+    return 0;
   };
 
   const createMutation = useMutation({

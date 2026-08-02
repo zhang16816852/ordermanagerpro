@@ -1,6 +1,5 @@
-import { Form, FormField, FormItem, FormLabel, FormControl } from '@/components/ui/form';
+import { Form } from '@/components/ui/form';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { UseFormReturn } from 'react-hook-form';
 
 import { IdentificationFields } from './sections/IdentificationFields';
@@ -8,8 +7,6 @@ import { CategorySelectField } from './sections/CategorySelectField';
 import { BrandSelectField } from './sections/BrandSelectField';
 import { SeriesSelectField } from './sections/SeriesSelectField';
 import { PricingFields } from './sections/PricingFields';
-import { DynamicSpecsFields } from './sections/DynamicSpecsFields';
-import { DeviceModelSelectField } from './sections/DeviceModelSelectField';
 
 interface BasicInfoFormProps {
     form: UseFormReturn<any>;
@@ -38,40 +35,7 @@ export function BasicInfoForm({ form, onSubmit, isLoading, onCancel }: BasicInfo
                     {/* 價格與型號 */}
                     <PricingFields form={form} />
 
-                    {/* 適用設備型號 (多選標籤) - 僅在無變體時顯示 */}
-                    {!form.watch('has_variants') && (
-                        <DeviceModelSelectField form={form} />
-                    )}
                 </div>
-
-                {/* 動態規格欄位 (根據分類自動顯示) - 僅在無變體時顯示 */}
-                {!form.watch('has_variants') && (
-                    <DynamicSpecsFields form={form} />
-                )}
-
-                {/* 變體切換開關 */}
-                <FormField
-                    control={form.control}
-                    name="has_variants"
-                    render={({ field }) => (
-                        <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 bg-muted/20">
-                            <FormControl>
-                                <Checkbox
-                                    checked={field.value}
-                                    onCheckedChange={(checked) =>
-                                        field.onChange(checked === true)
-                                    }
-                                />
-                            </FormControl>
-                            <div className="space-y-1 leading-none">
-                                <FormLabel>啟用規格變體</FormLabel>
-                                <p className="text-sm text-muted-foreground">
-                                    如果此產品有顏色、尺寸等不同規格，請勾選。
-                                </p>
-                            </div>
-                        </FormItem>
-                    )}
-                />
 
                 {/* 按鈕區 */}
                 <div className="flex justify-end gap-3 pt-4 border-t">

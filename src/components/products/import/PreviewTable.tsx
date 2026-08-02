@@ -1,5 +1,4 @@
 import { useEffect, useMemo } from 'react';
-import { useColorStore } from '@/store/useColorStore';
 import { useDeviceModelStore } from '@/store/useDeviceModelStore';
 import { useBrandSeriesCache } from '@/hooks/useBrandSeriesCache';
 import { ImportRow } from './useProductImport';
@@ -26,18 +25,17 @@ export function PreviewTable({
     filterStatus, onStatusFilterChange, onUpdate, onBatchUpdate, onRemove,
     allBrands = [], specDefs = []
 }: PreviewTableProps) {
-    const { colors: allColors, addColor, fetchColors, getColorByName } = useColorStore();
     const { models: allDeviceModels, brands: allDeviceBrands, groups: allDeviceGroups, addModel, fetchData: fetchDeviceData } = useDeviceModelStore();
     const { allSeries } = useBrandSeriesCache();
 
     const safeData = data || [];
 
-    useEffect(() => { fetchColors(); fetchDeviceData(true); }, [fetchColors, fetchDeviceData]);
+    useEffect(() => { fetchDeviceData(true); }, [fetchDeviceData]);
 
     const groups = useMemo(() => {
         const map = new Map<string, { rows: ImportRow[]; indices: number[] }>();
         safeData.forEach((row, i) => {
-            const key = row.product_sku;
+            const key = row.product_code;
             if (!map.has(key)) map.set(key, { rows: [], indices: [] });
             map.get(key)!.rows.push(row);
             map.get(key)!.indices.push(i);
@@ -70,9 +68,8 @@ export function PreviewTable({
                 <div className="bg-muted/60 px-3 py-1.5 flex items-center gap-3 text-[10px] font-medium text-muted-foreground border-b">
                     <span className="w-[60px] shrink-0 text-center">狀態</span>
                     <span className="w-[100px] shrink-0">變動</span>
-                    <span className="w-[120px] shrink-0">SKU</span>
+                    <span className="w-[120px] shrink-0">代碼</span>
                     <span className="flex-1 min-w-[120px]">名稱</span>
-                    <span className="w-[80px] shrink-0">型號</span>
                     <span className="w-[110px] shrink-0">品牌</span>
                     <span className="w-[100px] shrink-0">系列</span>
                     <span className="w-[110px] shrink-0">分類</span>
@@ -95,7 +92,6 @@ export function PreviewTable({
                             allDeviceModels={allDeviceModels}
                             allDeviceBrands={allDeviceBrands}
                             allDeviceGroups={allDeviceGroups}
-                            allColors={allColors}
                             addModel={addModel}
                             specDefs={specDefs}
                             allSeries={allSeries}

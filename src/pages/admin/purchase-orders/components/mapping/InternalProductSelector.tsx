@@ -17,13 +17,12 @@ export function InternalProductSelector({ onSelect, onClose }: InternalProductSe
   const { data: products = [], isLoading } = useQuery({
     queryKey: ['internal-products-search', searchTerm],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('products')
+      const { data, error } = await (supabase
+        .from('products') as any)
         .select(`
-          id, name, sku, has_variants,
-          variants:product_variants(id, name, sku, option_1, option_2, option_3)
+          id, name, code,
+          variants:product_variants(id, name, sku)
         `)
-        .eq('status', 'active')
         .ilike('name', `%${searchTerm}%`)
         .limit(20);
 
@@ -61,12 +60,12 @@ export function InternalProductSelector({ onSelect, onClose }: InternalProductSe
             ) : (
               products.map((p) => {
                 const variants = p.variants as any[];
-                if (p.has_variants && variants && variants.length > 0) {
+                if (variants && variants.length > 0) {
                   return variants.map(v => (
                     <TableRow key={v.id}>
                       <TableCell>
                         <div className="font-medium">{p.name}</div>
-                        <div className="text-sm text-muted-foreground">{v.name || [v.option_1, v.option_2, v.option_3].filter(Boolean).join(' - ')}</div>
+                        <div className="text-sm text-muted-foreground">{v.name || v.sku}</div>
                       </TableCell>
                       <TableCell className="text-sm">{v.sku}</TableCell>
                       <TableCell>
@@ -78,7 +77,7 @@ export function InternalProductSelector({ onSelect, onClose }: InternalProductSe
                 return (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.name}</TableCell>
-                    <TableCell className="text-sm">{p.sku}</TableCell>
+                    <TableCell className="text-sm">{p.code}</TableCell>
                     <TableCell>
                       <Button size="sm" variant="outline" onClick={() => onSelect(p.id, null, p.name, null)}>選擇</Button>
                     </TableCell>

@@ -78,8 +78,8 @@ export function DeviceModelGroupManager({ search = '', typeFilter = 'all' }: Dev
   const handleExport = async () => {
     try {
       toast.loading('正在準備匯出資料...');
-      const { data: allItems, error } = await supabase
-        .from('device_model_group_items')
+      const { data: allItems, error } = await (supabase
+        .from('device_model_group_items') as any)
         .select(`
           group_id,
           device_model_groups(name, description),
@@ -143,7 +143,7 @@ export function DeviceModelGroupManager({ search = '', typeFilter = 'all' }: Dev
           const modelMap = new Map(models.map(m => [m.name.toLowerCase(), m.id]));
 
           // 提前取得現有的型號關聯，用來做差異比對
-          const { data: allExistingItems } = await supabase.from('device_model_group_items').select('group_id, model_id');
+          const { data: allExistingItems } = await (supabase.from('device_model_group_items') as any).select('group_id, model_id');
           const existingGroupItemsMap = new Map<string, Set<string>>();
           allExistingItems?.forEach(item => {
             if (!existingGroupItemsMap.has(item.group_id)) {
@@ -166,7 +166,7 @@ export function DeviceModelGroupManager({ search = '', typeFilter = 'all' }: Dev
             // 2. 建立或更新群組
             let groupId;
             // 優先使用 UUID(群組ID) 識別，若無則降級使用名稱匹配
-            let existingGroup = null;
+            let existingGroup: DeviceModelGroup | null | undefined = null;
             if (groupIdFromCsv) {
               existingGroup = groups.find(g => g.id === groupIdFromCsv);
             }

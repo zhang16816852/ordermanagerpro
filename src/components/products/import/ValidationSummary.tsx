@@ -10,7 +10,7 @@ export function ValidationSummary({ data }: ValidationSummaryProps) {
     const safeData = data || [];
     const validRows = safeData.filter(r => r.isValid);
     const invalidRows = safeData.filter(r => !r.isValid);
-    const productCount = new Set(validRows.map(r => r.product_sku)).size;
+    const productCount = new Set(validRows.map(r => r.product_code)).size;
     const variantCount = validRows.filter(r => r.is_variant).length;
 
     return (

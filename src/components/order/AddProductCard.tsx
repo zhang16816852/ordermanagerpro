@@ -37,7 +37,7 @@ export function AddProductCard({
                         <SelectContent>
                             {availableProducts.map(product => (
                                 <SelectItem key={product.id} value={product.id}>
-                                    {product.sku} - {product.name} (${product.wholesale_price})
+                                    {product.code} - {product.name} (${product.wholesale_price})
                                 </SelectItem>
                             ))}
                         </SelectContent>

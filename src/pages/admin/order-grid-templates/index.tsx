@@ -1,12 +1,11 @@
 import React from 'react';
 import { OrderGridTemplateList } from '@/components/order-grid/OrderGridTemplateList';
 import { useProductCache } from '@/hooks/useProductCache';
-import type { ProductWithPricing } from '@/types/order-grid';
 
 export default function AdminOrderGridTemplates() {
   const { products: allProducts } = useProductCache();
 
-  const products = (allProducts || []) as ProductWithPricing[];
+  const products = (allProducts || []) as any[];
 
   return (
     <div className="space-y-6">

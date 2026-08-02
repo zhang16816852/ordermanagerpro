@@ -29,8 +29,8 @@ export default function StoreTeam() {
     queryFn: async () => {
       if (!storeId) return [];
 
-      const { data, error } = await supabase
-        .from("store_users")
+      const { data, error } = await (supabase
+        .from("store_users") as any)
         .select(`
           id,
           role,
@@ -43,8 +43,8 @@ export default function StoreTeam() {
 
       // Fetch profiles for members
       const userIds = data.map((m) => m.user_id);
-      const { data: profiles } = await supabase
-        .from("profiles")
+      const { data: profiles } = await (supabase
+        .from("profiles") as any)
         .select("id, email, full_name")
         .in("id", userIds);
 
@@ -61,8 +61,8 @@ export default function StoreTeam() {
     queryFn: async () => {
       if (!storeId) return [];
 
-      const { data, error } = await supabase
-        .from("invitations")
+      const { data, error } = await (supabase
+        .from("invitations") as any)
         .select("*")
         .eq("store_id", storeId)
         .eq("status", "pending")

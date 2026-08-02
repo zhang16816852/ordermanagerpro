@@ -1,19 +1,14 @@
-import { Database } from '@/integrations/supabase/types';
+export type RepairOrderStatus = 'pending' | 'diagnosing' | 'quoting' | 'awaiting_approval' | 'awaiting_parts' | 'repairing' | 'ready' | 'delivered' | 'cancelled';
+export type RepairItemType = 'service' | 'part';
 
-export type RepairOrder = Database['public']['Tables']['repair_orders']['Row'];
-export type RepairOrderInsert = Database['public']['Tables']['repair_orders']['Insert'];
-export type RepairOrderUpdate = Database['public']['Tables']['repair_orders']['Update'];
-
-export type RepairOrderItem = Database['public']['Tables']['repair_order_items']['Row'];
-export type RepairOrderItemInsert = Database['public']['Tables']['repair_order_items']['Insert'];
-export type RepairOrderItemUpdate = Database['public']['Tables']['repair_order_items']['Update'];
-
-export type RepairOrderStatusHistory = Database['public']['Tables']['repair_order_status_history']['Row'];
-
-export type RepairOrderSummary = Database['public']['Views']['repair_order_summary']['Row'];
-
-export type RepairOrderStatus = Database['public']['Enums']['repair_order_status'];
-export type RepairItemType = Database['public']['Enums']['repair_item_type'];
+export interface RepairOrder { id: string; [key: string]: any; }
+export interface RepairOrderInsert { [key: string]: any; }
+export interface RepairOrderUpdate { [key: string]: any; }
+export interface RepairOrderItem { id: string; [key: string]: any; }
+export interface RepairOrderItemInsert { [key: string]: any; }
+export interface RepairOrderItemUpdate { [key: string]: any; }
+export interface RepairOrderStatusHistory { id: string; [key: string]: any; }
+export type RepairOrderSummary = Record<string, any>;
 
 export const REPAIR_ORDER_STATUS_LABELS: Record<RepairOrderStatus, string> = {
   pending: '待處理',

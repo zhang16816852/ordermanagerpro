@@ -13,7 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 
 export default function AdminRepairOrders() {
   const navigate = useNavigate();
-  const { currentStoreId } = useAuth();
+  const { storeId } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const { orders, isLoading, updateStatusMutation } = useRepairOrders();
   const [search, setSearch] = useState(searchParams.get('search') || '');

@@ -114,7 +114,7 @@ export function ProductRowItem({
     onDelete,
     onUpdateVariant
 }: ProductRowItemProps) {
-    const hasVariants = product.has_variants && variants.length > 0;
+    const hasVariants = variants.length > 0;
     
     const displayBrand = (product as any).primary_brand_name || ((product as any).brand_ids?.length > 0 ? (product as any).brand_ids.map((id: string) => brandMap[id]).filter(Boolean).join(', ') : null) || '-';
 
@@ -171,11 +171,7 @@ export function ProductRowItem({
                     </TableCell>
                     <TableCell className="text-xs">
                         <div className="flex flex-col gap-1 max-w-[150px]">
-                            <div className="flex items-center flex-wrap">
-                                <span className="text-muted-foreground font-mono truncate" title={displayBrand}>{displayBrand}</span>
-                                <span className="mx-1 text-slate-300">/</span>
-                                <span className="text-slate-500 truncate">{product.model || '-'}</span>
-                            </div>
+                            <div className="text-muted-foreground font-mono truncate" title={displayBrand}>{displayBrand}</div>
                             {models.length > 0 && (
                                 <div className="flex flex-wrap gap-1 mt-1">
                                     {models.map((model, idx) => (
@@ -198,19 +194,11 @@ export function ProductRowItem({
                     </TableCell>
                     <TableCell className="text-right">
                         <div className="text-sm font-bold">
-                            {calculatePriceRange(product.base_wholesale_price, variants.map(v => v.wholesale_price)).display}
+                            {calculatePriceRange(undefined, variants.map(v => v.wholesale_price)).display}
                         </div>
                         <div className="text-[10px] text-muted-foreground">
-                            {calculatePriceRange(product.base_retail_price, variants.map(v => v.retail_price)).display}
+                            {calculatePriceRange(undefined, variants.map(v => v.retail_price)).display}
                         </div>
-                    </TableCell>
-                    <TableCell>
-                        <Badge
-                            variant="outline"
-                            className={`${STATUS_VARIANTS[product.status] || ''} border-none font-normal text-xs`}
-                        >
-                            {STATUS_LABELS[product.status] || product.status}
-                        </Badge>
                     </TableCell>
                     <TableCell className="text-center">
                         <DropdownMenu>
@@ -255,7 +243,7 @@ export function ProductRowItem({
                                                     <TableCell className="py-1 text-xs font-medium">{v.name}</TableCell>
                                                     <TableCell className="py-1 text-[10px] text-muted-foreground">
                                                         <div className="flex items-center gap-1.5">
-                                                            <span>{[v.option_1, v.option_2, v.option_3].filter(Boolean).join(' / ')}</span>
+                                                            <span>{v.option_values?.map((ov: any) => ov.label || ov.value).filter(Boolean).join(' / ') || v.name}</span>
                                                             {/* 變體規格格式標記 */}
                                                             <TooltipProvider>
                                                                 <SpecFormatBadge specValues={v.spec_values} />

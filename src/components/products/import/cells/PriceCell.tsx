@@ -9,15 +9,11 @@ interface PriceCellProps {
 }
 
 export function PriceCell({ row, index, onUpdate }: PriceCellProps) {
-    const wholesaleKey = row.is_variant ? 'variant_wholesale_price' as const : 'base_wholesale_price' as const;
-    const retailKey = row.is_variant ? 'variant_retail_price' as const : 'base_retail_price' as const;
+    const wholesaleKey = 'variant_wholesale_price' as const;
+    const retailKey = 'variant_retail_price' as const;
 
-    const wholesaleValue = row.is_variant
-        ? (row.variant_wholesale_price ?? row.base_wholesale_price)
-        : row.base_wholesale_price;
-    const retailValue = row.is_variant
-        ? (row.variant_retail_price ?? row.base_retail_price)
-        : row.base_retail_price;
+    const wholesaleValue = row.variant_wholesale_price ?? 0;
+    const retailValue = row.variant_retail_price ?? 0;
 
     return (
         <div className="flex flex-col items-end gap-0.5">
@@ -47,9 +43,7 @@ export function PriceCell({ row, index, onUpdate }: PriceCellProps) {
                     />
                 </div>
             </div>
-            <span className="text-[7px] text-muted-foreground/40 italic">
-                {row.is_variant ? '變體定義' : '主商品定價'}
-            </span>
+            <span className="text-[7px] text-muted-foreground/40 italic">定價</span>
         </div>
     );
 }

@@ -6,7 +6,6 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import { formatSpecValue } from '@/utils/specLogic';
 import { generateProductExcel } from '@/utils/excelUtils';
 import * as XLSX from 'xlsx';
-import { useColorStore } from '@/store/useColorStore';
 import { useDeviceModelStore } from '@/store/useDeviceModelStore';
 import { useSpecStore } from '@/store/useSpecStore';
 import { useBrandSeriesCache } from '@/hooks/useBrandSeriesCache';
@@ -15,7 +14,7 @@ import { useProductImportValidator } from './useProductImportValidator';
 import { useProductImportUploader } from './useProductImportUploader';
 
 export interface ImportRow {
-    product_sku: string;
+    product_code: string;
     product_name: string;
     description: string;
     category: string;
@@ -23,19 +22,12 @@ export interface ImportRow {
     brand: string;
     brand_id?: string;
     brand_ids?: string[];
-    model: string;
     series: string;
     brand_series_id?: string;
     series_name?: string;
-    base_wholesale_price: number;
-    base_retail_price: number;
-    product_status: 'active' | 'discontinued' | 'preorder' | 'sold_out';
     spec_values?: any;
     variant_sku?: string;
     variant_name?: string;
-    option_1?: string;
-    option_2?: string;
-    option_3?: string;
     variant_wholesale_price?: number;
     variant_retail_price?: number;
     variant_status?: 'active' | 'discontinued' | 'preorder' | 'sold_out';
@@ -53,7 +45,7 @@ export interface ImportRow {
     isValid: boolean;
     action?: 'create' | 'update';
     diff?: string[];
-    has_variants?: boolean;
+    _presentFields?: Set<string>;
 
 }
 
@@ -73,10 +65,9 @@ export function useProductImport(onSuccess: () => void) {
     });
 
     const { specDefinitions: specDefs, fetchSpecs } = useSpecStore();
-    const { colors: allColors, fetchColors } = useColorStore();
     const { models: allDeviceModels, groups: allGroups, fetchData: fetchDeviceData } = useDeviceModelStore();
 
-    useEffect(() => { fetchColors(); fetchDeviceData(true); fetchSpecs(); }, [fetchColors, fetchDeviceData, fetchSpecs]);
+    useEffect(() => { fetchDeviceData(true); fetchSpecs(); }, [fetchDeviceData, fetchSpecs]);
 
     const { data: allBrands = [] } = useQuery({
         queryKey: ['brands-all-for-import'],
@@ -92,8 +83,8 @@ export function useProductImport(onSuccess: () => void) {
         return Object.fromEntries(allSeries.map((s: any) => [s.id, s.name]));
     }, [allSeries]);
 
-    const parser = useProductImportParser(specDefs, allBrands, allColors, categories, allSeries);
-    const validator = useProductImportValidator(allColors, allDeviceModels, allGroups, categories, allSeries);
+    const parser = useProductImportParser(specDefs, allBrands, categories, allSeries);
+    const validator = useProductImportValidator(allDeviceModels, allGroups, categories, allSeries);
 
     const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -183,7 +174,7 @@ export function useProductImport(onSuccess: () => void) {
             }));
         }, 300);
         return () => clearTimeout(timer);
-    }, [allColors, allDeviceModels, allGroups, validator]);
+    }, [allDeviceModels, allGroups, validator]);
 
     return {
         step,

@@ -50,8 +50,8 @@ export function useBrandSeriesData(brandId?: string) {
           .eq('id', editingId);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from('brand_series')
+        const { error } = await (supabase
+          .from('brand_series') as any)
           .insert([{
             ...s,
             sort_order: nextSortOrder,
@@ -68,8 +68,8 @@ export function useBrandSeriesData(brandId?: string) {
 
   const deleteSeries = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('brand_series')
+      const { error } = await (supabase
+        .from('brand_series') as any)
         .delete()
         .eq('id', id);
       if (error) throw error;
@@ -83,8 +83,8 @@ export function useBrandSeriesData(brandId?: string) {
 
   const reorderSeries = useMutation({
     mutationFn: async (updates: { id: string; sort_order: number }[]) => {
-      const { error } = await supabase
-        .from('brand_series')
+      const { error } = await (supabase
+        .from('brand_series') as any)
         .upsert(updates, { onConflict: 'id' });
       if (error) throw error;
     },

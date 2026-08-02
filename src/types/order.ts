@@ -18,12 +18,11 @@ export interface OrderItem {
     store_id: string;
     product?: {
         name: string;
-        sku: string;
+        code: string;
     } | null;
     product_variant?: {
         name: string;
-        option_1: string | null;
-        option_2: string | null;
+        sku: string;
     } | null;
 }
 
@@ -35,6 +34,7 @@ export interface Order {
     status: OrderStatus;
     notes: string | null;
     store_id: string;
+    consignment_mode?: boolean;
     stores?: {
         name: string;
         code: string | null;

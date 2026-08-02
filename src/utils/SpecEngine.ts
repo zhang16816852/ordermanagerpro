@@ -254,7 +254,11 @@ export class SpecEngine {
     }
 
     public toggle(id: ID) {
-        this.isManual(id) ? this.deselect(id) : this.select(id);
+        if (this.isManual(id)) {
+            this.deselect(id);
+        } else {
+            this.select(id);
+        }
     }
 
     public setSortOrder(id: ID, order: number) {

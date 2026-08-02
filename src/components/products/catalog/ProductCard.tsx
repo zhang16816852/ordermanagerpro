@@ -52,8 +52,7 @@ export function ProductCard({ product, onClick, onInfoClick }: ProductCardProps)
           </Button>
         </div>
 
-        {/* 變體標籤 */}
-        {product.has_variants && (
+        {product.variants && product.variants.length > 0 && (
           <div className="absolute bottom-2 left-2">
             <Badge variant="secondary" className="bg-background/80 backdrop-blur-sm text-[10px] font-bold px-1.5 py-0">
               {product.variants?.length} 規格
@@ -64,7 +63,7 @@ export function ProductCard({ product, onClick, onInfoClick }: ProductCardProps)
 
       <CardContent className="p-3 flex-1 flex flex-col gap-1">
         <div className="text-xs font-mono text-muted-foreground truncate">
-          {product.sku}
+          {product.code}
         </div>
         <h3 className="font-semibold text-sm line-clamp-2 leading-tight group-hover:text-primary transition-colors">
           {product.name}

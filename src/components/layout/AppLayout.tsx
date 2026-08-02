@@ -61,6 +61,7 @@ const adminNavItems: NavItem[] = [
   { title: '出貨池', href: '/admin/shipping-pool', icon: Truck },
   { title: '銷售單', href: '/admin/sales-notes', icon: FileText },
   { title: '採購管理', href: '/admin/purchase-orders', icon: Truck },
+  { title: '寄賣管理', href: '/admin/consignment', icon: Package },
   { title: '會計管理', href: '/admin/accounting', icon: FileText },
   { title: '媒合市場', href: '/market', icon: ShoppingBag },
   { title: 'Table 式下單', href: '/admin/order-grid-templates', icon: Layers },
@@ -129,7 +130,7 @@ function SideNavLink({
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const { user, isAdmin, signOut, storeRoles, currentStoreId, isAuthReady } = useAuth();
+  const { user, isAdmin, signOut, storeRoles, storeId: currentStoreId, isAuthReady } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
@@ -180,6 +181,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     { title: '維修管理', href: '/dashboard/repair-orders', icon: Wrench },
     { title: '媒合市場', href: '/market', icon: ShoppingBag },
     { title: '銷貨單', href: '/sales-notes', icon: FileText },
+    { title: '寄賣銷售', href: '/consignment-sales', icon: Package },
     { title: '會計報表', href: '/accounting', icon: FileText },
     { title: '團隊管理', href: '/team', icon: Users },
   ];

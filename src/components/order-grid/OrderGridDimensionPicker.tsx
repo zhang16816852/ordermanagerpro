@@ -214,6 +214,22 @@ export function OrderGridDimensionPicker({
     return ids;
   }, [products]);
 
+  // Extract available option groups from products (deduplicated by name)
+  const availableOptionGroups = useMemo(() => {
+    if (!products || products.length === 0) return [];
+    const seen = new Set<string>();
+    const groups: { id: string; name: string }[] = [];
+    products.forEach((p) => {
+      ((p as any).option_groups || []).forEach((og: any) => {
+        if (!seen.has(og.name)) {
+          seen.add(og.name);
+          groups.push({ id: og.id, name: og.name });
+        }
+      });
+    });
+    return groups;
+  }, [products]);
+
   // Suitable specs: exclude heading/table, and if products provided, only show used specs
   const availableSpecs = useMemo(
     () =>
@@ -255,10 +271,13 @@ export function OrderGridDimensionPicker({
     (type: DimensionType) => {
       const v = valueRef.current;
       if (type === 'variant_field') {
-        onChange({ type, label: v.label, field: 'option_1' });
+        onChange({ type, label: v.label, field: '' });
         setItems([]);
       } else if (type === 'spec') {
         onChange({ type, label: v.label, spec_id: undefined });
+        setItems([]);
+      } else if (type === 'option') {
+        onChange({ type, label: v.label, option_group_id: undefined });
         setItems([]);
       } else if (type === 'custom') {
         onChange({ type, label: v.label, values: [] });
@@ -388,7 +407,7 @@ export function OrderGridDimensionPicker({
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Variant 欄位</Label>
           <Select
-            value={value.field || 'option_1'}
+            value={value.field || ''}
             onValueChange={handleFieldChange}
           >
             <SelectTrigger className="h-9">
@@ -402,6 +421,28 @@ export function OrderGridDimensionPicker({
                   </SelectItem>
                 ),
               )}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Option group selector */}
+      {value.type === 'option' && (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">選項群組</Label>
+          <Select
+            value={value.option_group_id || ''}
+            onValueChange={(id) => onChange({ ...value, option_group_id: id })}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="選擇選項群組..." />
+            </SelectTrigger>
+            <SelectContent>
+              {availableOptionGroups.map((og) => (
+                <SelectItem key={og.id} value={og.id}>
+                  {og.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

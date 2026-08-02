@@ -120,22 +120,14 @@ export function BatchToolbar({ data, onBatchUpdate, allBrands, categories }: Bat
                                         const pct = parseFloat((e.target as HTMLInputElement).value);
                                         if (!isNaN(pct)) {
                                             const indices = Array.from(selectedIndices);
-                                            const wKey: keyof ImportRow = 'base_wholesale_price';
-                                            const rKey: keyof ImportRow = 'base_retail_price';
                                             const vwKey: keyof ImportRow = 'variant_wholesale_price';
                                             const vrKey: keyof ImportRow = 'variant_retail_price';
                                             indices.forEach(i => {
                                                 const row = data[i];
-                                                const wholesale = row.is_variant
-                                                    ? (row.variant_wholesale_price ?? row.base_wholesale_price)
-                                                    : row.base_wholesale_price;
-                                                const retail = row.is_variant
-                                                    ? (row.variant_retail_price ?? row.base_retail_price)
-                                                    : row.base_retail_price;
-                                                const wk = row.is_variant ? vwKey : wKey;
-                                                const rk = row.is_variant ? vrKey : rKey;
-                                                onBatchUpdate([i], wk, Math.round(wholesale * (1 + pct / 100) * 100) / 100);
-                                                onBatchUpdate([i], rk, Math.round(retail * (1 + pct / 100) * 100) / 100);
+                                                const wholesale = row.variant_wholesale_price ?? 0;
+                                                const retail = row.variant_retail_price ?? 0;
+                                                onBatchUpdate([i], vwKey, Math.round(wholesale * (1 + pct / 100) * 100) / 100);
+                                                onBatchUpdate([i], vrKey, Math.round(retail * (1 + pct / 100) * 100) / 100);
                                             });
                                         }
                                     }

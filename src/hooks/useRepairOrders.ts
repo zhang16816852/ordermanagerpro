@@ -12,8 +12,7 @@ export function useRepairOrders(storeId?: string | null) {
   const { data: orders, isLoading, error } = useQuery({
     queryKey,
     queryFn: async () => {
-      let query = supabase
-        .from('repair_orders')
+      let query = (supabase as any).from('repair_orders')
         .select(`
           *,
           device_model:device_model_id(name, specifications, device_type, screen_size),
@@ -38,8 +37,7 @@ export function useRepairOrders(storeId?: string | null) {
 
   const createMutation = useMutation({
     mutationFn: async (values: RepairOrderInsert) => {
-      const { data, error } = await supabase
-        .from('repair_orders')
+      const { data, error } = await (supabase as any).from('repair_orders')
         .insert([values])
         .select()
         .single();
@@ -57,8 +55,7 @@ export function useRepairOrders(storeId?: string | null) {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, values }: { id: string; values: RepairOrderUpdate }) => {
-      const { data, error } = await supabase
-        .from('repair_orders')
+      const { data, error } = await (supabase as any).from('repair_orders')
         .update(values)
         .eq('id', id)
         .select()
@@ -77,7 +74,7 @@ export function useRepairOrders(storeId?: string | null) {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('repair_orders').delete().eq('id', id);
+      const { error } = await (supabase as any).from('repair_orders').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -91,8 +88,7 @@ export function useRepairOrders(storeId?: string | null) {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { data, error } = await supabase
-        .from('repair_orders')
+      const { data, error } = await (supabase as any).from('repair_orders')
         .update({ status: status as any })
         .eq('id', id)
         .select()
@@ -126,14 +122,13 @@ export function useRepairOrderDetail(orderId: string) {
   const { data: order, isLoading } = useQuery({
     queryKey,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('repair_orders')
+      const { data, error } = await (supabase as any).from('repair_orders')
         .select(`
           *,
           device_model:device_model_id(id, name, specifications, device_type, screen_size, device_series),
           device_brand:device_model_id(brand_id(name)),
           assigned_tech:assigned_to(id, email),
-          items:repair_order_items(*, product:product_id(name, sku), variant:variant_id(name, sku)),
+          items:repair_order_items(*, product:product_id(name, code), variant:variant_id(name, sku)),
           status_history:repair_order_status_history(*, changed_by_user:changed_by(email))
         `)
         .eq('id', orderId)
@@ -148,24 +143,24 @@ export function useRepairOrderDetail(orderId: string) {
 }
 
 export function useRepairOrderItems(orderId: string) {
+  const queryClient = useQueryClient();
   const queryKey = ['repair_order_items', orderId];
 
   const { data: items, isLoading } = useQuery({
     queryKey,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('repair_order_items')
-        .select('*, product:product_id(name, sku), variant:variant_id(name, sku)')
+      const { data, error } = await (supabase as any).from('repair_order_items')
+        .select('*, product:product_id(name, code), variant:variant_id(name, sku)')
         .eq('repair_order_id', orderId)
         .order('sort_order', { ascending: true });
       if (error) throw error;
-      return data as (RepairOrderItem & { product?: { name: string; sku: string } | null; variant?: { name: string; sku: string } | null })[];
+      return data as (RepairOrderItem & { product?: { name: string; code: string } | null; variant?: { name: string; sku: string } | null })[];
     },
   });
 
   const addItemMutation = useMutation({
     mutationFn: async (values: RepairOrderItemInsert) => {
-      const { data, error } = await supabase.from('repair_order_items').insert([values]).select().single();
+      const { data, error } = await (supabase as any).from('repair_order_items').insert([values]).select().single();
       if (error) throw error;
       return data;
     },
@@ -176,7 +171,7 @@ export function useRepairOrderItems(orderId: string) {
 
   const updateItemMutation = useMutation({
     mutationFn: async ({ id, values }: { id: string; values: Partial<RepairOrderItemInsert> }) => {
-      const { data, error } = await supabase.from('repair_order_items').update(values).eq('id', id).select().single();
+      const { data, error } = await (supabase as any).from('repair_order_items').update(values).eq('id', id).select().single();
       if (error) throw error;
       return data;
     },
@@ -187,7 +182,7 @@ export function useRepairOrderItems(orderId: string) {
 
   const deleteItemMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('repair_order_items').delete().eq('id', id);
+      const { error } = await (supabase as any).from('repair_order_items').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {

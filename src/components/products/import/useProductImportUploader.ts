@@ -39,93 +39,93 @@ export function useProductImportUploader(
 
             const { BatchProcessor } = await import('@/services/batchProcessor');
 
-            const { data: specDefsData } = await supabase.from('specification_definitions').select('*');
+            const { data: specDefsData } = await (supabase.from('specification_definitions') as any).select('*');
             const specMap = new Map(specDefsData?.map(s => [s.id, s]) || []);
 
             const uploader = async (chunk: ImportRow[]) => {
                 const chunkProductsMap = new Map<string, ImportRow>();
                 chunk.forEach(row => {
-                    const sku = row.product_sku;
-                    const existing = chunkProductsMap.get(sku);
+                    const code = row.product_code;
+                    const existing = chunkProductsMap.get(code);
                     const getCatId = (cName: string | undefined) => categories.find(c => c.name === cName?.split(',')[0].trim())?.id;
                     const catId = row.category_id || getCatId((row as any)._categoryName) || getCatId(row.category);
 
                     if (!existing) {
-                        chunkProductsMap.set(sku, { ...row, has_variants: false });
+                        chunkProductsMap.set(code, { ...row });
                     } else {
                         const merged = { ...existing };
-                        if (!row.is_variant) Object.assign(merged, row);
-                        merged.has_variants = existing.has_variants || row.is_variant;
-                        chunkProductsMap.set(sku, merged);
+                        if (!row.is_variant) {
+                            const mergedFields = new Set<string>([
+                                ...(existing._presentFields || []),
+                                ...(row._presentFields || [])
+                            ]);
+                            Object.assign(merged, row);
+                            merged._presentFields = mergedFields;
+                        }
+                        chunkProductsMap.set(code, merged);
                     }
                 });
 
-                chunk.forEach(row => {
-                    if (row.is_variant || (row.variant_sku && row.variant_sku !== row.product_sku)) {
-                        const p = chunkProductsMap.get(row.product_sku);
-                        if (p) p.has_variants = true;
-                    }
-                });
+                const productsUpsertData = Array.from(chunkProductsMap.values()).map(row => {
+                    const present = row._presentFields;
+                    const has = (key: string) => !present || present.has(key);
 
-                const productsUpsertData = Array.from(chunkProductsMap.values()).map(row => ({
-                    id: row.product_id || crypto.randomUUID(),
-                    sku: row.product_sku,
-                    name: row.product_name,
-                    description: row.description || null,
-                    model: row.model || null,
-                    base_wholesale_price: row.base_wholesale_price,
-                    base_retail_price: row.base_retail_price,
-                    status: row.product_status,
-                    has_variants: row.has_variants,
-                    barcode: row.barcode || null,
-                    color: row.option_3 || null,
-                }));
+                    const data: Record<string, any> = {
+                        id: row.product_id || crypto.randomUUID(),
+                        code: row.product_code,
+                        name: row.product_name,
+                    };
+
+                    if (has('description')) data.description = row.description || null;
+
+                    return data;
+                });
 
                 if (productsUpsertData.length > 0) {
-                    const { error: pErr } = await supabase.from('products').upsert(productsUpsertData, { onConflict: 'id' });
+                    const { error: pErr } = await (supabase.from('products') as any).upsert(productsUpsertData, { onConflict: 'id' });
                     if (pErr) throw pErr;
                 }
 
-                const { data: insertedProducts } = await supabase.from('products').select('id, sku').in('sku', Array.from(chunkProductsMap.keys()));
-                const productIdMap = new Map(insertedProducts?.map(p => [p.sku, p.id]) || []);
+                const { data: insertedProducts } = await (supabase.from('products') as any).select('id, code').in('code', Array.from(chunkProductsMap.keys()));
+                const productIdMap = new Map(insertedProducts?.map(p => [p.code, p.id]) || []);
 
                 const seriesLinkData: { product_id: string; brand_series_id: string }[] = [];
                 const brandLinkData: { product_id: string; brand_id: string; is_primary: boolean }[] = [];
-                for (const [sku, row] of chunkProductsMap) {
-                    const pId = productIdMap.get(sku);
+                for (const [code, row] of chunkProductsMap) {
+                    const pId = productIdMap.get(code);
                     if (pId && row.brand_series_id) {
-                        seriesLinkData.push({ product_id: pId, brand_series_id: row.brand_series_id });
+                        seriesLinkData.push({ product_id: String(pId), brand_series_id: String(row.brand_series_id) });
                     }
                     const brandIds = row.brand_ids || (row.brand_id ? [row.brand_id] : []);
-                    brandIds.forEach((bid: string, i: number) => {
-                        if (pId) brandLinkData.push({ product_id: pId, brand_id: bid, is_primary: i === 0 });
+                    brandIds.forEach((bid: any, i: number) => {
+                        if (pId) brandLinkData.push({ product_id: String(pId), brand_id: String(bid), is_primary: i === 0 });
                     });
                 }
                 if (seriesLinkData.length > 0) {
-                    await supabase.from('product_series_links').upsert(seriesLinkData, { onConflict: 'product_id,brand_series_id' });
+                    await (supabase.from('product_series_links') as any).upsert(seriesLinkData, { onConflict: 'product_id,brand_series_id' });
                 }
                 if (brandLinkData.length > 0) {
-                    await supabase.from('product_brands').upsert(brandLinkData, { onConflict: 'product_id,brand_id' });
+                    await (supabase.from('product_brands') as any).upsert(brandLinkData, { onConflict: 'product_id,brand_id' });
                 }
 
                 const relationPromises: any[] = [];
                 const variantSpecPromises: any[] = [];
 
-                for (const [sku, row] of chunkProductsMap) {
-                    const pId = productIdMap.get(sku);
+                for (const [code, row] of chunkProductsMap) {
+                    const pId = productIdMap.get(code);
                     if (!pId) continue;
 
                     const allCatIds = row.category_ids?.filter(Boolean) || (row.category_id ? [row.category_id] : []);
                     if (allCatIds.length > 0) {
                         relationPromises.push(
-                            supabase.from('product_category_links').upsert(
+                            (supabase.from('product_category_links') as any).upsert(
                                 allCatIds.map(cid => ({ product_id: pId, category_id: cid })),
                                 { onConflict: 'product_id,category_id' }
                             )
                         );
 
-                        const primaryCatId = allCatIds[0];
-                        let pathMap = new Map<string, any>();
+                        const primaryCatId = allCatIds[0] as string;
+                        const pathMap = new Map<string, any>();
                         if (row.spec_values) {
                             const existingSpecs = deserializeSpecs(row.spec_values);
                             Object.entries(existingSpecs).forEach(([p, v]) => pathMap.set(p, v));
@@ -138,10 +138,10 @@ export function useProductImportUploader(
                         if (serialized && serialized.length > 0) {
                             variantSpecPromises.push(
                                 supabase.rpc('sync_product_specs_v6', {
-                                    p_entity_id: pId,
+                                    p_entity_id: String(pId),
                                     p_entity_type: 'product',
-                                    p_category_id: primaryCatId,
-                                    p_new_data: serialized
+                                    p_category_id: String(primaryCatId),
+                                    p_new_data: serialized as any
                                 })
                             );
                         }
@@ -150,16 +150,14 @@ export function useProductImportUploader(
 
                 const variantSkuGroups = new Map<string, ImportRow[]>();
                 chunk.filter(r => r.is_variant && r.variant_sku).forEach(r => {
-                    const list = variantSkuGroups.get(r.variant_sku) || [];
+                    const sku = r.variant_sku!;
+                    const list = variantSkuGroups.get(sku) || [];
                     list.push(r);
-                    variantSkuGroups.set(r.variant_sku, list);
+                    variantSkuGroups.set(sku, list);
                 });
 
                 const DIFF_MAP: Record<string, string> = {
                     '變體名稱': 'name',
-                    '變體選項1': 'option_1',
-                    '變體選項2': 'option_2',
-                    '變體選項3': 'option_3',
                     '變體批發價': 'wholesale_price',
                     '變體零售價': 'retail_price',
                     '變體狀態': 'status',
@@ -167,20 +165,25 @@ export function useProductImportUploader(
                 };
 
                 const variantsToInsert = Array.from(variantSkuGroups.entries()).map(([sku, rows]) => {
-                    const rowData = rows.map(row => ({
-                        product_id: productIdMap.get(row.product_sku)!,
-                        sku: row.variant_sku,
-                        name: row.variant_name || row.product_name,
-                        option_1: row.option_1 || null,
-                        option_2: row.option_2 || null,
-                        option_3: row.option_3 || null,
-                        wholesale_price: row.variant_wholesale_price || row.base_wholesale_price,
-                        retail_price: row.variant_retail_price || row.base_retail_price,
-                        status: row.variant_status || row.product_status,
-                        barcode: row.barcode || null,
-                        diff: (row.diff || []) as string[],
-                        variant_id: row.variant_id,
-                    }));
+                    // 合併所有 rows 的 _presentFields
+                    const mergedPresent = new Set<string>();
+                    rows.forEach(r => r._presentFields?.forEach(f => mergedPresent.add(f)));
+                    const has = (key: string) => mergedPresent.size === 0 || mergedPresent.has(key);
+
+                    const rowData = rows.map(row => {
+                        const data: Record<string, any> = {
+                            product_id: productIdMap.get(row.product_code)!,
+                            sku: row.variant_sku,
+                            name: row.variant_name || row.product_name,
+                            diff: (row.diff || []) as string[],
+                            variant_id: row.variant_id,
+                        };
+                        if (has('wholesale_price') || has('variant_wholesale_price')) data.wholesale_price = row.variant_wholesale_price;
+                        if (has('retail_price') || has('variant_retail_price')) data.retail_price = row.variant_retail_price;
+                        if (has('status')) data.status = row.variant_status || 'active';
+                        if (has('barcode')) data.barcode = row.barcode || null;
+                        return data;
+                    });
 
                     const matchedRow = rowData.find(r => r.variant_id);
                     const id = matchedRow?.variant_id || crypto.randomUUID();
@@ -199,7 +202,7 @@ export function useProductImportUploader(
                 });
 
                 if (variantsToInsert.length > 0) {
-                    const { error: vErr } = await supabase.from('product_variants').upsert(variantsToInsert, { onConflict: 'id' });
+                    const { error: vErr } = await (supabase.from('product_variants') as any).upsert(variantsToInsert, { onConflict: 'id' });
                     if (vErr) throw vErr;
                 }
 
@@ -240,11 +243,11 @@ export function useProductImportUploader(
                 for (const [sku, row] of chunkProductsMap) {
                     const pId = productIdMap.get(sku);
                     if (!pId || row.device_models === undefined) continue;
-                    const relations = parseModelString(row.device_models);
-                    relationPromises.push(entityRelationService.updateRelations('product', pId, relations));
+                    const relations = parseModelString(String(row.device_models));
+                    relationPromises.push(entityRelationService.updateRelations('product', String(pId), relations));
                 }
 
-                const { data: insertedVariants } = await supabase.from('product_variants').select('id, sku').in('sku', variantsToInsert.map(v => v.sku));
+                const { data: insertedVariants } = await (supabase.from('product_variants') as any).select('id, sku').in('sku', variantsToInsert.map(v => (v as any).sku));
                 const variantIdMap = new Map(insertedVariants?.map(v => [v.sku, v.id]) || []);
 
                 const uniqueVariants = Array.from(new Map(chunk.filter((r: ImportRow) => r.is_variant && r.variant_sku).map((r: ImportRow) => [r.variant_sku, r])).values());
@@ -254,13 +257,13 @@ export function useProductImportUploader(
                     if (!vId) continue;
 
                     if (row.variant_device_models !== undefined) {
-                        const relations = parseModelString(row.variant_device_models);
-                        relationPromises.push(entityRelationService.updateRelations('variant', vId, relations));
+                        const relations = parseModelString(String(row.variant_device_models));
+                        relationPromises.push(entityRelationService.updateRelations('variant', String(vId), relations));
                     }
 
                     const catId = row.category_ids?.[0] || row.category_id;
                     if (catId && row._specs && Object.keys(row._specs).length > 0) {
-                        let pathMap = new Map<string, any>();
+                        const pathMap = new Map<string, any>();
                         if (row.spec_values) {
                             const existingSpecs = deserializeSpecs(row.spec_values);
                             Object.entries(existingSpecs).forEach(([p, v]) => pathMap.set(p, v));
@@ -270,10 +273,10 @@ export function useProductImportUploader(
                         if (serialized.length > 0) {
                             variantSpecPromises.push(
                                 supabase.rpc('sync_product_specs_v6', {
-                                    p_entity_id: vId,
+                                    p_entity_id: String(vId),
                                     p_entity_type: 'variant',
-                                    p_category_id: catId,
-                                    p_new_data: serialized
+                                    p_category_id: String(catId),
+                                    p_new_data: serialized as any
                                 })
                             );
                         }
@@ -309,10 +312,10 @@ export function useProductImportUploader(
             }
 
             const importedProductIds = Array.from(
-                new Set(validRows.map(r => r.product_sku))
+                new Set(validRows.map(r => r.product_code))
             );
-            const { data: finalProducts } = await supabase.from('products')
-                .select('id').in('sku', importedProductIds);
+            const { data: finalProducts } = await (supabase.from('products') as any)
+                .select('id').in('code', importedProductIds);
             const ids = finalProducts?.map(p => p.id) || [];
 
             for (let i = 0; i < ids.length; i += 5) {

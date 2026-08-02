@@ -37,9 +37,9 @@ export function ItemForm({
     setVariants([]);
 
     const product = products.find(p => p.id === pId);
-    if (product?.has_variants) {
-      const { data } = await supabase
-        .from('product_variants')
+    if (product) {
+      const { data } = await (supabase
+        .from('product_variants') as any)
         .select('id, name, sku')
         .eq('product_id', pId)
         .order('name');
@@ -51,7 +51,7 @@ export function ItemForm({
   };
 
   const selectedProduct = products.find(p => p.id === productId);
-  const showVariantSelect = selectedProduct?.has_variants;
+  const showVariantSelect = variants.length > 0;
 
   return (
     <div className="space-y-4">
@@ -64,7 +64,7 @@ export function ItemForm({
           <SelectContent>
             {products.map((product) => (
               <SelectItem key={product.id} value={product.id}>
-                {product.sku} - {product.name}
+                {product.code} - {product.name}
               </SelectItem>
             ))}
           </SelectContent>

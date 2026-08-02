@@ -93,10 +93,7 @@ export function AdvancedSpecFilters({
         }
     }, [fetchSpecs, specMap.size]);
 
-    // 監控目前被選取的選項，並將路徑轉換為中文顯示在 Console
     useEffect(() => {
-        const coreLabelMap: Record<string, string> = { 'option_1': '規格選項 1', 'option_2': '規格選項 2', 'option_3': '顏色' };
-
         const readableLogs = Object.entries(selectedSpecs).reduce((acc, [key, values]) => {
             const parts = key.split(':');
             const parentId = parts[0];
@@ -104,7 +101,7 @@ export function AdvancedSpecFilters({
 
             let pathName = "";
             if (key.startsWith('core:')) {
-                pathName = `核心規格 > ${coreLabelMap[specId] || specId}`;
+                pathName = `規格 > ${specId}`;
             } else {
                 // 優先從 specFields 找，找不到再從全域 specMap 找
                 const specDef = specFields.find(f => f.id === specId) || specMap.get(specId);
@@ -120,7 +117,7 @@ export function AdvancedSpecFilters({
         }, {} as Record<string, string[]>);
 
         if (Object.keys(selectedSpecs).length > 0) {
-            
+            // TODO: apply spec filters
         }
     }, [selectedSpecs, specFields, specMap]); // 當 specMap 載入後，Console 也會更新
 
@@ -149,14 +146,8 @@ export function AdvancedSpecFilters({
                 const parts = key.split(':');
                 const specId = parts.length === 3 ? parts[1] : (parts.length === 2 ? parts[1] : key);
 
-                // 處理核心選項 (Core Options)
                 if (key.startsWith('core:')) {
-                    const coreLabelMap: Record<string, string> = {
-                        'option_1': '規格選項 1',
-                        'option_2': '規格選項 2',
-                        'option_3': '顏色'
-                    };
-                    const displayName = coreLabelMap[specId] || specId;
+                    const displayName = specId;
                     return (
                         <div key={key} className="space-y-3">
                             <h4 className="text-xs font-semibold text-foreground/80">{displayName}</h4>

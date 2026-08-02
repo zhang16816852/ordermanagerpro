@@ -19,6 +19,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   isAuthReady: boolean;
+  rolesReady: boolean;
   systemRoles: SystemRole[];
   storeRoles: StoreRole[];
   isAdmin: boolean;
@@ -38,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [rolesReady, setRolesReady] = useState(false);
   const [systemRoles, setSystemRoles] = useState<SystemRole[]>([]);
   const [storeRoles, setStoreRoles] = useState<StoreRole[]>([]);
   const [currentStoreId, setCurrentStoreId] = useState<string | null>(null);
@@ -69,8 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchRoles = async (userId: string) => {
     try {
       // Fetch system roles
-      const { data: roleData, error: roleError } = await supabase
-        .from('user_roles')
+      const { data: roleData, error: roleError } = await (supabase
+        .from('user_roles') as any)
         .select('role')
         .eq('user_id', userId);
 
@@ -78,8 +80,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSystemRoles((roleData || []).map(r => r.role as SystemRole));
 
       // Fetch store roles
-      const { data: storeData, error: storeError } = await supabase
-        .from('store_users')
+      const { data: storeData, error: storeError } = await (supabase
+        .from('store_users') as any)
         .select(`
           store_id,
           role,
@@ -112,31 +114,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         if (session?.user) {
-          // Defer role fetching to avoid deadlock
-          setTimeout(() => {
-            fetchRoles(session.user.id);
+          // Defer role fetching to avoid deadlock with getSession()
+          setTimeout(async () => {
+            await fetchRoles(session.user.id);
+            setRolesReady(true);
+            setLoading(false);
+            setIsAuthReady(true);
           }, 0);
         } else {
           setSystemRoles([]);
           setStoreRoles([]);
+          setRolesReady(true);
+          setLoading(false);
+          setIsAuthReady(true);
         }
-        
-        setLoading(false);
-        setIsAuthReady(true);
       }
     );
 
     // Then check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
-        fetchRoles(session.user.id);
+        await fetchRoles(session.user.id);
       }
-      
+
+      setRolesReady(true);
       setLoading(false);
       setIsAuthReady(true);
     });
@@ -204,6 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         loading,
         isAuthReady,
+        rolesReady,
         systemRoles,
         storeRoles,
         isAdmin,

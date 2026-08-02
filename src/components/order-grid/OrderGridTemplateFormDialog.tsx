@@ -16,7 +16,7 @@ import { Separator } from '@/components/ui/separator';
 import { OrderGridDimensionPicker } from './OrderGridDimensionPicker';
 import { OrderGridProductPicker } from './OrderGridProductPicker';
 import { GridPreviewSidebar } from './GridPreviewSidebar';
-import { buildGridMatrix } from '@/lib/order-grid-utils';
+import { buildGridMatrix, migrateTemplateConfig, migrateTemplate } from '@/lib/order-grid-utils';
 import { Eye, EyeOff } from 'lucide-react';
 import type {
   OrderGridTemplateWithProducts,
@@ -44,13 +44,13 @@ interface OrderGridTemplateFormDialogProps {
 const defaultRowConfig: DimensionConfig = {
   type: 'variant_field',
   label: 'Row',
-  field: 'option_1',
+  field: '',
 };
 
 const defaultColConfig: DimensionConfig = {
   type: 'variant_field',
   label: 'Column',
-  field: 'option_2',
+  field: '',
 };
 
 export function OrderGridTemplateFormDialog({
@@ -72,7 +72,7 @@ export function OrderGridTemplateFormDialog({
   const [tabConfig, setTabConfig] = useState<DimensionConfig>({
     type: 'variant_field',
     label: 'Tab',
-    field: 'option_3',
+    field: '',
   });
   const [variantIds, setVariantIds] = useState<string[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -81,11 +81,11 @@ export function OrderGridTemplateFormDialog({
     if (template) {
       setName(template.name);
       setDescription(template.description || '');
-      setRowConfig(template.row_config);
-      setColConfig(template.col_config);
+      setRowConfig(migrateTemplateConfig(template.row_config, products));
+      setColConfig(migrateTemplateConfig(template.col_config, products));
       setUseTab(!!template.tab_config);
       if (template.tab_config) {
-        setTabConfig(template.tab_config);
+        setTabConfig(migrateTemplateConfig(template.tab_config, products));
       }
       setVariantIds(
         template.template_variants?.map((tv) => tv.variant_id) || []
@@ -99,11 +99,11 @@ export function OrderGridTemplateFormDialog({
       setTabConfig({
         type: 'variant_field',
         label: 'Tab',
-        field: 'option_3',
+        field: '',
       });
       setVariantIds(defaultVariantIds || []);
     }
-  }, [template, open, defaultVariantIds]);
+  }, [template, open, defaultVariantIds, products]);
 
   const selectedProducts = useMemo(() => {
     const variantSet = new Set(variantIds);

@@ -54,7 +54,7 @@ export function OrderItemsTable({
         }
         if (products) {
             const p = products.find(p => p.id === item.productId);
-            if (p) return { name: p.name, sku: p.sku };
+            if (p) return { name: p.name, sku: p.code };
         }
         return { name: '未知產品', sku: '' };
     };

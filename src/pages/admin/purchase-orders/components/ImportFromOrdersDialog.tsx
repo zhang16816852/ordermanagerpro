@@ -33,8 +33,8 @@ export function ImportFromOrdersDialog({
     queryKey: ['pending-order-items-for-po'],
     queryFn: async () => {
       // Fetch orders processing or pending
-      const { data: orders, error } = await supabase
-        .from('orders')
+      const { data: orders, error } = await (supabase
+        .from('orders') as any)
         .select(`
           id,
           created_at,
@@ -44,7 +44,7 @@ export function ImportFromOrdersDialog({
             shipped_quantity,
             product_id,
             variant_id,
-            products (id, name, sku),
+            products (id, name, code),
             product_variants (id, name, sku, wholesale_price)
           )
         `)
@@ -66,10 +66,9 @@ export function ImportFromOrdersDialog({
               variant_id: item.variant_id,
               product_name: item.products?.name,
               variant_name: item.product_variants?.name,
-              sku: item.product_variants?.sku || item.products?.sku,
+              sku: item.product_variants?.sku || item.products?.code,
               quantity: item.quantity - item.shipped_quantity, // Remaining needed
-              estimated_cost: item.product_variants?.wholesale_price ||
-                products.find(p => p.id === item.product_id)?.base_wholesale_price || 0,
+              estimated_cost: item.product_variants?.wholesale_price || 0,
             });
           }
         });

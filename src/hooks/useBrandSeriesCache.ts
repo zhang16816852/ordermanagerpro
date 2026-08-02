@@ -36,8 +36,8 @@ export const setBrandSeriesCache = (items: BrandSeriesItem[], version: string) =
 };
 
 async function fetchAllBrandSeries(): Promise<BrandSeriesItem[]> {
-  const { data, error } = await supabase
-    .from('brand_series')
+  const { data, error } = await (supabase
+    .from('brand_series') as any)
     .select('*')
     .order('sort_order')
     .order('name');
@@ -64,8 +64,8 @@ export const useBrandSeriesCache = () => {
       const cached = getBrandSeriesCache();
       const localVersion = cached?.dataVersion || '0';
 
-      const { data: versionData, error: verError } = await supabase
-        .from('data_versions')
+      const { data: versionData, error: verError } = await (supabase
+        .from('data_versions') as any)
         .select('version')
         .eq('table_name', 'brand_series')
         .maybeSingle();

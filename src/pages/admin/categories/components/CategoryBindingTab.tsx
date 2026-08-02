@@ -74,7 +74,7 @@ export function CategoryBindingTab() {
       const searchLower = search.toLowerCase();
       result = result.filter(p =>
         p.product_name.toLowerCase().includes(searchLower) ||
-        p.product_sku.toLowerCase().includes(searchLower)
+        p.product_code.toLowerCase().includes(searchLower)
       );
     }
 
@@ -87,7 +87,7 @@ export function CategoryBindingTab() {
     setSelectedVariantId('');
 
     const product = products.find(p => p.product_id === productId);
-    if (product && product.has_variants) {
+    if (product) {
       setIsLoadingVariants(true);
       try {
         const v = await fetchVariants(productId);
@@ -279,7 +279,7 @@ export function CategoryBindingTab() {
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="搜尋產品名稱或 SKU..."
+                placeholder="搜尋產品名稱或代碼..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
@@ -301,7 +301,7 @@ export function CategoryBindingTab() {
           <Card className="h-full">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium">
-                {selectedBrandId ? '產品列表' : '請先選擇品牌'}
+                產品列表
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -312,7 +312,7 @@ export function CategoryBindingTab() {
                   </div>
                 ) : filteredProducts.length === 0 ? (
                   <div className="text-center p-8 text-muted-foreground text-sm">
-                    {selectedBrandId ? '此品牌下無產品' : '請先選擇品牌以查看產品'}
+                    無符合產品
                   </div>
                 ) : (
                   <div className="space-y-1">
@@ -327,13 +327,11 @@ export function CategoryBindingTab() {
                           onClick={() => handleProductSelect(product.product_id)}
                         >
                           <div className="font-medium truncate">{product.product_name}</div>
-                          <div className="text-xs text-muted-foreground">{product.product_sku}</div>
+                          <div className="text-xs text-muted-foreground">{product.product_code}</div>
                           <div className="flex items-center gap-2 mt-1">
-                            {product.has_variants && (
-                              <Badge variant="secondary" className="text-[10px]">
-                                {product.variant_count} 變體
-                              </Badge>
-                            )}
+                            <Badge variant="secondary" className="text-[10px]">
+                              {product.variant_count} 變體
+                            </Badge>
                             {product.category_ids.length > 0 && (
                               <Badge variant="outline" className="text-[10px]">
                                 {product.category_ids.length} 分類
@@ -343,7 +341,7 @@ export function CategoryBindingTab() {
                         </button>
 
                         {/* 變體列表（展開） */}
-                        {selectedProductId === product.product_id && product.has_variants && (
+                        {selectedProductId === product.product_id && variants.length > 0 && (
                           <div className="ml-4 mt-1 space-y-1">
                             {isLoadingVariants ? (
                               <div className="flex justify-center p-4">

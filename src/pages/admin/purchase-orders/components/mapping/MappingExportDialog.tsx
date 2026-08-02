@@ -27,7 +27,7 @@ export function MappingExportDialog({
   const handleExport = () => {
     const data = mappings.map(m => ({
       '類型': m.internal_variant_id ? '變體' : '產品',
-      '內部SKU': m.internal_variant?.sku || m.internal_product?.sku || '',
+      '內部SKU': m.internal_variant?.sku || m.internal_product?.code || '',
       '內部產品名稱': m.internal_product?.name || '',
       '內部變體名稱': m.internal_variant?.name || '',
       '廠商代號': m.vendor_product_id,

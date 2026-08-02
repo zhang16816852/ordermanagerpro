@@ -104,7 +104,7 @@ export function ItemTableView({
                     <TableCell className="font-mono text-[11px] text-muted-foreground">
                       {item.orderCode?.slice(0, 12) || item.orderId?.slice(0, 8)}
                     </TableCell>
-                    <TableCell className="font-mono text-xs">{item.product?.sku}</TableCell>
+                    <TableCell className="font-mono text-xs">{item.product?.code}</TableCell>
                     <TableCell className="text-sm">
                       {item.product?.name}
                       {item.product_variant && (
@@ -150,7 +150,7 @@ export function ItemTableView({
                   <TableCell className="font-mono text-[11px] text-muted-foreground">
                     {item.orderCode?.slice(0, 12) || item.orderId?.slice(0, 8)}
                   </TableCell>
-                  <TableCell className="font-mono text-xs line-through">{item.product?.sku}</TableCell>
+                  <TableCell className="font-mono text-xs line-through">{item.product?.code}</TableCell>
                   <TableCell className="text-sm italic">
                     <span className="line-through">{item.product?.name}</span>
                     <Badge variant="outline" className="ml-1 text-[10px] h-4">

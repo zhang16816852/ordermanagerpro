@@ -43,8 +43,8 @@ export default function StoreOrderEdit() {
     queryKey: ['store-order-detail', orderId],
     queryFn: async () => {
       if (!orderId) return null;
-      const { data, error } = await supabase
-        .from('orders')
+      const { data, error } = await (supabase
+        .from('orders') as any)
         .select(`
           *,
           order_items (
@@ -54,7 +54,7 @@ export default function StoreOrderEdit() {
             unit_price,
             shipped_quantity,
             status,
-            products (name, sku)
+            products (name, code)
           )
         `)
         .eq('id', orderId)
@@ -83,8 +83,8 @@ export default function StoreOrderEdit() {
       if (order.status !== 'pending') throw new Error('只能修改未確認的訂單');
 
       // 更新訂單備註
-      const { error: orderError } = await supabase
-        .from('orders')
+      const { error: orderError } = await (supabase
+        .from('orders') as any)
         .update({ notes: notes || null })
         .eq('id', orderId);
       if (orderError) throw orderError;
@@ -92,8 +92,8 @@ export default function StoreOrderEdit() {
       // 更新現有項目
       for (const item of orderItems) {
         if (item.isNew) {
-          const { error } = await supabase
-            .from('order_items')
+          const { error } = await (supabase
+            .from('order_items') as any)
             .insert({
               order_id: orderId,
               product_id: item.productId,
@@ -103,8 +103,8 @@ export default function StoreOrderEdit() {
             });
           if (error) throw error;
         } else {
-          const { error } = await supabase
-            .from('order_items')
+          const { error } = await (supabase
+            .from('order_items') as any)
             .update({
               quantity: item.quantity,
               unit_price: item.unitPrice,
@@ -120,8 +120,8 @@ export default function StoreOrderEdit() {
       const toDelete = existingIds.filter((id: string) => !currentIds.includes(id));
 
       if (toDelete.length > 0) {
-        const { error } = await supabase
-          .from('order_items')
+        const { error } = await (supabase
+          .from('order_items') as any)
           .delete()
           .in('id', toDelete);
         if (error) throw error;

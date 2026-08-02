@@ -82,6 +82,7 @@ export function OrderDetailDialog({ order, open, onOpenChange }: OrderDetailDial
                         createdAt={formattedDate}
                         sourceType={order.source_type}
                         notes={order.notes}
+                        consignmentMode={order.consignment_mode}
                     />
 
                     {/* Order Items - Desktop Table */}

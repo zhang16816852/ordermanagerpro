@@ -22,8 +22,8 @@ export function useNotifications() {
         queryKey: ['notifications', user?.id],
         queryFn: async () => {
             if (!user) return [];
-            const { data, error } = await supabase
-                .from('notifications')
+            const { data, error } = await (supabase
+                .from('notifications') as any)
                 .select('*')
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: false })
@@ -38,8 +38,8 @@ export function useNotifications() {
     // Mark as Read Mutation
     const markAsReadMutation = useMutation({
         mutationFn: async (id: string) => {
-            const { error } = await supabase
-                .from('notifications')
+            const { error } = await (supabase
+                .from('notifications') as any)
                 .update({ read: true })
                 .eq('id', id);
             if (error) throw error;

@@ -15,7 +15,7 @@ export default function StoreAudit() {
 
   const isFounder = storeRole === "founder";
 
-  const { data: auditLogs, isLoading } = useStoreAuditLogs(storeId, isFounder, entityFilter);
+  const { data: auditLogs, isLoading } = useStoreAuditLogs(storeId ?? undefined, isFounder, entityFilter);
 
   const filteredLogs = auditLogs?.filter((log) => {
     const searchLower = search.toLowerCase();

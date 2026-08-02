@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,8 +6,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCreateOrder } from "@/hooks/useCreateOrder";
 import { useStoreDraft } from "@/store/useOrderDraftStore";
 import OrderReviewPanel from "@/components/order/OrderReviewPanel";
+import { Input } from "@/components/ui/input";
+import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
 import { toast } from "sonner";
 import { getErrorMessage } from '@/lib/errorMessages';
+import { format } from 'date-fns';
 import type { OrderDraftItem } from "@/store/useOrderDraftStore";
 
 export default function AdminOrderCheckout() {
@@ -15,6 +18,7 @@ export default function AdminOrderCheckout() {
   const storeId = searchParams.get("storeId") || "";
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { defaultWarehouse } = useWarehouses();
 
   const { data: store } = useQuery({
     queryKey: ["store", storeId],
@@ -44,6 +48,11 @@ export default function AdminOrderCheckout() {
   const [items, setItems] = useState<OrderDraftItem[]>(draftItems);
   const [notes, setNotes] = useState(draftNotes);
   const [priceSyncMap, setLocalPriceSyncMap] = useState<Record<string, boolean>>(draftPriceSyncMap);
+  const [shippedAt, setShippedAt] = useState<string>(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const [itemWarehouses, setItemWarehouses] = useState<Record<string, string>>({});
+  const [itemSources, setItemSources] = useState<Record<string, string>>({});
+
+  const getItemWarehouse = (itemId: string) => itemWarehouses[itemId] || defaultWarehouse?.id || '';
 
   const syncItems = useCallback(
     (newItems: OrderDraftItem[]) => {
@@ -133,20 +142,24 @@ export default function AdminOrderCheckout() {
           quantity: i.quantity,
           unit_price: i.price,
           selected_model_name: i.selectedModelName || null,
+          warehouse_id: getItemWarehouse(i.id) || null,
+          inventory_source_type: itemSources[i.id] || "self",
         }));
 
         const { data, error } = await supabase.rpc("create_order_with_sales_note", {
           p_store_id: storeId,
-          p_created_by: user?.id,
-          p_notes: notes.trim() || null,
+          p_created_by: user?.id as string,
+          p_notes: notes.trim() || undefined,
           p_items: payload,
+          p_shipped_at: shippedAt ? new Date(shippedAt).toISOString() : null,
+          p_warehouse_id: null,
         });
 
         if (error) throw error;
 
         await syncPrices();
 
-        const link = `${window.location.origin}/share/sales-note/${data.sales_note_code || data.sales_note_id}?token=${data.access_token}`;
+        const link = `${window.location.origin}/share/sales-note/${(data as any).sales_note_code || (data as any).sales_note_id}?token=${(data as any).access_token}`;
 
         toast.success("訂單已建立並開立銷貨單！", {
           duration: 10000,
@@ -167,7 +180,7 @@ export default function AdminOrderCheckout() {
         setIsPendingMode2(false);
       }
     },
-    [items, notes, storeId, user, navigate, clearDraft, createPendingOrder, syncPrices]
+    [items, notes, storeId, user, navigate, clearDraft, createPendingOrder, syncPrices, itemWarehouses, itemSources, getItemWarehouse, shippedAt]
   );
 
   if (!storeId) {
@@ -187,6 +200,10 @@ export default function AdminOrderCheckout() {
         items={items}
         notes={notes}
         priceSyncMap={priceSyncMap}
+        itemWarehouses={itemWarehouses}
+        onItemWarehouseChange={(id, w) => setItemWarehouses(prev => ({ ...prev, [id]: w }))}
+        itemSources={itemSources}
+        onItemSourceChange={(id, s) => setItemSources(prev => ({ ...prev, [id]: s }))}
         onItemsChange={handleItemsChange}
         onNotesChange={syncNotes}
         onPriceSyncMapChange={syncPriceSyncMap}

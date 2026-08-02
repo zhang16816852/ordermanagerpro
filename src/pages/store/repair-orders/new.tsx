@@ -18,15 +18,15 @@ import { getErrorMessage } from '@/lib/errorMessages';
 export default function StoreRepairOrderForm() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { currentStoreId } = useAuth();
+  const { storeId } = useAuth();
   const isEdit = !!id;
-  const { createMutation, updateMutation } = useRepairOrders(currentStoreId);
+  const { createMutation, updateMutation } = useRepairOrders(storeId || undefined);
 
   const { data: deviceModels = [] } = useQuery({
     queryKey: ['device_models_list'],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('device_models')
+      const { data } = await (supabase
+        .from('device_models') as any)
         .select('*, device_brand:brand_id(name)')
         .order('name');
       return (data || []).map((m: any) => ({
@@ -57,7 +57,7 @@ export default function StoreRepairOrderForm() {
 
   useEffect(() => {
     if (isEdit && id) {
-      supabase.from('repair_orders').select('*').eq('id', id).single().then(({ data }) => {
+      (supabase.from('repair_orders' as any) as any).select('*').eq('id', id).single().then(({ data }) => {
         if (data) {
           setForm({
             customer_name: data.customer_name || '',
@@ -75,7 +75,7 @@ export default function StoreRepairOrderForm() {
           });
         }
       });
-      supabase.from('repair_order_items').select('*').eq('repair_order_id', id).order('sort_order').then(({ data }) => {
+      (supabase.from('repair_order_items' as any) as any).select('*').eq('repair_order_id', id).order('sort_order').then(({ data }) => {
         if (data) {
           setItems(data.map((i: any) => ({
             id: i.id,
@@ -117,7 +117,7 @@ export default function StoreRepairOrderForm() {
       total_price: totalPrice,
       deposit: form.deposit || 0,
       status: form.status,
-      store_id: currentStoreId || null,
+      store_id: storeId || null,
     };
 
     if (isEdit && id) {
@@ -129,7 +129,7 @@ export default function StoreRepairOrderForm() {
       createMutation.mutate(payload as RepairOrderInsert, {
         onSuccess: async (data) => {
           if (items.length > 0) {
-            await supabase.from('repair_order_items').insert(
+            await (supabase.from('repair_order_items' as any) as any).insert(
               items.map((item, idx) => ({
                 repair_order_id: data.id,
                 item_type: 'service',

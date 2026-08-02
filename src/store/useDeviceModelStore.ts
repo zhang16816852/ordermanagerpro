@@ -92,9 +92,9 @@ export const useDeviceModelStore = create<DeviceModelStore>((set, get) => ({
       try {
         const results = await Promise.all([
           fetchAllRows<any>('device_models', '*', { order: [{ column: 'name' }] }),
-          supabase.from('device_brands').select('*').order('name'),
-          supabase.from('device_model_groups').select('*').is('deleted_at', null).order('name'),
-          supabase.from('device_model_group_items').select('group_id, model_id').order('position')
+          (supabase.from('device_brands') as any).select('*').order('name'),
+          (supabase.from('device_model_groups') as any).select('*').is('deleted_at', null).order('name'),
+          (supabase.from('device_model_group_items') as any).select('group_id, model_id').order('position')
         ]);
 
         const [models, brandsRes, groupsRes, groupItemsRes] = results;
@@ -134,8 +134,8 @@ export const useDeviceModelStore = create<DeviceModelStore>((set, get) => ({
   addModel: async (newModel) => {
     set({ isAdding: true });
     try {
-      const { data, error } = await supabase
-        .from('device_models')
+      const { data, error } = await (supabase
+        .from('device_models') as any)
         .insert([newModel as any])
         .select()
         .single();

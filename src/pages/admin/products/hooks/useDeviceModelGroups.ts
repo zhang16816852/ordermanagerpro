@@ -25,8 +25,8 @@ export function useDeviceModelGroups() {
   const { data: groups = [], isLoading } = useQuery({
     queryKey: ['device_model_groups'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('device_model_groups')
+      const { data, error } = await (supabase
+        .from('device_model_groups') as any)
         .select('*')
         .is('deleted_at', null)
         .order('name');
@@ -39,9 +39,8 @@ export function useDeviceModelGroups() {
   const createGroupMutation = useMutation({
     mutationFn: async (values: Partial<DeviceModelGroup>) => {
       const clean = values.name ? values.name.replace(/\s+/g, ' ').trim() : values.name;
-      const { data, error } = await supabase
-        .from('device_model_groups')
-        // 透過 as any 繞過 Supabase 對 name 必填的型別限制，呼叫方需確保 name 有值
+      const { data, error } = await (supabase
+        .from('device_model_groups') as any)
         .insert([{ ...values, name: clean } as any])
         .select()
         .single();
@@ -59,8 +58,8 @@ export function useDeviceModelGroups() {
   const updateGroupMutation = useMutation({
     mutationFn: async ({ id, values }: { id: string; values: Partial<DeviceModelGroup> }) => {
       const clean = values.name ? values.name.replace(/\s+/g, ' ').trim() : values.name;
-      const { error } = await supabase
-        .from('device_model_groups')
+      const { error } = await (supabase
+        .from('device_model_groups') as any)
         .update({ ...values, name: clean })
         .eq('id', id);
       if (error) throw error;
@@ -74,8 +73,8 @@ export function useDeviceModelGroups() {
   // 4. 軟刪除群組
   const deleteGroupMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('device_model_groups')
+      const { error } = await (supabase
+        .from('device_model_groups') as any)
         .update({ deleted_at: new Date().toISOString() })
         .eq('id', id);
       if (error) throw error;
@@ -94,7 +93,7 @@ export function useDeviceModelGroups() {
         model_id: modelId,
         position: index
       }));
-      const { error } = await supabase.from('device_model_group_items').upsert(items, { onConflict: 'group_id,model_id' });
+      const { error } = await (supabase.from('device_model_group_items') as any).upsert(items, { onConflict: 'group_id,model_id' });
       if (error) throw error;
     },
     onSuccess: (_, variables) => {
@@ -106,8 +105,8 @@ export function useDeviceModelGroups() {
   // 6. 移除群組成員
   const removeItemsMutation = useMutation({
     mutationFn: async ({ groupId, modelIds }: { groupId: string; modelIds: string[] }) => {
-      const { error } = await supabase
-        .from('device_model_group_items')
+      const { error } = await (supabase
+        .from('device_model_group_items') as any)
         .delete()
         .eq('group_id', groupId)
         .in('model_id', modelIds);
@@ -125,8 +124,8 @@ export function useDeviceModelGroups() {
       queryKey: ['device_model_group_items', groupId],
       queryFn: async () => {
         if (!groupId) return [];
-        const { data, error } = await supabase
-          .from('device_model_group_items')
+        const { data, error } = await (supabase
+          .from('device_model_group_items') as any)
           .select('*, device_models(*)')
           .eq('group_id', groupId)
           .order('position');
@@ -144,8 +143,8 @@ export function useDeviceModelGroups() {
       queryFn: async () => {
         if (!groupId) return { products: 0, variants: 0 };
         const [prodCount, varCount] = await Promise.all([
-          supabase.from('entity_model_relations').select('*', { count: 'exact', head: true }).eq('group_id', groupId).eq('relation_type', 'include').not('group_id', 'is', null).not('product_id', 'is', null),
-          supabase.from('entity_model_relations').select('*', { count: 'exact', head: true }).eq('group_id', groupId).eq('relation_type', 'include').not('group_id', 'is', null).not('variant_id', 'is', null),
+          (supabase.from('entity_model_relations') as any).select('*', { count: 'exact', head: true }).eq('group_id', groupId).eq('relation_type', 'include').not('group_id', 'is', null).not('product_id', 'is', null),
+          (supabase.from('entity_model_relations') as any).select('*', { count: 'exact', head: true }).eq('group_id', groupId).eq('relation_type', 'include').not('group_id', 'is', null).not('variant_id', 'is', null),
         ]);
         return {
           products: prodCount.count || 0,

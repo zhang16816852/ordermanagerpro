@@ -6,7 +6,7 @@ import { SalesNoteStatusBadge } from "./SalesNoteStatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { Json } from "@/integrations/supabase/types";
-import { Eye, Trash2, Copy, Calendar, Package, Store } from "lucide-react";
+import { Eye, Trash2, Copy, Calendar, Package, Store, CheckCircle2, Clock } from "lucide-react";
 interface SalesNoteSummary {
     id: string;
     code?: string;
@@ -116,7 +116,7 @@ export function SalesNoteListTable({
                     </TableHeader>
                     <TableBody>
                         {data.map((note) => (
-                            <TableRow key={note.id} className="hover:bg-muted/50 transition-colors">
+                            <TableRow key={note.id} className={`hover:bg-muted/50 transition-colors ${note.status === "received" ? "bg-green-50/40" : ""}`}>
                                 <TableCell className="font-mono text-xs font-medium">{note.code || note.id.slice(0, 8)}</TableCell>
                                 {showStoreColumn && (
                                     <TableCell>
@@ -124,14 +124,31 @@ export function SalesNoteListTable({
                                         <div className="text-xs text-muted-foreground">{note.storeCode}</div>
                                     </TableCell>
                                 )}
-                                <TableCell><SalesNoteStatusBadge status={note.status} /></TableCell>
+                                <TableCell>
+                                    <div className="flex items-center gap-2">
+                                        {note.status === "received" ? (
+                                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                        ) : (
+                                            <Clock className="h-4 w-4 text-amber-500" />
+                                        )}
+                                        <SalesNoteStatusBadge status={note.status} />
+                                    </div>
+                                </TableCell>
                                 <TableCell className="text-right">{note.itemCount}</TableCell>
-                                <TableCell className="text-xs text-muted-foreground">
+                                <TableCell className="text-xs">
                                     {note.received_at ? (
-                                        <span className="text-success-600 font-medium">已收: {format(new Date(note.received_at), "MM/dd HH:mm")}</span>
+                                        <span className="text-green-600 font-medium flex items-center gap-1">
+                                            <CheckCircle2 className="h-3.5 w-3.5" />
+                                            已收: {format(new Date(note.received_at), "MM/dd HH:mm")}
+                                        </span>
                                     ) : note.shipped_at ? (
-                                        <span className="text-primary">已出: {format(new Date(note.shipped_at), "MM/dd HH:mm")}</span>
-                                    ) : "-"}
+                                        <span className="text-amber-600 flex items-center gap-1">
+                                            <Clock className="h-3.5 w-3.5" />
+                                            已出: {format(new Date(note.shipped_at), "MM/dd HH:mm")}
+                                        </span>
+                                    ) : (
+                                        <span className="text-muted-foreground">待出貨</span>
+                                    )}
                                 </TableCell>
                                 <TableCell className="text-xs text-muted-foreground">
                                     {format(new Date(note.created_at), "yyyy/MM/dd HH:mm")}
@@ -162,12 +179,19 @@ export function SalesNoteListTable({
             {/* --- 手機版：卡片佈局 (md 以下顯示) --- */}
             <div className="grid grid-cols-1 gap-4 md:hidden">
                 {data.map((note) => (
-                    <div key={note.id} className="bg-card border rounded-xl p-4 shadow-sm space-y-4">
+                    <div key={note.id} className={`bg-card border rounded-xl p-4 shadow-sm space-y-4 ${note.status === "received" ? "border-green-200 bg-green-50/30" : ""}`}>
                         {/* 頂部：狀態與編號 */}
                         <div className="flex justify-between items-start">
                             <div className="space-y-1">
                                 <div className="text-xs font-mono text-muted-foreground">#{note.code || note.id.slice(0, 8)}</div>
-                                <SalesNoteStatusBadge status={note.status} />
+                                <div className="flex items-center gap-2">
+                                    {note.status === "received" ? (
+                                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                    ) : (
+                                        <Clock className="h-4 w-4 text-amber-500" />
+                                    )}
+                                    <SalesNoteStatusBadge status={note.status} />
+                                </div>
                             </div>
                             <div className="flex gap-1">
                                 <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => onView(note)}>
@@ -206,10 +230,18 @@ export function SalesNoteListTable({
                         <div className="flex items-center justify-between">
                             <div className="text-xs">
                                 {note.received_at ? (
-                                    <span className="text-success-600 font-medium italic">已收: {format(new Date(note.received_at), "MM/dd HH:mm")}</span>
+                                    <span className="text-green-600 font-medium flex items-center gap-1">
+                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                        已收: {format(new Date(note.received_at), "MM/dd HH:mm")}
+                                    </span>
                                 ) : note.shipped_at ? (
-                                    <span className="text-primary italic">已出: {format(new Date(note.shipped_at), "MM/dd HH:mm")}</span>
-                                ) : <span className="text-muted-foreground">待出貨</span>}
+                                    <span className="text-amber-600 flex items-center gap-1">
+                                        <Clock className="h-3.5 w-3.5" />
+                                        已出: {format(new Date(note.shipped_at), "MM/dd HH:mm")}
+                                    </span>
+                                ) : (
+                                    <span className="text-muted-foreground">待出貨</span>
+                                )}
                             </div>
                             <Button variant="secondary" size="sm" className="h-8" onClick={() => copyShareLink(note)}>
                                 <Copy className="h-3.5 w-3.5 mr-1.5" />

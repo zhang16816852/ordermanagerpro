@@ -17,8 +17,8 @@ export function useCategoryData() {
         queryKey: ['categories'],
         queryFn: async () => {
             try {
-                const { data, error } = await supabase
-                    .from('categories')
+                const { data, error } = await (supabase
+                    .from('categories') as any)
                     .select('*')
                     .order('sort_order', { ascending: true });
                 if (error) throw error;
@@ -62,11 +62,11 @@ export function useCategoryData() {
 
             if (editingCategoryId) {
                 // 更新既有分類
-                const { error } = await supabase.from('categories').update(catData).eq('id', catId!);
+                const { error } = await (supabase.from('categories') as any).update(catData).eq('id', catId!);
                 if (error) throw error;
             } else {
                 // 新增分類
-                const { data: newCat, error } = await supabase.from('categories').insert([catData]).select().single();
+                const { data: newCat, error } = await (supabase.from('categories') as any).insert([catData]).select().single();
                 if (error) throw error;
                 catId = newCat.id;
             }
@@ -95,9 +95,9 @@ export function useCategoryData() {
 
             // 清理分類下已移除規格的殘留值
             try {
-                const activeIds = (specs || []).map(s => s.id);
+                const activeIds = (specs || []).map(s => s.id).filter(Boolean) as string[];
                 await supabase.rpc('cleanup_category_spec_values', {
-                    p_category_id: catId,
+                    p_category_id: catId!,
                     p_active_spec_ids: activeIds.length > 0 ? activeIds : null as any
                 });
             } catch (err) {
@@ -116,7 +116,7 @@ export function useCategoryData() {
 
     const reorderMutation = useMutation({
         mutationFn: async (updates: { id: string, sort_order: number, name: string }[]) => {
-            const { error } = await supabase.from('categories').upsert(updates);
+            const { error } = await (supabase.from('categories') as any).upsert(updates);
             if (error) throw error;
 
         },
@@ -163,11 +163,11 @@ export function useCategoryData() {
                 complete: async (results) => {
                     const rows = results.data as any[];
                     try {
-                        const { data: existingCats } = await supabase
-                            .from('categories')
+                        const { data: existingCats } = await (supabase
+                            .from('categories') as any)
                             .select('id, name');
-                        const { data: specDefs } = await supabase
-                            .from('specification_definitions')
+                        const { data: specDefs } = await (supabase
+                            .from('specification_definitions') as any)
                             .select('id, name');
 
                         const nameToExistingId = new Map(existingCats?.map(c => [c.name.trim(), c.id]) || []);
@@ -182,7 +182,7 @@ export function useCategoryData() {
                             let targetId: string | null = null;
 
                             if (rawId && idToExistingId.has(rawId)) targetId = rawId;
-                            else if (name && nameToExistingId.has(name)) targetId = nameToExistingId.get(name)!;
+                            else if (name && nameToExistingId.has(name)) targetId = nameToExistingId.get(name)! as string;
                             else if (rawId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId)) targetId = rawId;
                             else targetId = crypto.randomUUID();
 
@@ -233,7 +233,7 @@ export function useCategoryData() {
     const confirmCategoryImport = async (categoriesToUpsert: any[], newHierarchy: any[], newSpecLinks: any[]) => {
         const importedIds = categoriesToUpsert.map(c => c.id);
 
-        const { error: upsertError } = await supabase.from('categories').upsert(categoriesToUpsert);
+        const { error: upsertError } = await (supabase.from('categories') as any).upsert(categoriesToUpsert);
         if (upsertError) throw upsertError;
 
         if (importedIds.length > 0) {
@@ -327,13 +327,13 @@ export function useCategoryData() {
                 const rows = results.data as any[];
                 try {
                     // 1. 取得現有分類與規格供名稱解析
-                    const { data: existingCats, error: fetchError } = await supabase
-                        .from('categories')
+                    const { data: existingCats, error: fetchError } = await (supabase
+                        .from('categories') as any)
                         .select('id, name');
                     if (fetchError) throw fetchError;
 
-                    const { data: specDefs, error: specError } = await supabase
-                        .from('specification_definitions')
+                    const { data: specDefs, error: specError } = await (supabase
+                        .from('specification_definitions') as any)
                         .select('id, name');
                     if (specError) throw specError;
 
@@ -359,7 +359,7 @@ export function useCategoryData() {
                         }
                         // 其次：名稱已存在於資料庫
                         else if (name && nameToExistingId.has(name)) {
-                            targetId = nameToExistingId.get(name)!;
+                            targetId = nameToExistingId.get(name)! as string;
                         }
                         // 再次：CSV 提供的 ID 是合法 UUID（新資料）
                         else if (rawId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId)) {
@@ -381,7 +381,7 @@ export function useCategoryData() {
                     });
 
                     // 執行 Upsert
-                    const { error: upsertError } = await supabase.from('categories').upsert(categoriesToUpsert);
+                    const { error: upsertError } = await (supabase.from('categories') as any).upsert(categoriesToUpsert);
                     if (upsertError) throw upsertError;
 
                     // 3. 解析父分類與規格關聯（支援名稱或 ID）

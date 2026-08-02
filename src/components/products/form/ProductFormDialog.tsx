@@ -16,18 +16,13 @@ import { EntityBindingManager } from './sections/EntityBindingManager';
 // 統一定義 Schema
 const productSchema = z.object({
   name: z.string().min(1, '產品名稱為必填'),
-  sku: z.string().min(1, 'SKU 為必填'),
+  code: z.string().min(1, '產品代碼為必填'),
   category_ids: z.array(z.string().uuid()).default([]),
   device_model_ids: z.array(z.string().uuid()).default([]),
   device_model_group_ids: z.array(z.string().uuid()).default([]),
   device_model_exclusion_ids: z.array(z.string().uuid()).default([]),
   brand_ids: z.array(z.string().uuid()).default([]),
   brand_series_ids: z.array(z.string().uuid()).default([]),
-  model: z.string().nullable().optional(),
-  base_wholesale_price: z.coerce.number().min(0),
-  base_retail_price: z.coerce.number().min(0),
-  status: z.enum(['active', 'discontinued', 'preorder', 'sold_out']),
-  has_variants: z.boolean().default(false),
   spec_values: z.any().nullable().optional(),
 });
 
@@ -52,9 +47,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
   const form = useForm<z.infer<typeof productSchema>>({
     resolver: zodResolver(productSchema),
     defaultValues: {
-            name: '', sku: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_ids: [], brand_series_ids: [], model: '',
-      base_wholesale_price: 0, base_retail_price: 0,
-      status: 'active', has_variants: false,
+            name: '', code: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_ids: [], brand_series_ids: [],
       spec_values: {},
     },
   });
@@ -69,7 +62,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
         if (initialData) {
           console.log('[ProductFormDialog] Resetting form with initialData:', initialData);
 
-          let currentSpecValues = [];
+          let currentSpecValues: any[] = [];
 
           // 編輯模式：從新資料表抓取規格數值
           if (initialData.id) {
@@ -88,6 +81,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
           // 先設定基本資料
           form.reset({
             ...initialData,
+            code: (initialData as any).code || '',
             category_ids: (initialData as any).category_ids || [],
             device_model_ids: [],
             device_model_group_ids: [],
@@ -100,9 +94,9 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
           // 讀取型號標籤、群組標籤與排除的關聯
           if (initialData.id) {
             Promise.all([
-              supabase.from('entity_model_relations').select('model_id').eq('product_id', initialData.id).eq('relation_type', 'include').not('model_id', 'is', null),
-              supabase.from('entity_model_relations').select('group_id').eq('product_id', initialData.id).eq('relation_type', 'include').not('group_id', 'is', null),
-              supabase.from('entity_model_relations').select('model_id').eq('product_id', initialData.id).eq('relation_type', 'exclude').not('model_id', 'is', null)
+              (supabase.from('entity_model_relations') as any).select('model_id').eq('product_id', initialData.id).eq('relation_type', 'include').not('model_id', 'is', null),
+              (supabase.from('entity_model_relations') as any).select('group_id').eq('product_id', initialData.id).eq('relation_type', 'include').not('group_id', 'is', null),
+              (supabase.from('entity_model_relations') as any).select('model_id').eq('product_id', initialData.id).eq('relation_type', 'exclude').not('model_id', 'is', null)
             ]).then(([models, groups, exclusions]) => {
               if (models.data) form.setValue('device_model_ids', models.data.map(d => d.model_id));
               if (groups.data) form.setValue('device_model_group_ids', groups.data.map(d => d.group_id));
@@ -111,9 +105,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
           }
         } else {
           form.reset({
-      name: '', sku: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_ids: [], brand_series_ids: [], model: '',
-            base_wholesale_price: 0, base_retail_price: 0,
-            status: 'active', has_variants: false,
+      name: '', code: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_ids: [], brand_series_ids: [],
             spec_values: {},
           });
         }
@@ -165,21 +157,21 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
               </TabsTrigger>
               <TabsTrigger
                 value="variants"
-                disabled={!initialData || !form.watch('has_variants')}
+                disabled={!initialData}
                 className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
               >
                 變體列表 {!initialData && '(儲存後可用)'}
               </TabsTrigger>
               <TabsTrigger
                 value="specs"
-                disabled={!initialData || !form.watch('has_variants')}
+                disabled={!initialData}
                 className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
               >
                 變體規格
               </TabsTrigger>
               <TabsTrigger
                 value="models"
-                disabled={!initialData || !form.watch('has_variants')}
+                disabled={!initialData}
                 className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
               >
                 變體型號

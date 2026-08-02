@@ -4,8 +4,11 @@ import {
   idbReplaceAll,
   idbPut,
   idbDelete,
+  idbClear,
   idbGetMeta,
+  idbSetMeta,
   type DataStoreName,
+  type MetaRecord,
 } from './indexedDBAdapter';
 import { memoryStorage, type CacheEnvelope } from './memoryStorage';
 import { versionCache } from './versionCache';
@@ -16,7 +19,7 @@ import { versionCache } from './versionCache';
 export const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 
 export const CACHE = {
-  products:      { key: 'ac_products_v1',       schema: 1, versionKey: 'products',       idbStore: 'products' as DataStoreName },
+  products:      { key: 'ac_products_v2',       schema: 3, versionKey: 'products',       idbStore: 'products' as DataStoreName },
   specs:         { key: 'ac_specs_v1',          schema: 1, versionKey: 'specs',           idbStore: 'specs' as DataStoreName },
   categories:    { key: 'ac_categories_v1',     schema: 1, versionKey: 'categories',      idbStore: 'categories' as DataStoreName },
   deviceModels:  { key: 'ac_device_models_v1',  schema: 1, versionKey: 'device_models',   idbStore: 'device_models' as DataStoreName },
@@ -29,6 +32,12 @@ export const CACHE = {
 const KEY_TO_STORE: Record<string, DataStoreName> = {};
 Object.values(CACHE).forEach(c => {
   KEY_TO_STORE[c.key] = (c as { idbStore: DataStoreName }).idbStore;
+});
+
+// Reverse mapping: storeName → { cacheKey, schema }
+const STORE_TO_KEY: Record<string, { key: string; schema: number }> = {};
+Object.values(CACHE).forEach(c => {
+  STORE_TO_KEY[c.idbStore] = { key: c.key, schema: c.schema };
 });
 
 const LEGACY_KEYS = [
@@ -93,15 +102,61 @@ export class CacheService {
   private static async ensureStoreLoaded(storeName: string): Promise<void> {
     if (this.loadedStores.has(storeName)) return;
 
-    const entries = await idbGetAll(storeName as DataStoreName);
-    entries.forEach((value, key) => {
-      memoryStorage.set(key, value as CacheEnvelope<any>);
-    });
+    const storeInfo = STORE_TO_KEY[storeName];
+    if (!storeInfo) {
+      this.loadedStores.add(storeName);
+      return;
+    }
 
+    const { key: cacheKey, schema: schemaVersion } = storeInfo;
+
+    // Already in memory (e.g., same-session init)
+    if (memoryStorage.has(cacheKey)) {
+      this.loadedStores.add(storeName);
+      return;
+    }
+
+    const entries = await idbGetAll(storeName as DataStoreName);
+    if (entries.size === 0) {
+      this.loadedStores.add(storeName);
+      return;
+    }
+
+    // Check stored schema version from meta
     const meta = await idbGetMeta(storeName as DataStoreName);
     if (meta) {
-      memoryStorage.setVersion(storeName, meta.version);
+      if (meta.schemaVersion !== schemaVersion) {
+        await idbClear(storeName as any);
+        this.loadedStores.add(storeName);
+        return;
+      }
+    } else if (schemaVersion > 1) {
+      // Old data stored without meta.schemaVersion → clear to force re-fetch
+      await idbClear(storeName as any);
+      this.loadedStores.add(storeName);
+      return;
     }
+
+    // Check if stored as envelope (key = cacheKey, has schemaVersion field)
+    const envelopeRecord = entries.get(cacheKey);
+    if (envelopeRecord && typeof envelopeRecord === 'object' && 'schemaVersion' in envelopeRecord) {
+      memoryStorage.set(cacheKey, envelopeRecord as CacheEnvelope<any>);
+      this.loadedStores.add(storeName);
+      return;
+    }
+
+    // Array-based: reconstruct envelope from individual records
+    const items: any[] = [];
+    entries.forEach(value => {
+      items.push(value);
+    });
+
+    memoryStorage.set(cacheKey, {
+      schemaVersion,
+      dataVersion: meta?.version || '0',
+      cachedAt: meta?.updatedAt || Date.now(),
+      data: items,
+    });
 
     this.loadedStores.add(storeName);
   }
@@ -141,9 +196,10 @@ export class CacheService {
     // 2. IDB (async, 非 fire-and-forget)
     const storeName = KEY_TO_STORE[key];
     if (storeName && Array.isArray(data)) {
-      this.writeRecordsToIDB(storeName, data, dataVersion);
+      this.writeRecordsToIDB(storeName, data, dataVersion, schemaVersion);
     } else if (storeName) {
       this.writeEnvelopeToIDB(storeName, key, envelope);
+      this.writeMetaToIDB(storeName, dataVersion);
     }
   }
 
@@ -151,6 +207,7 @@ export class CacheService {
     storeName: DataStoreName,
     data: any[],
     dataVersion: string,
+    schemaVersion: number,
   ): Promise<void> {
     this.pendingWrites++;
     try {
@@ -158,7 +215,7 @@ export class CacheService {
         item.id ?? item.slug ?? JSON.stringify(item),
         item,
       ]);
-      const meta = { version: dataVersion, updatedAt: Date.now() };
+      const meta = { version: dataVersion, updatedAt: Date.now(), schemaVersion };
       await idbReplaceAll(storeName, entries, meta);
       this.loadedStores.add(storeName);
     } catch (err) {
@@ -180,6 +237,14 @@ export class CacheService {
       console.error(`[CacheService] 🔴 IDB envelope write failed for ${key}:`, err);
     } finally {
       this.pendingWrites--;
+    }
+  }
+
+  private static async writeMetaToIDB(storeName: DataStoreName, dataVersion: string): Promise<void> {
+    try {
+      await idbSetMeta(storeName, { version: dataVersion, updatedAt: Date.now(), schemaVersion: 0 } as MetaRecord);
+    } catch (err) {
+      console.error(`[CacheService] 🔴 IDB meta write failed for ${storeName}:`, err);
     }
   }
 
@@ -225,8 +290,8 @@ export class CacheService {
 
   static async fetchServerVersions(): Promise<Record<string, string>> {
     try {
-      const { data } = await supabase
-        .from('data_versions')
+      const { data } = await (supabase
+        .from('data_versions') as any)
         .select('table_name, version');
       const versions: Record<string, string> = {};
       (data || []).forEach((v: any) => {

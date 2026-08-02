@@ -1,19 +1,17 @@
 import type { ProductWithPricing, VariantWithPricing } from './product';
 
-export type DimensionType = 'variant_field' | 'product_list' | 'custom' | 'spec';
+export type DimensionType = 'variant_field' | 'product_list' | 'custom' | 'spec' | 'option';
 
-export type VariantFieldKey = 'option_1' | 'option_2' | 'option_3' | 'device';
+export type VariantFieldKey = string;
 
-export const VARIANT_FIELD_LABELS: Record<VariantFieldKey, string> = {
-  option_1: '選項 1',
-  option_2: '選項 2',
-  option_3: '顏色',
+export const VARIANT_FIELD_LABELS: Record<string, string> = {
   device: '型號/群組',
 };
 
 export const DIMENSION_TYPE_LABELS: Record<DimensionType, string> = {
   variant_field: 'Variant 欄位',
   spec: '規格表',
+  option: '選項群組',
   product_list: '產品列表',
   custom: '自訂名稱',
 };
@@ -23,6 +21,7 @@ export interface DimensionConfig {
   label: string;
   field?: VariantFieldKey;
   spec_id?: string;
+  option_group_id?: string;
   model_ids?: string[];
   values?: string[];
   valueMap?: Record<string, string>;

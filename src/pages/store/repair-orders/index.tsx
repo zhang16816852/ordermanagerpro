@@ -13,8 +13,8 @@ import { useAuth } from '@/hooks/useAuth';
 
 export default function StoreRepairOrders() {
   const navigate = useNavigate();
-  const { currentStoreId } = useAuth();
-  const { orders, isLoading, updateStatusMutation } = useRepairOrders(currentStoreId);
+  const { storeId } = useAuth();
+  const { orders, isLoading, updateStatusMutation } = useRepairOrders(storeId || undefined);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 

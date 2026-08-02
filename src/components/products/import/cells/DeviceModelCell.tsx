@@ -140,7 +140,7 @@ export function DeviceModelCell({
                                 toast.error('名稱與品牌為必填');
                                 return;
                             }
-                            const res = await addModel(modelForm);
+                            const res = await addModel({ ...modelForm, name: modelForm.name.trim() });
                             if (res) {
                                 const current = value ? value.split(',').map(s => s.trim()) : [];
                                 const cleanName = res.name.replace(/\s+/g, ' ').trim();

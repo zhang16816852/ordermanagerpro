@@ -34,8 +34,8 @@ export default function AdminOrderComposer() {
   const { data: stores = [], isLoading: storesLoading } = useQuery({
     queryKey: ["admin-stores-list"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("stores")
+      const { data, error } = await (supabase
+        .from("stores") as any)
         .select("id, name, code")
         .order("name");
       if (error) throw error;
@@ -58,19 +58,11 @@ export default function AdminOrderComposer() {
   );
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
 
-  const composerFilterCount = useMemo(() => {
-    let count = 0;
-    if (selectedCategory) count++;
-    count += selectedBrands.length;
-    count += Object.values(selectedSpecs).reduce((sum, arr) => sum + arr.length, 0);
-    return count;
-  }, [selectedCategory, selectedBrands, selectedSpecs]);
-
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["categories"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("categories")
+      const { data, error } = await (supabase
+        .from("categories") as any)
         .select("*")
         .order("sort_order", { ascending: true });
       if (error) return [];
@@ -91,6 +83,14 @@ export default function AdminOrderComposer() {
       return {};
     }
   }, [searchParams]);
+
+  const composerFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedCategory) count++;
+    count += selectedBrands.length;
+    count += (Object.values(selectedSpecs) as string[][]).reduce((sum, arr) => sum + arr.length, 0);
+    return count;
+  }, [selectedCategory, selectedBrands, selectedSpecs]);
 
   const updateParams = useCallback(
     (updates: Record<string, string | null>) => {

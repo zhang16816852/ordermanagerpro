@@ -19,17 +19,25 @@ interface ProductVariant {
   id: string;
   name: string | null;
   sku: string;
-  option_1: string | null;
-  option_2: string | null;
-  option_3: string | null;
 }
 
 interface ProductWithVariants {
   id: string;
   name: string;
-  sku: string;
-  has_variants: boolean;
+  code: string;
   variants: ProductVariant[];
+}
+
+interface MatchedProductSummary {
+  id: string;
+  name: string;
+  sku: string;
+}
+
+interface MatchedVariantSummary {
+  id: string;
+  name: string | null;
+  sku: string;
 }
 
 interface MappingImportDialogProps {
@@ -49,8 +57,8 @@ interface ParsedMappingRow {
   unit_cost: number | null;
   match_status: 'matched' | 'unmatched' | 'conflict';
   match_method?: 'variant_sku' | 'product_sku' | 'product_name';
-  matched_product?: { id: string; name: string; sku: string };
-  matched_variant?: { id: string; name: string; sku: string };
+  matched_product?: MatchedProductSummary;
+  matched_variant?: MatchedVariantSummary;
   conflict_existing?: SupplierProductMapping;
 }
 
@@ -75,8 +83,8 @@ export function MappingImportDialog({
       const { data, error } = await supabase
         .from('products')
         .select(`
-          id, name, sku, has_variants,
-          variants:product_variants(id, name, sku, option_1, option_2, option_3)
+          id, name, code,
+          variants:product_variants(id, name, sku)
         `)
         .limit(5000);
 
@@ -115,9 +123,9 @@ export function MappingImportDialog({
           }
         }
       }
-      if (productSku && p.sku && p.sku.toLowerCase() === productSku.toLowerCase()) {
+      if (productSku && p.code && p.code.toLowerCase() === productSku.toLowerCase()) {
         matchedProduct = p;
-        if (p.has_variants && p.variants && p.variants.length === 1) {
+        if (p.variants && p.variants.length === 1) {
           matchedVariant = p.variants[0];
         }
         matchMethod = 'product_sku';
@@ -129,7 +137,7 @@ export function MappingImportDialog({
       for (const p of allProducts) {
         if (p.name.toLowerCase() === productName.toLowerCase()) {
           matchedProduct = p;
-          if (p.has_variants && p.variants && p.variants.length === 1) {
+          if (p.variants && p.variants.length === 1) {
             matchedVariant = p.variants[0];
           }
           matchMethod = 'product_name';
@@ -226,8 +234,8 @@ export function MappingImportDialog({
             unit_cost: unitCostIdx !== -1 ? Number(row[unitCostIdx]) || null : null,
             match_status: matchStatus,
             match_method: match_method || undefined,
-            matched_product: matched_product || undefined,
-            matched_variant: matched_variant || undefined,
+            matched_product: matched_product ? { id: matched_product.id, name: matched_product.name, sku: matched_product.code } : undefined,
+            matched_variant: matched_variant ? { id: matched_variant.id, name: matched_variant.name, sku: matched_variant.sku } : undefined,
             conflict_existing: conflict || undefined,
           };
         });

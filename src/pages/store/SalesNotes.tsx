@@ -21,7 +21,7 @@ interface SalesNoteWithItems {
     quantity: number;
     order_items: {
       id: string;
-      product: { name: string; sku: string } | null;
+      product: { name: string; code: string } | null;
       product_variant: { name: string } | null;
     } | null;
   }[];
@@ -47,8 +47,8 @@ export default function StoreSalesNotes() {
     queryKey: ['store-sales-notes', storeId],
     queryFn: async () => {
       if (!storeId) return [];
-      const { data, error } = await supabase
-        .from('sales_notes')
+      const { data, error } = await (supabase
+        .from('sales_notes') as any)
         .select(`
           id,
           code,
@@ -62,7 +62,7 @@ export default function StoreSalesNotes() {
             quantity,
             order_items (
               id,
-              product:products (name, sku),
+              product:products (name, code),
               product_variant:product_variants (name)
             )
           )
@@ -77,8 +77,8 @@ export default function StoreSalesNotes() {
 
   const confirmReceiveMutation = useMutation({
     mutationFn: async (noteId: string) => {
-      const { error } = await supabase
-        .from('sales_notes')
+      const { error } = await (supabase
+        .from('sales_notes') as any)
         .update({
           status: 'received',
           received_at: new Date().toISOString(),
@@ -128,7 +128,7 @@ export default function StoreSalesNotes() {
       items: note.sales_note_items.map((item) => ({
         id: item.id,
         quantity: item.quantity,
-        productSku: item.order_items?.product?.sku || '',
+        productSku: item.order_items?.product?.code || '',
         productName: item.order_items?.product?.name || '',
         variantName: item.order_items?.product_variant?.name || null,
       })),

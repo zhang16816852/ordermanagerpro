@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useDeviceModels } from '../../products/hooks/useDeviceModels';
 import { FullDeviceModel as DeviceModel } from '@/types/device-models';
 import { fetchAllRows } from '@/lib/utils';
@@ -25,16 +25,24 @@ export function DeviceModelManager() {
   const { data: deviceBrands = [] } = useQuery({
     queryKey: ['device_brands'],
     queryFn: async () => {
-      const { data } = await supabase.from('device_brands').select('*').order('sort_order', { ascending: true });
-      return data || [];
+      const { data, error } = await (supabase
+        .from('device_brands' as any)
+        .select('*' as any)
+        .order('sort_order' as any, { ascending: true } as any) as any);
+      if (error) throw error;
+      return ((data ?? []) as Array<{ id: string; name: string }>);
     }
   });
 
   const createBrandMutation = useMutation({
     mutationFn: async (name: string) => {
-      const { data, error } = await supabase.from('device_brands').insert([{ name }]).select().single();
+      const { data, error } = await (supabase
+        .from('device_brands' as any)
+        .insert([{ name }] as any)
+        .select('*' as any) as any)
+        .single();
       if (error) throw error;
-      return data;
+      return (data as { id: string; name: string } | null);
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['device_brands'] });
@@ -53,6 +61,8 @@ export function DeviceModelManager() {
   const [isConfirming, setIsConfirming] = useState(false);
 
   const [typeFilter, setTypeFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   const uniqueTypes = Array.from(new Set(models.map(m => m.device_type).filter(Boolean))) as string[];
 
@@ -62,11 +72,21 @@ export function DeviceModelManager() {
     return matchSearch && matchType;
   });
 
+  useEffect(() => {
+    setPage(1);
+  }, [search, typeFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredModels.length / PAGE_SIZE));
+  const paginatedModels = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredModels.slice(start, start + PAGE_SIZE);
+  }, [filteredModels, page]);
+
   const handleSave = () => {
     if (!editingData?.name?.trim()) return;
 
     const payload = {
-      name: editingData.name,
+      name: editingData.name.trim(),
       sort_order: editingData.sort_order || 0,
       brand_id: editingData.brand_id || null,
       device_type: editingData.device_type || null,
@@ -168,19 +188,23 @@ export function DeviceModelManager() {
         Object.values(r).some(v => v != null && String(v).trim() !== '')
       );
 
-      const { data: currentBrands } = await supabase.from('device_brands').select('*');
-      const existingBrandSet = new Set((currentBrands || []).map((b: any) => b.name.toLowerCase()));
+      const { data: currentBrands, error: currentBrandsError } = await (supabase.from('device_brands' as any).select('*' as any) as any);
+      if (currentBrandsError) throw currentBrandsError;
+      const existingBrandSet = new Set(((currentBrands ?? []) as Array<{ name: string }>).map((b) => b.name.toLowerCase()));
 
       const uniqueBrands = Array.from(new Set(nonEmptyRows.map(r => (r['廠牌'] || r['brand'] || '').trim()).filter(Boolean)));
       const newBrands = uniqueBrands.filter(b => !existingBrandSet.has(b.toLowerCase()));
 
       if (newBrands.length > 0) {
-        const { error: brandError } = await supabase.from('device_brands').insert(newBrands.map(name => ({ name })));
+        const { error: brandError } = await (supabase
+          .from('device_brands' as any)
+          .insert(newBrands.map(name => ({ name })) as any) as any);
         if (brandError) throw brandError;
       }
 
-      const { data: updatedBrands } = await supabase.from('device_brands').select('*');
-      const brandMap = new Map((updatedBrands || []).map((b: any) => [b.name.toLowerCase(), b.id]));
+      const { data: updatedBrands, error: updatedBrandsError } = await (supabase.from('device_brands' as any).select('*' as any) as any);
+      if (updatedBrandsError) throw updatedBrandsError;
+      const brandMap = new Map(((updatedBrands ?? []) as Array<{ id: string; name: string }>).map((b) => [b.name.toLowerCase(), b.id]));
 
       const existingModels = await fetchAllRows<any>('device_models', '*');
       const existingByName = new Map((existingModels || []).map((m: any) => [m.name.toLowerCase(), m]));
@@ -263,7 +287,7 @@ export function DeviceModelManager() {
           newCount++;
         }
 
-        const brandDisplayName = bName ? (updatedBrands || []).find((b: any) => b.id === brandId)?.name || bName : '';
+        const brandDisplayName = bName ? (((updatedBrands ?? []) as Array<{ id: string; name: string }>).find((b) => b.id === brandId)?.name || bName) : '';
         previewRows.push({
           _status: status,
           _reason: reason,
@@ -385,7 +409,11 @@ export function DeviceModelManager() {
         <TabsContent value="list" className="mt-4">
           <DeviceModelListView
             isLoading={isLoading}
-            models={filteredModels}
+            models={paginatedModels}
+            totalCount={filteredModels.length}
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
             deviceBrands={deviceBrands}
             openEdit={openEdit}
             updateMutation={updateMutation}

@@ -12,11 +12,11 @@ export default function AdminDashboard() {
         queryKey: ['admin-stats'],
         queryFn: async () => {
             const [stores, products, orders, salesNotes, users] = await Promise.all([
-                supabase.from('stores').select('id', { count: 'exact', head: true }),
-                supabase.from('products').select('id', { count: 'exact', head: true }),
-                supabase.from('orders').select('id', { count: 'exact', head: true }),
-                supabase.from('sales_notes').select('id', { count: 'exact', head: true }),
-                supabase.from('profiles').select('id', { count: 'exact', head: true }),
+                (supabase.from('stores') as any).select('id', { count: 'exact', head: true }),
+                (supabase.from('products') as any).select('id', { count: 'exact', head: true }),
+                (supabase.from('orders') as any).select('id', { count: 'exact', head: true }),
+                (supabase.from('sales_notes') as any).select('id', { count: 'exact', head: true }),
+                (supabase.from('profiles') as any).select('id', { count: 'exact', head: true }),
             ]);
             return {
                 stores: stores.count ?? 0,
@@ -35,8 +35,8 @@ export default function AdminDashboard() {
             const sevenDaysAgo = new Date();
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-            const { data, error } = await supabase
-                .from('accounting_entries')
+            const { data, error } = await (supabase
+                .from('accounting_entries') as any)
                 .select('amount, transaction_date')
                 .eq('type', 'income')
                 .gte('transaction_date', sevenDaysAgo.toISOString())
@@ -71,16 +71,26 @@ export default function AdminDashboard() {
     const { data: distributionData = [], isLoading: distLoading } = useQuery({
         queryKey: ['admin-category-dist'],
         queryFn: async () => {
-            const { data, error } = await supabase
-                .from('products')
-                .select('category');
-            
+            const { data: links, error } = await (supabase
+                .from('product_category_links') as any)
+                .select('category_id');
             if (error) throw error;
 
+            const catIds = [...new Set((links || []).map(l => l.category_id))];
+
+            let catNames: Record<string, string> = {};
+            if (catIds.length > 0) {
+                const { data: cats } = await (supabase
+                    .from('categories') as any)
+                    .select('id, name')
+                    .in('id', catIds);
+                catNames = Object.fromEntries((cats || []).map(c => [c.id, c.name]));
+            }
+
             const counts: Record<string, number> = {};
-            (data as any[]).forEach(p => {
-                const cat = p.category || '未分類';
-                counts[cat] = (counts[cat] || 0) + 1;
+            (links || []).forEach(l => {
+                const name = catNames[l.category_id] || '未分類';
+                counts[name] = (counts[name] || 0) + 1;
             });
 
             return Object.entries(counts)

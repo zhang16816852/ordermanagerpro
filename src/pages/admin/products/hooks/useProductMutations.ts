@@ -23,13 +23,13 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
                 ...productData
             } = values;
 
-            const { data: product, error: productError } = await supabase.from('products')
+            const { data: product, error: productError } = await (supabase.from('products') as any)
                 .insert({ ...productData })
                 .select().single();
             if (productError) throw productError;
 
             if (category_ids?.length > 0) {
-                const { error } = await supabase.from('product_category_links').insert(
+                const { error } = await (supabase.from('product_category_links') as any).insert(
                     category_ids.map((catId: string) => ({ product_id: product.id, category_id: catId }))
                 );
                 if (error) throw error;
@@ -39,13 +39,13 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
                 const links = brand_ids.map((bid: string, i: number) => ({
                     product_id: product.id, brand_id: bid, is_primary: i === 0
                 }));
-                const { error } = await supabase.from('product_brands').upsert(links, { onConflict: 'product_id,brand_id' });
+                const { error } = await (supabase.from('product_brands') as any).upsert(links, { onConflict: 'product_id,brand_id' });
                 if (error) throw error;
             }
 
             if (brand_series_ids.length > 0) {
                 const links = brand_series_ids.map((sid: string) => ({ product_id: product.id, brand_series_id: sid }));
-                const { error } = await supabase.from('product_series_links').upsert(links, { onConflict: 'product_id,brand_series_id' });
+                const { error } = await (supabase.from('product_series_links') as any).upsert(links, { onConflict: 'product_id,brand_series_id' });
                 if (error) throw error;
             }
 
@@ -55,7 +55,7 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
                 exclusions: device_model_exclusion_ids.map((id: string) => ({ model_id: id }))
             });
 
-            if (spec_values && !values.has_variants && category_ids?.[0]) {
+            if (spec_values && category_ids?.[0]) {
                 const { error: specError } = await supabase.rpc('sync_product_specs_v6', {
                     p_entity_id: product.id,
                     p_entity_type: 'product',
@@ -91,31 +91,31 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
                 ...productData
             } = values;
 
-            const { error: productError } = await supabase.from('products')
+            const { error: productError } = await (supabase.from('products') as any)
                 .update({ ...productData, updated_at: new Date().toISOString() })
                 .eq('id', id);
             if (productError) throw productError;
 
-            await supabase.from('product_category_links').delete().eq('product_id', id);
+            await (supabase.from('product_category_links') as any).delete().eq('product_id', id);
             if (category_ids?.length > 0) {
-                await supabase.from('product_category_links').insert(
+                await (supabase.from('product_category_links') as any).insert(
                     category_ids.map((catId: string) => ({ product_id: id, category_id: catId }))
                 );
             }
 
-            await supabase.from('product_brands').delete().eq('product_id', id);
+            await (supabase.from('product_brands') as any).delete().eq('product_id', id);
             if (brand_ids.length > 0) {
                 const links = brand_ids.map((bid: string, i: number) => ({
                     product_id: id, brand_id: bid, is_primary: i === 0
                 }));
-                const { error } = await supabase.from('product_brands').upsert(links, { onConflict: 'product_id,brand_id' });
+                const { error } = await (supabase.from('product_brands') as any).upsert(links, { onConflict: 'product_id,brand_id' });
                 if (error) throw error;
             }
 
-            await supabase.from('product_series_links').delete().eq('product_id', id);
+            await (supabase.from('product_series_links') as any).delete().eq('product_id', id);
             if (brand_series_ids.length > 0) {
                 const links = brand_series_ids.map((sid: string) => ({ product_id: id, brand_series_id: sid }));
-                const { error } = await supabase.from('product_series_links').upsert(links, { onConflict: 'product_id,brand_series_id' });
+                const { error } = await (supabase.from('product_series_links') as any).upsert(links, { onConflict: 'product_id,brand_series_id' });
                 if (error) throw error;
             }
 
@@ -125,7 +125,7 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
                 exclusions: device_model_exclusion_ids.map((id: string) => ({ model_id: id }))
             });
 
-            if (spec_values && !values.has_variants && category_ids?.[0]) {
+            if (spec_values && category_ids?.[0]) {
                 const { error: specError } = await supabase.rpc('sync_product_specs_v6', {
                     p_entity_id: id,
                     p_entity_type: 'product',
@@ -150,7 +150,7 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
 
     const deleteMutation = useMutation({
         mutationFn: async (id: string) => {
-            const { error } = await supabase.from('products').delete().eq('id', id);
+            const { error } = await (supabase.from('products') as any).delete().eq('id', id);
             if (error) throw error;
         },
         onSuccess: async () => {
@@ -164,7 +164,7 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
 
     const updateVariantPriceMutation = useMutation({
         mutationFn: async ({ id, ...updates }: { id: string, wholesale_price?: number, retail_price?: number, status?: any }) => {
-            const { error } = await supabase.from('product_variants').update(updates).eq('id', id);
+            const { error } = await (supabase.from('product_variants') as any).update(updates).eq('id', id);
             if (error) throw error;
         },
         onSuccess: () => {
@@ -175,7 +175,7 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
 
     const handleCopy = async (product: Product, setEditingProduct: (p: any) => void, setIsDialogOpen: (v: boolean) => void) => {
         const newName = `${product.name} (複製)`;
-        const newSku = `${product.sku}-COPY-${Math.floor(Math.random() * 1000)}`;
+        const newSku = `${product.code}-COPY-${Math.floor(Math.random() * 1000)}`;
         try {
             const { data: newProductId, error } = await (supabase.rpc as any)('duplicate_product_with_variants', {
                 target_product_id: product.id,
@@ -186,7 +186,7 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
             await forceRefresh();
             toast.success('產品及其變體已完整複製');
             if (newProductId) {
-                const { data: newProduct } = await supabase.from('products').select('*').eq('id', newProductId).single();
+                const { data: newProduct } = await (supabase.from('products') as any).select('*').eq('id', newProductId).single();
                 if (newProduct) { setEditingProduct(newProduct as any); setIsDialogOpen(true); }
             }
         } catch (error: any) { toast.error(`複製失敗：${getErrorMessage(error)}`); }

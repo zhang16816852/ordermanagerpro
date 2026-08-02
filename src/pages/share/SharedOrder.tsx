@@ -105,7 +105,7 @@ export default function SharedOrder() {
     setIsPrintDialogOpen(false);
 
     try {
-      // @ts-ignore
+      // @ts-expect-error - html2pdf might have type issues depending on version
       await html2pdf().set(opt).from(element).save();
       toast.success("PDF 匯出成功");
     } catch (err) {
@@ -174,7 +174,7 @@ export default function SharedOrder() {
               {/* QR Code and Page Info - Only visible in print */}
               <div className="hidden print:flex print-header-info">
                 <div className="print-qr-code">
-                  <QRCodeSVG value={window.location.href.replace(/[\?&]print=true.*/, "")} size={60} />
+                  <QRCodeSVG value={window.location.href.replace(/[?&]print=true.*/, "")} size={60} />
                 </div>
                 <div className="text-[10px] print-page-info font-mono mt-1 text-right"></div>
               </div>

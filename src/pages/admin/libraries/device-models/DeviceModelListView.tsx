@@ -4,10 +4,23 @@ import { Button } from '@/components/ui/button';
 import { Edit, Trash2 } from 'lucide-react';
 import { FullDeviceModel as DeviceModel } from '@/types/device-models';
 import { UseMutationResult } from '@tanstack/react-query';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from '@/components/ui/pagination';
 
 interface DeviceModelListViewProps {
   isLoading: boolean;
   models: DeviceModel[];
+  totalCount: number;
+  page: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
   deviceBrands: any[];
   openEdit: (model: DeviceModel) => void;
   updateMutation: UseMutationResult<any, Error, { id: string; values: any }, unknown>;
@@ -17,11 +30,31 @@ interface DeviceModelListViewProps {
 export function DeviceModelListView({
   isLoading,
   models,
+  totalCount,
+  page,
+  totalPages,
+  onPageChange,
   deviceBrands,
   openEdit,
   updateMutation,
   deleteMutation
 }: DeviceModelListViewProps) {
+  const getPageNumbers = () => {
+    const pages: (number | 'ellipsis')[] = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (page > 3) pages.push('ellipsis');
+      const start = Math.max(2, page - 1);
+      const end = Math.min(totalPages - 1, page + 1);
+      for (let i = start; i <= end; i++) pages.push(i);
+      if (page < totalPages - 2) pages.push('ellipsis');
+      pages.push(totalPages);
+    }
+    return pages;
+  };
+
   return (
     <div className="border rounded-lg bg-background">
       <Table>
@@ -99,6 +132,47 @@ export function DeviceModelListView({
           )}
         </TableBody>
       </Table>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-4 py-3 border-t">
+          <span className="text-sm text-muted-foreground">
+            共 {totalCount} 筆，第 {page}/{totalPages} 頁
+          </span>
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => onPageChange(Math.max(1, page - 1))}
+                  className={page <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+              {getPageNumbers().map((p, i) =>
+                p === 'ellipsis' ? (
+                  <PaginationItem key={`e${i}`}>
+                    <PaginationEllipsis />
+                  </PaginationItem>
+                ) : (
+                  <PaginationItem key={p}>
+                    <PaginationLink
+                      isActive={p === page}
+                      onClick={() => onPageChange(p)}
+                      className="cursor-pointer"
+                    >
+                      {p}
+                    </PaginationLink>
+                  </PaginationItem>
+                )
+              )}
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+                  className={page >= totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
     </div>
   );
 }

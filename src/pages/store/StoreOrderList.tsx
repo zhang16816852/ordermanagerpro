@@ -43,8 +43,8 @@ export default function StoreOrderList() {
     queryKey: ['store-orders', storeId, statusTab],
     queryFn: async () => {
       if (!storeId) return [];
-      const { data, error } = await supabase
-        .from('orders')
+      const { data, error } = await (supabase
+        .from('orders') as any)
         .select(`
           id,
           code,
@@ -57,7 +57,7 @@ export default function StoreOrderList() {
             shipped_quantity,
             unit_price,
             status,
-            product:products (name, sku),
+            product:products (name, code),
             product_variant:product_variants (name)
           )
         `)
@@ -78,7 +78,7 @@ export default function StoreOrderList() {
         const searchLower = productFilter.toLowerCase();
         return (
           item.product?.name.toLowerCase().includes(searchLower) ||
-          item.product?.sku.toLowerCase().includes(searchLower)
+          item.product?.code.toLowerCase().includes(searchLower)
         );
       })
       .map(item => ({
@@ -97,7 +97,7 @@ export default function StoreOrderList() {
       (order.code && order.code.toLowerCase().includes(searchLower)) ||
       order.order_items.some((item) =>
         item.product?.name.toLowerCase().includes(searchLower) ||
-        item.product?.sku.toLowerCase().includes(searchLower)
+        item.product?.code.toLowerCase().includes(searchLower)
       )
     );
   });

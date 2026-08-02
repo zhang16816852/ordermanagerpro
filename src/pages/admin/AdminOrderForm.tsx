@@ -18,6 +18,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -31,6 +32,8 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { OrderItemsTable, OrderItemRow } from '@/components/order/OrderItemsTable';
+import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
+import { WarehouseSelector } from "@/components/WarehouseSelector";
 
 const statusLabels: Record<string, { label: string; className: string }> = {
   pending: { label: '未確認', className: 'bg-warning text-warning-foreground' },
@@ -54,8 +57,8 @@ export default function AdminOrderForm() {
     queryKey: ['order-detail', orderId],
     queryFn: async () => {
       if (!orderId) return null;
-      const { data, error } = await supabase
-        .from('orders')
+      const { data, error } = await (supabase
+        .from('orders') as any)
         .select(`
           *,
           stores (name, code, brand),
@@ -68,8 +71,8 @@ export default function AdminOrderForm() {
             shipped_quantity,
             status,
             selected_model_name,
-            products (name, sku),
-            product_variants (name, option_1, option_2, option_3)
+            products (name, code),
+            product_variants (name)
           )
         `)
         .eq('id', orderId)
@@ -89,8 +92,8 @@ export default function AdminOrderForm() {
     queryKey: ['store', storeId],
     queryFn: async () => {
       if (!storeId) return null;
-      const { data, error } = await supabase
-        .from('stores')
+      const { data, error } = await (supabase
+        .from('stores') as any)
         .select('id, name, code, brand')
         .eq('id', storeId)
         .single();
@@ -110,13 +113,27 @@ export default function AdminOrderForm() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [isPendingMode2, setIsPendingMode2] = useState(false);
+  const { defaultWarehouse, warehouses } = useWarehouses();
   const [directShipDialogOpen, setDirectShipDialogOpen] = useState(false);
+  const [shippedAt, setShippedAt] = useState<string>(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const [warehouseId, setWarehouseId] = useState<string>("");
+  const [itemWarehouses, setItemWarehouses] = useState<Record<string, string>>({});
+  const [itemSources, setItemSources] = useState<Record<string, string>>({});
+  const [consignmentMode, setConsignmentMode] = useState(false);
+
+  useEffect(() => {
+    if (defaultWarehouse && !warehouseId) setWarehouseId(defaultWarehouse.id);
+  }, [defaultWarehouse]);
+
+  const getItemWarehouse = (id: string) => itemWarehouses[id] || warehouseId || defaultWarehouse?.id || '';
 
   // Refs to avoid stale closures in mutations
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const notesRef = useRef(notes);
   notesRef.current = notes;
+  const consignmentModeRef = useRef(consignmentMode);
+  consignmentModeRef.current = consignmentMode;
   const orderRef = useRef(order);
   orderRef.current = order;
 
@@ -131,7 +148,7 @@ export default function AdminOrderForm() {
       quantity: item.quantity,
       unitPrice: item.unit_price,
       selectedModelName: item.selected_model_name || undefined,
-      sku: item.products?.sku || '',
+      sku: item.products?.code || '',
       productName: item.products?.name || '',
       variantName: item.product_variants?.name || undefined,
     })));
@@ -264,11 +281,11 @@ export default function AdminOrderForm() {
       const currentNotes = notesRef.current;
       const currentOrder = orderRef.current;
       if (!orderId || !currentOrder) throw new Error('訂單不存在');
-      await supabase.from('orders').update({ notes: currentNotes || null }).eq('id', orderId);
+      await (supabase.from('orders') as any).update({ notes: currentNotes || null }).eq('id', orderId);
 
       for (const item of currentItems) {
         if (item.isNew) {
-          const { error } = await supabase.from('order_items').insert({
+          const { error } = await (supabase.from('order_items') as any).insert({
             order_id: orderId,
             product_id: item.productId,
             variant_id: item.variantId || null,
@@ -279,8 +296,8 @@ export default function AdminOrderForm() {
           });
           if (error) throw error;
         } else {
-          const { error } = await supabase
-            .from('order_items')
+          const { error } = await (supabase
+            .from('order_items') as any)
             .update({ quantity: item.quantity, unit_price: item.unitPrice })
             .eq('id', item.id);
           if (error) throw error;
@@ -291,7 +308,7 @@ export default function AdminOrderForm() {
       const currentIds = currentItems.filter((i) => !i.isNew).map((i) => i.id);
       const toDelete = existingIds.filter((id: string) => !currentIds.includes(id));
       if (toDelete.length > 0) {
-        await supabase.from('order_items').delete().in('id', toDelete);
+        await (supabase.from('order_items') as any).delete().in('id', toDelete);
       }
     },
     onSuccess: () => {
@@ -309,13 +326,14 @@ export default function AdminOrderForm() {
       const currentItems = itemsRef.current;
       const currentNotes = notesRef.current;
       if (currentItems.length === 0) throw new Error('訂單項目是空的');
-      const { data: newOrder, error: orderError } = await supabase
-        .from('orders')
+      const { data: newOrder, error: orderError } = await (supabase
+        .from('orders') as any)
         .insert({
           store_id: storeId,
           created_by: user?.id,
           source_type: 'admin_proxy',
           notes: currentNotes.trim() || null,
+          consignment_mode: consignmentModeRef.current,
         })
         .select('id')
         .single();
@@ -331,7 +349,7 @@ export default function AdminOrderForm() {
         selected_model_name: item.selectedModelName || null,
       }));
 
-      const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
+      const { error: itemsError } = await (supabase.from('order_items') as any).insert(orderItems);
       if (itemsError) throw itemsError;
       return newOrder;
     },
@@ -355,17 +373,22 @@ export default function AdminOrderForm() {
         quantity: i.quantity,
         unit_price: i.unitPrice,
         selected_model_name: i.selectedModelName || null,
+        warehouse_id: getItemWarehouse(i.id) || null,
+        inventory_source_type: itemSources[i.id] || "self",
       }));
 
       const { data, error } = await supabase.rpc('create_order_with_sales_note', {
         p_store_id: storeId,
-        p_created_by: user?.id,
-        p_notes: notes.trim() || null,
+        p_created_by: user?.id as string,
+        p_notes: notes.trim() || undefined,
         p_items: payload,
+        p_shipped_at: shippedAt ? new Date(shippedAt).toISOString() : null,
+        p_warehouse_id: null,
+        p_consignment_mode: consignmentModeRef.current,
       });
       if (error) throw error;
 
-      const link = `${window.location.origin}/share/sales-note/${data.sales_note_code || data.sales_note_id}?token=${data.access_token}`;
+      const link = `${window.location.origin}/share/sales-note/${(data as any).sales_note_code || (data as any).sales_note_id}?token=${(data as any).access_token}`;
       toast.success('訂單已建立並開立銷貨單！', {
         duration: 10000,
         action: {
@@ -384,14 +407,14 @@ export default function AdminOrderForm() {
     } finally {
       setIsPendingMode2(false);
     }
-  }, [isEditMode, items, notes, storeId, user, navigate, draft]);
+  }, [isEditMode, items, notes, storeId, user, navigate, draft, itemSources, getItemWarehouse, shippedAt]);
 
   // Status toggle (edit mode only)
   const toggleStatusMutation = useMutation({
     mutationFn: async () => {
       if (!orderId || !order) throw new Error('訂單不存在');
       const newStatus = order.status === 'pending' ? 'processing' : 'pending';
-      await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
+      await (supabase.from('orders') as any).update({ status: newStatus }).eq('id', orderId);
     },
     onSuccess: () => {
       toast.success('訂單狀態已更新');
@@ -405,10 +428,24 @@ export default function AdminOrderForm() {
   const directShipMutation = useMutation({
     mutationFn: async () => {
       if (!user || !orderId) throw new Error('訂單不存在');
+      const warehouseMap = items.reduce((acc, i) => {
+        const wh = getItemWarehouse(i.id);
+        if (wh) acc[i.id] = wh;
+        return acc;
+      }, {} as Record<string, string>);
+      const sourceMap = items.reduce((acc, i) => {
+        const src = itemSources[i.id];
+        if (src) acc[i.id] = src;
+        return acc;
+      }, {} as Record<string, string>);
       const { data, error } = await supabase.rpc('direct_ship_order', {
         p_order_id: orderId,
         p_created_by: user.id,
-        p_notes: null,
+        p_notes: undefined,
+        p_shipped_at: shippedAt ? new Date(shippedAt).toISOString() : null,
+        p_warehouse_id: null,
+        p_warehouse_map: Object.keys(warehouseMap).length > 0 ? warehouseMap : undefined,
+        p_source_map: Object.keys(sourceMap).length > 0 ? sourceMap : undefined,
       });
       if (error) throw error;
       return data as any;
@@ -451,7 +488,7 @@ export default function AdminOrderForm() {
     return availableProducts.filter(
       (p) =>
         p.name?.toLowerCase().includes(q) ||
-        p.sku?.toLowerCase().includes(q) ||
+        p.code?.toLowerCase().includes(q) ||
         p.variants?.some((v: any) => v.name?.toLowerCase().includes(q) || v.sku?.toLowerCase().includes(q))
     );
   }, [availableProducts, productSearch]);
@@ -493,6 +530,7 @@ export default function AdminOrderForm() {
         </div>
         <div className="flex items-center gap-2">
           {statusInfo && <Badge className={statusInfo.className}>{statusInfo.label}</Badge>}
+          {order?.consignment_mode && <Badge variant="secondary">寄賣</Badge>}
           {isEditMode && order!.status !== 'shipped' && (
             <Button variant="outline" onClick={() => toggleStatusMutation.mutate()} disabled={toggleStatusMutation.isPending}>
               {order!.status === 'pending' ? <><Lock className="mr-2 h-4 w-4" />鎖定訂單</> : <><Unlock className="mr-2 h-4 w-4" />解除鎖定</>}
@@ -543,8 +581,30 @@ export default function AdminOrderForm() {
 
         <Card>
           <CardHeader><CardTitle>訂單備註</CardTitle></CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <Textarea placeholder="輸入訂單備註..." value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} />
+            {!isEditMode && (
+              <>
+                <div>
+                  <label className="text-sm font-medium">出貨時間</label>
+                  <Input
+                    type="datetime-local"
+                    value={shippedAt}
+                    onChange={(e) => setShippedAt(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-medium">寄賣模式</div>
+                    <div className="text-xs text-muted-foreground">
+                      訂單出貨時以店家寄賣方式轉出，不扣自有庫存
+                    </div>
+                  </div>
+                  <Switch checked={consignmentMode} onCheckedChange={setConsignmentMode} />
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -599,6 +659,39 @@ export default function AdminOrderForm() {
             priceSyncMap={priceSyncMap}
             onTogglePriceSync={handleTogglePriceSync}
           />
+          {!isEditMode && items.length > 0 && !consignmentMode && (
+            <div className="mt-4 space-y-2">
+              <label className="text-sm font-medium">出貨倉（逐項）</label>
+              {items.map((item) => (
+                <div key={item.id} className="flex items-center gap-2 text-sm">
+                  <span className="w-40 truncate">{item.productName || item.sku || item.id.slice(0, 8)}</span>
+                  <WarehouseSelector
+                    value={getItemWarehouse(item.id)}
+                    onChange={(w) => setItemWarehouses(prev => ({ ...prev, [item.id]: w }))}
+                    productId={item.productId}
+                    variantId={item.variantId}
+                  />
+                  <Select
+                    value={itemSources[item.id] || "self"}
+                    onValueChange={(v) => setItemSources(prev => ({ ...prev, [item.id]: v }))}
+                  >
+                    <SelectTrigger className="h-8 w-40 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="self">自有庫存</SelectItem>
+                      <SelectItem value="supplier_consignment">供應商寄賣</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
+          )}
+          {!isEditMode && items.length > 0 && consignmentMode && (
+            <div className="mt-4 text-sm text-muted-foreground">
+              寄賣模式：出貨時以店家寄賣方式轉出（庫存來源為「店家寄賣」，不扣自有庫存）。
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -633,8 +726,11 @@ export default function AdminOrderForm() {
       </div>
 
       {/* Direct Ship Dialog */}
-      <Dialog open={directShipDialogOpen} onOpenChange={setDirectShipDialogOpen}>
-        <DialogContent>
+      <Dialog open={directShipDialogOpen} onOpenChange={(open) => {
+        setDirectShipDialogOpen(open);
+        if (open) setItemWarehouses({});
+      }}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Send className="h-5 w-5" />
@@ -652,6 +748,48 @@ export default function AdminOrderForm() {
                 <div><span className="text-muted-foreground">品項數：</span><span className="font-medium">{items.length}</span></div>
                 <div><span className="text-muted-foreground">店鋪：</span><span className="font-medium">{displayStoreName}</span></div>
               </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">出貨時間</label>
+              <Input
+                type="datetime-local"
+                value={shippedAt}
+                onChange={(e) => setShippedAt(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{order?.consignment_mode ? '出貨資訊' : '出貨倉（逐項）'}</label>
+              {order?.consignment_mode ? (
+                <div className="rounded-lg border p-3 text-sm text-muted-foreground">
+                  此訂單為寄賣模式，轉出時以店家寄賣方式記錄，不扣自有庫存。
+                </div>
+              ) : (
+                items.map((item) => (
+                  <div key={item.id} className="flex items-center gap-2 text-sm">
+                    <span className="flex-1 truncate">{item.productName || item.sku || item.id.slice(0, 8)}</span>
+                    <span className="text-muted-foreground w-12 text-right">{item.quantity}件</span>
+                    <WarehouseSelector
+                      value={getItemWarehouse(item.id)}
+                      onChange={(w) => setItemWarehouses(prev => ({ ...prev, [item.id]: w }))}
+                      productId={item.productId}
+                      variantId={item.variantId}
+                    />
+                    <Select
+                      value={itemSources[item.id] || "self"}
+                      onValueChange={(v) => setItemSources(prev => ({ ...prev, [item.id]: v }))}
+                    >
+                      <SelectTrigger className="h-8 w-40 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="self">自有庫存</SelectItem>
+                        <SelectItem value="supplier_consignment">供應商寄賣</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -680,7 +818,7 @@ function ProductRow({ product, onAdd }: { product: any; onAdd: (product: any, va
     <div className="flex items-start justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors gap-2">
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-mono text-xs text-muted-foreground">{product.sku}</span>
+          <span className="font-mono text-xs text-muted-foreground">{product.code}</span>
           {product.wholesale_price != null && (
             <Badge variant="outline" className="text-[10px] shrink-0">${product.wholesale_price}</Badge>
           )}

@@ -23,7 +23,7 @@ export default function AdminProducts() {
         products, isLoading, version, forceRefresh,
         brandMap,
         search, setSearch, activeTab, setActiveTab,
-        selectedProductIds, toggleSelect, toggleSelectAll, isAllSelected,
+        selectedProductIds, setSelectedProductIds, toggleSelect, toggleSelectAll, isAllSelected,
         expandedProducts, toggleExpanded, filteredProducts,
         isDialogOpen, setIsDialogOpen, isImportOpen, setIsImportOpen,
         editingProduct, setEditingProduct, deleteProduct, setDeleteProduct,
@@ -50,7 +50,7 @@ export default function AdminProducts() {
         count += selectedBrands.length;
         count += selectedSeries.length;
         count += selectedDeviceModels.length;
-        count += Object.values(selectedSpecs).reduce((sum, arr) => sum + arr.length, 0);
+        count += (Object.values(selectedSpecs) as string[][]).reduce((sum, arr) => sum + arr.length, 0);
         return count;
     }, [selectedCategory, selectedBrands, selectedSeries, selectedDeviceModels, selectedSpecs]);
 
@@ -225,7 +225,7 @@ export default function AdminProducts() {
                                 getModels={getProductModels}
                                 getModelGroups={getProductModelGroups}
                                 onEdit={(p) => { setEditingProduct(p as any); setIsDialogOpen(true); }}
-                                onCopy={handleCopy}
+                                onCopy={(p: any) => handleCopy(p)}
                                 onDelete={(p) => setDeleteProduct(p as any)}
                                 onUpdateVariant={(id, updates) => updateVariantPriceMutation.mutate({ id, ...updates })}
                             />
@@ -275,7 +275,14 @@ export default function AdminProducts() {
                         }
                     }
                 }}
-                onDeleteConfirm={(id) => deleteMutation.mutate(id)}
+                onDeleteConfirm={(id) => {
+                    deleteMutation.mutate(id);
+                    setSelectedProductIds(prev => {
+                        const next = new Set(prev);
+                        next.delete(id);
+                        return next;
+                    });
+                }}
                 onImportSuccess={handleImportSuccess}
                 isMutationLoading={isMutationLoading}
                 isSelectionOpen={isSelectionOpen}

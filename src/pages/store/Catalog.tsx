@@ -39,7 +39,7 @@ export default function StoreCatalog() {
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ['categories'],
     queryFn: async () => {
-        const { data, error } = await supabase.from('categories')
+        const { data, error } = await (supabase.from('categories') as any)
             .select('*')
             .order('sort_order', { ascending: true });
         if (error) return [];
@@ -74,16 +74,6 @@ export default function StoreCatalog() {
   const [viewMode, setViewMode] = useState<'products' | 'variants' | 'gallery' | 'table'>('products');
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
 
-  const catalogFilterCount = useMemo(() => {
-    let count = 0;
-    if (selectedCategory) count++;
-    count += selectedBrands.length;
-    count += selectedSeries.length;
-    count += selectedDeviceModels.length;
-    count += Object.values(selectedSpecs).reduce((sum, arr) => sum + arr.length, 0);
-    return count;
-  }, [selectedCategory, selectedBrands, selectedSeries, selectedDeviceModels, selectedSpecs]);
-
   // Specs are a bit more complex, stored as JSON in URL for simplicity
   const selectedSpecs = useMemo(() => {
     try {
@@ -91,6 +81,16 @@ export default function StoreCatalog() {
       return s ? JSON.parse(s) : {};
     } catch { return {}; }
   }, [searchParams]);
+
+  const catalogFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedCategory) count++;
+    count += selectedBrands.length;
+    count += selectedSeries.length;
+    count += selectedDeviceModels.length;
+    count += (Object.values(selectedSpecs) as any[]).reduce((sum: number, arr: any) => sum + (arr as any[]).length, 0);
+    return count;
+  }, [selectedCategory, selectedBrands, selectedSeries, selectedDeviceModels, selectedSpecs]);
 
   // Client-side filtering via unified hook
   const filteredProducts = useProductSearch({
@@ -292,7 +292,7 @@ export default function StoreCatalog() {
         <div className="space-y-6 mt-4 md:mt-6">
 
         <ProductCatalog
-          products={paginatedProducts}
+          products={viewMode === 'table' ? filteredProducts : paginatedProducts}
           isLoading={isSidebarLoading}
           storeId={storeId}
           viewMode={viewMode}

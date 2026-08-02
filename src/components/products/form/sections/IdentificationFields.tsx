@@ -1,6 +1,5 @@
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UseFormReturn } from 'react-hook-form';
 
 interface IdentificationFieldsProps {
@@ -25,41 +24,16 @@ export function IdentificationFields({ form }: IdentificationFieldsProps) {
                 )}
             />
 
-            {/* SKU */}
+            {/* 產品代碼 */}
             <FormField
                 control={form.control}
-                name="sku"
+                name="code"
                 render={({ field }) => (
                     <FormItem>
-                        <FormLabel>主要 SKU</FormLabel>
+                        <FormLabel>產品代碼</FormLabel>
                         <FormControl>
                             <Input placeholder="P-001" {...field} value={field.value || ''} />
                         </FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )}
-            />
-
-            {/* 狀態選單 */}
-            <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>銷售狀態</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ""}>
-                            <FormControl>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="選擇狀態" />
-                                </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                                <SelectItem value="active">上架中</SelectItem>
-                                <SelectItem value="preorder">預購中</SelectItem>
-                                <SelectItem value="sold_out">售完停產</SelectItem>
-                                <SelectItem value="discontinued">已停售</SelectItem>
-                            </SelectContent>
-                        </Select>
                         <FormMessage />
                     </FormItem>
                 )}

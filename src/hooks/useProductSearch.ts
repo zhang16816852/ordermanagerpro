@@ -55,8 +55,7 @@ export function useProductSearch({
 
           const productTexts = [
             p.name,
-            p.sku,
-            p.model,
+            p.code,
             brandName,
             ...(p.category_names || []),
             ...(p.effective_model_names || []),

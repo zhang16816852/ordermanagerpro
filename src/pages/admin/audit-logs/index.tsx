@@ -26,7 +26,7 @@ export default function AdminAuditLogs() {
     const { data: stores } = useQuery({
         queryKey: ['admin-stores'],
         queryFn: async () => {
-            const { data, error } = await supabase.from('stores').select('id, name, code');
+            const { data, error } = await (supabase.from('stores') as any).select('id, name, code');
             if (error) throw error;
             return data;
         },

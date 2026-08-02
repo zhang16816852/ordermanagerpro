@@ -7,8 +7,8 @@ export function useStoreAuditLogs(storeId: string | undefined, isFounder: boolea
     queryFn: async () => {
       if (!storeId) return [];
 
-      let query = supabase
-        .from("audit_logs")
+      let query = (supabase
+        .from("audit_logs") as any)
         .select("*")
         .eq("store_id", storeId)
         .order("created_at", { ascending: false })

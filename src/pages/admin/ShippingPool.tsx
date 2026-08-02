@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +17,8 @@ import { toast } from "sonner";
 import { getErrorMessage } from '@/lib/errorMessages';
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
+import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
+import { WarehouseSelector } from "@/components/WarehouseSelector";
 
 interface ShippingPoolItem {
   id: string;
@@ -27,7 +29,9 @@ interface ShippingPoolItem {
   order_item: {
     id: string;
     order_id: string;
-    order?: { code: string };
+    product_id: string;
+    variant_id: string | null;
+    order?: { code: string; consignment_mode?: boolean };
     quantity: number;
     shipped_quantity: number;
     unit_price: number;
@@ -47,17 +51,24 @@ interface GroupedByStore {
 export default function AdminShippingPool() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { defaultWarehouse, warehouses } = useWarehouses();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [storeFilter, setStoreFilter] = useState<string>(searchParams.get("store") || "all");
   const [selectedStores, setSelectedStores] = useState<Set<string>>(new Set());
   const [showShipDialog, setShowShipDialog] = useState(false);
   const [notes, setNotes] = useState("");
+  const [shippedAt, setShippedAt] = useState<string>(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
+  const [warehouseMap, setWarehouseMap] = useState<Record<string, string>>({});
+  const [sourceMap, setSourceMap] = useState<Record<string, string>>({});
+
+  const getItemWarehouse = (orderItemId: string) => warehouseMap[orderItemId] || defaultWarehouse?.id || '';
+  const getItemSource = (orderItemId: string) => sourceMap[orderItemId] || 'self';
 
   const { data: stores } = useQuery({
     queryKey: ["admin-stores"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("stores").select("id, name, code");
+      const { data, error } = await (supabase.from("stores") as any).select("id, name, code");
       if (error) throw error;
       return data;
     },
@@ -67,24 +78,26 @@ export default function AdminShippingPool() {
   const { data: shippingPoolItems, isLoading } = useQuery({
     queryKey: ["shipping-pool", storeFilter],
     queryFn: async () => {
-      let query = supabase
-        .from("shipping_pool")
+      let query = (supabase
+        .from("shipping_pool") as any)
         .select(`
           id,
           order_item_id,
           quantity,
           store_id,
           created_at,
-          order_item:order_items(
-            id,
-            order_id,
-            order:orders(code),
-            quantity,
-            shipped_quantity,
-            unit_price,
-            product:products(name, sku),
-            product_variant:product_variants(name)
-          )
+            order_item:order_items(
+              id,
+              order_id,
+              product_id,
+              variant_id,
+              order:orders(code, consignment_mode),
+              quantity,
+              shipped_quantity,
+              unit_price,
+              product:products(name, code),
+              product_variant:product_variants(name)
+            )
         `)
         .order("created_at", { ascending: true });
 
@@ -127,7 +140,7 @@ export default function AdminShippingPool() {
       group.storeCode?.toLowerCase().includes(searchLower) ||
       group.items.some(item =>
         item.order_item?.product?.name.toLowerCase().includes(searchLower) ||
-        item.order_item?.product?.sku.toLowerCase().includes(searchLower)
+        (item.order_item?.product as any)?.code.toLowerCase().includes(searchLower)
       )
     );
   });
@@ -145,8 +158,8 @@ export default function AdminShippingPool() {
   // 從出貨池移除單個項目
   const removeItemMutation = useMutation({
     mutationFn: async (itemId: string) => {
-      const { error } = await supabase
-        .from("shipping_pool")
+      const { error } = await (supabase
+        .from("shipping_pool") as any)
         .delete()
         .eq("id", itemId);
       if (error) throw error;
@@ -170,7 +183,11 @@ export default function AdminShippingPool() {
       const { data, error } = await supabase.rpc("ship_from_pool", {
         p_store_ids: Array.from(selectedStores),
         p_created_by: user.id,
-        p_notes: notes || null,
+        p_notes: notes || undefined,
+        p_shipped_at: shippedAt ? new Date(shippedAt).toISOString() : null,
+        p_warehouse_id: null,
+        p_warehouse_map: warehouseMap,
+        p_source_map: sourceMap,
       });
 
       if (error) throw error;
@@ -321,7 +338,7 @@ export default function AdminShippingPool() {
                           {group.items.map((item) => (
                             <TableRow key={item.id}>
                               <TableCell className="font-mono text-sm">
-                                {item.order_item?.product?.sku}
+                                {(item.order_item?.product as any)?.code}
                               </TableCell>
                               <TableCell>
                                 {item.order_item?.product?.name}
@@ -330,8 +347,11 @@ export default function AdminShippingPool() {
                                     - {item.order_item.product_variant.name}
                                   </span>
                                 )}
-                                <div className="text-[10px] text-muted-foreground mt-1">
+                                <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
                                   來源單號: {item.order_item?.order?.code || item.order_item?.order_id.slice(0, 8)}
+                                  {item.order_item?.order?.consignment_mode && (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
+                                  )}
                                 </div>
                               </TableCell>
                               <TableCell className="text-right">{item.quantity}</TableCell>
@@ -367,8 +387,14 @@ export default function AdminShippingPool() {
         </CardContent>
       </Card>
 
-      <Dialog open={showShipDialog} onOpenChange={setShowShipDialog}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0">
+      <Dialog open={showShipDialog} onOpenChange={(open) => {
+        setShowShipDialog(open);
+        if (open) {
+          setWarehouseMap({});
+          setSourceMap({});
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col p-0">
           <DialogHeader className="p-6 pb-2">
             <DialogTitle className="flex items-center gap-2">
               <Send className="h-5 w-5" />
@@ -411,18 +437,56 @@ export default function AdminShippingPool() {
                         <TableHead className="text-right">數量</TableHead>
                         <TableHead className="text-right">單價</TableHead>
                         <TableHead className="text-right">小計</TableHead>
+                        <TableHead>出貨倉</TableHead>
+                        <TableHead>庫存來源</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {group.items.map(item => (
-                        <TableRow key={item.id}>
-                          <TableCell className="font-mono text-xs">{item.order_item?.product?.sku}</TableCell>
-                          <TableCell className="text-sm">{item.order_item?.product?.name}</TableCell>
-                          <TableCell className="text-right">{item.quantity}</TableCell>
-                          <TableCell className="text-right">${item.order_item?.unit_price.toFixed(2)}</TableCell>
-                          <TableCell className="text-right font-medium">${(item.quantity * (item.order_item?.unit_price || 0)).toFixed(2)}</TableCell>
-                        </TableRow>
-                      ))}
+                      {group.items.map(item => {
+                        const isConsignment = !!item.order_item?.order?.consignment_mode;
+                        return (
+                          <TableRow key={item.id}>
+                            <TableCell className="font-mono text-xs">{(item.order_item?.product as any)?.code}</TableCell>
+                            <TableCell className="text-sm">
+                              {item.order_item?.product?.name}
+                              {isConsignment && <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>}
+                            </TableCell>
+                            <TableCell className="text-right">{item.quantity}</TableCell>
+                            <TableCell className="text-right">${item.order_item?.unit_price.toFixed(2)}</TableCell>
+                            <TableCell className="text-right font-medium">${(item.quantity * (item.order_item?.unit_price || 0)).toFixed(2)}</TableCell>
+                            <TableCell>
+                              {isConsignment ? (
+                                <span className="text-xs text-muted-foreground">不適用</span>
+                              ) : (
+                                <WarehouseSelector
+                                  value={getItemWarehouse(item.order_item_id)}
+                                  onChange={(w) => setWarehouseMap(prev => ({ ...prev, [item.order_item_id]: w }))}
+                                  productId={item.order_item.product_id}
+                                  variantId={item.order_item.variant_id}
+                                />
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {isConsignment ? (
+                                <span className="text-xs text-muted-foreground">店家寄賣</span>
+                              ) : (
+                                <Select
+                                  value={getItemSource(item.order_item_id)}
+                                  onValueChange={(v) => setSourceMap(prev => ({ ...prev, [item.order_item_id]: v }))}
+                                >
+                                  <SelectTrigger className="h-8 w-44 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="self">自有庫存</SelectItem>
+                                    <SelectItem value="supplier_consignment">供應商寄賣</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                   <div className="text-right text-sm font-bold">
@@ -431,14 +495,25 @@ export default function AdminShippingPool() {
                 </div>
               );
             })}
-            <div>
-              <label className="text-sm font-medium">備註（選填）</label>
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="輸入出貨備註..."
-                className="mt-1"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">出貨時間</label>
+                <Input
+                  type="datetime-local"
+                  value={shippedAt}
+                  onChange={(e) => setShippedAt(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">備註（選填）</label>
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="輸入出貨備註..."
+                  className="mt-1"
+                />
+              </div>
             </div>
           </div>
           <DialogFooter className="p-6 pt-2 bg-muted/20 border-t">

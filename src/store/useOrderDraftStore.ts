@@ -96,7 +96,7 @@ export const useOrderDraftStore = create<OrderDraftState>()(
           const realProductId = isVirtual ? (product as any).physical_product_id : product.id;
           const fallbackVariantId = isVirtual ? (product as any).physical_variant_id : undefined;
           const realVariantId = fallbackVariantId ?? variant?.id ?? undefined;
-          const realModelName = isVirtual ? (product as any).device_model_name : (selectedModelName || variant?.effective_model_names?.[0]);
+          const realModelName = isVirtual ? (product as any).device_model_name : (selectedModelName || (variant as any)?.effective_model_names?.[0]);
           const itemId = customItemId || (
             isVirtual && !fallbackVariantId
               ? generateItemId(product.id, realVariantId)
@@ -125,14 +125,10 @@ export const useOrderDraftStore = create<OrderDraftState>()(
               variantId: realVariantId,
               name: product.name,
               variantName: variant?.name ?? undefined,
-              sku: variant?.sku || product.sku,
-              price: variant 
-                ? (variant.effective_wholesale_price ?? variant.wholesale_price) 
-                : product.wholesale_price,
+              sku: variant?.sku || product.code || '',
+              price: variant?.effective_wholesale_price ?? variant?.wholesale_price ?? 0,
               quantity: 1,
-              options: variant
-                ? [variant.option_1, variant.option_2, variant.option_3].filter((o): o is string => !!o)
-                : undefined,
+              options: variant?.option_values?.map((ov: any) => ov.label || ov.value).filter(Boolean) || undefined,
               selectedModelName: realModelName,
             };
             newItems = [...draft.items, newItem];

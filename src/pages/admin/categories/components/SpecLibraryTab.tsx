@@ -231,7 +231,7 @@ export function SpecLibraryTab() {
             return null;
         };
 
-        let roots = specDefinitions
+        const roots = specDefinitions
             .filter(s => !targetIds.has(s.id))
             .map(root => buildTree(root));
 
@@ -280,7 +280,7 @@ export function SpecLibraryTab() {
 
     const handleDelete = async (spec: SpecDefinition) => {
         if (confirm(`確定要【全域刪除】規格「${spec.name}」嗎？這將導致所有產品與分類失去該欄位資料。`)) {
-            const { error } = await supabase.from('specification_definitions').delete().eq('id', spec.id);
+            const { error } = await (supabase.from('specification_definitions') as any).delete().eq('id', spec.id);
             if (error) toast.error('刪除失敗');
             else queryClient.invalidateQueries({ queryKey: ['spec_definitions'] });
         }
@@ -296,8 +296,8 @@ export function SpecLibraryTab() {
 
         if (!confirm(`確定要取消從「${parent.name}」到「${spec.name}」的連動關係嗎？\n(規格定義將保留，僅從此樹狀路徑移除)`)) return;
 
-        const { error } = await supabase
-            .from('specification_triggers')
+        const { error } = await (supabase
+            .from('specification_triggers') as any)
             .delete()
             .eq('source_spec_id', parent.id)
             .eq('target_spec_id', spec.id);
@@ -325,7 +325,7 @@ export function SpecLibraryTab() {
         // --- 2. 背景更新資料庫 ---
         try {
             const promises = updates.map(u =>
-                supabase.from('specification_definitions')
+                (supabase.from('specification_definitions') as any)
                     .update({ sort_order: u.sort_order })
                     .eq('id', u.id)
             );
@@ -335,8 +335,8 @@ export function SpecLibraryTab() {
                 // 觸發版號更新 (用於其他分頁同步)
                 const { error: rpcError } = await supabase.rpc('bump_data_version', { p_table_name: 'specs', p_source_table: 'specification_definitions' });
                 if (rpcError) {
-                    await supabase.from('data_versions')
-                        .update({ version: Date.now(), updated_at: new Date().toISOString() })
+                await (supabase.from('data_versions') as any)
+                    .update({ version: Date.now(), updated_at: new Date().toISOString() })
                         .eq('table_name', 'specs');
                 }
                 // 靜默更新快取，不觸發重新渲染

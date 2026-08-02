@@ -24,8 +24,8 @@ export function useDeviceModels() {
 
   const createMutation = useMutation({
     mutationFn: async (newModel: DeviceModelInsert) => {
-      const { data, error } = await supabase
-        .from('device_models')
+      const { data, error } = await (supabase
+        .from('device_models') as any)
         .insert([newModel])
         .select()
         .single();
@@ -45,8 +45,8 @@ export function useDeviceModels() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, values }: { id: string; values: DeviceModelUpdate }) => {
-      const { data, error } = await supabase
-        .from('device_models')
+      const { data, error } = await (supabase
+        .from('device_models') as any)
         .update(values)
         .eq('id', id)
         .select()
@@ -67,8 +67,8 @@ export function useDeviceModels() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('device_models')
+      const { error } = await (supabase
+        .from('device_models') as any)
         .delete()
         .eq('id', id);
 

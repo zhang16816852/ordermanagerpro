@@ -298,7 +298,7 @@ export function ProductDetailDialog({
 
     const handleAddProduct = () => {
         if (!product) return;
-        if (product.has_variants && !selectedVariantId) {
+        if ((product as any).has_variants && !selectedVariantId) {
             toast.error("請先選擇規格");
             return;
         }
@@ -319,7 +319,7 @@ export function ProductDetailDialog({
                 <DialogHeader>
                     <DialogTitle className="text-xl">{product.name}</DialogTitle>
                     <DialogDescription className="font-mono text-sm">
-                        SKU: {product.sku}
+                        SKU: {(product as any).sku}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -348,10 +348,10 @@ export function ProductDetailDialog({
                             <div className="text-2xl font-bold text-primary mt-1">{currentPriceDisplay}</div>
                         </div>
 
-                        {((product as any).brand_ids?.length > 0 || product.model) && (
+                        {((product as any).brand_ids?.length > 0 || (product as any).model) && (
                             <div>
                                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">品牌 / 型號</h3>
-                                <p className="mt-1">{(product as any).primary_brand_name || ((product as any).brand_names?.join(', ') || '-')} / {product.model || '-'}</p>
+                                <p className="mt-1">{(product as any).primary_brand_name || ((product as any).brand_names?.join(', ') || '-')} / {(product as any).model || '-'}</p>
                             </div>
                         )}
 
@@ -471,10 +471,10 @@ export function ProductDetailDialog({
                                 onClick={handleAddProduct}
                                 className="w-full"
                                 variant={qty > 0 ? "secondary" : "default"}
-                                disabled={product.has_variants && !selectedVariantId}
+                                disabled={(product as any).has_variants && !selectedVariantId}
                             >
                                 <ShoppingCart className="mr-2 h-4 w-4" />
-                                {product.has_variants && !selectedVariantId
+                                {(product as any).has_variants && !selectedVariantId
                                     ? "請先選擇規格選項"
                                     : qty > 0
                                         ? `已在購物車中 (x${qty})`
@@ -484,7 +484,7 @@ export function ProductDetailDialog({
                     </div>
                 </div>
 
-                {product.has_variants && (
+                {(product.variants && product.variants.length > 0) && (
                     <ProductVariantSection
                         product={product}
                         storeId={storeId}

@@ -29,19 +29,18 @@ const normalizeBarcode = (value: any): string => {
     if (!value) return '';
     let str: string;
     if (typeof value === 'number') {
-        str = value.toLocaleString('fullwide', { useGrouping: false });
+        str = String(Math.round(value));
     } else {
         str = String(value).trim();
     }
     if (str.startsWith("'")) str = str.substring(1);
-    if (/e\+/i.test(str)) return Number(str).toLocaleString('fullwide', { useGrouping: false });
+    if (/e\+/i.test(str)) return String(Number(str));
     return str;
 };
 
 export function useProductImportParser(
     specDefs: any[],
     allBrands: any[],
-    allColors: any[],
     categories: any[],
     allSeries: any[] = []
 ) {
@@ -97,47 +96,48 @@ export function useProductImportParser(
             reader.readAsArrayBuffer(file);
         });
 
-        const parsedRows = parseProductExcel(result);
+        const { rows: parsedRows, presentColumns } = parseProductExcel(result);
         if (parsedRows.length === 0) return [];
+
+        const has = (key: string) => presentColumns.has(key);
 
         const rawParsed: ImportRow[] = parsedRows.map(row => {
             const is_variant = !!row.is_variant;
             const has_variant_sku = !!(row['變體 SKU'] || row.variant_sku);
 
             const baseRow: ImportRow = {
-                product_sku: String(row.sku || row.product_sku || '').trim(),
+                product_code: String(row.code || row.sku || row.product_code || '').trim(),
                 product_name: String(row.name || row.product_name || '').trim(),
-                brand: String(row.brand || '').trim(),
-                model: String(row.model || '').trim(),
-                series: String(row.series || '').trim(),
-                description: String(row.description || '').trim(),
+                brand: has('brand') ? String(row.brand || '').trim() : '',
+                series: has('series') ? String(row.series || '').trim() : '',
+                description: has('description') ? String(row.description || '').trim() : '',
                 category: String(row.category || row._categoryName || '').trim(),
-
-                base_wholesale_price: !is_variant ? (parseFloat(row.wholesale_price || row.base_wholesale_price) || 0) : 0,
-                base_retail_price: !is_variant ? (parseFloat(row.retail_price || row.base_retail_price) || 0) : 0,
-                product_status: !is_variant ? parseStatus(row.status || row.product_status) : 'active',
 
                 variant_sku: is_variant
                     ? String(row['變體 SKU'] || row.variant_sku || '').trim()
-                    : (has_variant_sku ? '' : String(row.sku || row.product_sku || '').trim()),
+                    : (has_variant_sku ? '' : String(row.code || row.sku || row.product_code || '').trim()),
                 variant_name: is_variant
                     ? String(row['變體名稱'] || row.variant_name || '').trim()
                     : (has_variant_sku ? '' : String(row.name || row.product_name || '').trim()),
-                option_1: String(row['規格 1'] || row.option_1 || '').trim(),
-                option_2: String(row['規格 2'] || row.option_2 || '').trim(),
-                option_3: String(row['顏色 (規格 3)'] || row.option_3 || '').trim(),
-                variant_wholesale_price: parseFloat(row.variant_wholesale_price || row.wholesale_price) || undefined,
-                variant_retail_price: parseFloat(row.variant_retail_price || row.retail_price) || undefined,
-                variant_status: parseStatus(row.variant_status || row.status),
-                barcode: normalizeBarcode(row.barcode),
+                variant_wholesale_price: (has('wholesale_price') || has('variant_wholesale_price'))
+                    ? (parseFloat(row.variant_wholesale_price || row.wholesale_price) || undefined) : undefined,
+                variant_retail_price: (has('retail_price') || has('variant_retail_price'))
+                    ? (parseFloat(row.variant_retail_price || row.retail_price) || undefined) : undefined,
+                variant_status: has('status') ? parseStatus(row.variant_status || row.status) : undefined as any,
+                barcode: has('barcode') ? normalizeBarcode(row.barcode) : '',
 
-                device_models: !is_variant ? String(row['適用型號'] || row.device_models || '').replace(/\s+/g, ' ').trim() : '',
-                variant_device_models: is_variant ? String(row['適用型號'] || row.device_models || row.variant_device_models || '').replace(/\s+/g, ' ').trim() : '',
+                device_models: !is_variant && (has('device_models') || has('適用型號'))
+                    ? String(row['適用型號'] || row.device_models || '').replace(/\s+/g, ' ').trim()
+                    : (is_variant ? '' : ''),
+                variant_device_models: is_variant && (has('device_models') || has('適用型號'))
+                    ? String(row['適用型號'] || row.device_models || row.variant_device_models || '').replace(/\s+/g, ' ').trim()
+                    : '',
 
                 is_variant,
                 product_id: !is_variant ? row.id : undefined,
                 variant_id: is_variant ? row.id : undefined,
                 _specs: row._specs || {},
+                _presentFields: presentColumns,
                 errors: [],
                 isValid: true
             };

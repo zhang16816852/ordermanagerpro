@@ -16,6 +16,10 @@ import { Label } from "@/components/ui/label";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { WarehouseSelector } from "@/components/WarehouseSelector";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import type { OrderDraftItem } from "@/store/useOrderDraftStore";
 
 interface OrderReviewPanelProps {
@@ -25,6 +29,10 @@ interface OrderReviewPanelProps {
   items: OrderDraftItem[];
   notes: string;
   priceSyncMap: Record<string, boolean>;
+  itemWarehouses?: Record<string, string>;
+  onItemWarehouseChange?: (itemId: string, warehouseId: string) => void;
+  itemSources?: Record<string, string>;
+  onItemSourceChange?: (itemId: string, source: string) => void;
   onItemsChange: (items: OrderDraftItem[]) => void;
   onNotesChange: (notes: string) => void;
   onPriceSyncMapChange: (map: Record<string, boolean>) => void;
@@ -36,6 +44,10 @@ function SortableRow({
   item,
   index,
   priceSync,
+  warehouseId,
+  onWarehouseChange,
+  source,
+  onSourceChange,
   onTabNav,
   onPriceSyncChange,
   onPriceChange,
@@ -44,6 +56,10 @@ function SortableRow({
   item: OrderDraftItem;
   index: number;
   priceSync: boolean;
+  warehouseId?: string;
+  onWarehouseChange?: (wid: string) => void;
+  source?: string;
+  onSourceChange?: (source: string) => void;
   onTabNav: (e: React.KeyboardEvent<HTMLInputElement>, row: number, col: "qty" | "price") => void;
   onPriceSyncChange: (checked: boolean) => void;
   onPriceChange: (price: number) => void;
@@ -106,6 +122,27 @@ function SortableRow({
       <TableCell className="w-12 text-center">
         <Checkbox checked={priceSync} onCheckedChange={(v) => onPriceSyncChange(!!v)} />
       </TableCell>
+      <TableCell className="w-36">
+        <WarehouseSelector
+          value={warehouseId}
+          onChange={(wid) => onWarehouseChange?.(wid)}
+          productId={item.productId}
+          variantId={item.variantId}
+        />
+      </TableCell>
+      {onSourceChange && (
+        <TableCell className="w-32">
+          <Select value={source || "self"} onValueChange={onSourceChange}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="self">自有庫存</SelectItem>
+              <SelectItem value="supplier_consignment">供應商寄賣</SelectItem>
+            </SelectContent>
+          </Select>
+        </TableCell>
+      )}
     </TableRow>
   );
 }
@@ -117,6 +154,10 @@ export default function OrderReviewPanel({
   items,
   notes,
   priceSyncMap,
+  itemWarehouses,
+  onItemWarehouseChange,
+  itemSources,
+  onItemSourceChange,
   onItemsChange,
   onNotesChange,
   onPriceSyncMapChange,
@@ -240,6 +281,8 @@ export default function OrderReviewPanel({
                   <TableHead className="w-28 text-right">單價</TableHead>
                   <TableHead className="w-28 text-right">小計</TableHead>
                   <TableHead className="w-12 text-center text-xs">存為店價</TableHead>
+                  <TableHead className="w-36 text-center text-xs">出貨倉庫</TableHead>
+                  {onItemSourceChange && <TableHead className="w-32 text-center text-xs">庫存來源</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -249,6 +292,10 @@ export default function OrderReviewPanel({
                     item={item}
                     index={index}
                     priceSync={!!priceSyncMap[item.id]}
+                    warehouseId={itemWarehouses?.[item.id]}
+                    onWarehouseChange={(wid) => onItemWarehouseChange?.(item.id, wid)}
+                    source={itemSources?.[item.id]}
+                    onSourceChange={onItemSourceChange ? (v) => onItemSourceChange(item.id, v) : undefined}
                     onTabNav={handleTabNav}
                     onPriceSyncChange={(v) => handlePriceSyncChange(item.id, v)}
                     onPriceChange={(v) => handlePriceChange(item.id, v)}

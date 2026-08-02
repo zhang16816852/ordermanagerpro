@@ -81,6 +81,6 @@ export function activeFilterCount(): number {
   count += s.selectedBrands.length;
   count += s.selectedSeries.length;
   count += s.selectedDeviceModels.length;
-  count += Object.values(s.selectedSpecs).reduce((sum, arr) => sum + arr.length, 0);
+  count += Object.values(s.selectedSpecs as Record<string, string[]>).reduce((sum, arr) => sum + arr.length, 0);
   return count;
 }

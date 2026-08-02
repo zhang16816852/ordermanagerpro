@@ -4,6 +4,7 @@ import { openDB, type IDBPDatabase } from 'idb';
 export interface MetaRecord {
   version: string;
   updatedAt: number;
+  schemaVersion: number;
 }
 
 // ---- ObjectStore names ----
@@ -65,7 +66,7 @@ export async function idbGetAll<T>(store: DataStoreName): Promise<Map<string, T>
   const tx = db.transaction(store);
   let cursor = await tx.store.openCursor();
   while (cursor) {
-    map.set(cursor.key, cursor.value as T);
+    map.set(cursor.key as any, cursor.value as T);
     cursor = await cursor.continue();
   }
   return map;

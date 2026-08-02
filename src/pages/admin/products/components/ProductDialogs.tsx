@@ -159,7 +159,7 @@ function ProductSelectionDialog({
                             {products.map((product: any) => {
                                 const currentVariant = selectedVariantMap[product.id];
                                 const currentKey = getItemKey(product, currentVariant);
-                                const currentQty = currentVariant || !product.has_variants
+                                const currentQty = currentVariant
                                     ? (quantities[currentKey] || 0)
                                     : 0;
 
@@ -168,7 +168,7 @@ function ProductSelectionDialog({
                                         <div className="flex items-start justify-between mb-2">
                                             <div>
                                                 <div className="font-medium text-sm">{product.name}</div>
-                                                <div className="text-xs text-muted-foreground font-mono">{product.sku}</div>
+                                                <div className="text-xs text-muted-foreground font-mono">{product.code}</div>
                                             </div>
                                             <div className="text-right">
                                                 <div className="font-medium text-sm">
@@ -177,16 +177,14 @@ function ProductSelectionDialog({
                                             </div>
                                         </div>
 
-                                        {product.has_variants && (
-                                            <div className="mb-3">
-                                                <VariantOptionsPicker
-                                                    product={product}
-                                                    onVariantSelect={(v: any | null) => handleVariantSelect(product.id, v)}
-                                                />
-                                            </div>
-                                        )}
+                                        <div className="mb-3">
+                                            <VariantOptionsPicker
+                                                product={product}
+                                                onVariantSelect={(v: any | null) => handleVariantSelect(product.id, v)}
+                                            />
+                                        </div>
 
-                                        {(product.has_variants && !currentVariant) ? (
+                                        {!currentVariant ? (
                                             <div className="flex justify-end">
                                                 <span className="text-xs text-muted-foreground italic">請先選擇規格</span>
                                             </div>
@@ -216,11 +214,11 @@ function ProductSelectionDialog({
                                 </thead>
                                 <tbody>
                                     {products.flatMap((product: any) => {
-                                        if (product.has_variants && product.variants?.length) {
+                                        if (product.variants?.length) {
                                             return product.variants.map((v: any) => ({
                                                 id: `${product.id}-${v.id}`,
                                                 name: `${product.name} / ${v.name}`,
-                                                sku: v.sku || product.sku,
+                                                sku: v.sku || product.code,
                                                 price: v.effective_wholesale_price ?? v.wholesale_price ?? 0,
                                                 product,
                                                 variant: v,
@@ -229,7 +227,7 @@ function ProductSelectionDialog({
                                         return [{
                                             id: `${product.id}-base`,
                                             name: product.name,
-                                            sku: product.sku,
+                                            sku: product.code,
                                             price: product.wholesale_price ?? 0,
                                             product,
                                             variant: null,

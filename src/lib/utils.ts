@@ -20,7 +20,7 @@ export async function fetchAllRows<T = any>(
   const orders = options?.order?.length ? options.order : [{ column: 'id', ascending: true }];
 
   while (true) {
-    let query = supabase.from(table).select(select).range(from, from + pageSize - 1);
+    let query = (supabase as any).from(table).select(select).range(from, from + pageSize - 1);
     for (const o of orders) {
       query = query.order(o.column, { ascending: o.ascending ?? true });
     }

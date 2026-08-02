@@ -372,6 +372,479 @@ export type Database = {
           },
         ]
       }
+      consignment_order_items: {
+        Row: {
+          consignment_order_id: string
+          created_at: string
+          id: string
+          product_id: string
+          quantity: number
+          unit_cost: number
+          unit_price: number
+          variant_id: string | null
+        }
+        Insert: {
+          consignment_order_id: string
+          created_at?: string
+          id?: string
+          product_id: string
+          quantity: number
+          unit_cost?: number
+          unit_price?: number
+          variant_id?: string | null
+        }
+        Update: {
+          consignment_order_id?: string
+          created_at?: string
+          id?: string
+          product_id?: string
+          quantity?: number
+          unit_cost?: number
+          unit_price?: number
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consignment_order_items_consignment_order_id_fkey"
+            columns: ["consignment_order_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_order_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consignment_orders: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string | null
+          direction: string
+          id: string
+          note: string | null
+          source_order_id: string | null
+          status: string
+          store_id: string | null
+          supplier_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by?: string | null
+          direction: string
+          id?: string
+          note?: string | null
+          source_order_id?: string | null
+          status?: string
+          store_id?: string | null
+          supplier_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          direction?: string
+          id?: string
+          note?: string | null
+          source_order_id?: string | null
+          status?: string
+          store_id?: string | null
+          supplier_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consignment_orders_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_orders_source_order_id_fkey"
+            columns: ["source_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_orders_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_orders_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consignment_return_items: {
+        Row: {
+          consignment_order_item_id: string
+          created_at: string
+          id: string
+          quantity: number
+          return_id: string
+        }
+        Insert: {
+          consignment_order_item_id: string
+          created_at?: string
+          id?: string
+          quantity: number
+          return_id: string
+        }
+        Update: {
+          consignment_order_item_id?: string
+          created_at?: string
+          id?: string
+          quantity?: number
+          return_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consignment_return_items_consignment_order_item_id_fkey"
+            columns: ["consignment_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_order_item_summary"
+            referencedColumns: ["consignment_order_item_id"]
+          },
+          {
+            foreignKeyName: "consignment_return_items_consignment_order_item_id_fkey"
+            columns: ["consignment_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_return_items_return_id_fkey"
+            columns: ["return_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_returns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consignment_returns: {
+        Row: {
+          consignment_order_id: string
+          created_at: string
+          created_by: string | null
+          direction: string
+          id: string
+          note: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          consignment_order_id: string
+          created_at?: string
+          created_by?: string | null
+          direction: string
+          id?: string
+          note?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          consignment_order_id?: string
+          created_at?: string
+          created_by?: string | null
+          direction?: string
+          id?: string
+          note?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consignment_returns_consignment_order_id_fkey"
+            columns: ["consignment_order_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_returns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consignment_sales: {
+        Row: {
+          consignment_order_id: string
+          consignment_order_item_id: string
+          created_at: string
+          created_by: string | null
+          direction: string
+          id: string
+          order_item_id: string | null
+          quantity: number
+          report_id: string | null
+          reversed: boolean
+          sales_note_id: string | null
+          source_type: string
+          unit_cost: number
+          unit_price: number
+        }
+        Insert: {
+          consignment_order_id: string
+          consignment_order_item_id: string
+          created_at?: string
+          created_by?: string | null
+          direction: string
+          id?: string
+          order_item_id?: string | null
+          quantity: number
+          report_id?: string | null
+          reversed?: boolean
+          sales_note_id?: string | null
+          source_type: string
+          unit_cost?: number
+          unit_price?: number
+        }
+        Update: {
+          consignment_order_id?: string
+          consignment_order_item_id?: string
+          created_at?: string
+          created_by?: string | null
+          direction?: string
+          id?: string
+          order_item_id?: string | null
+          quantity?: number
+          report_id?: string | null
+          reversed?: boolean
+          sales_note_id?: string | null
+          source_type?: string
+          unit_cost?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consignment_sales_consignment_order_id_fkey"
+            columns: ["consignment_order_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_sales_consignment_order_item_id_fkey"
+            columns: ["consignment_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_order_item_summary"
+            referencedColumns: ["consignment_order_item_id"]
+          },
+          {
+            foreignKeyName: "consignment_sales_consignment_order_item_id_fkey"
+            columns: ["consignment_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_sales_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_sales_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_sales_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_sales_reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_sales_sales_note_id_fkey"
+            columns: ["sales_note_id"]
+            isOneToOne: false
+            referencedRelation: "sales_notes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consignment_sales_reports: {
+        Row: {
+          confirmed_at: string | null
+          confirmed_by: string | null
+          consignment_order_id: string
+          consignment_order_item_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          note: string | null
+          quantity: number
+          sale_price: number | null
+          status: string
+          store_id: string | null
+        }
+        Insert: {
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          consignment_order_id: string
+          consignment_order_item_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          quantity: number
+          sale_price?: number | null
+          status?: string
+          store_id?: string | null
+        }
+        Update: {
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          consignment_order_id?: string
+          consignment_order_item_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          quantity?: number
+          sale_price?: number | null
+          status?: string
+          store_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consignment_sales_reports_confirmed_by_fkey"
+            columns: ["confirmed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_sales_reports_consignment_order_id_fkey"
+            columns: ["consignment_order_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_sales_reports_consignment_order_item_id_fkey"
+            columns: ["consignment_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_order_item_summary"
+            referencedColumns: ["consignment_order_item_id"]
+          },
+          {
+            foreignKeyName: "consignment_sales_reports_consignment_order_item_id_fkey"
+            columns: ["consignment_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_sales_reports_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_sales_reports_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consignment_settlements: {
+        Row: {
+          account_id: string | null
+          amount: number
+          consignment_order_id: string
+          created_at: string
+          id: string
+          note: string | null
+          settled_at: string | null
+          settled_by: string | null
+          settlement_type: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          account_id?: string | null
+          amount?: number
+          consignment_order_id: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          settled_at?: string | null
+          settled_by?: string | null
+          settlement_type: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string | null
+          amount?: number
+          consignment_order_id?: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          settled_at?: string | null
+          settled_by?: string | null
+          settlement_type?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consignment_settlements_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_settlements_consignment_order_id_fkey"
+            columns: ["consignment_order_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_settlements_settled_by_fkey"
+            columns: ["settled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       data_change_logs: {
         Row: {
           action: string
@@ -899,6 +1372,127 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_movements: {
+        Row: {
+          balance_after: number
+          consignment_order_id: string | null
+          consignment_order_item_id: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          inventory_owner: string
+          note: string | null
+          product_id: string
+          purchase_order_id: string | null
+          quantity_change: number
+          reference_code: string | null
+          sales_note_id: string | null
+          source_type: string
+          variant_id: string | null
+          warehouse_id: string
+        }
+        Insert: {
+          balance_after: number
+          consignment_order_id?: string | null
+          consignment_order_item_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          inventory_owner?: string
+          note?: string | null
+          product_id: string
+          purchase_order_id?: string | null
+          quantity_change: number
+          reference_code?: string | null
+          sales_note_id?: string | null
+          source_type: string
+          variant_id?: string | null
+          warehouse_id: string
+        }
+        Update: {
+          balance_after?: number
+          consignment_order_id?: string | null
+          consignment_order_item_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          inventory_owner?: string
+          note?: string | null
+          product_id?: string
+          purchase_order_id?: string | null
+          quantity_change?: number
+          reference_code?: string | null
+          sales_note_id?: string | null
+          source_type?: string
+          variant_id?: string | null
+          warehouse_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_movements_consignment_order_id_fkey"
+            columns: ["consignment_order_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_consignment_order_item_id_fkey"
+            columns: ["consignment_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_order_item_summary"
+            referencedColumns: ["consignment_order_item_id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_consignment_order_item_id_fkey"
+            columns: ["consignment_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_created_by_fkey1"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_product_id_fkey1"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_sales_note_id_fkey"
+            columns: ["sales_note_id"]
+            isOneToOne: false
+            referencedRelation: "sales_notes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_variant_id_fkey1"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_warehouse_id_fkey"
+            columns: ["warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invitations: {
         Row: {
           created_at: string
@@ -1133,6 +1727,7 @@ export type Database = {
         Row: {
           access_token: string | null
           code: string | null
+          consignment_mode: boolean
           created_at: string
           created_by: string
           id: string
@@ -1145,6 +1740,7 @@ export type Database = {
         Insert: {
           access_token?: string | null
           code?: string | null
+          consignment_mode?: boolean
           created_at?: string
           created_by: string
           id?: string
@@ -1157,6 +1753,7 @@ export type Database = {
         Update: {
           access_token?: string | null
           code?: string | null
+          consignment_mode?: boolean
           created_at?: string
           created_by?: string
           id?: string
@@ -1321,38 +1918,124 @@ export type Database = {
       product_inventory: {
         Row: {
           id: string
-          product_id: string | null
+          product_id: string
           quantity: number
-          updated_at: string
+          updated_at: string | null
           variant_id: string | null
+          warehouse_id: string
         }
         Insert: {
           id?: string
-          product_id?: string | null
+          product_id: string
           quantity?: number
-          updated_at?: string
+          updated_at?: string | null
           variant_id?: string | null
+          warehouse_id: string
         }
         Update: {
           id?: string
-          product_id?: string | null
+          product_id?: string
           quantity?: number
-          updated_at?: string
+          updated_at?: string | null
           variant_id?: string | null
+          warehouse_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "product_inventory_product_id_fkey"
+            foreignKeyName: "product_inventory_product_id_fkey1"
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "product_inventory_variant_id_fkey"
+            foreignKeyName: "product_inventory_variant_id_fkey1"
             columns: ["variant_id"]
             isOneToOne: false
             referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_inventory_warehouse_id_fkey"
+            columns: ["warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_option_groups: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          product_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          product_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          product_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_option_groups_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_option_values: {
+        Row: {
+          created_at: string
+          group_id: string
+          hex_code: string | null
+          id: string
+          label: string
+          sort_order: number
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          hex_code?: string | null
+          id?: string
+          label: string
+          sort_order?: number
+          updated_at?: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          hex_code?: string | null
+          id?: string
+          label?: string
+          sort_order?: number
+          updated_at?: string
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_option_values_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "product_option_groups"
             referencedColumns: ["id"]
           },
         ]
@@ -1387,51 +2070,82 @@ export type Database = {
           },
         ]
       }
+      product_variant_options: {
+        Row: {
+          option_group_id: string
+          option_value_id: string
+          variant_id: string
+        }
+        Insert: {
+          option_group_id: string
+          option_value_id: string
+          variant_id: string
+        }
+        Update: {
+          option_group_id?: string
+          option_value_id?: string
+          variant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_variant_options_option_group_id_fkey"
+            columns: ["option_group_id"]
+            isOneToOne: false
+            referencedRelation: "product_option_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_variant_options_option_value_id_fkey"
+            columns: ["option_value_id"]
+            isOneToOne: false
+            referencedRelation: "product_option_values"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_variant_options_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_variants: {
         Row: {
           barcode: string | null
-          color: string | null
           created_at: string
           id: string
           name: string
-          option_1: string | null
-          option_2: string | null
-          option_3: string | null
           product_id: string
           retail_price: number
           sku: string
+          sort_order: number
           status: Database["public"]["Enums"]["product_status"]
           updated_at: string
           wholesale_price: number
         }
         Insert: {
           barcode?: string | null
-          color?: string | null
           created_at?: string
           id?: string
           name: string
-          option_1?: string | null
-          option_2?: string | null
-          option_3?: string | null
           product_id: string
           retail_price?: number
           sku: string
+          sort_order?: number
           status?: Database["public"]["Enums"]["product_status"]
           updated_at?: string
           wholesale_price?: number
         }
         Update: {
           barcode?: string | null
-          color?: string | null
           created_at?: string
           id?: string
           name?: string
-          option_1?: string | null
-          option_2?: string | null
-          option_3?: string | null
           product_id?: string
           retail_price?: number
           sku?: string
+          sort_order?: number
           status?: Database["public"]["Enums"]["product_status"]
           updated_at?: string
           wholesale_price?: number
@@ -1448,48 +2162,27 @@ export type Database = {
       }
       products: {
         Row: {
-          barcode: string | null
-          base_retail_price: number
-          base_wholesale_price: number
-          color: string | null
+          code: string | null
           created_at: string
           description: string | null
-          has_variants: boolean | null
           id: string
-          model: string | null
           name: string
-          sku: string
-          status: Database["public"]["Enums"]["product_status"]
           updated_at: string
         }
         Insert: {
-          barcode?: string | null
-          base_retail_price?: number
-          base_wholesale_price?: number
-          color?: string | null
+          code?: string | null
           created_at?: string
           description?: string | null
-          has_variants?: boolean | null
           id?: string
-          model?: string | null
           name: string
-          sku: string
-          status?: Database["public"]["Enums"]["product_status"]
           updated_at?: string
         }
         Update: {
-          barcode?: string | null
-          base_retail_price?: number
-          base_wholesale_price?: number
-          color?: string | null
+          code?: string | null
           created_at?: string
           description?: string | null
-          has_variants?: boolean | null
           id?: string
-          model?: string | null
           name?: string
-          sku?: string
-          status?: Database["public"]["Enums"]["product_status"]
           updated_at?: string
         }
         Relationships: []
@@ -1642,6 +2335,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          inventory_source_type: string
           order_item_id: string
           quantity: number
           sales_note_id: string
@@ -1649,6 +2343,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          inventory_source_type?: string
           order_item_id: string
           quantity: number
           sales_note_id: string
@@ -1656,6 +2351,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          inventory_source_type?: string
           order_item_id?: string
           quantity?: number
           sales_note_id?: string
@@ -1691,6 +2387,7 @@ export type Database = {
           status: Database["public"]["Enums"]["sales_note_status"]
           store_id: string
           updated_at: string
+          warehouse_id: string | null
         }
         Insert: {
           access_token?: string | null
@@ -1705,6 +2402,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["sales_note_status"]
           store_id: string
           updated_at?: string
+          warehouse_id?: string | null
         }
         Update: {
           access_token?: string | null
@@ -1719,6 +2417,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["sales_note_status"]
           store_id?: string
           updated_at?: string
+          warehouse_id?: string | null
         }
         Relationships: [
           {
@@ -1726,6 +2425,13 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_notes_warehouse_id_fkey"
+            columns: ["warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
             referencedColumns: ["id"]
           },
         ]
@@ -1738,6 +2444,7 @@ export type Database = {
           order_item_id: string
           quantity: number
           store_id: string
+          warehouse_id: string | null
         }
         Insert: {
           created_at?: string
@@ -1746,6 +2453,7 @@ export type Database = {
           order_item_id: string
           quantity: number
           store_id: string
+          warehouse_id?: string | null
         }
         Update: {
           created_at?: string
@@ -1754,6 +2462,7 @@ export type Database = {
           order_item_id?: string
           quantity?: number
           store_id?: string
+          warehouse_id?: string | null
         }
         Relationships: [
           {
@@ -1768,6 +2477,13 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shipping_pool_warehouse_id_fkey"
+            columns: ["warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
             referencedColumns: ["id"]
           },
         ]
@@ -2276,14 +2992,119 @@ export type Database = {
         }
         Relationships: []
       }
+      warehouses: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          include_in_actual: boolean
+          include_in_available: boolean
+          is_active: boolean
+          name: string
+          sort_order: number
+          type: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          include_in_actual?: boolean
+          include_in_available?: boolean
+          is_active?: boolean
+          name: string
+          sort_order?: number
+          type?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
+          include_in_actual?: boolean
+          include_in_available?: boolean
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+          type?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
-      [_ in never]: never
+      consignment_order_item_summary: {
+        Row: {
+          consignment_order_id: string | null
+          consignment_order_item_id: string | null
+          direction: string | null
+          order_quantity: number | null
+          product_id: string | null
+          received_quantity: number | null
+          remaining_quantity: number | null
+          returned_from_store: number | null
+          returned_to_supplier: number | null
+          shipped_quantity: number | null
+          sold_quantity: number | null
+          unit_cost: number | null
+          unit_price: number | null
+          variant_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consignment_order_items_consignment_order_id_fkey"
+            columns: ["consignment_order_id"]
+            isOneToOne: false
+            referencedRelation: "consignment_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_order_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       accept_invitation: {
         Args: { p_invitation_id: string }
         Returns: undefined
+      }
+      adjust_inventory:
+        | {
+            Args: { p_created_by: string; p_id: string; p_new_quantity: number }
+            Returns: undefined
+          }
+        | {
+            Args: {
+              p_created_by: string
+              p_id: string
+              p_new_quantity: number
+              p_note?: string
+            }
+            Returns: undefined
+          }
+      allocate_inventory: {
+        Args: {
+          p_created_by?: string
+          p_order_item_id?: string
+          p_product_id: string
+          p_quantity: number
+          p_reference_code?: string
+          p_sales_note_id?: string
+          p_source?: string
+          p_unit_price?: number
+          p_variant_id: string
+          p_warehouse_id?: string
+        }
+        Returns: Json
       }
       bind_user_to_store: {
         Args: { p_role: string; p_store_id: string; p_user_id: string }
@@ -2305,25 +3126,139 @@ export type Database = {
           deleted_count: number
         }[]
       }
-      create_order_with_sales_note: {
+      compare_product_row:
+        | {
+            Args: { p_code: string; p_description: string; p_name: string }
+            Returns: string[]
+          }
+        | {
+            Args: {
+              p_brand_id: string
+              p_code: string
+              p_description: string
+              p_name: string
+            }
+            Returns: string[]
+          }
+      confirm_consignment_sales: {
+        Args: { p_confirmed_by: string; p_report_ids: string[] }
+        Returns: number
+      }
+      create_consignment_shipment: {
         Args: {
+          p_consignment_order_id: string
           p_created_by: string
-          p_items?: Json
           p_notes?: string
-          p_store_id: string
+          p_shipped_at?: string
         }
         Returns: Json
       }
-      delete_sales_note: {
-        Args: { p_sales_note_id: string }
+      create_consignment_shipment_layer: {
+        Args: {
+          p_created_by: string
+          p_sales_note_id: string
+          p_warehouse_id: string
+        }
         Returns: undefined
       }
-      direct_ship_order: {
-        Args: { p_created_by: string; p_notes?: string; p_order_id: string }
-        Returns: Json
-      }
+      create_order_with_sales_note:
+        | {
+            Args: {
+              p_created_by: string
+              p_items?: Json
+              p_notes?: string
+              p_store_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_created_by: string
+              p_items?: Json
+              p_notes?: string
+              p_shipped_at?: string
+              p_store_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_created_by: string
+              p_items?: Json
+              p_notes?: string
+              p_shipped_at?: string
+              p_store_id: string
+              p_warehouse_id?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_consignment_mode?: boolean
+              p_created_by: string
+              p_items?: Json
+              p_notes?: string
+              p_shipped_at?: string
+              p_store_id: string
+              p_warehouse_id?: string
+            }
+            Returns: Json
+          }
+      delete_sales_note:
+        | { Args: { p_sales_note_id: string }; Returns: undefined }
+        | {
+            Args: { p_sales_note_id: string; p_warehouse_id?: string }
+            Returns: undefined
+          }
+      direct_ship_order:
+        | {
+            Args: { p_created_by: string; p_notes?: string; p_order_id: string }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_created_by: string
+              p_notes?: string
+              p_order_id: string
+              p_shipped_at?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_created_by: string
+              p_notes?: string
+              p_order_id: string
+              p_shipped_at?: string
+              p_warehouse_id?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_created_by: string
+              p_notes?: string
+              p_order_id: string
+              p_shipped_at?: string
+              p_warehouse_id?: string
+              p_warehouse_map?: Json
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_created_by: string
+              p_notes?: string
+              p_order_id: string
+              p_shipped_at?: string
+              p_source_map?: Json
+              p_warehouse_id?: string
+              p_warehouse_map?: Json
+            }
+            Returns: Json
+          }
       duplicate_product_with_variants: {
-        Args: { new_name: string; new_sku: string; target_product_id: string }
+        Args: { new_name: string; new_sku?: string; target_product_id: string }
         Returns: string
       }
       expire_market_listings: { Args: never; Returns: undefined }
@@ -2392,11 +3327,56 @@ export type Database = {
         }
         Returns: boolean
       }
+      import_product_batch: { Args: { p_items: Json }; Returns: Json }
       is_store_member: {
         Args: { _store_id: string; _user_id: string }
         Returns: boolean
       }
       migrate_historical_specs_to_v6: { Args: never; Returns: Json }
+      recalculate_inventory: {
+        Args: { p_created_by?: string }
+        Returns: {
+          diff: number
+          new_quantity: number
+          old_quantity: number
+          out_product_id: string
+          out_variant_id: string
+          out_warehouse_id: string
+        }[]
+      }
+      receive_consignment_items: {
+        Args: {
+          p_consignment_order_id: string
+          p_created_by?: string
+          p_items: Json
+        }
+        Returns: undefined
+      }
+      receive_purchase_items:
+        | { Args: { p_items: Json }; Returns: undefined }
+        | {
+            Args: { p_items: Json; p_warehouse_id?: string }
+            Returns: undefined
+          }
+      report_consignment_sale: {
+        Args: {
+          p_consignment_order_item_id: string
+          p_created_by?: string
+          p_note?: string
+          p_quantity: number
+          p_sale_price?: number
+        }
+        Returns: string
+      }
+      return_consignment_items: {
+        Args: {
+          p_consignment_order_id: string
+          p_created_by?: string
+          p_items: Json
+          p_note?: string
+        }
+        Returns: undefined
+      }
       safe_eval_dsl: {
         Args: {
           p_condition: Json
@@ -2405,10 +3385,68 @@ export type Database = {
         }
         Returns: boolean
       }
-      ship_from_pool: {
-        Args: { p_created_by: string; p_notes?: string; p_store_ids: string[] }
-        Returns: Json
+      settle_consignment: {
+        Args: {
+          p_account_id?: string
+          p_amount: number
+          p_consignment_order_id: string
+          p_created_by?: string
+          p_note?: string
+          p_settlement_type: string
+        }
+        Returns: string
       }
+      ship_from_pool:
+        | {
+            Args: {
+              p_created_by: string
+              p_notes?: string
+              p_store_ids: string[]
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_created_by: string
+              p_notes?: string
+              p_shipped_at?: string
+              p_store_ids: string[]
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_created_by: string
+              p_notes?: string
+              p_shipped_at?: string
+              p_store_ids: string[]
+              p_warehouse_id?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_created_by: string
+              p_notes?: string
+              p_shipped_at?: string
+              p_store_ids: string[]
+              p_warehouse_id?: string
+              p_warehouse_map?: Json
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_created_by: string
+              p_notes?: string
+              p_shipped_at?: string
+              p_source_map?: Json
+              p_store_ids: string[]
+              p_warehouse_id?: string
+              p_warehouse_map?: Json
+            }
+            Returns: Json
+          }
       sync_product_specs_v6: {
         Args: {
           p_category_id: string
@@ -2443,7 +3481,7 @@ export type Database = {
         | "out_of_stock"
         | "discontinued"
         | "cancelled"
-      order_source_type: "frontend" | "admin_proxy"
+      order_source_type: "frontend" | "admin_proxy" | "consignment"
       order_status: "pending" | "processing" | "shipped"
       payment_status: "unpaid" | "partial" | "paid"
       product_status: "active" | "discontinued" | "preorder" | "sold_out"
@@ -2598,7 +3636,7 @@ export const Constants = {
         "discontinued",
         "cancelled",
       ],
-      order_source_type: ["frontend", "admin_proxy"],
+      order_source_type: ["frontend", "admin_proxy", "consignment"],
       order_status: ["pending", "processing", "shipped"],
       payment_status: ["unpaid", "partial", "paid"],
       product_status: ["active", "discontinued", "preorder", "sold_out"],

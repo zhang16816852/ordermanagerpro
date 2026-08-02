@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { OrderGridCell } from './OrderGridCell';
 import { OrderGridToolbar } from './OrderGridToolbar';
-import { buildGridMatrix, filterRowsColsForTab, getDisplayValue } from '@/lib/order-grid-utils';
+import { buildGridMatrix, filterRowsColsForTab, getDisplayValue, migrateTemplate } from '@/lib/order-grid-utils';
 import type {
   OrderGridTemplateWithProducts,
   GridMode,
@@ -59,9 +59,14 @@ export function OrderGridRenderer({
       }));
   }, [products, templateVariantIds]);
 
-  const grid = useMemo(
-    () => buildGridMatrix(template, templateProducts),
+  const migratedTemplate = useMemo(
+    () => migrateTemplate(template, templateProducts),
     [template, templateProducts]
+  );
+
+  const grid = useMemo(
+    () => buildGridMatrix(migratedTemplate, templateProducts),
+    [migratedTemplate, templateProducts]
   );
 
   const handleQuantityChange = useCallback(

@@ -29,12 +29,12 @@ export function useSupplierMappings(supplierId?: string) {
     queryKey: ['supplier-mappings', supplierId],
     queryFn: async () => {
       if (!supplierId) return [];
-      const { data, error } = await supabase
-        .from('supplier_product_mappings')
+      const { data, error } = await (supabase
+        .from('supplier_product_mappings') as any)
         .select(`
           *,
-          internal_product:products(id, name, sku),
-          internal_variant:product_variants(id, name, sku, option_1, option_2, option_3)
+          internal_product:products(id, name, code),
+          internal_variant:product_variants(id, name, sku)
         `)
         .eq('supplier_id', supplierId)
         .order('created_at', { ascending: false });
@@ -52,8 +52,8 @@ export function useSupplierMappings(supplierId?: string) {
     queryKey: ['supplier-import-config', supplierId],
     queryFn: async () => {
       if (!supplierId) return null;
-      const { data, error } = await supabase
-        .from('supplier_import_configs')
+      const { data, error } = await (supabase
+        .from('supplier_import_configs') as any)
         .select('*')
         .eq('supplier_id', supplierId)
         .maybeSingle();
@@ -68,8 +68,8 @@ export function useSupplierMappings(supplierId?: string) {
 
   const saveMappingMutation = useMutation({
     mutationFn: async (data: Partial<SupplierProductMapping> & { supplier_id: string, vendor_product_id: string }) => {
-      const { data: result, error } = await supabase
-        .from('supplier_product_mappings')
+      const { data: result, error } = await (supabase
+        .from('supplier_product_mappings') as any)
         .upsert(
           {
             supplier_id: data.supplier_id,
@@ -100,8 +100,8 @@ export function useSupplierMappings(supplierId?: string) {
 
   const deleteMappingMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('supplier_product_mappings')
+      const { error } = await (supabase
+        .from('supplier_product_mappings') as any)
         .delete()
         .eq('id', id);
 
@@ -119,8 +119,8 @@ export function useSupplierMappings(supplierId?: string) {
 
   const saveConfigMutation = useMutation({
     mutationFn: async (data: Partial<SupplierImportConfig> & { supplier_id: string }) => {
-      const { data: result, error } = await supabase
-        .from('supplier_import_configs')
+      const { data: result, error } = await (supabase
+        .from('supplier_import_configs') as any)
         .upsert(
           {
             supplier_id: data.supplier_id,

@@ -41,14 +41,11 @@ export function OrderGridProductPicker({
       const q = search.toLowerCase();
       // 產品層級
       if (p.name.toLowerCase().includes(q)) return true;
-      if (p.sku.toLowerCase().includes(q)) return true;
+      if ((p.code ?? '').toLowerCase().includes(q)) return true;
       // 變體層級
       return (p.variants || []).some((v: any) =>
         v.name?.toLowerCase().includes(q) ||
-        v.sku?.toLowerCase().includes(q) ||
-        v.option_1?.toLowerCase().includes(q) ||
-        v.option_2?.toLowerCase().includes(q) ||
-        v.option_3?.toLowerCase().includes(q)
+        v.sku?.toLowerCase().includes(q)
       );
     });
   }, [products, search, productVariantMap]);
@@ -200,7 +197,7 @@ export function OrderGridProductPicker({
                     />
                     <div className="flex-1 min-w-0" onClick={() => toggleExpand(product.id)}>
                       <div className="text-sm truncate">{product.name}</div>
-                      <div className="text-xs text-muted-foreground">{product.sku}</div>
+                      <div className="text-xs text-muted-foreground">{product.code}</div>
                     </div>
                     <div className="text-[10px] text-muted-foreground shrink-0">
                       {variants.length} 變體
@@ -211,7 +208,7 @@ export function OrderGridProductPicker({
                     <div className="ml-8 pl-1 border-l border-muted space-y-0.5 pb-1">
                       {variants.map((v: any) => {
                         const isSelected = selectedSet.has(v.id);
-                        const label = [v.name, v.option_1, v.option_2, v.option_3].filter(Boolean).join(' / ') || v.sku;
+                        const label = v.name || v.sku;
                         return (
                           <div
                             key={v.id}

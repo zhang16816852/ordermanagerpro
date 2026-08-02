@@ -20,8 +20,8 @@ export default function StoreNotifications() {
     queryFn: async () => {
       if (!user) return [];
 
-      const { data, error } = await supabase
-        .from("notifications")
+      const { data, error } = await (supabase
+        .from("notifications") as any)
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
@@ -34,8 +34,8 @@ export default function StoreNotifications() {
 
   const markAsReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {
-      const { error } = await supabase
-        .from("notifications")
+      const { error } = await (supabase
+        .from("notifications") as any)
         .update({ read: true })
         .eq("id", notificationId);
 
@@ -50,8 +50,8 @@ export default function StoreNotifications() {
     mutationFn: async () => {
       if (!user) return;
 
-      const { error } = await supabase
-        .from("notifications")
+      const { error } = await (supabase
+        .from("notifications") as any)
         .update({ read: true })
         .eq("user_id", user.id)
         .eq("read", false);

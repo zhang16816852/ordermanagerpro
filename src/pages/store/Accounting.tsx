@@ -45,8 +45,8 @@ export default function StoreAccounting() {
       const startDate = startOfMonth(new Date(year, month - 1));
       const endDate = endOfMonth(new Date(year, month - 1));
 
-      const { data, error } = await supabase
-        .from('sales_notes')
+      const { data, error } = await (supabase
+        .from('sales_notes') as any)
         .select(`
           *,
           sales_note_items (
@@ -55,7 +55,7 @@ export default function StoreAccounting() {
             order_item:order_items (
               id,
               unit_price,
-              product:products (name, sku)
+              product:products (name, code)
             )
           )
         `)

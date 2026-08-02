@@ -112,7 +112,14 @@ export function OrderTableView({
                       />
                     </TableCell>
                   )}
-                  <TableCell className="font-mono text-xs font-medium">{displayId.slice(0, 16)}</TableCell>
+                  <TableCell className="font-mono text-xs font-medium">
+                    <div className="flex items-center gap-1.5">
+                      {displayId.slice(0, 16)}
+                      {order.consignment_mode && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <div className="font-medium">{order.stores?.name}</div>
                     {order.stores?.code && <div className="text-xs text-muted-foreground">{order.stores.code}</div>}

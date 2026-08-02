@@ -12,7 +12,7 @@ export const entityRelationService = {
     async updateRelations(entityType: EntityType, entityId: string, data: EntityRelationData) {
         const entityField = entityType === 'product' ? 'product_id' : 'variant_id';
 
-        await supabase.from('entity_model_relations')
+        await (supabase.from('entity_model_relations') as any)
             .delete()
             .eq(entityField, entityId);
 
@@ -44,13 +44,13 @@ export const entityRelationService = {
         }
 
         if (inserts.length > 0) {
-            const { error } = await supabase.from('entity_model_relations').insert(inserts);
+            const { error } = await (supabase.from('entity_model_relations') as any).insert(inserts);
             if (error) throw error;
         }
     },
 
     async fetchAllRelations() {
-        const { data } = await supabase.from('entity_model_relations').select('*');
+        const { data } = await (supabase.from('entity_model_relations') as any).select('*');
         return {
             links: (data || []).filter(r => r.relation_type === 'include' && r.model_id),
             groups: (data || []).filter(r => r.relation_type === 'include' && r.group_id),

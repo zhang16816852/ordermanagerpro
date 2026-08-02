@@ -13,8 +13,8 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
   const { data: shippingPoolItems = [] } = useQuery({
     queryKey: ['shipping-pool-items'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('shipping_pool')
+      const { data, error } = await (supabase
+        .from('shipping_pool') as any)
         .select('order_item_id, quantity');
       if (error) throw error;
       return data as ShippingPoolItem[];
@@ -25,25 +25,33 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
     shippingPoolItems.map(item => [item.order_item_id, item.quantity]) || []
   );
 
-  // 2. Stores list for filter
+  // 2. Stores list for filter — only stores with orders of this status
   const { data: stores = [] } = useQuery({
-    queryKey: ['stores-list'],
+    queryKey: ['stores-list', statusTab],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('stores')
+      const { data: orderStores } = await (supabase
+        .from('orders') as any)
+        .select('store_id')
+        .eq('status', statusTab);
+      if (!orderStores || orderStores.length === 0) return [];
+      const storeIds = [...new Set(orderStores.map(o => o.store_id))];
+      const { data, error } = await (supabase
+        .from('stores') as any)
         .select('id, name, code')
+        .in('id', storeIds)
         .order('name');
       if (error) throw error;
       return data;
     },
+    enabled: !!statusTab,
   });
 
   // 3. Main Orders Query
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ['admin-orders', storeFilter, statusTab],
     queryFn: async () => {
-      let query = supabase
-        .from('orders')
+      let query = (supabase
+        .from('orders') as any)
         .select(`
           id,
           code,
@@ -53,6 +61,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
           status,
           notes,
           store_id,
+          consignment_mode,
           stores (name, code),
           order_items (
             id,
@@ -63,8 +72,8 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
             store_id,
             product_id,
             variant_id,
-            product:products (name, sku),
-            product_variant:product_variants (name, option_1, option_2)
+            product:products (name, code),
+            product_variant:product_variants (name)
           )
         `)
         .eq('status', statusTab)
@@ -88,8 +97,8 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
 
   const syncOrdersMutation = useMutation({
     mutationFn: async () => {
-      const { data: processingOrders, error } = await supabase
-        .from('orders')
+      const { data: processingOrders, error } = await (supabase
+        .from('orders') as any)
         .select(`id, order_items (quantity, shipped_quantity, status)`)
         .eq('status', 'processing');
 
@@ -109,8 +118,8 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
 
       if (ordersToUpdate.length === 0) return 0;
 
-      const { error: updateError } = await supabase
-        .from('orders')
+      const { error: updateError } = await (supabase
+        .from('orders') as any)
         .update({ status: 'shipped' })
         .in('id', ordersToUpdate);
 
@@ -130,8 +139,8 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
 
   const confirmOrdersMutation = useMutation({
     mutationFn: async (orderIds: string[]) => {
-      const { error } = await supabase
-        .from('orders')
+      const { error } = await (supabase
+        .from('orders') as any)
         .update({ status: 'processing' })
         .in('id', orderIds);
       if (error) throw error;
@@ -148,8 +157,8 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
       if (!user) throw new Error('未登入');
 
       const orderItemIds = items.map(i => i.itemId);
-      const { data: existingItems } = await supabase
-        .from('shipping_pool')
+      const { data: existingItems } = await (supabase
+        .from('shipping_pool') as any)
         .select('id, order_item_id, quantity')
         .in('order_item_id', orderItemIds);
 
@@ -161,7 +170,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
 
       for (const item of items) {
         if (item.orderId) orderIdsToLock.add(item.orderId);
-        const existing = existingMap.get(item.itemId);
+        const existing = existingMap.get(item.itemId) as any;
         if (existing) {
           toUpdate.push({ id: existing.id, quantity: existing.quantity + item.quantity });
         } else {
@@ -175,13 +184,13 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
       }
 
       if (toInsert.length > 0) {
-        const { error } = await supabase.from('shipping_pool').insert(toInsert);
+        const { error } = await (supabase.from('shipping_pool') as any).insert(toInsert);
         if (error) throw error;
       }
 
       for (const update of toUpdate) {
-        const { error } = await supabase
-          .from('shipping_pool')
+        const { error } = await (supabase
+          .from('shipping_pool') as any)
           .update({ quantity: update.quantity })
           .eq('id', update.id);
         if (error) throw error;
@@ -189,8 +198,8 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
 
       // 自動鎖定訂單：將相關訂單設為 processing
       if (orderIdsToLock.size > 0) {
-        const { error: lockError } = await supabase
-          .from('orders')
+        const { error: lockError } = await (supabase
+          .from('orders') as any)
           .update({ status: 'processing' })
           .in('id', Array.from(orderIdsToLock))
           .eq('status', 'pending');
@@ -208,8 +217,8 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
 
   const cancelItemsMutation = useMutation({
     mutationFn: async ({ itemIds, targetStatus }: { itemIds: string[]; targetStatus: 'cancelled' | 'waiting' }) => {
-      const { error } = await supabase
-        .from('order_items')
+      const { error } = await (supabase
+        .from('order_items') as any)
         .update({ status: targetStatus })
         .in('id', itemIds);
       if (error) throw error;

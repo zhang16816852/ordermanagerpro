@@ -36,8 +36,8 @@ export function useCreateOrder({
       if (items.length === 0) throw new Error("購物車是空的");
       if (!storeId || !userId) throw new Error("無法取得店鋪或使用者資訊");
 
-      const { data: order, error: orderError } = await supabase
-        .from("orders")
+      const { data: order, error: orderError } = await (supabase
+        .from("orders") as any)
         .insert({
           store_id: storeId,
           created_by: userId,
@@ -59,8 +59,8 @@ export function useCreateOrder({
         selected_model_name: item.selectedModelName || null,
       }));
 
-      const { error: itemsError } = await supabase
-        .from("order_items")
+      const { error: itemsError } = await (supabase
+        .from("order_items") as any)
         .insert(orderItems);
 
       if (itemsError) throw itemsError;

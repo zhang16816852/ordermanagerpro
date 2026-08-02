@@ -181,10 +181,10 @@ export function SpecDialog({
                             <Checkbox
                                 id="filter-enabled"
                                 checked={specForm.configuration?.filter_config?.enabled ?? true}
-                                onCheckedChange={(checked) => setSpecForm(prev => ({
+                                onCheckedChange={(checked: any) => setSpecForm(prev => ({
                                     ...prev,
-                                    configuration: { ...prev.configuration, filter_config: { ...(prev.configuration?.filter_config || { display_mode: 'auto' }), enabled: !!checked } }
-                                }))}
+                                    configuration: { ...prev.configuration, filter_config: { ...((prev.configuration as any)?.filter_config || { display_mode: 'auto' } as any), enabled: !!checked } }
+                                } as any))}
                             />
                             <label htmlFor="filter-enabled" className="text-sm">允許作為篩選條件</label>
                         </div>

@@ -65,7 +65,7 @@ export function ProductImageManager({ entityType, entityId, className }: Product
                 const file = files[i];
                 const { url, storagePath } = await imageStorageService.upload(file, folder);
 
-                const { error } = await supabase.from('product_images').insert({
+                const { error } = await (supabase.from('product_images') as any).insert({
                     entity_type: entityType,
                     entity_id: entityId,
                     storage_path: storagePath,

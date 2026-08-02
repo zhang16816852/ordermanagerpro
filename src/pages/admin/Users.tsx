@@ -29,8 +29,8 @@ export default function AdminUsers() {
   const { data: profiles, isLoading } = useQuery({
     queryKey: ["admin-profiles"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
+      const { data, error } = await (supabase
+        .from("profiles") as any)
         .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -41,8 +41,8 @@ export default function AdminUsers() {
   const { data: userRoles } = useQuery({
     queryKey: ["admin-user-roles"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_roles")
+      const { data, error } = await (supabase
+        .from("user_roles") as any)
         .select("user_id, role");
       if (error) throw error;
       return data;
@@ -52,8 +52,8 @@ export default function AdminUsers() {
   const { data: storeUsers } = useQuery({
     queryKey: ["admin-store-users"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("store_users")
+      const { data, error } = await (supabase
+        .from("store_users") as any)
         .select(`
           id,
           user_id,
@@ -69,8 +69,8 @@ export default function AdminUsers() {
   const { data: stores } = useQuery({
     queryKey: ["admin-stores-list"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("stores")
+      const { data, error } = await (supabase
+        .from("stores") as any)
         .select("id, name, code")
         .order("name");
       if (error) throw error;
@@ -81,8 +81,8 @@ export default function AdminUsers() {
   const { data: invitations } = useQuery({
     queryKey: ["admin-invitations"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("invitations")
+      const { data, error } = await (supabase
+        .from("invitations") as any)
         .select(`
           *,
           stores(name, code)
@@ -99,8 +99,8 @@ export default function AdminUsers() {
       if (!selectedUserId || !selectedStoreId) throw new Error("請選擇用戶和店鋪");
 
       // Check if already exists
-      const { data: existing } = await supabase
-        .from("store_users")
+      const { data: existing } = await (supabase
+        .from("store_users") as any)
         .select("id")
         .eq("user_id", selectedUserId)
         .eq("store_id", selectedStoreId)
@@ -108,15 +108,15 @@ export default function AdminUsers() {
 
       if (existing) {
         // Update role
-        const { error } = await supabase
-          .from("store_users")
+        const { error } = await (supabase
+          .from("store_users") as any)
           .update({ role: selectedRole as "founder" | "manager" | "employee" })
           .eq("id", existing.id);
         if (error) throw error;
       } else {
         // Create new
-        const { error } = await supabase
-          .from("store_users")
+        const { error } = await (supabase
+          .from("store_users") as any)
           .insert({
             user_id: selectedUserId,
             store_id: selectedStoreId,
@@ -142,7 +142,7 @@ export default function AdminUsers() {
     mutationFn: async () => {
       if (!user || !selectedStoreId || !inviteEmail) throw new Error("請填寫完整資料");
 
-      const { error } = await supabase.from("invitations").insert({
+      const { error } = await (supabase.from("invitations") as any).insert({
         email: inviteEmail,
         store_id: selectedStoreId,
         role: selectedRole as "founder" | "manager" | "employee",
@@ -166,8 +166,8 @@ export default function AdminUsers() {
 
   const removeStoreMutation = useMutation({
     mutationFn: async (storeUserId: string) => {
-      const { error } = await supabase
-        .from("store_users")
+      const { error } = await (supabase
+        .from("store_users") as any)
         .delete()
         .eq("id", storeUserId);
       if (error) throw error;

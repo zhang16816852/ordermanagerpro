@@ -183,16 +183,16 @@ export class SyncManager {
       const bsCached = getBrandSeriesCache();
       const bsSeq = forceFull ? '0' : (bsCached?.dataVersion || '0');
 
-      const { data: bsVersionData } = await supabase
-        .from('data_versions')
+      const { data: bsVersionData } = await (supabase
+        .from('data_versions') as any)
         .select('version')
         .eq('table_name', 'brand_series')
         .maybeSingle();
       const bsServerVersion = String(bsVersionData?.version || '0');
 
       if (CacheService.isStale(bsSeq, bsServerVersion)) {
-        const { data: bsData, error: bsError } = await supabase
-          .from('brand_series')
+        const { data: bsData, error: bsError } = await (supabase
+          .from('brand_series') as any)
           .select('*')
           .order('sort_order')
           .order('name');
