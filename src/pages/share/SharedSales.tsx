@@ -14,7 +14,6 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import { useState, useEffect, useRef } from "react";
 import { PrintDialog, PrintOptions } from "@/components/PrintDialog";
 import { QRCodeSVG } from "qrcode.react";
-import html2pdf from "html2pdf.js";
 
 interface SharedSalesData {
   sales_note: {
@@ -171,6 +170,7 @@ export default function SharedSales() {
     setIsPrintDialogOpen(false);
 
     try {
+      const { default: html2pdf } = await import('html2pdf.js');
       // @ts-expect-error - html2pdf might have type issues depending on version
       await html2pdf().set(opt).from(element).save();
       toast.success("PDF 匯出成功");

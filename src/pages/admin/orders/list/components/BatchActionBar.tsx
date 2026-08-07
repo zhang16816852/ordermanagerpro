@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Truck, CheckSquare, XCircle, Package, Send, ClipboardList, FileText, FileSpreadsheet } from 'lucide-react';
+import { Truck, CheckSquare, XCircle, Package, Send, Store, ClipboardList, FileText, FileSpreadsheet } from 'lucide-react';
 
 interface BatchActionBarProps {
   statusTab: string;
@@ -7,10 +7,15 @@ interface BatchActionBarProps {
   selectedOrderCount: number;
   selectedItemCount: number;
   selectedAggregateCount: number;
+  hasConsignmentSelection: boolean;
+  hasNormalSelection: boolean;
+  allSelectedConsignment: boolean;
   onConfirmOrders: () => void;
   onShipItems: () => void;
   onCancelItems: () => void;
   onDirectShipOrders: () => void;
+  onConvertToConsignment: () => void;
+  onShipOrdersToPool: () => void;
   onConvertToPO: () => void;
   onExportAggregateCSV: () => void;
   onExportAggregateExcel: () => void;
@@ -23,10 +28,15 @@ export function BatchActionBar({
   selectedOrderCount,
   selectedItemCount,
   selectedAggregateCount,
+  hasConsignmentSelection,
+  hasNormalSelection,
+  allSelectedConsignment,
   onConfirmOrders,
   onShipItems,
   onCancelItems,
   onDirectShipOrders,
+  onConvertToConsignment,
+  onShipOrdersToPool,
   onConvertToPO,
   onExportAggregateCSV,
   onExportAggregateExcel,
@@ -72,16 +82,55 @@ export function BatchActionBar({
           )}
 
           {statusTab === 'processing' && viewMode === 'orders' && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={onDirectShipOrders}
-              disabled={isLoading}
-              className="rounded-full shadow-inner active:scale-95 transition-all"
-            >
-              <Send className="h-4 w-4 mr-2" />
-              轉銷貨單
-            </Button>
+            <>
+              {hasNormalSelection && (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={onDirectShipOrders}
+                    disabled={isLoading}
+                    className="rounded-full shadow-inner active:scale-95 transition-all"
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    轉銷貨單
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={onConvertToConsignment}
+                    disabled={isLoading}
+                    className="rounded-full shadow-inner active:scale-95 transition-all"
+                  >
+                    <Store className="h-4 w-4 mr-2" />
+                    轉寄賣
+                  </Button>
+                  {hasConsignmentSelection && <span className="w-px h-6 bg-primary-foreground/30" />}
+                </>
+              )}
+              {hasConsignmentSelection && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onDirectShipOrders}
+                  disabled={isLoading}
+                  className="rounded-full shadow-inner active:scale-95 transition-all"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  寄賣出貨
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onShipOrdersToPool}
+                disabled={isLoading}
+                className="rounded-full shadow-inner active:scale-95 transition-all"
+              >
+                <Truck className="h-4 w-4 mr-2" />
+                轉出貨池
+              </Button>
+            </>
           )}
 
           {viewMode === 'items' && (

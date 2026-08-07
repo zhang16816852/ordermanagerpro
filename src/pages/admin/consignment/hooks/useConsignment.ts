@@ -25,6 +25,9 @@ export function useConsignment() {
     queryClient.invalidateQueries({ queryKey: ['consignment-reports'] });
     queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
     queryClient.invalidateQueries({ queryKey: ['inventory-movements'] });
+    queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+    queryClient.invalidateQueries({ queryKey: ['shipping-pool'] });
+    queryClient.invalidateQueries({ queryKey: ['shipping-pool-items'] });
   };
 
   const { data: suppliers = [] } = useQuery({
@@ -160,36 +163,102 @@ export function useConsignment() {
         .select()
         .single();
       if (error) throw error;
+
+      // 店家寄賣（send_to_store）：同步建立真實來源訂單，讓「所有訂單」可勾選/出貨
+      if (direction === 'send_to_store') {
+        const { data: sourceOrder, error: orderError } = await (supabase as any)
+          .from('orders')
+          .insert({
+            store_id: partnerId,
+            created_by: user?.id,
+            notes: note || null,
+            source_type: 'consignment',
+            status: 'pending',
+            consignment_mode: true,
+          })
+          .select('id')
+          .single();
+        if (orderError) throw orderError;
+
+        const { error: linkError } = await (supabase as any)
+          .from('consignment_orders')
+          .update({ source_order_id: sourceOrder.id })
+          .eq('id', data.id);
+        if (linkError) throw linkError;
+      }
+
       return data as { id: string };
     },
     {
       successMessage: '寄賣單已建立',
-      invalidateKeys: [['consignment-orders']],
+      invalidateKeys: [['consignment-orders'], ['admin-orders']],
     }
   );
 
   const addItemMutation = useSupabaseAction<void, { orderId: string; item: NewConsignmentItem }>(
     async ({ orderId, item }) => {
+      const { data: co } = await (supabase as any)
+        .from('consignment_orders')
+        .select('direction, store_id, source_order_id')
+        .eq('id', orderId)
+        .single();
+      if (!co) throw new Error('找不到寄賣單');
+
+      let orderItemId: string | null = null;
+      if (co.direction === 'send_to_store' && co.source_order_id) {
+        const { data: inserted, error: oiError } = await (supabase as any)
+          .from('order_items')
+          .insert({
+            order_id: co.source_order_id,
+            product_id: item.product_id,
+            variant_id: item.variant_id || null,
+            store_id: co.store_id,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            shipped_quantity: 0,
+            status: 'waiting',
+          })
+          .select('id')
+          .single();
+        if (oiError) throw oiError;
+        orderItemId = inserted.id;
+      }
+
+      const payload: any = {
+        consignment_order_id: orderId,
+        product_id: item.product_id,
+        variant_id: item.variant_id || null,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        unit_cost: item.unit_cost,
+      };
+      if (orderItemId) payload.order_item_id = orderItemId;
+
       const { error } = await (supabase as any)
         .from('consignment_order_items')
-        .insert({
-          consignment_order_id: orderId,
-          product_id: item.product_id,
-          variant_id: item.variant_id || null,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          unit_cost: item.unit_cost,
-        });
+        .insert(payload);
       if (error) throw error;
     },
     {
       successMessage: '品項已新增',
-      invalidateKeys: [['consignment-order-detail']],
+      invalidateKeys: [['consignment-order-detail'], ['admin-orders']],
     }
   );
 
   const removeItemMutation = useSupabaseAction<void, string>(
     async (itemId) => {
+      const { data: item } = await (supabase as any)
+        .from('consignment_order_items')
+        .select('order_item_id')
+        .eq('id', itemId)
+        .single();
+      if (item?.order_item_id) {
+        const { error: oiError } = await (supabase as any)
+          .from('order_items')
+          .delete()
+          .eq('id', item.order_item_id);
+        if (oiError) throw oiError;
+      }
       const { error } = await (supabase as any)
         .from('consignment_order_items')
         .delete()
@@ -198,12 +267,80 @@ export function useConsignment() {
     },
     {
       successMessage: '品項已移除',
-      invalidateKeys: [['consignment-order-detail']],
+      invalidateKeys: [['consignment-order-detail'], ['admin-orders']],
+    }
+  );
+
+  const updateItemMutation = useSupabaseAction<
+    void,
+    {
+      orderId: string;
+      itemId: string;
+      patch: Partial<{ quantity: number; unit_price: number; unit_cost: number }>;
+    }
+  >(
+    async ({ orderId, itemId, patch }) => {
+      const { data: co } = await (supabase as any)
+        .from('consignment_orders')
+        .select('direction, source_order_id')
+        .eq('id', orderId)
+        .single();
+      if (!co) throw new Error('找不到寄賣單');
+
+      const { data: item } = await (supabase as any)
+        .from('consignment_order_items')
+        .select('order_item_id')
+        .eq('id', itemId)
+        .single();
+
+      // 店家寄賣：同步鏡像來源 order_items（草稿尚未出貨，直接覆寫安全）
+      if (co.direction === 'send_to_store' && item?.order_item_id) {
+        const oiPatch: Record<string, number> = {};
+        if (patch.quantity != null) oiPatch.quantity = patch.quantity;
+        if (patch.unit_price != null) oiPatch.unit_price = patch.unit_price;
+        if (Object.keys(oiPatch).length > 0) {
+          const { error: oiError } = await (supabase as any)
+            .from('order_items')
+            .update(oiPatch)
+            .eq('id', item.order_item_id);
+          if (oiError) throw oiError;
+        }
+      }
+
+      const { error } = await (supabase as any)
+        .from('consignment_order_items')
+        .update(patch)
+        .eq('id', itemId);
+      if (error) throw error;
+    },
+    {
+      successMessage: '品項已更新',
+      invalidateKeys: [['consignment-order-detail'], ['admin-orders']],
     }
   );
 
   const cancelOrderMutation = useSupabaseAction<void, string>(
     async (orderId) => {
+      const { data: co } = await (supabase as any)
+        .from('consignment_orders')
+        .select('source_order_id')
+        .eq('id', orderId)
+        .single();
+      if (co?.source_order_id) {
+        const { data: src } = await (supabase as any)
+          .from('orders')
+          .select('status')
+          .eq('id', co.source_order_id)
+          .single();
+        // 草稿鏡像來源訂單：取消即刪除；已出貨的來源訂單保留
+        if (src?.status === 'pending') {
+          const { error: delError } = await (supabase as any)
+            .from('orders')
+            .delete()
+            .eq('id', co.source_order_id);
+          if (delError) throw delError;
+        }
+      }
       const { error } = await (supabase as any)
         .from('consignment_orders')
         .update({ status: 'cancelled' })
@@ -212,7 +349,7 @@ export function useConsignment() {
     },
     {
       successMessage: '寄賣單已取消',
-      invalidateKeys: [['consignment-orders']],
+      invalidateKeys: [['consignment-orders'], ['admin-orders']],
     }
   );
 
@@ -246,8 +383,32 @@ export function useConsignment() {
       return data;
     },
     {
-      successMessage: '已出貨並建立銷貨單',
+      successMessage: '已出貨（店家寄賣，確認售出後才會開立銷貨單）',
       invalidateKeys: [['consignment-orders'], ['consignment-order-detail']],
+    }
+  );
+
+  const reverseShipmentMutation = useSupabaseAction<Record<string, unknown>, { orderId: string; note?: string }>(
+    async ({ orderId, note }) => {
+      const { data, error } = await (supabase as any).rpc('reverse_consignment_shipment', {
+        p_consignment_order_id: orderId,
+        p_created_by: user?.id,
+        p_note: note || null,
+      });
+      if (error) throw error;
+      return data;
+    },
+    {
+      successMessage: '已回滾出貨，品項已放回出貨池',
+      invalidateKeys: [
+        ['consignment-orders'],
+        ['consignment-order-detail'],
+        ['admin-orders'],
+        ['shipping-pool'],
+        ['shipping-pool-items'],
+        ['inventory-list'],
+        ['inventory-movements'],
+      ],
     }
   );
 
@@ -261,8 +422,8 @@ export function useConsignment() {
       return data;
     },
     {
-      successMessage: '銷售回報已審核確認',
-      invalidateKeys: [['consignment-reports'], ['consignment-orders'], ['consignment-order-detail']],
+      successMessage: '銷售回報已審核確認，已依店家開立收款銷貨單',
+      invalidateKeys: [['consignment-reports'], ['consignment-orders'], ['consignment-order-detail'], ['sales-notes'], ['store-sales-notes']],
     }
   );
 
@@ -353,9 +514,11 @@ export function useConsignment() {
     createOrderMutation,
     addItemMutation,
     removeItemMutation,
+    updateItemMutation,
     cancelOrderMutation,
     receiveItemsMutation,
     shipMutation,
+    reverseShipmentMutation,
     confirmReportsMutation,
     rejectReportMutation,
     returnItemsMutation,

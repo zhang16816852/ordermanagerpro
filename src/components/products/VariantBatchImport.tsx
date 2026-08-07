@@ -5,12 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import Papa from 'papaparse';
-import jschardet from 'jschardet';
 import {
   Dialog,
-  DialogContent,
-  DialogHeader,
+  DialogContent, DialogHeader,
   DialogTitle,
   DialogFooter,
   DialogDescription,
@@ -115,7 +112,7 @@ export function VariantBatchImport({ open, onOpenChange }: VariantBatchImportPro
 
     const reader = new FileReader();
 
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const result = event.target?.result;
       if (!(result instanceof ArrayBuffer)) return;
 
@@ -124,6 +121,10 @@ export function VariantBatchImport({ open, onOpenChange }: VariantBatchImportPro
         .map(b => String.fromCharCode(b))
         .join('');
 
+      const [{ default: jschardet }, { default: Papa }] = await Promise.all([
+        import('jschardet'),
+        import('papaparse'),
+      ]);
       const detection = jschardet.detect(binaryString);
       const encoding = detection.encoding || 'UTF-8';
 

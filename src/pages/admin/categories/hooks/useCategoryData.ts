@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
-import Papa from 'papaparse';
 import { Category, CategoryHierarchy } from '../types';
 import { useSpecStore } from '@/store/useSpecStore';
 
@@ -156,6 +155,7 @@ export function useCategoryData() {
     // --- CSV 解析（預覽用，不做 DB 寫入）---
 
     const parseCategoryFile = async (file: File): Promise<{ rows: any[]; categoriesToUpsert: any[]; newHierarchy: any[]; newSpecLinks: any[] }> => {
+        const { default: Papa } = await import('papaparse');
         return new Promise((resolve, reject) => {
             Papa.parse(file, {
                 header: true,
@@ -275,7 +275,7 @@ export function useCategoryData() {
 
     // --- 匯出 CSV（以名稱為主，輔以 ID 備查）---
 
-    const handleCategoryExport = (specDefinitions: any[]) => {
+    const handleCategoryExport = async (specDefinitions: any[]) => {
         // 建立 spec id -> name 的對照表
         const specIdToName = new Map(specDefinitions.map((s: any) => [s.id, s.name]));
         // 建立 category id -> name 的對照表
@@ -303,6 +303,7 @@ export function useCategoryData() {
             };
         });
 
+        const { default: Papa } = await import('papaparse');
         const csv = Papa.unparse(exportData);
         const BOM = '\uFEFF';
         const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
@@ -316,10 +317,11 @@ export function useCategoryData() {
 
     // --- 匯入 CSV（優先以名稱解析，向下相容舊版 ID 欄位）---
 
-    const handleCategoryImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleCategoryImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        const { default: Papa } = await import('papaparse');
         Papa.parse(file, {
             header: true,
             skipEmptyLines: true,

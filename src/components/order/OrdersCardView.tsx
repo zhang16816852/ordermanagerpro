@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Eye, Pencil, Package, Calendar } from 'lucide-react';
+import { Eye, Pencil, Package, Calendar, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { OrderStatusBadge } from './OrderStatusBadge';
@@ -13,6 +13,8 @@ interface OrdersCardViewProps {
     isLoading: boolean;
     onView: (order: Order) => void;
     onEdit: (orderId: string) => void;
+    onReverseShipment?: (order: Order) => void;
+    statusTab?: string;
     getOrderShipmentStatus: (items: OrderItem[]) => string;
     getOrderTotal: (items: OrderItem[]) => number;
 }
@@ -22,6 +24,8 @@ export function OrdersCardView({
     isLoading,
     onView,
     onEdit,
+    onReverseShipment,
+    statusTab,
     getOrderShipmentStatus,
     getOrderTotal,
 }: OrdersCardViewProps) {
@@ -56,6 +60,17 @@ export function OrdersCardView({
                                         <OrderStatusBadge status={itemStatus} type="shipping" />
                                     </div>
                                     <div className="flex gap-1">
+                                        {statusTab === 'shipped' && order.consignment_mode && onReverseShipment && (
+                                            <Button
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-9 w-9 text-destructive"
+                                                title="回滾出貨（放回出貨池）"
+                                                onClick={() => onReverseShipment(order)}
+                                            >
+                                                <RotateCcw className="h-4 w-4" />
+                                            </Button>
+                                        )}
                                         <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => onView(order)}>
                                             <Eye className="h-4 w-4" />
                                         </Button>

@@ -89,7 +89,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
     },
   });
 
-  // Helper functions
+  // 4. Helper functions
   const getPendingQuantity = (item: { id: string; quantity: number; shipped_quantity: number }) => {
     const inPool = shippingPoolMap.get(item.id) || 0;
     return item.quantity - item.shipped_quantity - inPool;

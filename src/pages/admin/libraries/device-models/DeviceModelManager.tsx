@@ -2,8 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { useDeviceModels } from '../../products/hooks/useDeviceModels';
 import { FullDeviceModel as DeviceModel } from '@/types/device-models';
 import { fetchAllRows } from '@/lib/utils';
-import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -118,7 +116,7 @@ export function DeviceModelManager() {
     setIsDialogOpen(true);
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const exportData = models.map(m => ({
       '型號ID': m.id,
       '型號名稱': m.name || '',
@@ -133,6 +131,7 @@ export function DeviceModelManager() {
       '啟用': m.is_active !== false ? '是' : '否'
     }));
 
+    const XLSX = await import('xlsx');
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     // 隱藏第一欄 (型號ID)
     worksheet['!cols'] = [{ hidden: true }];
@@ -177,6 +176,7 @@ export function DeviceModelManager() {
         reader.readAsArrayBuffer(file);
       });
 
+      const XLSX = await import('xlsx');
       const workbook = XLSX.read(result, { type: 'array' });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];

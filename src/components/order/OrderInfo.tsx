@@ -39,7 +39,7 @@ export function OrderInfo({ orderId, storeName, createdAt, sourceType, notes, co
                     <div>
                         <span className="text-muted-foreground mr-2">來源：</span>
                         <span>
-                            {sourceType === 'frontend' ? '前台訂單' : '後台代訂'}
+                            {sourceType === 'frontend' ? '前台訂單' : sourceType === 'consignment' ? '寄賣訂單' : '後台代訂'}
                         </span>
                     </div>
                 )}

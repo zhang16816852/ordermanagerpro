@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Download, FileText, FileSpreadsheet } from 'lucide-react';
-import * as xlsx from 'xlsx';
 import { exportToCSV } from '@/lib/exportUtils';
 import { SupplierProductMapping } from '../../hooks/useSupplierMappings';
 import {
@@ -24,7 +23,7 @@ export function MappingExportDialog({
 }: MappingExportDialogProps) {
   const [format, setFormat] = useState<'csv' | 'excel'>('csv');
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const data = mappings.map(m => ({
       '類型': m.internal_variant_id ? '變體' : '產品',
       '內部SKU': m.internal_variant?.sku || m.internal_product?.code || '',
@@ -38,8 +37,9 @@ export function MappingExportDialog({
     const filename = `產品對照_${supplierName}`;
 
     if (format === 'csv') {
-      exportToCSV(data, filename);
+      await exportToCSV(data, filename);
     } else {
+      const xlsx = await import('xlsx');
       const ws = xlsx.utils.json_to_sheet(data);
       const wb = xlsx.utils.book_new();
       xlsx.utils.book_append_sheet(wb, ws, '產品對照');

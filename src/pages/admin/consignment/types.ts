@@ -22,6 +22,9 @@ export interface ConsignmentOrder {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  source_order_id?: string | null;
+  received_at?: string | null;
+  received_by?: string | null;
   supplier?: { id: string; name: string } | null;
   store?: { id: string; name: string } | null;
 }
@@ -34,6 +37,7 @@ export interface ConsignmentOrderItem {
   quantity: number;
   unit_price: number;
   unit_cost: number;
+  order_item_id?: string | null;
   product?: { id: string; name: string; code: string };
   variant?: { id: string; name: string; sku: string };
 }

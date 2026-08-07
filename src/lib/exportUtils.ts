@@ -1,13 +1,12 @@
-import Papa from 'papaparse';
-import html2pdf from 'html2pdf.js';
-
 /**
  * 匯出資料為 CSV 檔案
  * @param data 資料陣列
  * @param filename 檔案名稱 (不含副檔名)
  */
-export function exportToCSV(data: any[], filename: string = 'export') {
+export async function exportToCSV(data: any[], filename: string = 'export') {
     if (!data || data.length === 0) return;
+
+    const { default: Papa } = await import('papaparse');
 
     // 轉換為 CSV 字串
     const csv = Papa.unparse(data);
@@ -48,6 +47,7 @@ export async function exportToPDF(elementId: string, filename: string = 'report'
     };
 
     try {
+        const { default: html2pdf } = await import('html2pdf.js');
         await html2pdf().set(options).from(element).save();
     } catch (error) {
         console.error('PDF Export Error:', error);

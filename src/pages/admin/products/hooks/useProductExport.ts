@@ -3,7 +3,6 @@ import { useSpecStore } from '@/store/useSpecStore';
 import { generateProductExcel } from '@/utils/excelUtils';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
-import * as XLSX from 'xlsx';
 import { ProductWithPricing } from '@/types/product';
 
 export async function handleBatchExport(
@@ -34,7 +33,8 @@ export async function handleBatchExport(
     }
 
     try {
-        const workbook = generateProductExcel(selected, categoriesData || [], defs, specLinks || [], brandMap);
+        const workbook = await generateProductExcel(selected, categoriesData || [], defs, specLinks || [], brandMap);
+        const XLSX = await import('xlsx');
         const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 

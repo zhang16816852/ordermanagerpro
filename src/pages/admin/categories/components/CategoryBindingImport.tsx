@@ -9,7 +9,6 @@ import {
 import { ImportPreviewDialog, ImportColumn } from '@/components/shared/ImportPreviewDialog';
 import { Upload, Download, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import Papa from 'papaparse';
 import { useCategoryBindings, ImportBindingRow } from '../hooks/useCategoryBindings';
 
 interface CategoryBindingImportProps {
@@ -49,12 +48,16 @@ export function CategoryBindingImport({
       setPreviewError(null);
 
       const result = await new Promise<any[]>((resolve, reject) => {
-        Papa.parse(file, {
-          header: true,
-          skipEmptyLines: true,
-          complete: (results) => resolve(results.data as any[]),
-          error: (err) => reject(err),
-        });
+        const parse = async () => {
+          const { default: Papa } = await import('papaparse');
+          Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => resolve(results.data as any[]),
+            error: (err) => reject(err),
+          });
+        };
+        void parse();
       });
 
       if (result.length === 0) {
@@ -157,12 +160,13 @@ export function CategoryBindingImport({
   };
 
   // 匯出 CSV 範本
-  const handleExportTemplate = () => {
+  const handleExportTemplate = async () => {
     const template = [
       { product_code: 'IMOS_GLA_CN', variant_sku: '', category_path: '玻璃保護貼/康寧系列' },
       { product_code: 'IMOS_GLA_CN', variant_sku: 'IMOS_GLA_CN_18P_25D', category_path: '玻璃保護貼/康寧系列' },
     ];
 
+    const { default: Papa } = await import('papaparse');
     const csv = Papa.unparse(template);
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');

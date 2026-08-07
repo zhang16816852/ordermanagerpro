@@ -102,9 +102,9 @@ export function OrderGridTemplateList({
     return map;
   }, [products]);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const selected = templates.filter((t) => selectedIds.has(t.id));
-    exportTemplatesToExcel(selected, variantLookup);
+    await exportTemplatesToExcel(selected, variantLookup);
     toast.success(`已匯出 ${selected.length} 個範本`);
   };
 
@@ -112,9 +112,9 @@ export function OrderGridTemplateList({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       const buf = evt.target?.result as ArrayBuffer;
-      const result = parseTemplateExcel(buf, existingIds);
+      const result = await parseTemplateExcel(buf, existingIds);
       if (result.errors.length > 0) {
         toast.error(`解析失敗：${result.errors[0]}`);
         return;

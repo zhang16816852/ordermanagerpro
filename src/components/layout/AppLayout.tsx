@@ -180,8 +180,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     { title: '我的訂單', href: '/orders', icon: ClipboardList },
     { title: '維修管理', href: '/dashboard/repair-orders', icon: Wrench },
     { title: '媒合市場', href: '/market', icon: ShoppingBag },
-    { title: '銷貨單', href: '/sales-notes', icon: FileText },
-    { title: '寄賣銷售', href: '/consignment-sales', icon: Package },
+    { title: '寄賣/銷貨', href: '/sales-notes', icon: Package },
     { title: '會計報表', href: '/accounting', icon: FileText },
     { title: '團隊管理', href: '/team', icon: Users },
   ];

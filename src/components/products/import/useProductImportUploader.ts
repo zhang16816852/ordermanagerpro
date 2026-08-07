@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { serializeSpecs, deserializeSpecs } from '@/utils/specLogic';
 import { entityRelationService } from '@/services/entityRelationService';
+import { SyncManager } from '@/services/syncManager';
 import { ImportRow } from './useProductImport';
 
 export function useProductImportUploader(
@@ -26,7 +27,6 @@ export function useProductImportUploader(
             setProcessedCount(0);
             setSkippedCount(0);
 
-            const { SyncManager } = await import('@/services/syncManager');
             await SyncManager.performGlobalDataSync(true);
 
             const validRows = importData.filter(r => r.isValid);

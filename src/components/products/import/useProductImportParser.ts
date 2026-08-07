@@ -1,7 +1,5 @@
 import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import Papa from 'papaparse';
-import jschardet from 'jschardet';
 import { parseProductExcel } from '@/utils/excelUtils';
 import { ImportRow } from './useProductImport';
 
@@ -96,7 +94,7 @@ export function useProductImportParser(
             reader.readAsArrayBuffer(file);
         });
 
-        const { rows: parsedRows, presentColumns } = parseProductExcel(result);
+        const { rows: parsedRows, presentColumns } = await parseProductExcel(result);
         if (parsedRows.length === 0) return [];
 
         const has = (key: string) => presentColumns.has(key);

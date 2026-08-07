@@ -1,5 +1,3 @@
-import * as XLSX from 'xlsx';
-
 const BASE_COLUMNS = {
     'ID': 'id',
     '產品類型': 'is_variant',
@@ -13,12 +11,15 @@ const BASE_COLUMNS = {
     '適用型號': 'device_models',
     '批發價': 'wholesale_price',
     '零售價': 'retail_price',
+    '狀態': 'status',
+    '條碼': 'barcode',
     '分類': 'category',
 } as const;
 
 type BaseColumnKey = keyof typeof BASE_COLUMNS;
 
-export function parseProductExcel(buffer: ArrayBuffer): { rows: any[]; presentColumns: Set<string> } {
+export async function parseProductExcel(buffer: ArrayBuffer): Promise<{ rows: any[]; presentColumns: Set<string> }> {
+    const XLSX = await import('xlsx');
     const workbook = XLSX.read(buffer, { type: 'array' });
     const allData: any[] = [];
     const presentColumns = new Set<string>();

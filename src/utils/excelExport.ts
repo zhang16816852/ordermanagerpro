@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import { CategorySpec } from '@/hooks/useCategorySpecs';
 import { formatSpecValue } from './specLogic';
 
@@ -22,7 +21,7 @@ export const BASE_COLUMNS = {
 
 export type BaseColumnKey = keyof typeof BASE_COLUMNS;
 
-export function generateProductExcel(
+export async function generateProductExcel(
     products: any[],
     categories: any[],
     specDefs: any[],
@@ -30,6 +29,19 @@ export function generateProductExcel(
     brandMap: Record<string, string> = {},
     seriesMap: Record<string, string> = {}
 ) {
+    const workbook = await createWorkbook(products, categories, specDefs, specLinks, brandMap, seriesMap);
+    return workbook;
+}
+
+async function createWorkbook(
+    products: any[],
+    categories: any[],
+    specDefs: any[],
+    specLinks: any[] = [],
+    brandMap: Record<string, string> = {},
+    seriesMap: Record<string, string> = {}
+) {
+    const XLSX = await import('xlsx');
     const workbook = XLSX.utils.book_new();
 
     const specMap = new Map<string, CategorySpec>();

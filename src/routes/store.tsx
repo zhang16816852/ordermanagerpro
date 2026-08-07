@@ -1,3 +1,4 @@
+import { Navigate } from "react-router-dom";
 import StoreDashboard from "@/pages/store/Dashboard";
 import StoreOrderList from "@/pages/store/StoreOrderList";
 import StoreCatalog from "@/pages/store/Catalog";
@@ -15,7 +16,6 @@ import StoreRepairOrders from "@/pages/store/repair-orders/index";
 import StoreRepairOrderNew from "@/pages/store/repair-orders/new";
 import StoreRepairOrderEdit from "@/pages/store/repair-orders/new";
 import StoreRepairOrderDetail from "@/pages/store/repair-orders/detail";
-import StoreConsignmentSales from "@/pages/store/ConsignmentSales";
 export const storeRoutes = [
     { path: "/dashboard", element: <StoreDashboard /> },
     { path: "/orders", element: <StoreOrderList /> },
@@ -23,7 +23,7 @@ export const storeRoutes = [
     { path: "/orders/:orderId/edit", element: <StoreOrderEdit /> },
     { path: "/catalog", element: <StoreCatalog /> },
     { path: "/sales-notes", element: <StoreSalesNotes /> },
-    { path: "/consignment-sales", element: <StoreConsignmentSales /> },
+    { path: "/consignment-sales", element: <Navigate to="/sales-notes" replace /> },
     { path: "/receiving", element: <StoreReceiving /> },
     { path: "/team", element: <StoreTeam /> },
     { path: "/audit", element: <StoreAudit /> },

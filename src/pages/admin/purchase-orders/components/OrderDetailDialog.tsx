@@ -25,7 +25,6 @@ import { ReceiveForm } from './ReceiveForm';
 import { PaymentForm } from './PaymentForm';
 import { ExcelImportDialog } from './ExcelImportDialog';
 import { exportToCSV } from '@/lib/exportUtils';
-import * as xlsx from 'xlsx';
 
 
 interface OrderDetailDialogProps {
@@ -63,7 +62,7 @@ export function OrderDetailDialog({
 
   const getMappingKey = (item: PurchaseOrderItem) => `${item.product_id}_${item.variant_id || 'null'}`;
 
-  const handleExportCSV = () => {
+  const handleExportCSV = async () => {
     const data = orderItems.map(item => {
       const mapping = supplierMappingMap[getMappingKey(item)];
       return {
@@ -79,10 +78,10 @@ export function OrderDetailDialog({
         '來源訂單': (item.source_order_ids || []).map(id => sourceOrderMap[id] || id.slice(0, 8)).join(', '),
       };
     });
-    exportToCSV(data, `採購單_${order.id.slice(0, 8)}`);
+    await exportToCSV(data, `採購單_${order.id.slice(0, 8)}`);
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     const data = orderItems.map(item => {
       const mapping = supplierMappingMap[getMappingKey(item)];
       return {
@@ -98,6 +97,7 @@ export function OrderDetailDialog({
         '來源訂單': (item.source_order_ids || []).map(id => sourceOrderMap[id] || id.slice(0, 8)).join(', '),
       };
     });
+      const xlsx = await import('xlsx');
     const ws = xlsx.utils.json_to_sheet(data);
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, '採購單');

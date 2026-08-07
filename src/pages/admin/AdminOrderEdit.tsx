@@ -319,7 +319,7 @@ export default function AdminOrderEdit() {
               </div>
               <div>
                 <span className="text-muted-foreground">來源：</span>
-                <span>{order.source_type === 'frontend' ? '前台' : '後台'}</span>
+                <span>{order.source_type === 'frontend' ? '前台' : order.source_type === 'consignment' ? '寄賣' : '後台'}</span>
               </div>
             </div>
           </CardContent>

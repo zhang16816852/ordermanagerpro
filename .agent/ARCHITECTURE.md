@@ -102,20 +102,29 @@ App 掛載 → CacheService.init() 完成前顯示「載入中...」
 - **整單寄賣模式**（v1.1）：`AdminOrderForm.tsx` 建立訂單時可切換「寄賣模式」Switch → 送 `create_order_with_sales_note(p_consignment_mode)` 或 pending insert 帶 `orders.consignment_mode=true`；出貨（pool / direct ship / 下單即出貨）時 DB 端 `create_consignment_shipment_layer` 自動建 send_to_store 寄賣單
   - `ShippingPool.tsx`：查詢帶 `order:orders(code, consignment_mode)`，寄賣品項出貨 Dialog 不顯示倉/來源選擇（固定 store_consignment）
   - 訂單列表/明細顯示「寄賣」Badge（`OrderTableView.tsx`、`OrdersCardView.tsx`、`OrderInfo.tsx`）
+- **出貨池逐項轉寄賣**（v1.2）：`ShippingPool.tsx` 出貨 Dialog 新增「寄賣」Switch（僅一般訂單品項）→ 逐項組 `p_consignment_override_map` 傳 `ship_from_pool`（DB 依此建 store_consignment 層）；同時將「出貨倉/庫存來源」兩欄合併為單一「出貨來源」欄（自有倉＋供應商寄賣 FIFO，批次查 product_inventory 顯示庫存）。`AdminOrderCheckout.tsx`（經 `OrderReviewPanel`）也加寄賣 Switch → 送 `p_consignment_mode` 並隱藏逐列倉/來源選擇器
+- **寄賣出貨不開銷貨單**（v1.3）：寄賣品項出貨（pool / direct ship / 下單即出貨 / 獨立寄賣單）一律不建立 sales_note；店家端「確認收貨」後回報銷售、後台審核確認才開立 `sales_notes`(status='received') 收款單。前端呼叫皆為 7 named args（`direct_ship_order` / `create_order_with_sales_note` 唯一簽名）：`AdminOrderCheckout.tsx`、`AdminOrderForm.tsx`（新增 `consignmentMode` Switch、按模式切換按鈕/toast/共享連結）、`OrderListPage.tsx`、`ShippingPool.tsx`（出貨成功 toast 依回傳 `sales_note_id` 顯示寄賣語意）
+- **寄賣草稿＝真實來源訂單**（v1.4）：send_to_store 寄賣單一建立即同步建來源 `orders`（pending / `source_type='consignment'` / `consignment_mode=true`）與 `order_items`（waiting），回填 `consignment_orders.source_order_id` + `consignment_order_items.order_item_id`；「所有訂單」（`useOrdersList.tsx`）因此直接列出真實草稿訂單——可勾選、批次操作（確認/轉出貨池）、編輯、商品模式看數量，無需再在前端假列合併（先前 `isConsignmentDraft` 假列方案已移除）。出貨由 `create_consignment_shipment_layer`/`create_consignment_shipment` 重用既有來源 order/items。`useConsignment.ts` 的 createOrder/addItem/removeItem/cancelOrder 皆同步鏡像並 invalidate `['admin-orders']`；AdminOrderForm/AdminOrderEdit 來源顯示補「寄賣」
+
+- **出貨回滾＋draft 品項編輯**（v1.5）：DB 端 `reverse_consignment_shipment` RPC（見 DATABASE.md）整單回滾 send_to_store 出貨；前端兩入口：
+  - 寄賣頁 `OrderDetailDialog.tsx`：`action === 'reverse'` → `ReverseDialog`（確認＋備註，呼叫 `reverseShipmentMutation`，destructive 樣式）；`action === 'edit'` → `EditItemsDialog`（draft 單品項數量/價格可編輯、Trash 刪除既有品項、Plus 加入品項列選商品/規格，儲存時依序 `updateItemMutation`/`addItemMutation`/`removeItemMutation` 並 toast「品項已更新」）。按鈕顯示條件：回滾出貨＝`!isSupplier && active && !received_at`；編輯品項＝draft
+  - 「所有訂單」`OrderTableView.tsx`：`statusTab === 'shipped' && order.consignment_mode` 顯示 RotateCcw 圖示 → `OrderListPage.tsx` `handleReverseShipment` 先查 `consignment_orders`（`source_order_id`＋`send_to_store`＋`active`）→ `Reverse Consignment Shipment Dialog`（備註＋確認）呼叫 RPC，成功 invalidate admin-orders/consignment/shipping-pool/inventory-*
+- **`BatchActionBar` 批次列修正**（v1.5）：`OrderListPage.tsx` 計算 `hasConsignmentSelection`/`hasNormalSelection`/`allSelectedConsignment` 三旗標傳入；processing tab「轉銷貨單」「轉寄賣」僅 `hasNormalSelection` 顯示、「寄賣出貨」（沿用 `onDirectShipOrders` → `direct_ship_order` RPC，寄賣單出貨不開銷貨單）僅 `hasConsignmentSelection` 顯示、混合選取時兩組之間加 `w-px` 分隔線、「轉出貨池」恆顯示；`DirectShipDialog` 於 `allSelectedConsignment` 時標題「寄賣出貨」、描述改寄賣語意、確認鈕「確認寄賣出貨」；`directShipMutation` 成功 toast 依選取是否全為寄賣改顯示「已寄賣出貨 N 個訂單」
 
 ## 7b. 寄賣系統 v1（前端）
 
 - **後台 `/admin/consignment`**（`src/pages/admin/consignment/`）：
   - `index.tsx`：Tabs（寄賣單 / 銷售回報審核，審核 tab 帶 pending 數 badge）
-  - `hooks/useConsignment.ts`：資料 queries（suppliers/stores/products/orders/pendingReports/accounts/warehouses）+ `useOrderDetail`（內嵌查 items + summary + settlements + sales）+ mutations（createOrder / addItem / removeItem / cancelOrder / receiveItems / ship / confirmReports / rejectReport / returnItems / settle），全部用 `useSupabaseAction`（自動 toast + invalidate）
-  - `components/`：`OrderListTab.tsx`、`CreateOrderDialog.tsx`、`OrderDetailDialog.tsx`（內嵌 Receive/Ship/Return/Settle 四 Dialog）、`ReportsTab.tsx`
+  - `hooks/useConsignment.ts`：資料 queries（suppliers/stores/products/orders/pendingReports/accounts/warehouses）+ `useOrderDetail`（內嵌查 items + summary + settlements + sales）+ mutations（createOrder / addItem / removeItem / cancelOrder / receiveItems / ship / confirmReports / rejectReport / returnItems / settle / updateItem / reverseShipment），全部用 `useSupabaseAction`（自動 toast + invalidate）。`invalidateAll` 已納入 `['shipping-pool']`/`['shipping-pool-items']`；`updateItemMutation`（send_to_store 且 `order_item_id` 存在時同步鏡像 `order_items.quantity/unit_price`）、`reverseShipmentMutation`（rpc `reverse_consignment_shipment`，invalidate consignment/admin-orders/shipping-pool/inventory-*）
+  - `components/`：`OrderListTab.tsx`、`CreateOrderDialog.tsx`、`OrderDetailDialog.tsx`（內嵌 Receive/Ship/Return/Settle/Reverse/Edit 六 Dialog）、`ReportsTab.tsx`
   - 建立流程兩步：insert 表頭（`code='TMP'`，trigger 產 `CS-YYMMDD-XXXXX`）→ 逐筆 addItem；方向 `receive_from_supplier` 選供應商、`send_to_store` 選門市
   - 明細數量/金額以 view `consignment_order_item_summary` 為準；退回/回報上限 = `remaining_quantity`
-- **門市端 `/consignment-sales`**（`src/pages/store/ConsignmentSales.tsx`）：用 `useAuth` 取得 `storeId`，查 direction=send_to_store 的 active 訂單 + items + summary，Dialog 填數量/實際售價（空=建議售價）/備註 → `report_consignment_sale` RPC
+  - v1.3：出貨訊息改「已出貨（店家寄賣…）」、審核成功提示「已依店家開立收款銷貨單」、`OrderDetailDialog` ShipDialog 說明改「不開立銷貨單」、send_to_store 單已收貨時顯示綠色收貨橫幅（received_at）
+- **門市端 `/sales-notes`**（`src/pages/store/SalesNotes.tsx`，v1.3 起為母頁）：Tabs（`?tab=consignment` 寄賣銷售回報 / `?tab=sales-notes` 銷貨單確認收貨）。寄賣 tab 查 direction=send_to_store active 單 + items + summary，Dialog 填數量/實際售價/備註 → `report_consignment_sale` RPC；銷貨單 tab 為原列表＋確認收貨 Dialog。`/consignment-sales` 舊路由改 `<Navigate to="/sales-notes" replace />`；sidebar 合併為單一「寄賣/銷貨」入口；`ConsignmentSales.tsx` 已刪除
 - **逐項庫存來源選擇**（`inventory_source_type`）：
-  - `src/components/order/OrderReviewPanel.tsx`：新增 optional props `itemSources` / `onItemSourceChange`，SortableRow 加來源 Select（self / 供應商寄賣）
-  - `src/pages/admin/ShippingPool.tsx`：出貨 Dialog 逐項選來源，組 `p_source_map` 傳 `ship_from_pool`
-  - `src/pages/admin/AdminOrderForm.tsx` / `AdminOrderCheckout.tsx`：`itemSources` state，payload 帶 `inventory_source_type`、`direct_ship_order` 組 `p_source_map`
+  - `src/components/order/OrderReviewPanel.tsx`：optional props `itemSources` / `onItemSourceChange`，SortableRow 加來源 Select（self / 供應商寄賣）；另支援 `consignmentMode` / `onConsignmentModeChange`（寄賣時隱藏逐列倉/來源、改顯示「店家寄賣」）
+  - `src/pages/admin/ShippingPool.tsx`：出貨 Dialog 合併為單一「出貨來源」欄（自有倉／供應商寄賣 FIFO），組 `p_source_map` + `p_consignment_override_map` 傳 `ship_from_pool`
+  - `src/pages/admin/AdminOrderForm.tsx` / `AdminOrderCheckout.tsx`：`itemSources` state，payload 帶 `inventory_source_type`、`direct_ship_order` 組 `p_source_map`；寄賣模式訂單隱藏來源選擇
 
 ## 8. 組件架構重點
 

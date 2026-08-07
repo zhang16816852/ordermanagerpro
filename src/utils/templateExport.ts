@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import type { OrderGridTemplateWithProducts, DimensionConfig } from '@/types/order-grid';
 
 export interface VariantLookup {
@@ -19,10 +18,11 @@ function dimConfigToCols(config: DimensionConfig, prefix: string): Record<string
   };
 }
 
-export function exportTemplatesToExcel(
+export async function exportTemplatesToExcel(
   templates: OrderGridTemplateWithProducts[],
   variantLookup: Map<string, VariantLookup>,
-): void {
+): Promise<void> {
+  const XLSX = await import('xlsx');
   const rows: Record<string, string>[] = [];
 
   for (const t of templates) {

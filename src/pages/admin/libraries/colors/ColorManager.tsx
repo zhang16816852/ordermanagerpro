@@ -9,7 +9,6 @@ import { getContrastColor } from '@/utils/colorUtils';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import * as XLSX from 'xlsx';
 import { Download, Upload } from 'lucide-react';
 
 export function ColorManager() {
@@ -68,7 +67,7 @@ export function ColorManager() {
     }
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     try {
       const data = colors.map(c => ({
         'uuid': c.id,
@@ -79,6 +78,7 @@ export function ColorManager() {
         '啟用': c.is_active !== false ? '是' : '否'
       }));
       
+      const XLSX = await import('xlsx');
       const ws = XLSX.utils.json_to_sheet(data);
       ws['!cols'] = [{ hidden: true }, ...(ws['!cols']?.slice(1) ?? [])];
       const wb = XLSX.utils.book_new();
@@ -98,6 +98,7 @@ export function ColorManager() {
     reader.onload = async (evt) => {
       try {
         const bstr = evt.target?.result;
+        const XLSX = await import('xlsx');
         const wb = XLSX.read(bstr, { type: 'binary' });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];

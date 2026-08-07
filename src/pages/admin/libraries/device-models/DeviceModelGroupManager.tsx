@@ -20,7 +20,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
-import Papa from 'papaparse';
 import { Download, Upload, FileUp } from 'lucide-react';
 import { useRef } from 'react';
 
@@ -111,6 +110,7 @@ export function DeviceModelGroupManager({ search = '', typeFilter = 'all' }: Dev
         '適用型號': g.models.join(', ')
       }));
 
+      const { default: Papa } = await import('papaparse');
       const csv = Papa.unparse(exportData);
       const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
@@ -129,6 +129,7 @@ export function DeviceModelGroupManager({ search = '', typeFilter = 'all' }: Dev
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const { default: Papa } = await import('papaparse');
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,

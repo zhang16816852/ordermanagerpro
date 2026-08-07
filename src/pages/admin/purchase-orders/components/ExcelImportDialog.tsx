@@ -1,5 +1,4 @@
 import { useState, useRef } from 'react';
-import * as xlsx from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useSupplierMappings } from '../hooks/useSupplierMappings';
@@ -46,7 +45,8 @@ export function ExcelImportDialog({ supplierId, supplierName, onImport, isLoadin
     }
     
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
+      const xlsx = await import('xlsx');
       const data = new Uint8Array(e.target?.result as ArrayBuffer);
       const workbook = xlsx.read(data, { type: 'array' });
       const sheetName = workbook.SheetNames[0];

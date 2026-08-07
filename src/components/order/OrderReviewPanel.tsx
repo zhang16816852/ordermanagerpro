@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -33,6 +34,8 @@ interface OrderReviewPanelProps {
   onItemWarehouseChange?: (itemId: string, warehouseId: string) => void;
   itemSources?: Record<string, string>;
   onItemSourceChange?: (itemId: string, source: string) => void;
+  consignmentMode?: boolean;
+  onConsignmentModeChange?: (checked: boolean) => void;
   onItemsChange: (items: OrderDraftItem[]) => void;
   onNotesChange: (notes: string) => void;
   onPriceSyncMapChange: (map: Record<string, boolean>) => void;
@@ -48,6 +51,7 @@ function SortableRow({
   onWarehouseChange,
   source,
   onSourceChange,
+  consignmentMode,
   onTabNav,
   onPriceSyncChange,
   onPriceChange,
@@ -60,6 +64,7 @@ function SortableRow({
   onWarehouseChange?: (wid: string) => void;
   source?: string;
   onSourceChange?: (source: string) => void;
+  consignmentMode?: boolean;
   onTabNav: (e: React.KeyboardEvent<HTMLInputElement>, row: number, col: "qty" | "price") => void;
   onPriceSyncChange: (checked: boolean) => void;
   onPriceChange: (price: number) => void;
@@ -122,26 +127,34 @@ function SortableRow({
       <TableCell className="w-12 text-center">
         <Checkbox checked={priceSync} onCheckedChange={(v) => onPriceSyncChange(!!v)} />
       </TableCell>
-      <TableCell className="w-36">
-        <WarehouseSelector
-          value={warehouseId}
-          onChange={(wid) => onWarehouseChange?.(wid)}
-          productId={item.productId}
-          variantId={item.variantId}
-        />
-      </TableCell>
-      {onSourceChange && (
-        <TableCell className="w-32">
-          <Select value={source || "self"} onValueChange={onSourceChange}>
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="self">自有庫存</SelectItem>
-              <SelectItem value="supplier_consignment">供應商寄賣</SelectItem>
-            </SelectContent>
-          </Select>
+      {consignmentMode ? (
+        <TableCell className="w-36 text-center">
+          <span className="text-xs text-muted-foreground">店家寄賣</span>
         </TableCell>
+      ) : (
+        <>
+          <TableCell className="w-36">
+            <WarehouseSelector
+              value={warehouseId}
+              onChange={(wid) => onWarehouseChange?.(wid)}
+              productId={item.productId}
+              variantId={item.variantId}
+            />
+          </TableCell>
+          {onSourceChange && (
+            <TableCell className="w-32">
+              <Select value={source || "self"} onValueChange={onSourceChange}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="self">自有庫存</SelectItem>
+                  <SelectItem value="supplier_consignment">供應商寄賣</SelectItem>
+                </SelectContent>
+              </Select>
+            </TableCell>
+          )}
+        </>
       )}
     </TableRow>
   );
@@ -158,6 +171,8 @@ export default function OrderReviewPanel({
   onItemWarehouseChange,
   itemSources,
   onItemSourceChange,
+  consignmentMode,
+  onConsignmentModeChange,
   onItemsChange,
   onNotesChange,
   onPriceSyncMapChange,
@@ -281,8 +296,14 @@ export default function OrderReviewPanel({
                   <TableHead className="w-28 text-right">單價</TableHead>
                   <TableHead className="w-28 text-right">小計</TableHead>
                   <TableHead className="w-12 text-center text-xs">存為店價</TableHead>
-                  <TableHead className="w-36 text-center text-xs">出貨倉庫</TableHead>
-                  {onItemSourceChange && <TableHead className="w-32 text-center text-xs">庫存來源</TableHead>}
+                  {consignmentMode ? (
+                    <TableHead className="w-36 text-center text-xs">出貨方式</TableHead>
+                  ) : (
+                    <>
+                      <TableHead className="w-36 text-center text-xs">出貨倉庫</TableHead>
+                      {onItemSourceChange && <TableHead className="w-32 text-center text-xs">庫存來源</TableHead>}
+                    </>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -296,6 +317,7 @@ export default function OrderReviewPanel({
                     onWarehouseChange={(wid) => onItemWarehouseChange?.(item.id, wid)}
                     source={itemSources?.[item.id]}
                     onSourceChange={onItemSourceChange ? (v) => onItemSourceChange(item.id, v) : undefined}
+                    consignmentMode={consignmentMode}
                     onTabNav={handleTabNav}
                     onPriceSyncChange={(v) => handlePriceSyncChange(item.id, v)}
                     onPriceChange={(v) => handlePriceChange(item.id, v)}
@@ -374,6 +396,18 @@ export default function OrderReviewPanel({
           rows={3}
         />
       </div>
+
+      {onConsignmentModeChange && (
+        <div className="flex items-center justify-between rounded-lg border p-3">
+          <div className="space-y-0.5">
+            <div className="text-sm font-medium">寄賣模式</div>
+            <div className="text-xs text-muted-foreground">
+              訂單出貨時以店家寄賣方式轉出，不扣自有庫存
+            </div>
+          </div>
+          <Switch checked={!!consignmentMode} onCheckedChange={onConsignmentModeChange} />
+        </div>
+      )}
 
       <div className="flex items-center justify-between text-lg font-bold border-t pt-4">
         <span>總計 <span className="text-base font-normal text-muted-foreground">（{totalQuantity} 件）</span></span>

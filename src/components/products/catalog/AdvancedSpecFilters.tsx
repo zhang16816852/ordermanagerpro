@@ -2,7 +2,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { formatSpecValue } from "@/utils/specLogic";
 import { useEffect } from "react";
 import { useSpecStore } from "@/store/useSpecStore";
 
@@ -92,34 +91,6 @@ export function AdvancedSpecFilters({
             fetchSpecs();
         }
     }, [fetchSpecs, specMap.size]);
-
-    useEffect(() => {
-        const readableLogs = Object.entries(selectedSpecs).reduce((acc, [key, values]) => {
-            const parts = key.split(':');
-            const parentId = parts[0];
-            const specId = parts.length >= 2 ? parts[1] : key;
-
-            let pathName = "";
-            if (key.startsWith('core:')) {
-                pathName = `規格 > ${specId}`;
-            } else {
-                // 優先從 specFields 找，找不到再從全域 specMap 找
-                const specDef = specFields.find(f => f.id === specId) || specMap.get(specId);
-                const parentDef = specFields.find(f => f.id === parentId) || specMap.get(parentId);
-                
-                const parentName = parentDef ? parentDef.name : (parentId === 'root' ? '根層級' : '父層級');
-                const specName = specDef ? specDef.name : specId;
-                pathName = `${parentName} > ${specName}`;
-            }
-
-            acc[pathName] = values;
-            return acc;
-        }, {} as Record<string, string[]>);
-
-        if (Object.keys(selectedSpecs).length > 0) {
-            // TODO: apply spec filters
-        }
-    }, [selectedSpecs, specFields, specMap]); // 當 specMap 載入後，Console 也會更新
 
     const specEntries = Object.entries(availableSpecs);
 

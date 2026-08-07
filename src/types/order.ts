@@ -4,7 +4,7 @@ type Tables<T extends keyof Database['public']['Tables']> = Database['public']['
 
 export type OrderStatus = 'pending' | 'processing' | 'shipped';
 export type OrderItemStatus = 'waiting' | 'partial' | 'shipped' | 'out_of_stock' | 'discontinued' | 'cancelled';
-export type OrderSourceType = 'frontend' | 'admin_proxy';
+export type OrderSourceType = 'frontend' | 'admin_proxy' | 'consignment';
 
 export interface OrderItem {
     id: string;

@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { formatSpecValue } from '@/utils/specLogic';
 import { generateProductExcel } from '@/utils/excelUtils';
-import * as XLSX from 'xlsx';
 import { useDeviceModelStore } from '@/store/useDeviceModelStore';
 import { useSpecStore } from '@/store/useSpecStore';
 import { useBrandSeriesCache } from '@/hooks/useBrandSeriesCache';
@@ -151,10 +150,11 @@ export function useProductImport(onSuccess: () => void) {
         return categoryMatch && statusMatch;
     });
 
-    const downloadTemplate = useCallback(() => {
+    const downloadTemplate = useCallback(async () => {
         const { categoryLinks } = useSpecStore.getState();
         const brandMap = Object.fromEntries(allBrands.map(b => [b.id, b.name]));
-        const workbook = generateProductExcel([], categories, specDefs, categoryLinks, brandMap, seriesMap);
+        const workbook = await generateProductExcel([], categories, specDefs, categoryLinks, brandMap, seriesMap);
+        const XLSX = await import('xlsx');
         const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
         const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = URL.createObjectURL(data);

@@ -4,6 +4,7 @@ import {
   ConsignmentOrder,
   ConsignmentOrderItem,
   ConsignmentOrderItemSummary,
+  NewConsignmentItem,
 } from '../types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +33,10 @@ import {
   Undo2,
   Wallet,
   Ban,
+  Pencil,
+  RotateCcw,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 
 interface OrderDetailDialogProps {
@@ -39,7 +44,7 @@ interface OrderDetailDialogProps {
   onClose: () => void;
 }
 
-type ActionType = 'receive' | 'ship' | 'return' | 'settle';
+type ActionType = 'receive' | 'ship' | 'return' | 'settle' | 'reverse' | 'edit';
 
 export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
   const { useOrderDetail, accounts, cancelOrderMutation, warehouses } = useConsignment();
@@ -96,6 +101,11 @@ export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
         </DialogHeader>
 
         <div className="space-y-6">
+          {!isSupplier && order.received_at && (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+              店家已於 {new Date(order.received_at).toLocaleString('zh-TW')} 確認收貨，可進行銷售回報。
+            </div>
+          )}
           {/* 品項表 */}
           <div className="border rounded-md overflow-x-auto">
             <table className="w-full text-sm">
@@ -158,6 +168,20 @@ export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
               ) : (
                 <Button onClick={() => setAction('ship')} className="bg-blue-600 hover:bg-blue-700">
                   <Truck className="h-4 w-4 mr-1" /> 出貨
+                </Button>
+              )}
+              {!isSupplier && order.status === 'active' && !order.received_at && (
+                <Button
+                  variant="outline"
+                  className="text-destructive"
+                  onClick={() => setAction('reverse')}
+                >
+                  <RotateCcw className="h-4 w-4 mr-1" /> 回滾出貨
+                </Button>
+              )}
+              {order.status === 'draft' && (
+                <Button variant="outline" onClick={() => setAction('edit')}>
+                  <Pencil className="h-4 w-4 mr-1" /> 編輯品項
                 </Button>
               )}
               <Button variant="outline" onClick={() => setAction('return')}>
@@ -236,6 +260,19 @@ export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
             order={order}
             items={items}
             summaries={summaries}
+            onCancel={() => setAction(null)}
+          />
+        )}
+        {action === 'reverse' && (
+          <ReverseDialog
+            order={order}
+            onCancel={() => setAction(null)}
+          />
+        )}
+        {action === 'edit' && (
+          <EditItemsDialog
+            order={order}
+            items={items}
             onCancel={() => setAction(null)}
           />
         )}
@@ -366,7 +403,7 @@ function ShipDialog({ order, onCancel }: ShipDialogProps) {
         <DialogHeader>
           <DialogTitle>出貨（{order.code}）</DialogTitle>
           <DialogDescription>
-            將依剩餘數量出貨至店家並建立銷貨單，店家可透過收貨流程確認入庫。
+            將依剩餘數量出貨至店家（店家寄賣，不開立銷貨單），店家確認收貨後即可回報銷售。
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
@@ -562,6 +599,348 @@ function SettleDialog({ order, accounts, expected, settled, onCancel }: SettleDi
           <Button variant="outline" onClick={onCancel}>取消</Button>
           <Button onClick={handleSubmit} disabled={settleMutation.isPending}>
             {settleMutation.isPending ? '處理中...' : '確認結算'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ============ 回滾出貨 ============ */
+interface ReverseDialogProps {
+  order: ConsignmentOrder;
+  onCancel: () => void;
+}
+
+function ReverseDialog({ order, onCancel }: ReverseDialogProps) {
+  const { reverseShipmentMutation } = useConsignment();
+  const [note, setNote] = useState('');
+
+  const handleSubmit = () => {
+    reverseShipmentMutation.mutate({ orderId: order.id, note }, { onSuccess: onCancel });
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onCancel(); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>回滾出貨（{order.code}）</DialogTitle>
+          <DialogDescription>
+            將整單出貨回滾：扣回已出貨數量、品項放回出貨池，寄賣單退回草稿狀態，可重新編輯後再出貨。店家尚未確認收貨時才能執行。
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label>備註（選填）</Label>
+          <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="輸入回滾原因" />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>取消</Button>
+          <Button variant="destructive" onClick={handleSubmit} disabled={reverseShipmentMutation.isPending}>
+            {reverseShipmentMutation.isPending ? '處理中...' : '確認回滾出貨'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ============ 編輯品項（draft） ============ */
+interface EditItemsDialogProps {
+  order: ConsignmentOrder;
+  items: ConsignmentOrderItem[];
+  onCancel: () => void;
+}
+
+interface EditLine {
+  quantity: number;
+  unit_price: number;
+  unit_cost: number;
+}
+
+interface EditNewLine extends NewConsignmentItem {
+  key: string;
+}
+
+function EditItemsDialog({ order, items, onCancel }: EditItemsDialogProps) {
+  const { products, addItemMutation, removeItemMutation, updateItemMutation } = useConsignment();
+  const isSupplier = order.direction === 'receive_from_supplier';
+  const [saving, setSaving] = useState(false);
+
+  const [edits, setEdits] = useState<Record<string, EditLine>>(() => {
+    const init: Record<string, EditLine> = {};
+    items.forEach(item => {
+      init[item.id] = {
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        unit_cost: item.unit_cost,
+      };
+    });
+    return init;
+  });
+
+  const [newLines, setNewLines] = useState<EditNewLine[]>([]);
+
+  const addLine = () => {
+    setNewLines(prev => [...prev, { key: crypto.randomUUID(), product_id: '', variant_id: null, quantity: 1, unit_price: 0, unit_cost: 0 }]);
+  };
+  const removeLine = (key: string) => {
+    setNewLines(prev => prev.filter(l => l.key !== key));
+  };
+  const updateLine = (key: string, patch: Partial<EditNewLine>) => {
+    setNewLines(prev => prev.map(l => (l.key === key ? { ...l, ...patch } : l)));
+  };
+  const getVariants = (productId: string) => {
+    return products.find((p) => p.id === productId)?.variants || [];
+  };
+
+  const handleSave = async () => {
+    if (newLines.some(l => !l.product_id)) {
+      toast.warning('新增品項需選擇商品');
+      return;
+    }
+    const validNew = newLines.filter(l => l.product_id && l.quantity > 0);
+    setSaving(true);
+    try {
+      for (const item of items) {
+        const e = edits[item.id];
+        if (!e) continue;
+        const patch: Partial<{ quantity: number; unit_price: number; unit_cost: number }> = {};
+        if (e.quantity !== item.quantity) patch.quantity = e.quantity;
+        if (e.unit_price !== item.unit_price) patch.unit_price = e.unit_price;
+        if (e.unit_cost !== item.unit_cost) patch.unit_cost = e.unit_cost;
+        if (Object.keys(patch).length > 0) {
+          await updateItemMutation.mutateAsync({ orderId: order.id, itemId: item.id, patch });
+        }
+      }
+      for (const line of validNew) {
+        await addItemMutation.mutateAsync({
+          orderId: order.id,
+          item: {
+            product_id: line.product_id,
+            variant_id: line.variant_id,
+            quantity: line.quantity,
+            unit_price: line.unit_price,
+            unit_cost: line.unit_cost,
+          },
+        });
+      }
+      toast.success('品項已更新');
+      onCancel();
+    } catch {
+      // 錯誤訊息已由 useSupabaseAction 統一顯示
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onCancel(); }}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>編輯品項（{order.code}）</DialogTitle>
+          <DialogDescription>
+            修改既有品項的數量與價格，或新增/刪除品項。店家寄賣草稿將同步鏡像到來源訂單。
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="border rounded-md overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left py-2 px-3 font-medium">商品</th>
+                  <th className="text-right py-2 px-3 font-medium w-20">數量</th>
+                  <th className="text-right py-2 px-3 font-medium w-28">
+                    {isSupplier ? '成本價' : '出貨價'}
+                  </th>
+                  <th className="text-right py-2 px-3 font-medium w-28">
+                    {isSupplier ? '建議售價' : '進貨成本'}
+                  </th>
+                  <th className="w-10"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map(item => {
+                  const e = edits[item.id] || { quantity: item.quantity, unit_price: item.unit_price, unit_cost: item.unit_cost };
+                  return (
+                    <tr key={item.id} className="border-b last:border-0">
+                      <td className="py-1.5 px-3">
+                        <p className="font-medium">{item.product?.name || '-'}</p>
+                        {item.variant?.name && (
+                          <p className="text-xs text-muted-foreground">{item.variant.name}</p>
+                        )}
+                      </td>
+                      <td className="py-1.5 px-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          className="h-8 text-right text-xs"
+                          value={e.quantity}
+                          onChange={(ev) => setEdits(prev => ({
+                            ...prev,
+                            [item.id]: { ...e, quantity: Math.max(1, parseInt(ev.target.value) || 1) },
+                          }))}
+                        />
+                      </td>
+                      <td className="py-1.5 px-2">
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          className="h-8 text-right text-xs"
+                          value={e.unit_price}
+                          onChange={(ev) => setEdits(prev => ({
+                            ...prev,
+                            [item.id]: { ...e, unit_price: parseFloat(ev.target.value) || 0 },
+                          }))}
+                        />
+                      </td>
+                      <td className="py-1.5 px-2">
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          className="h-8 text-right text-xs"
+                          value={e.unit_cost}
+                          onChange={(ev) => setEdits(prev => ({
+                            ...prev,
+                            [item.id]: { ...e, unit_cost: parseFloat(ev.target.value) || 0 },
+                          }))}
+                        />
+                      </td>
+                      <td className="py-1.5 px-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-destructive"
+                          disabled={removeItemMutation.isPending}
+                          onClick={() => removeItemMutation.mutate(item.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {items.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="text-center py-6 text-muted-foreground italic">目前沒有品項</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>新增品項</Label>
+              <Button size="sm" variant="outline" onClick={addLine}>
+                <Plus className="h-4 w-4 mr-1" /> 加入品項
+              </Button>
+            </div>
+            {newLines.length > 0 && (
+              <div className="border rounded-md overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left py-2 px-3 font-medium w-56">商品</th>
+                      <th className="text-left py-2 px-3 font-medium w-28">規格</th>
+                      <th className="text-right py-2 px-3 font-medium w-20">數量</th>
+                      <th className="text-right py-2 px-3 font-medium w-28">
+                        {isSupplier ? '成本價' : '出貨價'}
+                      </th>
+                      <th className="text-right py-2 px-3 font-medium w-28">
+                        {isSupplier ? '建議售價' : '進貨成本'}
+                      </th>
+                      <th className="w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {newLines.map(line => (
+                      <tr key={line.key} className="border-b last:border-0">
+                        <td className="py-1.5 px-2">
+                          <Select value={line.product_id} onValueChange={(v) => updateLine(line.key, { product_id: v, variant_id: null })}>
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="選擇商品" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {products.map((p) => (
+                                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="py-1.5 px-2">
+                          {(() => {
+                            const variants = getVariants(line.product_id);
+                            if (!line.product_id) {
+                              return <div className="px-1 text-xs text-muted-foreground">先選擇商品</div>;
+                            }
+                            if (variants.length === 0) {
+                              return <div className="px-1 text-xs text-muted-foreground">無規格</div>;
+                            }
+                            return (
+                              <Select
+                                value={line.variant_id || ''}
+                                onValueChange={(v) => updateLine(line.key, { variant_id: v })}
+                              >
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue placeholder="選擇規格" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {variants.map((v) => (
+                                    <SelectItem key={v.id} value={v.id}>{v.name || v.sku}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            );
+                          })()}
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <Input
+                            type="number"
+                            min={1}
+                            className="h-8 text-right text-xs"
+                            value={line.quantity}
+                            onChange={(ev) => updateLine(line.key, { quantity: parseInt(ev.target.value) || 0 })}
+                          />
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            className="h-8 text-right text-xs"
+                            value={line.unit_cost}
+                            onChange={(ev) => updateLine(line.key, { unit_cost: parseFloat(ev.target.value) || 0 })}
+                          />
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            className="h-8 text-right text-xs"
+                            value={line.unit_price}
+                            onChange={(ev) => updateLine(line.key, { unit_price: parseFloat(ev.target.value) || 0 })}
+                          />
+                        </td>
+                        <td className="py-1.5 px-2">
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => removeLine(line.key)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>取消</Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? '儲存中...' : '儲存變更'}
           </Button>
         </DialogFooter>
       </DialogContent>

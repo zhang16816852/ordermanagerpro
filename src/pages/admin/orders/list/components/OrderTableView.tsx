@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Eye, Pencil } from 'lucide-react';
+import { Eye, Pencil, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
@@ -25,6 +25,7 @@ interface OrderTableViewProps {
   onToggleAll: (checked: boolean) => void;
   onView: (order: Order) => void;
   onEdit: (id: string) => void;
+  onReverseShipment?: (order: Order) => void;
 }
 
 export function OrderTableView({
@@ -36,6 +37,7 @@ export function OrderTableView({
   onToggleAll,
   onView,
   onEdit,
+  onReverseShipment,
 }: OrderTableViewProps) {
   const getOrderShipmentStatus = (items: OrderItem[]) => {
     if (items.length === 0) return 'waiting';
@@ -50,6 +52,12 @@ export function OrderTableView({
 
   const getOrderTotal = (items: OrderItem[]) => {
     return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+  };
+
+  const getSourceLabel = (sourceType: string) => {
+    if (sourceType === 'frontend') return '前台';
+    if (sourceType === 'consignment') return '寄賣';
+    return '後台';
   };
 
   return (
@@ -127,7 +135,7 @@ export function OrderTableView({
                   <TableCell>{order.order_items.length}</TableCell>
                   <TableCell className="text-right font-bold">${getOrderTotal(order.order_items).toLocaleString()}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{order.source_type === 'frontend' ? '前台' : '後台'}</Badge>
+                      <Badge variant="outline">{getSourceLabel(order.source_type)}</Badge>
                     </TableCell>
                     <TableCell><OrderStatusBadge status={order.status} type="order" /></TableCell>
                     <TableCell><OrderStatusBadge status={itemStatus} type="shipping" /></TableCell>
@@ -136,6 +144,17 @@ export function OrderTableView({
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
+                      {statusTab === 'shipped' && order.consignment_mode && onReverseShipment && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive"
+                          title="回滾出貨（放回出貨池）"
+                          onClick={() => onReverseShipment(order)}
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500" onClick={() => onView(order)}>
                         <Eye className="h-4 w-4" />
                       </Button>

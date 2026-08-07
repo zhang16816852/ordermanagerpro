@@ -302,7 +302,7 @@ export default function AdminInventory() {
                 <TabsContent value="inventory" className="space-y-6 mt-6">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex gap-2">
-                            <Button variant="outline" size="sm" onClick={() => {
+                            <Button variant="outline" size="sm" onClick={async () => {
                                 const exportData = inventory.map((item: any) => ({
                                     "商品名稱": item.name,
                                     "SKU": item.code,
@@ -311,7 +311,7 @@ export default function AdminInventory() {
                                     "庫存數量": item.quantity,
                                     "最後更新": item.updatedAt ? new Date(item.updatedAt).toLocaleString() : '-'
                                 }));
-                                exportToCSV(exportData, '庫存清單');
+                                await exportToCSV(exportData, '庫存清單');
                             }}>
                                 <FileText className="mr-2 h-4 w-4" />
                                 匯出 CSV

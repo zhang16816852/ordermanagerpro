@@ -3,7 +3,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
-import Papa from 'papaparse';
 import { SpecDefinition } from '../types';
 import { useSpecStore } from '@/store/useSpecStore';
 
@@ -118,6 +117,7 @@ export function useSpecData() {
 
     // --- 解析 CSV（預覽用）---
     const parseSpecCSV = async (file: File): Promise<any[]> => {
+        const { default: Papa } = await import('papaparse');
         return new Promise((resolve, reject) => {
             Papa.parse(file, {
                 header: true,
@@ -247,7 +247,7 @@ export function useSpecData() {
     };
 
     // --- 匯出 CSV (基本屬性相容) ---
-    const handleSpecExport = () => {
+    const handleSpecExport = async () => {
         const exportData = specDefinitions.map(s => ({
             name: s.name,
             type: s.type,
@@ -259,6 +259,7 @@ export function useSpecData() {
             logic_config: JSON.stringify(s.logic_config || {})
         }));
 
+        const { default: Papa } = await import('papaparse');
         const csv = Papa.unparse(exportData);
         const BOM = '\uFEFF';
         const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
@@ -271,10 +272,11 @@ export function useSpecData() {
     };
 
     // --- 匯入 CSV ---
-    const handleSpecImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleSpecImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        const { default: Papa } = await import('papaparse');
         Papa.parse(file, {
             header: true,
             skipEmptyLines: true,

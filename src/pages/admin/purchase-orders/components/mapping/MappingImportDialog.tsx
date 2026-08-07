@@ -1,8 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import * as xlsx from 'xlsx';
-import Papa from 'papaparse';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -164,12 +162,14 @@ export function MappingImportDialog({
 
       if (isExcel) {
         const data = await file.arrayBuffer();
+        const xlsx = await import('xlsx');
         const workbook = xlsx.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         rawData = xlsx.utils.sheet_to_json(worksheet, { header: 1, blankrows: false }) as (string | number)[][];
       } else {
         const text = await file.text();
+        const { default: Papa } = await import('papaparse');
         const result = Papa.parse(text, { header: false, skipEmptyLines: true });
         rawData = result.data as (string | number)[][];
       }

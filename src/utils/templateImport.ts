@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import type { DimensionConfig } from '@/types/order-grid';
 
 export interface ParsedTemplate {
@@ -43,10 +42,11 @@ export interface ParseResult {
   errors: string[];
 }
 
-export function parseTemplateExcel(
+export async function parseTemplateExcel(
   buffer: ArrayBuffer,
   existingIds: Set<string>,
-): ParseResult {
+): Promise<ParseResult> {
+    const XLSX = await import('xlsx');
   const workbook = XLSX.read(buffer, { type: 'array' });
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];

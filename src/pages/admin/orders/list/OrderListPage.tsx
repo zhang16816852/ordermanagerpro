@@ -1,11 +1,11 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Package, FileText, Send } from 'lucide-react';
+import { Plus, Package, FileText, Send, Store, RotateCcw } from 'lucide-react';
 import { WarehouseSelector } from "@/components/WarehouseSelector";
 import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
 import { OrderDetailDialog } from '@/components/order/OrderDetailDialog';
@@ -13,13 +13,13 @@ import { OrdersCardView } from '@/components/order/OrdersCardView';
 import { ItemsCardView } from '@/components/order/ItemsCardView';
 import { Order, OrderItem } from '@/types/order';
 import { exportToCSV } from '@/lib/exportUtils';
-import * as xlsx from 'xlsx';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 
 import { useOrdersList } from './hooks/useOrdersList';
@@ -62,6 +62,10 @@ export default function AdminOrderList() {
   const [selectedItems, setSelectedItems] = useState<Map<string, any>>(new Map());
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [shipToPoolOpen, setShipToPoolOpen] = useState(false);
+  const [orderPoolOpen, setOrderPoolOpen] = useState(false);
+  const [convertToConsignmentOpen, setConvertToConsignmentOpen] = useState(false);
+  const [reverseShipmentOrder, setReverseShipmentOrder] = useState<{ order: Order; consignmentOrderId: string } | null>(null);
+  const [reverseNote, setReverseNote] = useState('');
   const [directShipDialogOpen, setDirectShipDialogOpen] = useState(false);
   const [directShipNotes, setDirectShipNotes] = useState('');
   const [directShipAt, setDirectShipAt] = useState<string>(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
@@ -105,8 +109,8 @@ export default function AdminOrderList() {
           p_order_id: orderId,
           p_created_by: user.id,
           p_notes: notes || undefined,
-          p_shipped_at: directShipAt ? new Date(directShipAt).toISOString() : null,
-          p_warehouse_id: null,
+          p_shipped_at: directShipAt ? new Date(directShipAt).toISOString() : undefined,
+          p_warehouse_id: undefined,
           p_warehouse_map: warehouseMap as any,
         });
         if (error) throw error;
@@ -116,8 +120,11 @@ export default function AdminOrderList() {
     },
     onSuccess: (results, variables) => {
       const count = variables.orderIds.length;
-      toast.success(`已將 ${count} 個訂單轉為銷貨單`, {
-        action: count === 1 ? {
+      const isConsignmentShip = Array.from(variables.orderIds).every(
+        (id) => orders.find((o) => o.id === id)?.consignment_mode
+      );
+      toast.success(isConsignmentShip ? `已寄賣出貨 ${count} 個訂單` : `已將 ${count} 個訂單轉為銷貨單`, {
+        action: count === 1 && !isConsignmentShip ? {
           label: '複製連結',
           onClick: () => {
             const r = results[0] as any;
@@ -137,7 +144,114 @@ export default function AdminOrderList() {
     onError: (error: Error) => toast.error(getErrorMessage(error)),
   });
 
-  // Fetch inventory and auto-select best warehouse per item when dialog opens
+  const convertToConsignmentMutation = useMutation({
+    mutationFn: async (orderIds: string[]) => {
+      if (!user) throw new Error('未登入');
+      const { error: markError } = await (supabase
+        .from('orders') as any)
+        .update({ consignment_mode: true })
+        .in('id', orderIds);
+      if (markError) throw markError;
+      for (const orderId of orderIds) {
+        const { data, error } = await supabase.rpc('direct_ship_order', {
+          p_order_id: orderId,
+          p_created_by: user.id,
+          p_notes: undefined,
+          p_shipped_at: undefined,
+          p_warehouse_id: undefined,
+          p_warehouse_map: undefined,
+          p_source_map: undefined,
+        });
+        if (error) throw error;
+      }
+      return orderIds;
+    },
+    onSuccess: (orderIds) => {
+      toast.success(`已將 ${orderIds.length} 個訂單轉為寄賣出貨`);
+      setConvertToConsignmentOpen(false);
+      setSelectedOrderIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['consignment-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['shipping-pool-items'] });
+      queryClient.invalidateQueries({ queryKey: ['shipping-pool'] });
+    },
+    onError: (error: Error) => toast.error(getErrorMessage(error)),
+  });
+
+  const reverseShipmentMutation = useMutation({
+    mutationFn: async ({ consignmentOrderId, note }: { consignmentOrderId: string; note: string }) => {
+      if (!user) throw new Error('未登入');
+      const { data, error } = await supabase.rpc('reverse_consignment_shipment', {
+        p_consignment_order_id: consignmentOrderId,
+        p_created_by: user.id,
+        p_note: note || undefined,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('已回滾出貨，品項已放回出貨池');
+      setReverseShipmentOrder(null);
+      setReverseNote('');
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['consignment-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['consignment-order-detail'] });
+      queryClient.invalidateQueries({ queryKey: ['shipping-pool'] });
+      queryClient.invalidateQueries({ queryKey: ['shipping-pool-items'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-movements'] });
+    },
+    onError: (error: Error) => toast.error(getErrorMessage(error)),
+  });
+
+  const handleReverseShipment = async (order: Order) => {
+    if (!user) {
+      toast.error('未登入');
+      return;
+    }
+    const { data, error } = await (supabase.from('consignment_orders') as any)
+      .select('id')
+      .eq('source_order_id', order.id)
+      .eq('direction', 'send_to_store')
+      .eq('status', 'active')
+      .maybeSingle();
+    if (error) {
+      toast.error(getErrorMessage(error));
+      return;
+    }
+    if (!data) {
+      toast.error('找不到對應的寄賣單');
+      return;
+    }
+    setReverseShipmentOrder({ order, consignmentOrderId: data.id });
+    setReverseNote('');
+  };
+
+  const orderPoolGroupedItems = useMemo(() => {
+    const grouped: Record<string, { storeName: string; items: any[] }> = {};
+    for (const order of orders) {
+      if (!selectedOrderIds.has(order.id)) continue;
+      for (const item of order.order_items) {
+        const pending = getPendingQuantity(item);
+        if (pending <= 0) continue;
+        if (item.status === 'cancelled' || item.status === 'discontinued') continue;
+        if (!grouped[order.store_id]) {
+          grouped[order.store_id] = { storeName: order.stores?.name || '', items: [] };
+        }
+        grouped[order.store_id].items.push({
+          itemId: item.id,
+          productName: item.product?.name || '',
+          sku: item.product?.code || '',
+          quantity: pending,
+          maxQuantity: pending,
+          storeId: order.store_id,
+          storeName: order.stores?.name || '',
+          orderId: order.id,
+        });
+      }
+    }
+    return grouped;
+  }, [orders, selectedOrderIds, getPendingQuantity]);
   useEffect(() => {
     if (!directShipDialogOpen || !defaultWarehouse) return;
 
@@ -181,18 +295,23 @@ export default function AdminOrderList() {
   }, [directShipDialogOpen, selectedOrderIds, orders, defaultWarehouse]);
 
   // Filtering Logic (Orders)
+  const matchesSearch = useCallback((order: Order) => {
+    if (!search) return true;
+    const searchLower = search.toLowerCase();
+    return (
+      order.stores?.name.toLowerCase().includes(searchLower) ||
+      order.stores?.code?.toLowerCase().includes(searchLower) ||
+      order.id.toLowerCase().includes(searchLower) ||
+      (order.code && order.code.toLowerCase().includes(searchLower))
+    );
+  }, [search]);
+
   const filteredOrders = useMemo(() => {
     return orders?.filter((order) => {
-      if (!search || viewMode !== 'orders') return true;
-      const searchLower = search.toLowerCase();
-      return (
-        order.stores?.name.toLowerCase().includes(searchLower) ||
-        order.stores?.code?.toLowerCase().includes(searchLower) ||
-        order.id.toLowerCase().includes(searchLower) ||
-        (order.code && order.code.toLowerCase().includes(searchLower))
-      );
+      if (viewMode !== 'orders') return true;
+      return matchesSearch(order);
     }) || [];
-  }, [orders, search, viewMode]);
+  }, [orders, viewMode, matchesSearch]);
 
   // Filtering Logic (Items - Flattened)
   const allPendingItems = useMemo(() => {
@@ -408,7 +527,7 @@ export default function AdminOrderList() {
     });
   };
 
-  const handleExportAggregateCSV = () => {
+  const handleExportAggregateCSV = async () => {
     const data = Array.from(selectedAggregateItems.values()).map(item => {
       const agg = aggregatedItems.find(a => getAggregateItemKey(a) === `${item.productId}_${item.variantId || 'null'}`);
       const storeDetail = agg?.storeBreakdown.map(s =>
@@ -422,10 +541,10 @@ export default function AdminOrderList() {
         '門市明細': storeDetail,
       };
     });
-    exportToCSV(data, `叫貨總覽_${statusTab}`);
+    await exportToCSV(data, `叫貨總覽_${statusTab}`);
   };
 
-  const handleExportAggregateExcel = () => {
+  const handleExportAggregateExcel = async () => {
     const data = Array.from(selectedAggregateItems.values()).map(item => {
       const agg = aggregatedItems.find(a => getAggregateItemKey(a) === `${item.productId}_${item.variantId || 'null'}`);
       const storeDetail = agg?.storeBreakdown.map(s =>
@@ -439,11 +558,20 @@ export default function AdminOrderList() {
         '門市明細': storeDetail,
       };
     });
+    const xlsx = await import('xlsx');
     const ws = xlsx.utils.json_to_sheet(data);
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, '叫貨總覽');
     xlsx.writeFile(wb, `叫貨總覽_${statusTab}_${Date.now()}.xlsx`);
   };
+
+  const selectedOrdersArray = Array.from(selectedOrderIds)
+    .map((id) => filteredOrders.find((o) => o.id === id))
+    .filter((o): o is Order => !!o);
+  const hasConsignmentSelection = selectedOrdersArray.some((o) => o.consignment_mode);
+  const hasNormalSelection = selectedOrdersArray.some((o) => !o.consignment_mode);
+  const allSelectedConsignment =
+    selectedOrdersArray.length > 0 && selectedOrdersArray.every((o) => o.consignment_mode);
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] space-y-4 p-4 md:p-6 overflow-hidden bg-muted/10">
@@ -457,7 +585,7 @@ export default function AdminOrderList() {
             <Plus className="mr-2 h-4 w-4" /> 代訂訂單
           </Button>
           <Button
-            onClick={() => {
+            onClick={async () => {
                 const exportData = filteredOrders.map(o => ({
                     "店鋪名稱": o.stores?.name,
                     "訂單ID": o.id,
@@ -466,7 +594,7 @@ export default function AdminOrderList() {
                     "建立日期": new Date(o.created_at).toLocaleString(),
                     "備註": o.notes || '-'
                 }));
-                exportToCSV(exportData, `訂單列表_${statusTab}`);
+                await exportToCSV(exportData, `訂單列表_${statusTab}`);
             }}
             variant="outline"
             size="sm"
@@ -543,6 +671,7 @@ export default function AdminOrderList() {
                   }}
                   onView={setViewingOrder}
                   onEdit={(id) => navigate(`/admin/orders/${id}/edit`)}
+                  onReverseShipment={handleReverseShipment}
                 />
               </div>
             </div>
@@ -553,6 +682,8 @@ export default function AdminOrderList() {
                 isLoading={isLoading}
                 onView={setViewingOrder}
                 onEdit={(id) => navigate(`/admin/orders/${id}/edit`)}
+                onReverseShipment={handleReverseShipment}
+                statusTab={statusTab}
                 getOrderShipmentStatus={getOrderShipmentStatus}
                 getOrderTotal={getOrderTotal}
               />
@@ -663,10 +794,15 @@ export default function AdminOrderList() {
         selectedOrderCount={selectedOrderIds.size}
         selectedItemCount={selectedItems.size}
         selectedAggregateCount={selectedAggregateItems.size}
-        isLoading={confirmOrdersMutation.isPending || addToShippingPoolMutation.isPending || cancelItemsMutation.isPending || directShipMutation.isPending}
+        hasConsignmentSelection={hasConsignmentSelection}
+        hasNormalSelection={hasNormalSelection}
+        allSelectedConsignment={allSelectedConsignment}
+        isLoading={confirmOrdersMutation.isPending || addToShippingPoolMutation.isPending || cancelItemsMutation.isPending || directShipMutation.isPending || convertToConsignmentMutation.isPending}
         onConfirmOrders={() => confirmOrdersMutation.mutate(Array.from(selectedOrderIds))}
         onShipItems={() => setShipToPoolOpen(true)}
         onDirectShipOrders={() => setDirectShipDialogOpen(true)}
+        onConvertToConsignment={() => setConvertToConsignmentOpen(true)}
+        onShipOrdersToPool={() => setOrderPoolOpen(true)}
         onCancelItems={() => {
           if (confirm(`確定要標記這 ${selectedItems.size} 個品項為 停產/取消 嗎？`)) {
             cancelItemsMutation.mutate({ itemIds: Array.from(selectedItems.keys()), targetStatus: 'cancelled' });
@@ -691,6 +827,54 @@ export default function AdminOrderList() {
         })}
       />
 
+      {/* Whole-order Ship To Pool Dialog */}
+      <ShipToPoolDialog
+        open={orderPoolOpen}
+        onOpenChange={setOrderPoolOpen}
+        groupedItems={orderPoolGroupedItems}
+        isLoading={addToShippingPoolMutation.isPending}
+        onConfirm={() => addToShippingPoolMutation.mutate(Object.values(orderPoolGroupedItems).flatMap(g => g.items), {
+          onSuccess: () => {
+            setOrderPoolOpen(false);
+            setSelectedOrderIds(new Set());
+          }
+        })}
+      />
+
+      {/* Convert To Consignment Dialog */}
+      <Dialog open={convertToConsignmentOpen} onOpenChange={setConvertToConsignmentOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5" />
+              轉寄賣出貨
+            </DialogTitle>
+            <DialogDescription>
+              將所選訂單標記為寄賣模式並直接出貨，不開立銷貨單；店家確認售出後才開立收款銷貨單。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border divide-y max-h-96 overflow-y-auto">
+            {orders.filter(o => selectedOrderIds.has(o.id)).map(order => (
+              <div key={order.id} className="flex items-center justify-between px-3 py-2">
+                <div className="text-sm font-medium">{order.code} - {order.stores?.name || '未知店家'}</div>
+                <div className="text-xs text-muted-foreground">{order.order_items.filter(i => i.status !== 'cancelled' && i.status !== 'discontinued' && (i.quantity - i.shipped_quantity) > 0).length} 個品項待寄賣出貨</div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConvertToConsignmentOpen(false)} disabled={convertToConsignmentMutation.isPending}>
+              取消
+            </Button>
+            <Button
+              onClick={() => convertToConsignmentMutation.mutate(Array.from(selectedOrderIds))}
+              disabled={convertToConsignmentMutation.isPending}
+            >
+              {convertToConsignmentMutation.isPending ? '處理中...' : '確認轉寄賣出貨'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Direct Ship Dialog */}
       <Dialog open={directShipDialogOpen} onOpenChange={(open) => {
         if (!open) setItemWarehouses({});
@@ -700,10 +884,12 @@ export default function AdminOrderList() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Send className="h-5 w-5" />
-              直接轉銷貨單
+              {allSelectedConsignment ? '寄賣出貨' : '直接轉銷貨單'}
             </DialogTitle>
             <DialogDescription>
-              為每個品項選擇出貨倉庫，所有剩餘數量將全額出貨。
+              {allSelectedConsignment
+                ? '所有品項將以寄賣模式出貨（不開立銷貨單），店家確認收貨並回報銷售後才會開收款單。'
+                : '為每個品項選擇出貨倉庫，所有剩餘數量將全額出貨。'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -763,7 +949,47 @@ export default function AdminOrderList() {
               onClick={() => directShipMutation.mutate({ orderIds: Array.from(selectedOrderIds), notes: directShipNotes })}
               disabled={directShipMutation.isPending}
             >
-              {directShipMutation.isPending ? '處理中...' : '確認轉銷貨單'}
+              {directShipMutation.isPending ? '處理中...' : allSelectedConsignment ? '確認寄賣出貨' : '確認轉銷貨單'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reverse Consignment Shipment Dialog */}
+      <Dialog open={!!reverseShipmentOrder} onOpenChange={(open) => !open && setReverseShipmentOrder(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-destructive" />
+              回滾出貨（{reverseShipmentOrder?.order.code}）
+            </DialogTitle>
+            <DialogDescription>
+              將此寄賣訂單的出貨整單回滾：扣回已出貨數量、品項放回出貨池，寄賣單退回草稿狀態。店家尚未確認收貨時才能執行。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>備註（選填）</Label>
+            <Textarea
+              value={reverseNote}
+              onChange={(e) => setReverseNote(e.target.value)}
+              placeholder="輸入回滾原因"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReverseShipmentOrder(null)}>
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() =>
+                reverseShipmentMutation.mutate({
+                  consignmentOrderId: reverseShipmentOrder?.consignmentOrderId || '',
+                  note: reverseNote,
+                })
+              }
+              disabled={reverseShipmentMutation.isPending || !reverseShipmentOrder}
+            >
+              {reverseShipmentMutation.isPending ? '處理中...' : '確認回滾出貨'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -51,6 +51,7 @@ export default function AdminOrderCheckout() {
   const [shippedAt, setShippedAt] = useState<string>(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const [itemWarehouses, setItemWarehouses] = useState<Record<string, string>>({});
   const [itemSources, setItemSources] = useState<Record<string, string>>({});
+  const [consignmentMode, setConsignmentMode] = useState(false);
 
   const getItemWarehouse = (itemId: string) => itemWarehouses[itemId] || defaultWarehouse?.id || '';
 
@@ -142,8 +143,8 @@ export default function AdminOrderCheckout() {
           quantity: i.quantity,
           unit_price: i.price,
           selected_model_name: i.selectedModelName || null,
-          warehouse_id: getItemWarehouse(i.id) || null,
-          inventory_source_type: itemSources[i.id] || "self",
+          warehouse_id: consignmentMode ? null : (getItemWarehouse(i.id) || null),
+          inventory_source_type: consignmentMode ? "store_consignment" : (itemSources[i.id] || "self"),
         }));
 
         const { data, error } = await supabase.rpc("create_order_with_sales_note", {
@@ -151,8 +152,9 @@ export default function AdminOrderCheckout() {
           p_created_by: user?.id as string,
           p_notes: notes.trim() || undefined,
           p_items: payload,
-          p_shipped_at: shippedAt ? new Date(shippedAt).toISOString() : null,
-          p_warehouse_id: null,
+          p_shipped_at: shippedAt ? new Date(shippedAt).toISOString() : undefined,
+          p_warehouse_id: undefined,
+          p_consignment_mode: consignmentMode,
         });
 
         if (error) throw error;
@@ -180,7 +182,7 @@ export default function AdminOrderCheckout() {
         setIsPendingMode2(false);
       }
     },
-    [items, notes, storeId, user, navigate, clearDraft, createPendingOrder, syncPrices, itemWarehouses, itemSources, getItemWarehouse, shippedAt]
+    [items, notes, storeId, user, navigate, clearDraft, createPendingOrder, syncPrices, itemWarehouses, itemSources, getItemWarehouse, shippedAt, consignmentMode]
   );
 
   if (!storeId) {
@@ -204,6 +206,8 @@ export default function AdminOrderCheckout() {
         onItemWarehouseChange={(id, w) => setItemWarehouses(prev => ({ ...prev, [id]: w }))}
         itemSources={itemSources}
         onItemSourceChange={(id, s) => setItemSources(prev => ({ ...prev, [id]: s }))}
+        consignmentMode={consignmentMode}
+        onConsignmentModeChange={setConsignmentMode}
         onItemsChange={handleItemsChange}
         onNotesChange={syncNotes}
         onPriceSyncMapChange={syncPriceSyncMap}

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -18,7 +19,30 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
-import { WarehouseSelector } from "@/components/WarehouseSelector";
+
+// 批次取得出貨池品項在各倉庫的庫存（product_id + variant_id → warehouse_id → qty）
+function usePoolStock(items: ShippingPoolItem[]) {
+  const productIds = [...new Set(items.map(i => i.order_item?.product_id).filter(Boolean))];
+  return useQuery({
+    queryKey: ["shipping-pool-stock", productIds.join(",")],
+    queryFn: async () => {
+      if (productIds.length === 0) return {};
+      const { data, error } = await (supabase
+        .from("product_inventory") as any)
+        .select("product_id, variant_id, warehouse_id, quantity")
+        .in("product_id", productIds);
+      if (error) throw error;
+      const map: Record<string, Record<string, number>> = {};
+      for (const row of (data || []) as Array<{ product_id: string; variant_id: string | null; warehouse_id: string; quantity: number }>) {
+        const key = `${row.product_id}:${row.variant_id || ""}`;
+        if (!map[key]) map[key] = {};
+        map[key][row.warehouse_id] = row.quantity;
+      }
+      return map;
+    },
+    staleTime: 30_000,
+  });
+}
 
 interface ShippingPoolItem {
   id: string;
@@ -61,9 +85,31 @@ export default function AdminShippingPool() {
   const [shippedAt, setShippedAt] = useState<string>(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const [warehouseMap, setWarehouseMap] = useState<Record<string, string>>({});
   const [sourceMap, setSourceMap] = useState<Record<string, string>>({});
+  const [consignmentOverrideMap, setConsignmentOverrideMap] = useState<Record<string, boolean>>({});
 
   const getItemWarehouse = (orderItemId: string) => warehouseMap[orderItemId] || defaultWarehouse?.id || '';
   const getItemSource = (orderItemId: string) => sourceMap[orderItemId] || 'self';
+
+  // 出貨來源：sc = 供應商寄賣（FIFO）；wh:{id} = 自有倉庫
+  const getSourceValue = (orderItemId: string) =>
+    getItemSource(orderItemId) === 'supplier_consignment'
+      ? 'sc'
+      : `wh:${getItemWarehouse(orderItemId)}`;
+
+  const setSourceValue = (orderItemId: string, value: string) => {
+    if (value === 'sc') {
+      setSourceMap(prev => ({ ...prev, [orderItemId]: 'supplier_consignment' }));
+      setWarehouseMap(prev => {
+        const next = { ...prev };
+        delete next[orderItemId];
+        return next;
+      });
+    } else if (value.startsWith('wh:')) {
+      const warehouseId = value.slice(3);
+      setWarehouseMap(prev => ({ ...prev, [orderItemId]: warehouseId }));
+      setSourceMap(prev => ({ ...prev, [orderItemId]: 'self' }));
+    }
+  };
 
   const { data: stores } = useQuery({
     queryKey: ["admin-stores"],
@@ -184,22 +230,29 @@ export default function AdminShippingPool() {
         p_store_ids: Array.from(selectedStores),
         p_created_by: user.id,
         p_notes: notes || undefined,
-        p_shipped_at: shippedAt ? new Date(shippedAt).toISOString() : null,
-        p_warehouse_id: null,
+        p_shipped_at: shippedAt ? new Date(shippedAt).toISOString() : undefined,
+        p_warehouse_id: undefined,
         p_warehouse_map: warehouseMap,
         p_source_map: sourceMap,
+        p_consignment_override_map: consignmentOverrideMap,
       });
 
       if (error) throw error;
       return data as Array<{ sales_note_id: string; store_id: string }>;
     },
     onSuccess: (data) => {
-      toast.success(`已建立 ${selectedStores.size} 個銷售單並出貨`, {
-        action: data?.length > 0 ? {
-          label: "檢視銷貨單",
-          onClick: () => window.location.href = "/admin/sales-notes",
-        } : undefined,
-      });
+      const noteCount = (data || []).filter(d => d.sales_note_id).length;
+      toast.success(
+        noteCount > 0
+          ? `已建立 ${noteCount} 個銷售單並出貨${data && data.length > noteCount ? `，${data.length - noteCount} 個店家以寄賣方式出貨` : ''}`
+          : `已出貨（${data?.length ?? 0} 個店家皆為寄賣方式，確認售出後再開立銷貨單）`,
+        {
+          action: noteCount > 0 ? {
+            label: "檢視銷貨單",
+            onClick: () => window.location.href = "/admin/sales-notes",
+          } : undefined,
+        }
+      );
       setSelectedStores(new Set());
       setShowShipDialog(false);
       setNotes("");
@@ -221,6 +274,10 @@ export default function AdminShippingPool() {
   };
 
   const summary = getSelectedSummary();
+
+  const ownWarehouses = warehouses.filter(w => w.include_in_available && w.is_active !== false);
+  const selectedPoolItems = shippingPoolItems?.filter(i => selectedStores.has(i.store_id)) || [];
+  const { data: poolStock } = usePoolStock(selectedPoolItems);
 
   return (
     <div className="space-y-6">
@@ -401,7 +458,7 @@ export default function AdminShippingPool() {
               確認出貨
             </DialogTitle>
             <DialogDescription>
-              將選定店家的待出貨品項合併產生銷售單，並更新系統訂單狀態。出貨後資料將從集貨池中移除。
+              將選定店家的待出貨品項出貨。一般品項合併產生銷售單；寄賣品項以店家寄賣方式出貨，確認售出後才開立銷貨單。出貨後資料將從集貨池中移除。
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto px-6 space-y-4">
@@ -437,13 +494,17 @@ export default function AdminShippingPool() {
                         <TableHead className="text-right">數量</TableHead>
                         <TableHead className="text-right">單價</TableHead>
                         <TableHead className="text-right">小計</TableHead>
-                        <TableHead>出貨倉</TableHead>
-                        <TableHead>庫存來源</TableHead>
+                        <TableHead className="w-16 text-center">寄賣</TableHead>
+                        <TableHead>出貨來源</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {group.items.map(item => {
                         const isConsignment = !!item.order_item?.order?.consignment_mode;
+                        const isOverride = !isConsignment && !!consignmentOverrideMap[item.order_item_id];
+                        const showConsignment = isConsignment || isOverride;
+                        const stockKey = `${item.order_item?.product_id}:${item.order_item?.variant_id || ""}`;
+                        const stockByWh = poolStock?.[stockKey] || {};
                         return (
                           <TableRow key={item.id}>
                             <TableCell className="font-mono text-xs">{(item.order_item?.product as any)?.code}</TableCell>
@@ -454,32 +515,36 @@ export default function AdminShippingPool() {
                             <TableCell className="text-right">{item.quantity}</TableCell>
                             <TableCell className="text-right">${item.order_item?.unit_price.toFixed(2)}</TableCell>
                             <TableCell className="text-right font-medium">${(item.quantity * (item.order_item?.unit_price || 0)).toFixed(2)}</TableCell>
-                            <TableCell>
+                            <TableCell className="text-center">
                               {isConsignment ? (
-                                <span className="text-xs text-muted-foreground">不適用</span>
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
                               ) : (
-                                <WarehouseSelector
-                                  value={getItemWarehouse(item.order_item_id)}
-                                  onChange={(w) => setWarehouseMap(prev => ({ ...prev, [item.order_item_id]: w }))}
-                                  productId={item.order_item.product_id}
-                                  variantId={item.order_item.variant_id}
+                                <Switch
+                                  checked={isOverride}
+                                  onCheckedChange={(v) => setConsignmentOverrideMap(prev => ({ ...prev, [item.order_item_id]: v }))}
+                                  title="此項目改以店家寄賣方式出貨"
+                                  aria-label="轉為店家寄賣出貨"
                                 />
                               )}
                             </TableCell>
                             <TableCell>
-                              {isConsignment ? (
+                              {showConsignment ? (
                                 <span className="text-xs text-muted-foreground">店家寄賣</span>
                               ) : (
                                 <Select
-                                  value={getItemSource(item.order_item_id)}
-                                  onValueChange={(v) => setSourceMap(prev => ({ ...prev, [item.order_item_id]: v }))}
+                                  value={getSourceValue(item.order_item_id)}
+                                  onValueChange={(v) => setSourceValue(item.order_item_id, v)}
                                 >
-                                  <SelectTrigger className="h-8 w-44 text-xs">
+                                  <SelectTrigger className="h-8 w-56 text-xs">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="self">自有庫存</SelectItem>
-                                    <SelectItem value="supplier_consignment">供應商寄賣</SelectItem>
+                                    {ownWarehouses.map(w => (
+                                      <SelectItem key={w.id} value={`wh:${w.id}`}>
+                                        自有 · {w.name}（庫存:{stockByWh[w.id] ?? 0}）
+                                      </SelectItem>
+                                    ))}
+                                    <SelectItem value="sc">供應商寄賣（FIFO）</SelectItem>
                                   </SelectContent>
                                 </Select>
                               )}

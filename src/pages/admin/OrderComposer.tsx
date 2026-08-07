@@ -5,6 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useCreateOrder } from "@/hooks/useCreateOrder";
 import { useStoreProductCache } from "@/hooks/useProductCache";
+import { useProductSearch } from "@/hooks/useProductSearch";
+import { useBrands } from "@/hooks/useBrands";
 import { useStoreDraft } from "@/store/useOrderDraftStore";
 import { useDeviceModelStore } from "@/store/useDeviceModelStore";
 import { ProductWithPricing, Category } from "@/types/product";
@@ -49,7 +51,10 @@ export default function AdminOrderComposer() {
 
   const search = searchParams.get("search") || "";
   const categoryNameInUrl = searchParams.get("category");
-  const selectedBrands = searchParams.get("brands")?.split(",").filter(Boolean) || [];
+  const selectedBrands = useMemo(
+    () => searchParams.get("brands")?.split(",").filter(Boolean) || [],
+    [searchParams]
+  );
   const viewModeParam = searchParams.get("view");
   const [viewMode, setViewMode] = useState<"products" | "variants" | "gallery" | "table">(
     (["products", "variants", "gallery", "table"].includes(viewModeParam || "")
@@ -69,6 +74,17 @@ export default function AdminOrderComposer() {
       return data as Category[];
     },
   });
+
+  const { data: categoryHierarchy = [] } = useQuery({
+    queryKey: ["category_hierarchy"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from("category_hierarchy" as any) as any).select("*");
+      if (error) return [];
+      return data;
+    },
+  });
+
+  const { brandMap } = useBrands();
 
   const selectedCategory = useMemo(() => {
     if (!categoryNameInUrl || categories.length === 0) return null;
@@ -143,6 +159,16 @@ export default function AdminOrderComposer() {
       physical_variant_id: undefined,
     }));
   }, [storefrontItems]) as unknown as ProductWithPricing[];
+
+  const filteredProducts = useProductSearch({
+    products,
+    search,
+    selectedCategory,
+    categoryHierarchy,
+    selectedBrands,
+    selectedSpecs,
+    brandMap,
+  });
 
   const { items, notes, totalAmount, updateNotes } = useCreateOrder({
     storeId: selectedStoreId,
@@ -305,7 +331,7 @@ export default function AdminOrderComposer() {
             </div>
 
             <ProductCatalog
-              products={products}
+              products={filteredProducts}
               isLoading={productsLoading}
               storeId={selectedStoreId}
               viewMode={viewMode}

@@ -388,17 +388,21 @@ export default function AdminOrderForm() {
       });
       if (error) throw error;
 
-      const link = `${window.location.origin}/share/sales-note/${(data as any).sales_note_code || (data as any).sales_note_id}?token=${(data as any).access_token}`;
-      toast.success('訂單已建立並開立銷貨單！', {
-        duration: 10000,
-        action: {
-          label: '複製連結',
-          onClick: () => {
-            navigator.clipboard.writeText(link);
-            toast.success('連結已複製');
+      if (consignmentModeRef.current) {
+        toast.success('訂單已建立並以店家寄賣方式出貨，確認售出後才開立銷貨單');
+      } else {
+        const link = `${window.location.origin}/share/sales-note/${(data as any).sales_note_code || (data as any).sales_note_id}?token=${(data as any).access_token}`;
+        toast.success('訂單已建立並開立銷貨單！', {
+          duration: 10000,
+          action: {
+            label: '複製連結',
+            onClick: () => {
+              navigator.clipboard.writeText(link);
+              toast.success('連結已複製');
+            },
           },
-        },
-      });
+        });
+      }
 
       draft.clearDraft();
       navigate('/admin/orders');
@@ -451,20 +455,25 @@ export default function AdminOrderForm() {
       return data as any;
     },
     onSuccess: (result) => {
-      const link = `${window.location.origin}/share/sales-note/${result.sales_note_code || result.sales_note_id}?token=${result.access_token}`;
-      toast.success('訂單已轉為銷貨單！', {
-        duration: 10000,
-        action: {
-          label: '複製連結',
-          onClick: () => {
-            navigator.clipboard.writeText(link);
-            toast.success('連結已複製');
+      if (result?.sales_note_id) {
+        const link = `${window.location.origin}/share/sales-note/${result.sales_note_code || result.sales_note_id}?token=${result.access_token}`;
+        toast.success('訂單已轉為銷貨單！', {
+          duration: 10000,
+          action: {
+            label: '複製連結',
+            onClick: () => {
+              navigator.clipboard.writeText(link);
+              toast.success('連結已複製');
+            },
           },
-        },
-      });
+        });
+      } else {
+        toast.success('訂單已以店家寄賣方式出貨，確認售出後才開立銷貨單');
+      }
       setDirectShipDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ['order-detail'] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['consignment-orders'] });
       navigate('/admin/orders');
     },
     onError: (error: Error) => toast.error(getErrorMessage(error)),
@@ -571,7 +580,7 @@ export default function AdminOrderForm() {
                   </div>
                   <div>
                     <span className="text-muted-foreground">來源：</span>
-                    <span>{order!.source_type === 'frontend' ? '前台' : '後台'}</span>
+                    <span>{order!.source_type === 'frontend' ? '前台' : order!.source_type === 'consignment' ? '寄賣' : '後台'}</span>
                   </div>
                 </>
               )}
@@ -705,7 +714,7 @@ export default function AdminOrderForm() {
             {order?.status === 'processing' && (
               <Button variant="default" onClick={() => setDirectShipDialogOpen(true)} disabled={isSubmitting}>
                 <Send className="mr-2 h-4 w-4" />
-                轉銷貨單
+                {order?.consignment_mode ? '寄賣出貨' : '轉銷貨單'}
               </Button>
             )}
             <Button onClick={() => updateOrderMutation.mutate()} disabled={isSubmitting}>
@@ -719,7 +728,7 @@ export default function AdminOrderForm() {
               {createPendingMutation.isPending ? '建立中...' : '建立訂單'}
             </Button>
             <Button onClick={handleCreateWithSalesNote} disabled={isSubmitting || items.length === 0} variant="default">
-              建立訂單並開立銷貨單
+              {consignmentMode ? '建立訂單並寄賣出貨' : '建立訂單並開立銷貨單'}
             </Button>
           </>
         )}
@@ -734,11 +743,12 @@ export default function AdminOrderForm() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Send className="h-5 w-5" />
-              直接轉銷貨單
+              {order?.consignment_mode ? '寄賣出貨' : '直接轉銷貨單'}
             </DialogTitle>
             <DialogDescription>
-              將此訂單的所有剩餘品項直接出貨，跳過出貨池。
-              出貨後訂單狀態將變為「已出貨」。
+              {order?.consignment_mode
+                ? '將此訂單的所有剩餘品項以店家寄賣方式直接出貨，不開立銷貨單，店家確認售出後再開立。'
+                : '將此訂單的所有剩餘品項直接出貨，跳過出貨池。出貨後訂單狀態將變為「已出貨」。'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -800,7 +810,7 @@ export default function AdminOrderForm() {
               onClick={() => directShipMutation.mutate()}
               disabled={directShipMutation.isPending}
             >
-              {directShipMutation.isPending ? '處理中...' : '確認轉銷貨單'}
+              {directShipMutation.isPending ? '處理中...' : (order?.consignment_mode ? '確認寄賣出貨' : '確認轉銷貨單')}
             </Button>
           </DialogFooter>
         </DialogContent>
