@@ -169,6 +169,9 @@ async function createWorkbook(
 
         const baseKeys = Object.keys(BASE_COLUMNS);
 
+        const statusColIndex = baseKeys.indexOf('狀態');
+        if (statusColIndex >= 0) row2Instructions[statusColIndex] = '上架中, 已停售, 預購中, 售完停產';
+
         const modelColIndex = baseKeys.indexOf('適用型號');
         if (modelColIndex >= 0) row2Instructions[modelColIndex] = '多個用逗號分隔。\n特定寫法:\ngroup:名稱\nexclude:名稱';
 
@@ -211,8 +214,6 @@ async function createWorkbook(
         worksheet['!rows'][1] = { hpt: 45 };
         worksheet['!rows'][2] = { hidden: true };
         worksheet['!rows'][3] = { hidden: true };
-
-        worksheet['!view'] = [{ state: 'frozen', ySplit: 4 }];
 
         const sanitizedCatName = catName.replace(/[:\\/?*[\]]/g, '_').substring(0, 31);
         XLSX.utils.book_append_sheet(workbook, worksheet, sanitizedCatName);

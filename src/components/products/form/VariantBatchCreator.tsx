@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Tables } from '@/integrations/supabase/types';
@@ -16,11 +16,31 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
+import { getContrastColor } from '@/utils/colorUtils';
 import { Layers, Sparkles, AlertCircle, Plus, X, GripVertical } from 'lucide-react';
 import { StandaloneDeviceModelSelectField } from '../StandaloneDeviceModelSelectField';
 import { useDeviceModelStore } from '@/store/useDeviceModelStore';
+import { ColorSelectField } from './ColorSelectField';
+import { useColorStore } from '@/store/useColorStore';
+import type { ProductColor } from '@/types/colors';
 
 type Product = Tables<'products'>;
+
+const COLOR_GROUP_NAME_RE = /(顏色|色|color)/i;
+
+function isColorGroupName(name: string): boolean {
+  return COLOR_GROUP_NAME_RE.test(name);
+}
+
+function findLibraryColor(colors: ProductColor[], value: OptionValueInput): ProductColor | undefined {
+  if (!value.label) return undefined;
+  const byName = colors.find(c => c.name.trim().toLowerCase() === value.label.trim().toLowerCase());
+  if (byName) return byName;
+  if (value.value) {
+    return colors.find(c => c.code.toUpperCase() === value.value.trim().toUpperCase());
+  }
+  return undefined;
+}
 
 interface VariantBatchCreatorProps {
   open: boolean;
@@ -192,23 +212,29 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
   const [defaultWholesalePrice, setDefaultWholesalePrice] = useState('');
   const [defaultRetailPrice, setDefaultRetailPrice] = useState('');
   const [generatedVariants, setGeneratedVariants] = useState<GeneratedVariant[]>([]);
+  const [diffSummary, setDiffSummary] = useState<{ added: number; kept: number; removed: GeneratedVariant[]; priceUpdated: number } | null>(null);
+  const loadExistingDataDbValueToColorId = useRef(new Map<string, string>());
 
   const { models: deviceModels, groups: deviceGroups, fetchData: fetchDeviceData } = useDeviceModelStore();
+  const { colors: libraryColors, fetchColors } = useColorStore();
 
   useEffect(() => {
     const init = async () => {
       if (open) {
         await Promise.all([
           fetchDeviceData(),
+          fetchColors(),
         ]);
         await loadExistingData();
       }
     };
     init();
-  }, [open, fetchDeviceData]);
+  }, [open, fetchDeviceData, fetchColors]);
 
   const loadExistingData = async () => {
     try {
+      setDiffSummary(null);
+      loadExistingDataDbValueToColorId.current = new Map();
       // 1. Load existing option groups with values
       const { data: groups, error: gErr } = await supabase
         .from('product_option_groups')
@@ -219,21 +245,32 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
       if (gErr) throw gErr;
 
       if (groups && groups.length > 0) {
-        const loaded: OptionGroupInput[] = groups.map(g => ({
-          id: g.id,
-          name: g.name,
-          values: (g.product_option_values || [])
-            .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
-            .map((v: any) => ({
-              id: v.id,
-              label: v.label,
-              value: v.value,
-              wholesalePrice: '',
-              retailPrice: '',
-              hexCode: v.hex_code || '',
-            })),
-        }));
+        const dbValueToColorId = new Map<string, string>();
+        const loaded: OptionGroupInput[] = groups.map(g => {
+          const isColorGroup = isColorGroupName(g.name);
+          return {
+            id: g.id,
+            name: g.name,
+            values: (g.product_option_values || [])
+              .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
+              .map((v: any) => {
+                const libColor = isColorGroup ? findLibraryColor(libraryColors, { label: v.label, value: v.value } as OptionValueInput) : undefined;
+                if (isColorGroup && libColor) {
+                  dbValueToColorId.set(v.id, `color-${libColor.id}`);
+                }
+                return {
+                  id: dbValueToColorId.get(v.id) ?? v.id,
+                  label: v.label,
+                  value: libColor?.code ?? v.value,
+                  wholesalePrice: '',
+                  retailPrice: '',
+                  hexCode: v.hex_code || '',
+                };
+              }),
+          };
+        });
         setOptionGroups(loaded);
+        loadExistingDataDbValueToColorId.current = dbValueToColorId;
       }
 
       // 2. Load existing variants
@@ -307,7 +344,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
           wholesale_price: v.wholesale_price,
           retail_price: v.retail_price,
           sort_order: v.sort_order,
-          optionValueIds: variantOptionMap.get(v.id) || [],
+          optionValueIds: (variantOptionMap.get(v.id) || []).map(id => loadExistingDataDbValueToColorId.current.get(id) ?? id),
           _modelGroupId: singleMapping?.id,
           _modelGroupType: singleMapping?.type,
         };
@@ -319,6 +356,41 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     } catch (err) {
       console.error('載入資料失敗:', err);
     }
+  };
+
+  const getGroupSelectedColorIds = (values: OptionValueInput[]): string[] => {
+    const ids: string[] = [];
+    for (const v of values) {
+      const match = findLibraryColor(libraryColors, v);
+      if (match && !ids.includes(match.id)) ids.push(match.id);
+    }
+    return ids;
+  };
+
+  const syncGroupColors = (groupId: string, colorIds: string[]) => {
+    setOptionGroups(prev => prev.map(g => {
+      if (g.id !== groupId) return g;
+      const nonLibrary = g.values.filter(v => !findLibraryColor(libraryColors, v));
+      const existingByLabel = new Map<string, OptionValueInput>();
+      for (const v of g.values) {
+        if (v.label) existingByLabel.set(v.label.trim(), v);
+      }
+      const selectedValues: OptionValueInput[] = colorIds
+        .map(id => libraryColors.find(c => c.id === id))
+        .filter((c): c is ProductColor => !!c)
+        .map(color => {
+          const existing = existingByLabel.get(color.name.trim());
+          return {
+            id: existing?.id ?? `color-${color.id}`,
+            label: color.name,
+            value: color.code,
+            wholesalePrice: existing?.wholesalePrice ?? '',
+            retailPrice: existing?.retailPrice ?? '',
+            hexCode: color.hex_code || '',
+          };
+        });
+      return { ...g, values: [...nonLibrary, ...selectedValues] };
+    }));
   };
 
   const generateVariants = () => {
@@ -481,14 +553,40 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     setGeneratedVariants(mergeWithExisting(newVariants));
   };
 
+  const identityKey = (v: GeneratedVariant): string => {
+    const opts = [...v.optionValueIds].sort().join('|');
+    return `${v._modelGroupId ?? ''}::${opts}`;
+  };
+
   const mergeWithExisting = (newVariants: GeneratedVariant[]): GeneratedVariant[] => {
-    return newVariants.map(newV => {
-      const existing = generatedVariants.find(ev => ev.sku === newV.sku);
+    const existingList = generatedVariants;
+    const existingByKey = new Map(existingList.map(ev => [identityKey(ev), ev]));
+    const newKeys = new Set(newVariants.map(identityKey));
+
+    const removed = existingList.filter(ev => !newKeys.has(identityKey(ev)));
+    let kept = 0;
+    let priceUpdated = 0;
+
+    const merged = newVariants.map(newV => {
+      const key = identityKey(newV);
+      const existing = existingByKey.get(key);
       if (existing) {
-        return { ...existing, _modelGroupId: newV._modelGroupId, _modelGroupType: newV._modelGroupType };
+        kept++;
+        if (existing.wholesale_price !== newV.wholesale_price || existing.retail_price !== newV.retail_price) {
+          priceUpdated++;
+        }
+        return { ...newV, barcode: existing.barcode };
       }
       return newV;
     });
+
+    setDiffSummary({
+      added: merged.length - kept,
+      kept,
+      removed,
+      priceUpdated,
+    });
+    return merged;
   };
 
   const createMutation = useMutation({
@@ -675,6 +773,8 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     setDefaultRetailPrice('');
     setBarcodeList('');
     setGeneratedVariants([]);
+    setDiffSummary(null);
+    loadExistingDataDbValueToColorId.current = new Map();
   };
 
   const updateGroupName = (groupId: string, name: string) => {
@@ -796,7 +896,12 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
               </div>
             )}
 
-            {optionGroups.map((group) => (
+            {optionGroups.map((group) => {
+              const isColorGroup = isColorGroupName(group.name);
+              const selectedColorIds = getGroupSelectedColorIds(group.values);
+              const extraValues = group.values.filter(v => !findLibraryColor(libraryColors, v));
+
+              return (
               <div key={group.id} className="border rounded-lg p-4 space-y-3 bg-card">
                 <div className="flex items-center gap-2">
                   <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -806,6 +911,9 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                     className="h-8 max-w-[200px] font-medium"
                     placeholder="群組名稱（如：顏色、尺寸）"
                   />
+                  {isColorGroup && (
+                    <Badge variant="outline" className="text-xs text-muted-foreground">顏色群組</Badge>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -816,15 +924,45 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                   </Button>
                 </div>
 
-                <OptionValueTable
-                  values={group.values}
-                  onUpdate={(id, field, value) => updateValue(group.id, id, field, value)}
-                  onRemove={(id) => removeValue(group.id, id)}
-                  onAdd={() => addValue(group.id)}
-                  onBulkPaste={() => { setBulkPasteText(''); setBulkPasteTargetGroupId(group.id); }}
+                <ColorSelectField
+                  selectedColorIds={selectedColorIds}
+                  onChange={(ids) => syncGroupColors(group.id, ids)}
                 />
+
+                {isColorGroup && extraValues.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {extraValues.map(v => (
+                      <Badge
+                        key={v.id}
+                        variant="outline"
+                        className="flex items-center gap-1 pr-1 pl-2 h-6"
+                        style={{
+                          backgroundColor: v.hexCode || 'transparent',
+                          color: v.hexCode ? getContrastColor(v.hexCode) : 'inherit',
+                        }}
+                      >
+                        {v.label || v.value}
+                        <X
+                          className="h-3 w-3 cursor-pointer hover:bg-black/10 rounded-full"
+                          onClick={() => removeValue(group.id, v.id)}
+                        />
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                {!isColorGroup && (
+                  <OptionValueTable
+                    values={group.values}
+                    onUpdate={(id, field, value) => updateValue(group.id, id, field, value)}
+                    onRemove={(id) => removeValue(group.id, id)}
+                    onAdd={() => addValue(group.id)}
+                    onBulkPaste={() => { setBulkPasteText(''); setBulkPasteTargetGroupId(group.id); }}
+                  />
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Device Models */}
@@ -915,6 +1053,40 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                 <h4 className="font-medium">預覽（{generatedVariants.length} 個變體）</h4>
                 <Badge variant="outline">點擊可編輯價格</Badge>
               </div>
+
+              {diffSummary && (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary">新增 {diffSummary.added}</Badge>
+                    <Badge variant="outline">保留 {diffSummary.kept}</Badge>
+                    {diffSummary.removed.length > 0 && (
+                      <Badge variant="destructive">移除 {diffSummary.removed.length}</Badge>
+                    )}
+                  </div>
+                  {diffSummary.priceUpdated > 0 && (
+                    <div className="flex items-center gap-2 p-2.5 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm">
+                      <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                      <span>{diffSummary.priceUpdated} 個變體價格已依選項值／預設價格更新，原有手動修改已覆寫</span>
+                    </div>
+                  )}
+                  {diffSummary.removed.length > 0 && (
+                    <details className="border rounded-lg p-3 bg-destructive/5 border-destructive/20 text-sm">
+                      <summary className="cursor-pointer text-destructive font-medium">
+                        待移除清單（{diffSummary.removed.length}）— 僅提示，儲存時不會刪除既有變體
+                      </summary>
+                      <ul className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                        {diffSummary.removed.map(rv => (
+                          <li key={rv.sku} className="flex items-center gap-2 text-muted-foreground">
+                            <X className="h-3 w-3 shrink-0" />
+                            <span className="font-mono text-xs">{rv.sku}</span>
+                            <span>{rv.name}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
 
               {(selectedModelIds.length > 0 || selectedGroupIds.length > 0) && (
                 <div className="flex items-center gap-2 p-2.5 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg text-sm">

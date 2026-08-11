@@ -66,6 +66,17 @@ export function ColorSelectField({ selectedColorIds, onChange, multiple = true }
     setSearchQuery('');
   };
 
+  // 已選顏色置頂，其餘維持庫內順序
+  const sortedColors = useMemo(() => {
+    return [...colors].sort((a, b) => {
+      const aSelected = selectedColorIds.includes(a.id);
+      const bSelected = selectedColorIds.includes(b.id);
+      if (aSelected && !bSelected) return -1;
+      if (!aSelected && bSelected) return 1;
+      return (a.sort_order || 0) - (b.sort_order || 0);
+    });
+  }, [colors, selectedColorIds]);
+
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-1 mb-2 min-h-[32px] p-1 border rounded-md bg-background/50">
@@ -142,7 +153,7 @@ export function ColorSelectField({ selectedColorIds, onChange, multiple = true }
                   </div>
                 </CommandEmpty>
                 <CommandGroup>
-                  {colors.map((color) => (
+                  {sortedColors.map((color) => (
                     <CommandItem
                       key={color.id}
                       value={color.name}

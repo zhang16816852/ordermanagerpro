@@ -42,9 +42,11 @@ export async function parseProductExcel(buffer: ArrayBuffer): Promise<{ rows: an
         const dataRows = rows.slice(headerRowIndex + 1);
 
         // 偵測哪些 base column 存在於 header
+        const baseValues = Object.values(BASE_COLUMNS);
         headerKeys.forEach(h => {
             const mapped = BASE_COLUMNS[h as keyof typeof BASE_COLUMNS];
             if (mapped) presentColumns.add(mapped);
+            else if (baseValues.includes(h as any)) presentColumns.add(h);
         });
 
         dataRows.forEach(row => {
