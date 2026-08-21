@@ -74,8 +74,8 @@ export function AggregateTableView({
   }
 
   return (
-    <div className="rounded-lg border bg-card overflow-hidden">
-      <Table>
+    <div className="rounded-lg border bg-card shadow-soft flex-1 flex flex-col overflow-hidden">
+      <Table containerClassName="h-full">
         <TableHeader>
           <TableRow className="bg-muted/50">
             <TableHead className="w-12">

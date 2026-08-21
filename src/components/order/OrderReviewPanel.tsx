@@ -22,6 +22,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import type { OrderDraftItem } from "@/store/useOrderDraftStore";
+import { formatCurrency } from "@/lib/formatters";
 
 interface OrderReviewPanelProps {
   storeId: string;
@@ -122,7 +123,7 @@ function SortableRow({
         />
       </TableCell>
       <TableCell className="text-right font-mono text-sm w-28">
-        ${(item.price * item.quantity).toLocaleString()}
+        {formatCurrency(item.price * item.quantity)}
       </TableCell>
       <TableCell className="w-12 text-center">
         <Checkbox checked={priceSync} onCheckedChange={(v) => onPriceSyncChange(!!v)} />
@@ -381,7 +382,7 @@ export default function OrderReviewPanel({
                 />
                 <Label htmlFor={`sync-${item.id}`} className="text-xs cursor-pointer">存為店價</Label>
               </div>
-              <span className="font-mono font-medium">${(item.price * item.quantity).toLocaleString()}</span>
+              <span className="font-mono font-medium">{formatCurrency(item.price * item.quantity)}</span>
             </div>
           </div>
         ))}
@@ -411,7 +412,7 @@ export default function OrderReviewPanel({
 
       <div className="flex items-center justify-between text-lg font-bold border-t pt-4">
         <span>總計 <span className="text-base font-normal text-muted-foreground">（{totalQuantity} 件）</span></span>
-        <span>${totalAmount.toLocaleString()}</span>
+        <span>{formatCurrency(totalAmount)}</span>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">

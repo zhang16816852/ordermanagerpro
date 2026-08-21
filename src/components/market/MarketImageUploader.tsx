@@ -103,7 +103,7 @@ export function MarketImageUploader({ value, onChange, disabled }: MarketImageUp
             )}
           >
             {uploading ? (
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" role="status" aria-live="polite" />
             ) : (
               <>
                 <ImagePlus className="h-5 w-5 text-muted-foreground" />

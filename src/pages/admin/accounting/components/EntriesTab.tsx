@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { CreditCard, Edit, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { AccountingEntry, PaymentStatus } from '../types';
+import { formatCurrency } from '@/lib/formatters';
 
 interface EntriesTabProps {
   entries: AccountingEntry[];
@@ -55,75 +56,138 @@ export function EntriesTab({
   }
 
   return (
-    <div className="border rounded-md overflow-hidden bg-background">
-      <Table>
-        <TableHeader className="bg-muted/50">
-          <TableRow>
-            <TableHead>日期</TableHead>
-            <TableHead>類型</TableHead>
-            <TableHead>分類</TableHead>
-            <TableHead>說明</TableHead>
-            <TableHead className="text-right">金額</TableHead>
-            <TableHead className="text-right">已付/已收</TableHead>
-            <TableHead>狀態</TableHead>
-            <TableHead className="text-right">操作</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {entries.map((entry) => (
-            <TableRow key={entry.id} className="hover:bg-muted/30 transition-colors">
-              <TableCell className="font-medium">{format(new Date(entry.transaction_date), 'MM/dd')}</TableCell>
-              <TableCell>
-                <Badge variant={entry.type === 'income' ? 'default' : 'secondary'}>
-                  {entry.type === 'income' ? '收入' : '支出'}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-sm">{entry.category?.name || '-'}</TableCell>
-              <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">
-                {entry.description || '-'}
-              </TableCell>
-              <TableCell className={`text-right font-bold ${entry.type === 'income' ? 'text-green-600' : 'text-destructive'}`}>
-                {entry.type === 'income' ? '+' : '-'}${entry.amount.toLocaleString()}
-              </TableCell>
-              <TableCell className="text-right text-sm">
-                ${entry.paid_amount.toLocaleString()}
-              </TableCell>
-              <TableCell>{getStatusBadge(entry.payment_status)}</TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-1">
-                  {entry.payment_status !== 'paid' && (
+    <>
+      {/* Desktop: Table */}
+      <div className="hidden md:block border rounded-md overflow-hidden bg-background">
+        <Table>
+          <TableHeader className="bg-muted/50">
+            <TableRow>
+              <TableHead>日期</TableHead>
+              <TableHead>類型</TableHead>
+              <TableHead>分類</TableHead>
+              <TableHead>說明</TableHead>
+              <TableHead className="text-right">金額</TableHead>
+              <TableHead className="text-right">已付/已收</TableHead>
+              <TableHead>狀態</TableHead>
+              <TableHead className="text-right">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {entries.map((entry) => (
+              <TableRow key={entry.id} className="hover:bg-muted/30 transition-colors">
+                <TableCell className="font-medium">{format(new Date(entry.transaction_date), 'MM/dd')}</TableCell>
+                <TableCell>
+                  <Badge variant={entry.type === 'income' ? 'default' : 'secondary'}>
+                    {entry.type === 'income' ? '收入' : '支出'}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-sm">{entry.category?.name || '-'}</TableCell>
+                <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">
+                  {entry.description || '-'}
+                </TableCell>
+                <TableCell className={`text-right font-bold ${entry.type === 'income' ? 'text-green-600' : 'text-destructive'}`}>
+                  {entry.type === 'income' ? '+' : '-'}{formatCurrency(entry.amount)}
+                </TableCell>
+                <TableCell className="text-right text-sm">
+                  {formatCurrency(entry.paid_amount)}
+                </TableCell>
+                <TableCell>{getStatusBadge(entry.payment_status)}</TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
+                    {entry.payment_status !== 'paid' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-blue-500"
+                        onClick={() => onPay(entry)}
+                        aria-label="記錄付款"
+                      >
+                        <CreditCard className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 text-blue-500"
-                      onClick={() => onPay(entry)}
-                      title="記錄付款"
+                      className="h-8 w-8"
+                      onClick={() => onEdit(entry)}
+                      aria-label="編輯"
                     >
-                      <CreditCard className="h-4 w-4" />
+                      <Edit className="h-4 w-4" aria-hidden="true" />
                     </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => onEdit(entry)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive"
-                    onClick={() => onDelete(entry.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive"
+                      onClick={() => onDelete(entry.id)}
+                      aria-label="刪除"
+                    >
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Mobile: Cards */}
+      <div className="md:hidden space-y-3">
+        {entries.map((entry) => (
+          <div key={entry.id} className="border rounded-lg p-4 bg-card shadow-soft space-y-2">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm">{format(new Date(entry.transaction_date), 'MM/dd')}</span>
+                <Badge variant={entry.type === 'income' ? 'default' : 'secondary'}>
+                  {entry.type === 'income' ? '收入' : '支出'}
+                </Badge>
+                {getStatusBadge(entry.payment_status)}
+              </div>
+              <span className={`font-bold ${entry.type === 'income' ? 'text-green-600' : 'text-destructive'}`}>
+                {entry.type === 'income' ? '+' : '-'}{formatCurrency(entry.amount)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground truncate">{entry.category?.name || '-'}</span>
+              <span className="text-xs text-muted-foreground">已付 {formatCurrency(entry.paid_amount)}</span>
+            </div>
+            {entry.description && (
+              <p className="text-xs text-muted-foreground truncate">{entry.description}</p>
+            )}
+            <div className="flex items-center gap-1 pt-1 border-t">
+              {entry.payment_status !== 'paid' && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-blue-500"
+                  onClick={() => onPay(entry)}
+                  aria-label="記錄付款"
+                >
+                  <CreditCard className="h-4 w-4" />
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => onEdit(entry)}
+                aria-label="編輯"
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-destructive"
+                onClick={() => onDelete(entry.id)}
+                aria-label="刪除"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }

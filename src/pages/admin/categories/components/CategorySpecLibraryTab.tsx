@@ -77,7 +77,7 @@ const SpecTreeNode = ({ node, level, engine, searchLower, expandedIds, onToggleE
             <div
                 onClick={() => isRoot && engine.toggle(spec.id)}
                 className={`
-                    flex items-center justify-between p-3 rounded-lg border transition-all mb-0.5
+                    flex items-center justify-between p-3 rounded-lg border transition-colors duration-200 mb-0.5
                     ${isSelected
                         ? (isManual ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-100' : 'bg-slate-100 border-slate-200 opacity-80')
                         : 'bg-white hover:border-slate-300 hover:shadow-sm'
@@ -96,7 +96,7 @@ const SpecTreeNode = ({ node, level, engine, searchLower, expandedIds, onToggleE
                     ) : (
                         <div className="w-5 h-5 shrink-0" />
                     )}
-                    {!isRoot && <LinkIcon className="h-3 w-3 text-slate-300 shrink-0" />}
+                    {!isRoot && <LinkIcon className="h-3 w-3 text-slate-300 shrink-0" aria-hidden="true" />}
                     <div className="flex flex-col min-w-0">
                         <span className={`text-sm font-medium truncate ${isSelected && isManual ? 'text-blue-700' : 'text-slate-700'}`}>
                             {spec.name}
@@ -168,7 +168,7 @@ export const CategorySpecLibraryTab = ({ specDefinitions, engine }: CategorySpec
     return (
         <div className="flex flex-col gap-1 p-4 flex-1 min-h-0 overflow-y-auto bg-slate-50/30">
             <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" aria-hidden="true" />
                 <Input
                     placeholder="搜尋規格..."
                     className="pl-8 h-9 text-sm"

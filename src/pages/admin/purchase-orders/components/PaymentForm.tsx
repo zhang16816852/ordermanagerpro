@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import { DialogFooter } from '@/components/ui/dialog';
 import { format } from 'date-fns';
+import { formatCurrency } from '@/lib/formatters';
 
 interface PaymentFormProps {
   accounts: any[];
@@ -40,7 +41,7 @@ export function PaymentForm({
           <SelectContent>
             {accounts.map((acc) => (
               <SelectItem key={acc.id} value={acc.id}>
-                {acc.name} (餘額: ${acc.balance.toLocaleString()})
+                {acc.name} (餘額: {formatCurrency(acc.balance)})
               </SelectItem>
             ))}
           </SelectContent>

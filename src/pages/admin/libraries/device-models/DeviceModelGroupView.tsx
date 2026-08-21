@@ -157,13 +157,14 @@ export function DeviceModelGroupView({
                                   <div className="flex justify-between items-center mt-2 border-t pt-2 border-dashed">
                                     <span className="text-[10px] text-muted-foreground">排序: {model.sort_order}</span>
                                     <div className="flex gap-1">
-                                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEdit(model)}>
+                                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEdit(model)} aria-label="編輯機型">
                                         <Edit className="h-3 w-3 text-muted-foreground" />
                                       </Button>
                                       <Button
                                         variant="ghost"
                                         size="icon"
                                         className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                        aria-label="刪除機型"
                                         onClick={() => {
                                           if (confirm(`確定要刪除「${model.name}」嗎？此操作不可逆。`)) {
                                             deleteMutation.mutate(model.id);

@@ -342,8 +342,8 @@ const AcceptInvite = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Card className="w-full max-w-md">
-          <CardContent className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <CardContent className="flex items-center justify-center py-12" role="status" aria-live="polite">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
           </CardContent>
         </Card>
       </div>
@@ -356,7 +356,7 @@ const AcceptInvite = () => {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
-              <XCircle className="h-6 w-6 text-destructive" />
+              <XCircle className="h-6 w-6 text-destructive" aria-hidden="true" />
             </div>
             <CardTitle>邀請無效</CardTitle>
             <CardDescription>{error}</CardDescription>
@@ -378,7 +378,7 @@ const AcceptInvite = () => {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
-              <XCircle className="h-6 w-6 text-destructive" />
+              <XCircle className="h-6 w-6 text-destructive" aria-hidden="true" />
             </div>
             <CardTitle>邀請無效</CardTitle>
             <CardDescription>找不到相關的邀請資訊或商店資訊。</CardDescription>
@@ -402,7 +402,7 @@ const AcceptInvite = () => {
           <Card className="w-full max-w-md">
             <CardHeader className="text-center">
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                <Store className="h-6 w-6 text-primary" />
+                <Store className="h-6 w-6 text-primary" aria-hidden="true" />
               </div>
               <CardTitle>此 Email 已有帳號</CardTitle>
               <CardDescription>
@@ -423,7 +423,7 @@ const AcceptInvite = () => {
                 className="w-full"
                 onClick={() => navigate(`/auth?redirect=/invite/${token}`)}
               >
-                <Mail className="mr-2 h-4 w-4" />
+                <Mail className="mr-2 h-4 w-4" aria-hidden="true" />
                 登入帳號以接受邀請
               </Button>
               <Button
@@ -446,7 +446,7 @@ const AcceptInvite = () => {
           <Card className="w-full max-w-md">
             <CardHeader className="text-center">
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                <UserPlus className="h-6 w-6 text-primary" />
+                <UserPlus className="h-6 w-6 text-primary" aria-hidden="true" />
               </div>
               <CardTitle>設定您的帳號</CardTitle>
               <CardDescription>
@@ -463,7 +463,7 @@ const AcceptInvite = () => {
                 <div className="space-y-2">
                   <Label htmlFor="fullName">姓名</Label>
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                     <Input
                       id="fullName"
                       type="text"
@@ -479,7 +479,7 @@ const AcceptInvite = () => {
                 <div className="space-y-2">
                   <Label htmlFor="password">設定密碼</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                     <Input
                       id="password"
                       type="password"
@@ -495,7 +495,7 @@ const AcceptInvite = () => {
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">確認密碼</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                     <Input
                       id="confirmPassword"
                       type="password"
@@ -510,12 +510,12 @@ const AcceptInvite = () => {
 
                 <div className="rounded-lg border p-3 bg-muted/30">
                   <div className="flex items-center gap-2 text-sm">
-                    <Store className="h-4 w-4 text-muted-foreground" />
+                    <Store className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                     <span className="text-muted-foreground">將加入店鋪：</span>
                     <span className="font-medium">{invitation!.store?.name}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm mt-1">
-                    <UserPlus className="h-4 w-4 text-muted-foreground" />
+                    <UserPlus className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                     <span className="text-muted-foreground">職位：</span>
                     <span className="font-medium">{getRoleLabel(invitation!.role)}</span>
                   </div>
@@ -524,8 +524,8 @@ const AcceptInvite = () => {
                 <Button type="submit" className="w-full" disabled={registering}>
                   {registering ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      處理中...
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                      處理中…
                     </>
                   ) : (
                     '確認並加入店鋪'
@@ -545,7 +545,7 @@ const AcceptInvite = () => {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-              <Store className="h-6 w-6 text-primary" />
+              <Store className="h-6 w-6 text-primary" aria-hidden="true" />
             </div>
             <CardTitle>您已被邀請加入店鋪</CardTitle>
             <CardDescription>
@@ -565,7 +565,7 @@ const AcceptInvite = () => {
                 className="w-full"
                 onClick={() => setShowSignUp(true)}
               >
-                <UserPlus className="mr-2 h-4 w-4" />
+                <UserPlus className="mr-2 h-4 w-4" aria-hidden="true" />
                 註冊新帳號
               </Button>
               <Button
@@ -573,7 +573,7 @@ const AcceptInvite = () => {
                 className="w-full"
                 onClick={() => navigate(`/auth?redirect=/invite/${token}`)}
               >
-                <Mail className="mr-2 h-4 w-4" />
+                <Mail className="mr-2 h-4 w-4" aria-hidden="true" />
                 已有帳號，登入
               </Button>
             </div>
@@ -590,7 +590,7 @@ const AcceptInvite = () => {
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-warning/10">
-              <XCircle className="h-6 w-6 text-warning" />
+              <XCircle className="h-6 w-6 text-warning" aria-hidden="true" />
             </div>
             <CardTitle>Email 不符</CardTitle>
             <CardDescription>
@@ -631,7 +631,7 @@ const AcceptInvite = () => {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <UserPlus className="h-6 w-6 text-primary" />
+            <UserPlus className="h-6 w-6 text-primary" aria-hidden="true" />
           </div>
           <CardTitle>接受邀請</CardTitle>
           <CardDescription>
@@ -668,12 +668,12 @@ const AcceptInvite = () => {
             >
               {accepting ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  處理中...
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  處理中…
                 </>
               ) : (
                 <>
-                  <CheckCircle className="mr-2 h-4 w-4" />
+                  <CheckCircle className="mr-2 h-4 w-4" aria-hidden="true" />
                   接受邀請
                 </>
               )}

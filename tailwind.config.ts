@@ -20,6 +20,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ["Noto Sans TC", "system-ui", "sans-serif"],
+        display: ["Inter", "Noto Sans TC", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "monospace"],
       },
       colors: {

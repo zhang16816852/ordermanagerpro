@@ -30,13 +30,13 @@ export function AccountForm({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label>帳戶名稱</Label>
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="如：玉山銀行" />
+        <Label htmlFor="account-name">帳戶名稱</Label>
+        <Input id="account-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="如：玉山銀行" />
       </div>
       <div className="space-y-2">
-        <Label>類型</Label>
+        <Label htmlFor="account-type">類型</Label>
         <Select value={type} onValueChange={setType}>
-          <SelectTrigger>
+          <SelectTrigger id="account-type">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -46,12 +46,12 @@ export function AccountForm({
         </Select>
       </div>
       <div className="space-y-2">
-        <Label>初始餘額</Label>
-        <Input type="number" value={balance} onChange={(e) => setBalance(e.target.value)} />
+        <Label htmlFor="account-balance">初始餘額</Label>
+        <Input id="account-balance" type="number" value={balance} onChange={(e) => setBalance(e.target.value)} />
       </div>
       <div className="space-y-2">
-        <Label>備註</Label>
-        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+        <Label htmlFor="account-description">備註</Label>
+        <Textarea id="account-description" value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
       <DialogFooter>
         <Button

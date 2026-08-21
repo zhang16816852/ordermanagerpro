@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Eye, EyeOff, ArrowUpDown, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatTWD } from "@/lib/formatters";
 
 export type MarketListingType = "buy" | "sell" | "service";
 export type MarketListingStatus = "active" | "draft" | "completed" | "closed";
@@ -107,7 +108,7 @@ export function MarketListingCard({ listing, isAuthenticated }: MarketListingCar
             {isAuthenticated ? (
               listing.price != null ? (
                 <span className="text-base font-bold text-primary">
-                  NT${listing.price.toLocaleString()}
+                  {formatTWD(listing.price ?? 0)}
                 </span>
               ) : (
                 <span className="text-sm text-muted-foreground">面議</span>

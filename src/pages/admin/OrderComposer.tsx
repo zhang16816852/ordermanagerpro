@@ -26,6 +26,7 @@ import { ShoppingCart, Filter } from "lucide-react";
 import ProductCatalog from "@/components/products/catalog/ProductCatalog";
 import CartPanel from "@/components/order/CartPanel";
 import { CatalogSidebar } from "@/components/products/catalog/CatalogSidebar";
+import { formatCurrency } from "@/lib/formatters";
 
 export default function AdminOrderComposer() {
   const { user } = useAuth();
@@ -271,7 +272,7 @@ export default function AdminOrderComposer() {
                           return next;
                         }, { replace: true });
                       }}
-                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors duration-200 ${
                         viewMode === mode
                           ? "bg-background text-foreground shadow-sm"
                           : "text-muted-foreground hover:text-foreground"
@@ -314,7 +315,7 @@ export default function AdminOrderComposer() {
                         />
                         <div className="flex justify-between text-lg font-semibold">
                           <span>總計</span>
-                          <span>${totalAmount.toLocaleString()}</span>
+                           <span>{formatCurrency(totalAmount)}</span>
                         </div>
                         <Button
                           size="lg"

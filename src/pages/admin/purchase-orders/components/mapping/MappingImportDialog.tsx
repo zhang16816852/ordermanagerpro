@@ -302,7 +302,7 @@ export function MappingImportDialog({
           {parsedData.length === 0 ? (
             <div className="space-y-4">
               <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
+                <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-4" aria-hidden="true" />
                 <p className="text-sm text-muted-foreground mb-4">
                   選擇 CSV 或 Excel 檔案上傳
                 </p>
@@ -341,19 +341,19 @@ export function MappingImportDialog({
                 </Badge>
                 {matchedCount > 0 && (
                   <Badge variant="default" className="text-sm bg-green-600">
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    <CheckCircle2 className="h-3 w-3 mr-1" aria-hidden="true" />
                     已匹配 {matchedCount}
                   </Badge>
                 )}
                 {conflictCount > 0 && (
                   <Badge variant="default" className="text-sm bg-amber-500">
-                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    <AlertTriangle className="h-3 w-3 mr-1" aria-hidden="true" />
                     有衝突 {conflictCount}
                   </Badge>
                 )}
                 {unmatchedCount > 0 && (
                   <Badge variant="destructive" className="text-sm">
-                    <XCircle className="h-3 w-3 mr-1" />
+                    <XCircle className="h-3 w-3 mr-1" aria-hidden="true" />
                     未匹配 {unmatchedCount}
                   </Badge>
                 )}
@@ -388,7 +388,7 @@ export function MappingImportDialog({
                         <TableCell>
                           {row.match_status === 'matched' && (
                             <div className="flex items-center text-green-600 text-sm">
-                              <CheckCircle2 className="h-4 w-4 mr-1" />
+                              <CheckCircle2 className="h-4 w-4 mr-1" aria-hidden="true" />
                               {row.matched_product?.name}
                               {row.matched_variant && (
                                 <span className="text-muted-foreground ml-1">({row.matched_variant.name})</span>
@@ -402,14 +402,14 @@ export function MappingImportDialog({
                           )}
                           {row.match_status === 'conflict' && (
                             <div className="flex items-center text-amber-600 text-sm">
-                              <AlertTriangle className="h-4 w-4 mr-1" />
+                              <AlertTriangle className="h-4 w-4 mr-1" aria-hidden="true" />
                               已有對照：{row.conflict_existing?.internal_product?.name || '未知'}
                               <span className="text-muted-foreground ml-1">（將覆蓋）</span>
                             </div>
                           )}
                           {row.match_status === 'unmatched' && (
                             <div className="flex items-center text-destructive text-sm">
-                              <XCircle className="h-4 w-4 mr-1" />
+                              <XCircle className="h-4 w-4 mr-1" aria-hidden="true" />
                               未找到匹配產品
                             </div>
                           )}

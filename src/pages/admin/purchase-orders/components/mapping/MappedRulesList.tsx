@@ -9,6 +9,7 @@ import { SupplierProductMapping } from '../../hooks/useSupplierMappings';
 import { MappingExportDialog } from './MappingExportDialog';
 import { MappingImportDialog } from './MappingImportDialog';
 import { InternalProductSelector } from './InternalProductSelector';
+import { formatCurrency } from '@/lib/formatters';
 
 interface MappedRulesListProps {
   mappings: SupplierProductMapping[];
@@ -155,6 +156,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
                       variant="ghost"
                       size="sm"
                       onClick={() => setAddValues(prev => ({ ...prev, internal_product_id: '', internal_variant_id: null, internal_label: '' }))}
+                      aria-label="清除已選產品"
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -263,7 +265,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
                         placeholder="0"
                       />
                     ) : (
-                      rule.vendor_unit_cost != null ? `$${rule.vendor_unit_cost.toLocaleString()}` : '-'
+                      rule.vendor_unit_cost != null ? formatCurrency(rule.vendor_unit_cost) : '-'
                     )}
                   </TableCell>
                   <TableCell className="text-right">
@@ -275,6 +277,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
                           className="h-8 w-8"
                           onClick={() => saveEdit(rule)}
                           disabled={isSaving}
+                          aria-label="儲存編輯"
                         >
                           <Check className="h-4 w-4 text-green-600" />
                         </Button>
@@ -283,6 +286,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
                           size="icon"
                           className="h-8 w-8"
                           onClick={() => setEditingId(null)}
+                          aria-label="取消編輯"
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -294,6 +298,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
                           size="icon"
                           className="h-8 w-8"
                           onClick={() => startEdit(rule)}
+                          aria-label="編輯對照規則"
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -306,6 +311,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
                               onDelete(rule.id);
                             }
                           }}
+                          aria-label="刪除對照規則"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

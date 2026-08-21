@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { AccountingEntry, Account } from '../types';
+import { formatCurrency } from '@/lib/formatters';
 
 interface PaymentDialogProps {
   open: boolean;
@@ -67,14 +68,15 @@ export function PaymentDialog({
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <Label>待付金額</Label>
-            <p className="text-2xl font-bold">
-              ${entry ? (entry.amount - entry.paid_amount).toLocaleString() : 0}
+            <Label htmlFor="payment-pending">待付金額</Label>
+            <p id="payment-pending" className="text-2xl font-bold">
+               {entry ? formatCurrency(entry.amount - entry.paid_amount) : formatCurrency(0)}
             </p>
           </div>
           <div className="space-y-2">
-            <Label>付款金額</Label>
+            <Label htmlFor="payment-amount">付款金額</Label>
             <Input
+              id="payment-amount"
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
@@ -82,15 +84,15 @@ export function PaymentDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label>付款帳戶</Label>
+            <Label htmlFor="payment-account">付款帳戶</Label>
             <Select value={accountId} onValueChange={setAccountId}>
-              <SelectTrigger>
+              <SelectTrigger id="payment-account">
                 <SelectValue placeholder="選擇帳戶" />
               </SelectTrigger>
               <SelectContent>
                 {accounts.map((account) => (
                   <SelectItem key={account.id} value={account.id}>
-                    {account.name} (${account.balance.toLocaleString()})
+                     {account.name} ({formatCurrency(account.balance)})
                   </SelectItem>
                 ))}
               </SelectContent>

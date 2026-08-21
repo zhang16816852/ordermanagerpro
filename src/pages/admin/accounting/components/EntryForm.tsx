@@ -24,6 +24,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { DialogFooter } from '@/components/ui/dialog';
 import { format } from 'date-fns';
 import { AccountingEntry, AccountingCategory } from '../types';
+import { formatCurrency } from '@/lib/formatters';
 
 interface EntryFormProps {
   entry: AccountingEntry | null;
@@ -206,7 +207,7 @@ export function EntryForm({
                             <div className="text-xs text-muted-foreground font-mono">{po.id.slice(0, 8)}</div>
                           </TableCell>
                           <TableCell className="text-xs">{format(new Date(po.order_date), 'MM/dd')}</TableCell>
-                          <TableCell className="text-right">${po.total_amount.toLocaleString()}</TableCell>
+                           <TableCell className="text-right">{formatCurrency(po.total_amount)}</TableCell>
                         </TableRow>
                       ))
                     )
@@ -227,7 +228,7 @@ export function EntryForm({
                             <div className="text-xs text-muted-foreground font-mono">{order.id.slice(0, 8)}</div>
                           </TableCell>
                           <TableCell className="text-xs">{format(new Date(order.created_at), 'MM/dd')}</TableCell>
-                          <TableCell className="text-right">${order.total_amount.toLocaleString()}</TableCell>
+                           <TableCell className="text-right">{formatCurrency(order.total_amount)}</TableCell>
                         </TableRow>
                       ))
                     )

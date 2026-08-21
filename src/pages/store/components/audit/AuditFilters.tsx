@@ -13,7 +13,7 @@ export function AuditFilters({ search, setSearch, entityFilter, setEntityFilter 
   return (
     <div className="flex gap-4 mb-4">
       <div className="relative flex-1">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
         <Input
           placeholder="搜尋..."
           value={search}

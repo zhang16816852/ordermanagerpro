@@ -61,7 +61,7 @@ function SortableNodeWrapper({ node, level, onEdit, onDelete, onReorder, isRoot 
                 {...attributes}
                 {...listeners}
             >
-                <GripVertical className="h-4 w-4 text-slate-400 hover:text-slate-700" />
+                <GripVertical className="h-4 w-4 text-slate-400 hover:text-slate-700" aria-hidden="true" />
             </div>
 
             <TreeNode node={node} level={level} onEdit={onEdit} onDelete={onDelete} onReorder={onReorder} />
@@ -85,8 +85,8 @@ function TreeNode({ node, level, onEdit, onDelete, onReorder }: any) {
                 <div className="flex-1 space-y-2">
                     {/* 觸發條件提示 */}
                     {node.onValue && (
-                        <div className="flex items-center gap-1.5 mb-1 animate-in fade-in slide-in-from-left-2 transition-all">
-                            <Zap className="h-3 w-3 text-orange-500 fill-current" />
+                        <div className="flex items-center gap-1.5 mb-1 animate-in fade-in slide-in-from-left-2 transition-colors duration-200">
+                            <Zap className="h-3 w-3 text-orange-500 fill-current" aria-hidden="true" />
                             <Badge variant="outline" className="text-[9px] h-4 px-1.5 bg-orange-500/5 text-orange-600 border-orange-500/20 font-bold">
                                 當值為: {node.onValue} 時觸發
                             </Badge>

@@ -110,13 +110,14 @@ export function DeviceModelListView({
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(model)}>
+                    <Button variant="ghost" size="icon" onClick={() => openEdit(model)} aria-label="編輯機型">
                       <Edit className="h-4 w-4 text-muted-foreground" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      aria-label="刪除機型"
                       onClick={() => {
                         if (confirm(`確定要刪除「${model.name}」嗎？此操作不可逆。`)) {
                           deleteMutation.mutate(model.id);

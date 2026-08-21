@@ -469,6 +469,8 @@ export default function AdminStores() {
           </div>
 
           <div className="rounded-lg border bg-card shadow-soft">
+            {/* Desktop: Table */}
+            <div className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -525,7 +527,7 @@ export default function AdminStores() {
                         </Button>
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon" onClick={() => { setEditingStore(store); setIsStoreDialogOpen(true); }}>
+                        <Button variant="ghost" size="icon" aria-label="編輯門市" onClick={() => { setEditingStore(store); setIsStoreDialogOpen(true); }}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                       </TableCell>
@@ -534,6 +536,54 @@ export default function AdminStores() {
                 )}
               </TableBody>
             </Table>
+            </div>
+
+            {/* Mobile: Cards */}
+            <div className="md:hidden">
+              {storesLoading ? (
+                <div className="p-4 space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-20 w-full rounded-lg" />
+                  ))}
+                </div>
+              ) : filteredStores?.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">沒有找到店鋪</div>
+              ) : (
+                <div className="divide-y">
+                  {filteredStores?.map((store) => (
+                    <div key={store.id} className="p-4 space-y-2">
+                      <div className="flex items-start justify-between">
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{store.name}</p>
+                          <p className="font-mono text-xs text-muted-foreground">{store.code || '-'}</p>
+                        </div>
+                        <Button variant="ghost" size="icon" aria-label="編輯門市" onClick={() => { setEditingStore(store); setIsStoreDialogOpen(true); }}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        {(store as any).brand && <Badge variant="secondary">{(store as any).brand}</Badge>}
+                        {store.phone && <span>{store.phone}</span>}
+                      </div>
+                      {store.address && (
+                        <p className="text-xs text-muted-foreground truncate">{store.address}</p>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto p-0 hover:bg-transparent"
+                        onClick={() => openMembersDialog(store)}
+                      >
+                        <Badge variant="secondary" className="gap-1 cursor-pointer hover:bg-secondary/80">
+                          <Users className="h-3 w-3" />
+                          {store.store_users?.[0]?.count ?? 0} 位成員
+                        </Badge>
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </TabsContent>
 
@@ -669,6 +719,7 @@ export default function AdminStores() {
                                     variant="ghost"
                                     size="icon"
                                     className="h-5 w-5 text-destructive ml-auto"
+                                    aria-label="移除門市"
                                     onClick={() => removeStoreMutation.mutate(su.id)}
                                   >
                                     <X className="h-3 w-3" />
@@ -682,7 +733,7 @@ export default function AdminStores() {
                           {format(new Date(profile.created_at), 'yyyy/MM/dd')}
                         </TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="icon" onClick={() => openAssignDialog(profile.id)}>
+                          <Button variant="ghost" size="icon" aria-label="指派門市" onClick={() => openAssignDialog(profile.id)}>
                             <UserPlus className="h-4 w-4" />
                           </Button>
                         </TableCell>
@@ -777,6 +828,7 @@ export default function AdminStores() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive"
+                          aria-label="移除門市成員"
                           onClick={() => {
                             removeStoreMutation.mutate(su.id);
                           }}
@@ -819,9 +871,9 @@ export default function AdminStores() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>店鋪</Label>
+              <Label htmlFor="assign-store">店鋪</Label>
               <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
-                <SelectTrigger>
+                <SelectTrigger id="assign-store">
                   <SelectValue placeholder="選擇店鋪" />
                 </SelectTrigger>
                 <SelectContent>
@@ -834,9 +886,9 @@ export default function AdminStores() {
               </Select>
             </div>
             <div>
-              <Label>角色</Label>
+              <Label htmlFor="assign-role">角色</Label>
               <Select value={selectedRole} onValueChange={setSelectedRole}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="assign-role"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="founder">創辦人</SelectItem>
                   <SelectItem value="manager">經理</SelectItem>
@@ -865,13 +917,13 @@ export default function AdminStores() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Email</Label>
-              <Input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="member@example.com" />
+              <Label htmlFor="invite-email">Email</Label>
+              <Input id="invite-email" type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="member@example.com" />
             </div>
             <div>
-              <Label>店鋪</Label>
+              <Label htmlFor="invite-store">店鋪</Label>
               <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
-                <SelectTrigger><SelectValue placeholder="選擇店鋪" /></SelectTrigger>
+                <SelectTrigger id="invite-store"><SelectValue placeholder="選擇店鋪" /></SelectTrigger>
                 <SelectContent>
                   {storesList?.map((store) => (
                     <SelectItem key={store.id} value={store.id}>
@@ -882,9 +934,9 @@ export default function AdminStores() {
               </Select>
             </div>
             <div>
-              <Label>角色</Label>
+              <Label htmlFor="invite-role">角色</Label>
               <Select value={selectedRole} onValueChange={setSelectedRole}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="invite-role"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="founder">創辦人</SelectItem>
                   <SelectItem value="manager">經理</SelectItem>

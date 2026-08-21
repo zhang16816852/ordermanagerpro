@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TrendingUp, TrendingDown, DollarSign, Wallet, Calculator } from 'lucide-react';
 import { AccountingEntry, Account } from '../types';
+import { formatCurrency } from '@/lib/formatters';
 
 interface StatsCardsProps {
   entries: AccountingEntry[];
@@ -23,8 +24,8 @@ export function StatsCards({ entries, accounts }: StatsCardsProps) {
           <TrendingUp className="h-4 w-4 text-green-600" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-green-600">${totalIncome.toLocaleString()}</div>
-          <p className="text-xs text-muted-foreground">未收: ${unpaidIncome.toLocaleString()}</p>
+          <div className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</div>
+          <p className="text-xs text-muted-foreground">未收: {formatCurrency(unpaidIncome)}</p>
         </CardContent>
       </Card>
 
@@ -34,8 +35,8 @@ export function StatsCards({ entries, accounts }: StatsCardsProps) {
           <TrendingDown className="h-4 w-4 text-destructive" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-destructive">${totalExpense.toLocaleString()}</div>
-          <p className="text-xs text-muted-foreground">未付: ${unpaidExpense.toLocaleString()}</p>
+          <div className="text-2xl font-bold text-destructive">{formatCurrency(totalExpense)}</div>
+          <p className="text-xs text-muted-foreground">未付: {formatCurrency(unpaidExpense)}</p>
         </CardContent>
       </Card>
 
@@ -46,7 +47,7 @@ export function StatsCards({ entries, accounts }: StatsCardsProps) {
         </CardHeader>
         <CardContent>
           <div className={`text-2xl font-bold ${totalIncome - totalExpense >= 0 ? 'text-green-600' : 'text-destructive'}`}>
-            ${(totalIncome - totalExpense).toLocaleString()}
+            {formatCurrency(totalIncome - totalExpense)}
           </div>
         </CardContent>
       </Card>
@@ -57,7 +58,7 @@ export function StatsCards({ entries, accounts }: StatsCardsProps) {
           <Wallet className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">${totalBalance.toLocaleString()}</div>
+          <div className="text-2xl font-bold">{formatCurrency(totalBalance)}</div>
         </CardContent>
       </Card>
 

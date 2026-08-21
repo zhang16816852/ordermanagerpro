@@ -50,6 +50,7 @@ export function Toolbar({
                             size="icon" 
                             className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 hover:bg-transparent text-muted-foreground hover:text-foreground"
                             onClick={() => onSearchChange('')}
+                            aria-label="清除搜尋"
                         >
                             <Plus className="h-3 w-3 rotate-45" />
                         </Button>

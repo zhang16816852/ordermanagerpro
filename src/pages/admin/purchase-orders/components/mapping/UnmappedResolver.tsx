@@ -87,7 +87,7 @@ export function UnmappedResolver({ supplierId, unmappedItems, onRuleCreated, onA
                   <TableCell>{item.vendor_product_name}</TableCell>
                   <TableCell>
                     {isResolved ? (
-                      <span className="flex items-center text-green-600 text-sm"><CheckCircle2 className="w-4 h-4 mr-1" /> 已設定</span>
+                      <span className="flex items-center text-green-600 text-sm"><CheckCircle2 className="w-4 h-4 mr-1" aria-hidden="true" /> 已設定</span>
                     ) : (
                       <span className="text-amber-600 text-sm">未對應</span>
                     )}

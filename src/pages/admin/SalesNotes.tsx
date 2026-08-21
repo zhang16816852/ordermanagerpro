@@ -16,6 +16,7 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/formatters";
 import type { DateRange } from "react-day-picker";
 
 export default function AdminSalesNotes() {
@@ -185,7 +186,7 @@ export default function AdminSalesNotes() {
               <span className="text-muted-foreground">|</span>
               <span className="text-green-600">已收: <strong>{receivedCount}</strong></span>
               <span className="text-muted-foreground">|</span>
-              <span>金額總計: <strong>${totalAmount.toLocaleString()}</strong></span>
+               <span>金額總計: <strong>{formatCurrency(totalAmount)}</strong></span>
             </div>
           </div>
 
@@ -279,6 +280,7 @@ export default function AdminSalesNotes() {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="清除日期篩選"
                 onClick={() => {
                   setDateRange(undefined);
                   setSearchParams((prev) => {

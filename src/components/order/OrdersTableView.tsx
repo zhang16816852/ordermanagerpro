@@ -13,6 +13,7 @@ import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { OrderStatusBadge } from './OrderStatusBadge';
 import { Order, OrderItem } from '@/types/order';
+import { formatCurrency } from '@/lib/formatters';
 
 interface OrdersTableViewProps {
     orders: Order[] | undefined;
@@ -73,7 +74,7 @@ export function OrdersTableView({
                                     </TableCell>
                                     <TableCell>{order.order_items.length}</TableCell>
                                     <TableCell className="text-right font-medium">
-                                        ${getOrderTotal(order.order_items).toFixed(2)}
+                                        {formatCurrency(getOrderTotal(order.order_items))}
                                     </TableCell>
                                     <TableCell>
                                         <OrderStatusBadge status={itemStatus} type="shipping" />

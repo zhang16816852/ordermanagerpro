@@ -270,16 +270,15 @@ export const useProductCache = (storeId?: string | null) => {
 /**
  * [V7.5] 提供門市使用的產品快取，整合定價資訊
  */
-export const useStoreProductCache = (storeId?: string | null) => {
+export const useStoreProductCache = (storeId?: string | null, brand?: string | null) => {
   const { products: rawProducts, templates, isLoading: isCacheLoading, version, refresh } = useProductCache();
 
-  // 抓取門市特定價格 (目前 store_products 表尚無 store_id 欄位，採全量抓取後於前端過濾)
   const { data: storeProducts = [], isLoading: isStoreLoading } = useQuery({
-    queryKey: ['store_products'],
+    queryKey: ['store_products', brand],
     queryFn: async () => {
-      const { data, error } = await (supabase
-        .from('store_products') as any)
-        .select('*');
+      const query = (supabase.from('store_products') as any).select('*');
+      if (brand) query.eq('brand', brand);
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },

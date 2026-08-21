@@ -249,7 +249,6 @@ export function SpecLibraryTab() {
 
         return roots;
     }, [specDefinitions, viewMode, searchQuery]);
-    console.log("樹狀", treeData)
     const openSpecDialog = (spec: SpecDefinition | null = null) => {
         if (spec) {
             setEditingSpec(spec);
@@ -271,7 +270,6 @@ export function SpecLibraryTab() {
     };
 
     const handleSubmit = () => {
-        console.log("handleSubmit", specForm)
         const cleaned = { ...specForm, options: (specForm.options || []).filter(o => o.trim() !== '') };
         specMutation.mutate({ spec: cleaned, editingSpecId: editingSpec?.id }, {
             onSuccess: () => setIsSpecDialogOpen(false),
@@ -386,7 +384,7 @@ export function SpecLibraryTab() {
                 />
 
                 {isLoadingSpecs ? (
-                    <div className="py-20 text-center animate-pulse text-muted-foreground">正在載入規格百科全書...</div>
+                    <div className="py-20 text-center animate-pulse text-muted-foreground" role="status" aria-live="polite">正在載入規格百科全書…</div>
                 ) : (
                     <>
                         {viewMode === 'grid' ? (

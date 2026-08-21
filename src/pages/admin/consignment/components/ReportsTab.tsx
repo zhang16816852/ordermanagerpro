@@ -4,6 +4,7 @@ import { ConsignmentSalesReport } from '../types';
 import { Button } from '@/components/ui/button';
 import { Check, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatCurrency } from '@/lib/formatters';
 
 interface ReportsTabProps {
   reports: ConsignmentSalesReport[];
@@ -116,7 +117,7 @@ export function ReportsTab({ reports, isLoading }: ReportsTabProps) {
                 <td className="text-right py-2 px-3 font-medium">{report.quantity}</td>
                 <td className="text-right py-2 px-3">
                   {report.sale_price != null
-                    ? `$${report.sale_price.toLocaleString()}`
+                    ? formatCurrency(report.sale_price)
                     : <span className="text-muted-foreground">依預設</span>}
                 </td>
                 <td className="text-right py-2 px-3 text-xs">
@@ -129,7 +130,8 @@ export function ReportsTab({ reports, isLoading }: ReportsTabProps) {
                       <Check className="h-3.5 w-3.5 mr-1" />確認
                     </Button>
                     <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive"
-                      onClick={() => handleRejectOne(report)} disabled={rejectReportMutation.isPending}>
+                      onClick={() => handleRejectOne(report)} disabled={rejectReportMutation.isPending}
+                      aria-label="駁回回報">
                       <X className="h-4 w-4" />
                     </Button>
                   </div>

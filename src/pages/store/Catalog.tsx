@@ -20,12 +20,14 @@ import { useBrands } from "@/hooks/useBrands";
 import { Category } from "@/types/product";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { MobileFooter } from "@/components/layout/MobileFooter";
+import { formatCurrency } from "@/lib/formatters";
 
 const PAGE_SIZE = 24;
 
 export default function StoreCatalog() {
   const { storeId, isAuthReady } = useAuth();
-  const { totalItems } = useStoreDraft(storeId || '');
+  const { totalItems, totalAmount } = useStoreDraft(storeId || '');
   const { products: allProducts, isLoading: isSidebarLoading } = useStoreProductCache(storeId ?? null);
   const { fetchData: fetchDeviceData } = useDeviceModelStore();
 
@@ -229,7 +231,7 @@ export default function StoreCatalog() {
               <div className="flex bg-muted p-1 rounded-lg">
                 <button
                   onClick={() => setViewMode('products')}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'products'
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors duration-200 ${viewMode === 'products'
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
                     }`}
@@ -238,7 +240,7 @@ export default function StoreCatalog() {
                 </button>
                 <button
                   onClick={() => setViewMode('variants')}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'variants'
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors duration-200 ${viewMode === 'variants'
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
                     }`}
@@ -247,7 +249,7 @@ export default function StoreCatalog() {
                 </button>
                 <button
                   onClick={() => setViewMode('gallery')}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'gallery'
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors duration-200 ${viewMode === 'gallery'
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
                     }`}
@@ -256,7 +258,7 @@ export default function StoreCatalog() {
                 </button>
                 <button
                   onClick={() => setViewMode('table')}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'table'
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors duration-200 ${viewMode === 'table'
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
                     }`}
@@ -267,7 +269,7 @@ export default function StoreCatalog() {
 
               <Sheet>
                 <SheetTrigger asChild>
-                  <Button className="relative h-9">
+                  <Button className="relative h-9 hidden md:flex">
                     <ShoppingCart className="mr-2 h-4 w-4" />
                     購物車
                     {totalItems > 0 && (
@@ -289,7 +291,7 @@ export default function StoreCatalog() {
           </div>
         </div>
 
-        <div className="space-y-6 mt-4 md:mt-6">
+        <div className="space-y-6 mt-4 md:mt-6 pb-24 md:pb-0">
 
         <ProductCatalog
           products={viewMode === 'table' ? filteredProducts : paginatedProducts}
@@ -348,6 +350,28 @@ export default function StoreCatalog() {
         )}
       </div>
       </div>
+
+      {/* Mobile Cart Footer */}
+      <MobileFooter visible={totalItems > 0}>
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button className="w-full h-12 rounded-2xl text-base font-semibold gap-2">
+              <ShoppingCart className="h-5 w-5" />
+              購物車
+              <Badge variant="destructive" className="ml-1 h-5 w-5 p-0 flex items-center justify-center rounded-full text-[10px]">
+                {totalItems}
+              </Badge>
+              <span className="ml-auto">{formatCurrency(totalAmount)}</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent
+            side="right"
+            className="w-full sm:max-w-[500px] p-0 h-full flex flex-col"
+          >
+            <CartPanel storeId={storeId} showCheckoutButton />
+          </SheetContent>
+        </Sheet>
+      </MobileFooter>
     </div>
   );
 }

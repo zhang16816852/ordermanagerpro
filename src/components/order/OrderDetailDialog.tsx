@@ -15,6 +15,7 @@ import { OrderDetailItemsCards } from './OrderDetailItemsCards';
 import { Order } from '@/types/order';
 import { Check, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatCurrency } from '@/lib/formatters';
 
 interface OrderDetailDialogProps {
     order: Order | null;
@@ -93,7 +94,7 @@ export function OrderDetailDialog({ order, open, onOpenChange }: OrderDetailDial
 
                     {/* Total Amount */}
                     <div className="flex justify-end text-lg font-semibold text-primary">
-                        總計：${getTotalAmount().toFixed(2)}
+                        總計：{formatCurrency(getTotalAmount())}
                     </div>
                 </div>
             </DialogContent>

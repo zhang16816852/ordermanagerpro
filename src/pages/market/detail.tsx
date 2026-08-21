@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner";
 import { getErrorMessage } from '@/lib/errorMessages';
 import { cn } from "@/lib/utils";
+import { formatTWD } from "@/lib/formatters";
 
 interface ListingDetail {
   id: string;
@@ -114,7 +115,7 @@ export default function MarketDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
+      <div className="flex justify-center items-center min-h-screen" role="status" aria-live="polite">
         <Loader2 className="h-8 w-8 animate-spin text-primary/60" />
       </div>
     );
@@ -131,16 +132,16 @@ export default function MarketDetailPage() {
     <div className="min-h-screen bg-background pb-32">
       {/* Back button */}
       <div className="sticky top-0 z-20 flex items-center gap-2 px-4 py-3 bg-background/80 backdrop-blur-md border-b border-white/8">
-        <Button variant="ghost" size="icon" className="-ml-2 h-9 w-9" onClick={() => navigate(-1)}>
+        <Button variant="ghost" size="icon" className="-ml-2 h-9 w-9" onClick={() => navigate(-1)} aria-label="返回">
           <ChevronLeft className="h-5 w-5" />
         </Button>
         <span className="text-sm font-medium flex-1 line-clamp-1">{listing.title}</span>
         {isOwner && (
           <div className="flex gap-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/market/create?edit=${listing.id}`)}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/market/create?edit=${listing.id}`)} aria-label="編輯">
               <Pencil className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={handleDelete}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={handleDelete} aria-label="刪除">
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
@@ -164,7 +165,7 @@ export default function MarketDetailPage() {
                   key={i}
                   onClick={() => setImgIndex(i)}
                   className={cn(
-                    "h-1.5 rounded-full transition-all",
+                    "h-1.5 rounded-full transition-all duration-200",
                     i === imgIndex ? "w-6 bg-primary" : "w-1.5 bg-muted-foreground/40"
                   )}
                 />
@@ -207,7 +208,7 @@ export default function MarketDetailPage() {
           {/* Price */}
           {user ? (
             listing.price != null ? (
-              <p className="text-2xl font-bold text-primary">NT${listing.price.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-primary">{formatTWD(listing.price ?? 0)}</p>
             ) : (
               <p className="text-lg text-muted-foreground">面議</p>
             )
@@ -264,7 +265,7 @@ export default function MarketDetailPage() {
                   <p className="text-xs text-muted-foreground">{contactConf.label}</p>
                   <p className="text-base font-semibold">{contactInfo || "（未設定）"}</p>
                 </div>
-                <Button variant="ghost" size="icon" onClick={handleCopy} disabled={!contactInfo}>
+                <Button variant="ghost" size="icon" onClick={handleCopy} disabled={!contactInfo} aria-label="複製聯絡資訊">
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>

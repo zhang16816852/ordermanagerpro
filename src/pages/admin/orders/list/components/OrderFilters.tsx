@@ -2,7 +2,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Package, Truck, CheckSquare, List, LayoutGrid, ClipboardList } from 'lucide-react';
+import { Search, Package, Truck, CheckSquare, List, LayoutGrid, ClipboardList, Calendar } from 'lucide-react';
 
 interface OrderFiltersProps {
   statusTab: 'pending' | 'processing' | 'shipped';
@@ -14,6 +14,12 @@ interface OrderFiltersProps {
   storeFilter: string;
   onStoreFilterChange: (v: string) => void;
   stores: any[];
+  dateFrom: string;
+  onDateFromChange: (v: string) => void;
+  dateTo: string;
+  onDateToChange: (v: string) => void;
+  poFilter: 'all' | 'has_po' | 'no_po';
+  onPoFilterChange: (v: 'all' | 'has_po' | 'no_po') => void;
 }
 
 export function OrderFilters({
@@ -26,10 +32,16 @@ export function OrderFilters({
   storeFilter,
   onStoreFilterChange,
   stores,
+  dateFrom,
+  onDateFromChange,
+  dateTo,
+  onDateToChange,
+  poFilter,
+  onPoFilterChange,
 }: OrderFiltersProps) {
   return (
     <div className="space-y-4 flex-none">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 items-center">
         <Tabs value={statusTab} onValueChange={(v) => onStatusTabChange(v as any)}>
           <TabsList className="bg-muted/50 p-1">
             <TabsTrigger value="pending" className="gap-2 px-6">
@@ -72,7 +84,7 @@ export function OrderFilters({
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-center gap-4">
+      <div className="flex flex-col sm:flex-row items-center gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -83,7 +95,7 @@ export function OrderFilters({
           />
         </div>
         <Select value={storeFilter} onValueChange={onStoreFilterChange}>
-          <SelectTrigger className="w-56 h-10 border-muted">
+          <SelectTrigger className="w-48 h-10 border-muted">
             <SelectValue placeholder="選擇店鋪" />
           </SelectTrigger>
           <SelectContent>
@@ -95,6 +107,36 @@ export function OrderFilters({
             ))}
           </SelectContent>
         </Select>
+        <div className="flex items-center gap-1.5">
+          <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => onDateFromChange(e.target.value)}
+            className="w-36 h-10 border-muted text-xs"
+            placeholder="起日"
+          />
+          <span className="text-muted-foreground text-xs">~</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => onDateToChange(e.target.value)}
+            className="w-36 h-10 border-muted text-xs"
+            placeholder="迄日"
+          />
+        </div>
+        {viewMode === 'orders' && (
+          <Select value={poFilter} onValueChange={(v) => onPoFilterChange(v as any)}>
+            <SelectTrigger className="w-36 h-10 border-muted">
+              <SelectValue placeholder="採購狀態" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部</SelectItem>
+              <SelectItem value="has_po">已轉採購</SelectItem>
+              <SelectItem value="no_po">未轉採購</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
       </div>
     </div>
   );

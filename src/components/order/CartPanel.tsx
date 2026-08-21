@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { ShoppingCart, Plus, Minus, Trash2, ArrowRight } from "lucide-react";
 import { useStoreDraft } from "@/store/useOrderDraftStore";
+import { formatCurrency } from "@/lib/formatters";
 import {
   Table,
   TableBody,
@@ -106,10 +107,10 @@ export default function CartPanel({
                   </div>
 
                   <div className="flex items-center justify-between gap-2">
-                    {/* 單價 */}
-                    <div className="text-xs text-muted-foreground">
-                      ${item.price.toLocaleString()}
-                    </div>
+                          {/* 單價 */}
+                          <div className="text-sm font-medium">
+                            {formatCurrency(item.price)}
+                          </div>
 
                     {/* 數量控制 */}
                     <div className="flex items-center border rounded-md h-7 shadow-sm">
@@ -136,7 +137,7 @@ export default function CartPanel({
 
                     {/* 小計 */}
                     <div className="text-sm font-medium tabular-nums text-right min-w-[60px]">
-                      ${(item.price * item.quantity).toLocaleString()}
+                      {formatCurrency(item.price * item.quantity)}
                     </div>
                   </div>
                 </div>
@@ -182,7 +183,7 @@ export default function CartPanel({
 
                           {/* 單價 */}
                           <div className="text-sm font-medium">
-                            ${item.price.toLocaleString()}
+                      {formatCurrency(item.price)}
                           </div>
 
                           {/* 數量控制 */}
@@ -213,7 +214,7 @@ export default function CartPanel({
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-lg ">
-                        ${(item.price * item.quantity).toLocaleString()}
+                        {formatCurrency(item.price * item.quantity)}
                       </TableCell>
                       <TableCell>
                         <Button
@@ -238,7 +239,7 @@ export default function CartPanel({
         <div className="shrink-0 space-y-4 pt-2">
           <div className="flex justify-between text-lg font-semibold">
             <span>總計</span>
-            <span>${totalAmount.toLocaleString()}</span>
+            <span>{formatCurrency(totalAmount)}</span>
           </div>
 
           {showCheckoutButton && (

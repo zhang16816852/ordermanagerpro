@@ -231,7 +231,7 @@ export function CreateOrderDialog({ open, onOpenChange }: CreateOrderDialogProps
                         />
                       </td>
                       <td className="py-1.5 px-2">
-                        <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => removeLine(line.key)}>
+                        <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => removeLine(line.key)} aria-label="刪除項目">
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </td>
@@ -255,7 +255,7 @@ export function CreateOrderDialog({ open, onOpenChange }: CreateOrderDialogProps
 
         <DialogFooter>
           <Button onClick={handleSubmit} disabled={submitting}>
-            {submitting ? '建立中...' : '建立寄賣單'}
+            {submitting ? '建立中…' : '建立寄賣單'}
           </Button>
         </DialogFooter>
       </DialogContent>

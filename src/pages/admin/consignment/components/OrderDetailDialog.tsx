@@ -38,6 +38,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
+import { formatCurrency } from '@/lib/formatters';
 
 interface OrderDetailDialogProps {
   order: ConsignmentOrder | null;
@@ -126,7 +127,7 @@ export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
               </thead>
               <tbody>
                 {detail.isLoading ? (
-                  <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">載入中...</td></tr>
+                  <tr><td colSpan={7} className="text-center py-8 text-muted-foreground" role="status" aria-live="polite">載入中…</td></tr>
                 ) : items.map((item: ConsignmentOrderItem) => {
                   const s = summaryMap[item.id];
                   const remaining = s?.remaining_quantity ?? 0;
@@ -149,7 +150,7 @@ export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
                       <td className="text-right py-2 px-3 text-destructive">{returned}</td>
                       <td className="text-right py-2 px-3 font-medium">{remaining}</td>
                       <td className="text-right py-2 px-3 text-muted-foreground">
-                        ${(isSupplier ? item.unit_cost : item.unit_price).toLocaleString()}
+                        {formatCurrency(isSupplier ? item.unit_cost : item.unit_price)}
                       </td>
                     </tr>
                   );
@@ -220,7 +221,7 @@ export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
                       <td className="py-2 px-3">
                         {s.settlement_type === 'supplier_payment' ? '應付廠商' : '店家應收'}
                       </td>
-                      <td className="text-right py-2 px-3 font-medium">${s.amount.toLocaleString()}</td>
+                      <td className="text-right py-2 px-3 font-medium">{formatCurrency(s.amount)}</td>
                       <td className="text-right py-2 px-3">
                         {s.settled_at ? new Date(s.settled_at).toLocaleDateString('zh-TW') : '-'}
                       </td>
@@ -234,8 +235,8 @@ export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
                 </tbody>
               </table>
               <div className="p-3 text-sm flex justify-end gap-4">
-                <span className="text-muted-foreground">應結算 ${expectedSettlement.toLocaleString()}</span>
-                <span className="font-medium">已結算 ${settledAmount.toLocaleString()}</span>
+                <span className="text-muted-foreground">應結算 {formatCurrency(expectedSettlement)}</span>
+                <span className="font-medium">已結算 {formatCurrency(settledAmount)}</span>
               </div>
             </div>
           )}
@@ -375,7 +376,7 @@ function ReceiveDialog({ order, items, summaries, onCancel }: ReceiveDialogProps
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>取消</Button>
           <Button className="bg-green-600 hover:bg-green-700" onClick={handleSubmit} disabled={receiveItemsMutation.isPending}>
-            {receiveItemsMutation.isPending ? '處理中...' : '確認收貨'}
+            {receiveItemsMutation.isPending ? '處理中…' : '確認收貨'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -413,7 +414,7 @@ function ShipDialog({ order, onCancel }: ShipDialogProps) {
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>取消</Button>
           <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleSubmit} disabled={shipMutation.isPending}>
-            {shipMutation.isPending ? '處理中...' : '確認出貨'}
+            {shipMutation.isPending ? '處理中…' : '確認出貨'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -508,7 +509,7 @@ function ReturnDialog({ order, items, summaries, onCancel }: ReturnDialogProps) 
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>取消</Button>
           <Button onClick={handleSubmit} disabled={returnItemsMutation.isPending}>
-            {returnItemsMutation.isPending ? '處理中...' : '確認退回'}
+            {returnItemsMutation.isPending ? '處理中…' : '確認退回'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -561,11 +562,11 @@ function SettleDialog({ order, accounts, expected, settled, onCancel }: SettleDi
         <div className="space-y-4">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">應結算金額</span>
-            <span className="font-medium">${expected.toLocaleString()}</span>
+            <span className="font-medium">{formatCurrency(expected)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">已結算金額</span>
-            <span className="font-medium">${settled.toLocaleString()}</span>
+            <span className="font-medium">{formatCurrency(settled)}</span>
           </div>
           <div className="space-y-2">
             <Label>本次結算金額</Label>
@@ -598,7 +599,7 @@ function SettleDialog({ order, accounts, expected, settled, onCancel }: SettleDi
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>取消</Button>
           <Button onClick={handleSubmit} disabled={settleMutation.isPending}>
-            {settleMutation.isPending ? '處理中...' : '確認結算'}
+            {settleMutation.isPending ? '處理中…' : '確認結算'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -636,7 +637,7 @@ function ReverseDialog({ order, onCancel }: ReverseDialogProps) {
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>取消</Button>
           <Button variant="destructive" onClick={handleSubmit} disabled={reverseShipmentMutation.isPending}>
-            {reverseShipmentMutation.isPending ? '處理中...' : '確認回滾出貨'}
+            {reverseShipmentMutation.isPending ? '處理中…' : '確認回滾出貨'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -814,6 +815,7 @@ function EditItemsDialog({ order, items, onCancel }: EditItemsDialogProps) {
                           className="h-8 w-8 text-destructive"
                           disabled={removeItemMutation.isPending}
                           onClick={() => removeItemMutation.mutate(item.id)}
+                          aria-label="刪除品項"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -925,7 +927,7 @@ function EditItemsDialog({ order, items, onCancel }: EditItemsDialogProps) {
                           />
                         </td>
                         <td className="py-1.5 px-2">
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => removeLine(line.key)}>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => removeLine(line.key)} aria-label="刪除項目">
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </td>
@@ -940,7 +942,7 @@ function EditItemsDialog({ order, items, onCancel }: EditItemsDialogProps) {
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>取消</Button>
           <Button onClick={handleSave} disabled={saving}>
-            {saving ? '儲存中...' : '儲存變更'}
+            {saving ? '儲存中…' : '儲存變更'}
           </Button>
         </DialogFooter>
       </DialogContent>

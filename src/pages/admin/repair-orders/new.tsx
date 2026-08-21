@@ -13,6 +13,7 @@ import { useRepairOrders, useRepairOrderItems } from '@/hooks/useRepairOrders';
 import { useAuth } from '@/hooks/useAuth';
 import { REPAIR_ORDER_STATUS_LABELS, RepairOrder, RepairOrderInsert, RepairOrderItemInsert } from '@/types/repair';
 import { toast } from 'sonner';
+import { formatCurrency } from '@/lib/formatters';
 import { getErrorMessage } from '@/lib/errorMessages';
 
 interface DeviceModelOption {
@@ -227,7 +228,7 @@ export default function AdminRepairOrderForm() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/repair-orders')}>
+          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/repair-orders')} aria-label="返回維修單列表">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h1 className="text-2xl font-bold tracking-tight">
@@ -448,7 +449,7 @@ export default function AdminRepairOrderForm() {
                       />
                     </div>
                     <div className="col-span-1 flex items-center justify-end">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(item.id)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(item.id)} aria-label="刪除品項">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -501,11 +502,11 @@ export default function AdminRepairOrderForm() {
             <CardContent className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">零件成本</span>
-                <span className="font-mono">${partsCost.toLocaleString()}</span>
+                <span className="font-mono">{formatCurrency(partsCost)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">工資收入</span>
-                <span className="font-mono">${laborFee.toLocaleString()}</span>
+                <span className="font-mono">{formatCurrency(laborFee)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">折扣</span>
@@ -519,12 +520,12 @@ export default function AdminRepairOrderForm() {
               <hr />
               <div className="flex justify-between font-semibold">
                 <span>應收總額</span>
-                <span className="font-mono text-lg">${finalPrice.toLocaleString()}</span>
+                <span className="font-mono text-lg">{formatCurrency(finalPrice)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">利潤 (估)</span>
                 <span className={`font-mono ${finalPrice - partsCost >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  ${(finalPrice - partsCost).toLocaleString()}
+                  {formatCurrency(finalPrice - partsCost)}
                 </span>
               </div>
               <div className="space-y-2 pt-2">

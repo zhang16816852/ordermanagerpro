@@ -5,7 +5,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Package, Truck, List, LayoutGrid } from 'lucide-react';
+import { Search, Package, Truck, List, LayoutGrid, ClipboardList } from 'lucide-react';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { useNavigate } from 'react-router-dom';
 import { OrderDetailDialog } from '@/components/order/OrderDetailDialog';
 import { OrdersTableView } from '@/components/order/OrdersTableView';
@@ -125,25 +126,26 @@ export default function StoreOrderList() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] space-y-4 p-4 md:p-6 ">
-      <div className="flex-none">
-        <h1 className="text-2xl font-bold tracking-tight">我的訂單</h1>
-        <p className="text-muted-foreground">查看您的所有訂單</p>
-      </div>
+      <PageHeader
+        title="我的訂單"
+        subtitle="查看您的所有訂單"
+        icon={<ClipboardList className="h-5 w-5" />}
+      />
 
       {/* 狀態 Tabs */}
       <Tabs value={statusTab} onValueChange={(v) => setStatusTab(v as 'pending' | 'processing' | 'shipped')}>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between flex-none">
           <TabsList>
             <TabsTrigger value="pending" className="gap-2">
-              <Package className="h-4 w-4" />
+              <Package className="h-4 w-4" aria-hidden="true" />
               未確認
             </TabsTrigger>
             <TabsTrigger value="processing" className="gap-2">
-              <Truck className="h-4 w-4" />
+              <Truck className="h-4 w-4" aria-hidden="true" />
               處理中
             </TabsTrigger>
             <TabsTrigger value="shipped" className="gap-2">
-              <Truck className="h-4 w-4" />
+              <Truck className="h-4 w-4" aria-hidden="true" />
               已出貨
             </TabsTrigger>
           </TabsList>

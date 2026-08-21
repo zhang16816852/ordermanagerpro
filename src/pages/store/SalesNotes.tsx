@@ -18,6 +18,7 @@ import { Package, PackageCheck, Send } from 'lucide-react';
 import { SalesNoteListTable } from '@/components/sales/SalesNoteListTable';
 import { SalesNoteDetailDialog } from '@/components/sales/SalesNoteDetailDialog';
 import type { SalesNoteDetail } from '@/components/sales/SalesNoteDetailDialog';
+import { formatCurrency } from '@/lib/formatters';
 
 interface SalesNoteWithItems {
   id: string;
@@ -306,18 +307,18 @@ export default function StoreSalesNotes() {
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         <TabsList>
           <TabsTrigger value="consignment" className="flex items-center gap-2">
-            <Package className="h-4 w-4" />
+            <Package className="h-4 w-4" aria-hidden="true" />
             寄賣銷售
           </TabsTrigger>
           <TabsTrigger value="sales-notes" className="flex items-center gap-2">
-            <Send className="h-4 w-4" />
+            <Send className="h-4 w-4" aria-hidden="true" />
             銷貨單
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="consignment" className="space-y-4">
           {consignmentLoading ? (
-            <div className="text-center py-12 text-muted-foreground">載入中...</div>
+            <div className="text-center py-12 text-muted-foreground" role="status" aria-live="polite">載入中…</div>
           ) : orderList.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
               <Package className="h-12 w-12 mx-auto mb-4 opacity-30" />
@@ -398,7 +399,7 @@ export default function StoreSalesNotes() {
                                   <td className="text-right py-2 px-3">{sold}</td>
                                   <td className="text-right py-2 px-3 font-medium">{available}</td>
                                   <td className="text-right py-2 px-3 text-muted-foreground">
-                                    ${item.unit_price.toLocaleString()}
+                                    {formatCurrency(item.unit_price)}
                                   </td>
                                   <td className="py-2 px-3">
                                     <div className="flex justify-end">
@@ -482,7 +483,7 @@ export default function StoreSalesNotes() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setReportItem(null)}>取消</Button>
             <Button onClick={() => reportItem && reportMutation.mutate(reportItem)} disabled={reportMutation.isPending}>
-              {reportMutation.isPending ? '送出中...' : '送出回報'}
+              {reportMutation.isPending ? '送出中…' : '送出回報'}
             </Button>
           </DialogFooter>
         </DialogContent>

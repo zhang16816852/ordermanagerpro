@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -20,7 +20,7 @@
     --primary-hover: 220 70% 45%;
 
     /* Background */
-    --background: 220 20% 97%;
+    --background: 220 20% 98.5%;
     --foreground: 220 25% 15%;
 
     /* Cards & Surfaces */
@@ -35,7 +35,7 @@
     --secondary-foreground: 220 25% 25%;
 
     /* Muted */
-    --muted: 220 15% 95%;
+    --muted: 220 15% 96%;
     --muted-foreground: 220 10% 45%;
 
     /* Accent - Warm Orange */
@@ -136,6 +136,21 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 
+  /* Accessibility: Respect user motion preferences */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Accessibility: Tabular numbers for all table cells and number displays */
+  td, th, [role="cell"], [role="columnheader"] {
+    font-variant-numeric: tabular-nums;
+  }
+
   h1,
   h2,
   h3,
@@ -143,6 +158,7 @@
   h5,
   h6 {
     @apply font-semibold tracking-tight;
+    font-family: 'Inter', 'Noto Sans TC', system-ui, sans-serif;
   }
 }
 
@@ -165,6 +181,44 @@
 
   .shadow-glow {
     box-shadow: 0 0 20px hsl(var(--primary) / 0.15);
+  }
+
+  /* Signature brand gradient strip */
+  .brand-bar {
+    background: linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 50%, hsl(var(--success)) 100%);
+  }
+
+  /* Hover lift for cards */
+  .hover-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px -2px hsl(220 25% 15% / 0.1), 0 8px 24px -4px hsl(220 25% 15% / 0.15);
+  }
+
+  /* Active press for buttons */
+  .active-press {
+    transition: transform 0.1s ease;
+  }
+  .active-press:active {
+    transform: scale(0.97);
+  }
+
+  /* Page entrance animation */
+  .page-enter {
+    animation: page-enter 0.35s ease-out both;
+  }
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -258,4 +312,9 @@
   margin: 0 !important;
   background-color: white !important;
   box-shadow: none !important;
+}
+
+/* Safe area padding for iPhone bottom bar */
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }

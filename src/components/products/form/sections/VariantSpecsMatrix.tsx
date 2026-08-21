@@ -187,7 +187,7 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
     };
 
     if (specsLoading || variantsLoading) {
-        return <div className="flex items-center gap-2 p-12 justify-center text-muted-foreground"><Loader2 className="animate-spin h-5 w-5" /> 正在構建規格矩陣樹...</div>;
+        return <div className="flex items-center gap-2 p-12 justify-center text-muted-foreground" role="status" aria-live="polite"><Loader2 className="animate-spin h-5 w-5" /> 正在構建規格矩陣樹...</div>;
     }
 
     if (variants.length === 0) return null;

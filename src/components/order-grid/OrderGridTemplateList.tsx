@@ -287,7 +287,7 @@ export function OrderGridTemplateList({
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center" role="status" aria-live="polite">
                   載入中...
                 </TableCell>
               </TableRow>

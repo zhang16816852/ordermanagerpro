@@ -103,7 +103,7 @@ export default function MarketPage() {
                   onClick={() => !cat.soon && setMainCat(cat.value)}
                   disabled={cat.soon}
                   className={cn(
-                    "flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all",
+                    "flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors duration-200",
                     cat.value === mainCat
                       ? "bg-primary text-primary-foreground border-primary"
                       : "bg-muted/40 text-muted-foreground border-white/10",
@@ -142,7 +142,7 @@ export default function MarketPage() {
       {/* ── Listing Grid ── */}
       <div className="px-4 py-4">
         {loading ? (
-          <div className="flex justify-center py-20">
+          <div className="flex justify-center py-20" role="status" aria-live="polite">
             <Loader2 className="h-7 w-7 animate-spin text-primary/60" />
           </div>
         ) : listings.length === 0 ? (
@@ -175,6 +175,7 @@ export default function MarketPage() {
             className="h-14 w-14 rounded-full shadow-lg shadow-primary/30 p-0"
             onClick={() => navigate("/market/create")}
             id="market-fab-create"
+            aria-label="建立新刊登"
           >
             <Plus className="h-6 w-6" />
           </Button>

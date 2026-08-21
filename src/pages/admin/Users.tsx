@@ -270,7 +270,7 @@ export default function AdminUsers() {
           </div>
 
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">載入中...</div>
+            <div className="text-center py-8 text-muted-foreground" role="status" aria-live="polite">載入中...</div>
           ) : (
             <Table>
               <TableHeader>
@@ -325,6 +325,7 @@ export default function AdminUsers() {
                                   variant="ghost"
                                   size="icon"
                                   className="h-5 w-5 text-destructive"
+                                  aria-label="移除門市"
                                   onClick={() => removeStoreMutation.mutate(su.id)}
                                 >
                                   <Trash2 className="h-3 w-3" />
@@ -341,6 +342,7 @@ export default function AdminUsers() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          aria-label="指派門市"
                           onClick={() => openAssignDialog(profile.id)}
                         >
                           <UserPlus className="h-4 w-4" />
@@ -416,9 +418,9 @@ export default function AdminUsers() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>店鋪</Label>
+              <Label htmlFor="user-assign-store">店鋪</Label>
               <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
-                <SelectTrigger>
+                <SelectTrigger id="user-assign-store">
                   <SelectValue placeholder="選擇店鋪" />
                 </SelectTrigger>
                 <SelectContent>
@@ -431,9 +433,9 @@ export default function AdminUsers() {
               </Select>
             </div>
             <div>
-              <Label>角色</Label>
+              <Label htmlFor="user-assign-role">角色</Label>
               <Select value={selectedRole} onValueChange={setSelectedRole}>
-                <SelectTrigger>
+                <SelectTrigger id="user-assign-role">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -469,8 +471,9 @@ export default function AdminUsers() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Email</Label>
+              <Label htmlFor="user-invite-email">Email</Label>
               <Input
+                id="user-invite-email"
                 type="email"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
@@ -478,9 +481,9 @@ export default function AdminUsers() {
               />
             </div>
             <div>
-              <Label>店鋪</Label>
+              <Label htmlFor="user-invite-store">店鋪</Label>
               <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
-                <SelectTrigger>
+                <SelectTrigger id="user-invite-store">
                   <SelectValue placeholder="選擇店鋪" />
                 </SelectTrigger>
                 <SelectContent>
@@ -493,9 +496,9 @@ export default function AdminUsers() {
               </Select>
             </div>
             <div>
-              <Label>角色</Label>
+              <Label htmlFor="user-invite-role">角色</Label>
               <Select value={selectedRole} onValueChange={setSelectedRole}>
-                <SelectTrigger>
+                <SelectTrigger id="user-invite-role">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

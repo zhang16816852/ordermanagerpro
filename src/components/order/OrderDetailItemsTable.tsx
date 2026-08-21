@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/table';
 import { OrderStatusBadge } from './OrderStatusBadge';
 import { OrderItem } from '@/types/order';
+import { formatCurrency } from '@/lib/formatters';
 
 interface OrderItemsTableProps {
     items: OrderItem[];
@@ -38,7 +39,7 @@ export function OrderDetailItemsTable({ items }: OrderItemsTableProps) {
                                 )}
                             </TableCell>
                             <TableCell className="text-right">
-                                ${item.unit_price.toFixed(2)}
+                                {formatCurrency(item.unit_price)}
                             </TableCell>
                             <TableCell className="text-right">{item.quantity}</TableCell>
                             <TableCell className="text-right">

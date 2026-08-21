@@ -51,7 +51,6 @@ const CategoryDialog = ({
     onSubmit,
 }: CategoryDialogProps) => {
     const [activeTab, setActiveTab] = useState<'library' | 'config'>('library');
-    console.log("已選規格", activeConfiguration)
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-4xl max-h-[90vh] min-h-[520px] flex flex-col p-0 gap-0 overflow-hidden">
@@ -112,7 +111,7 @@ const CategoryDialog = ({
                         <div className="flex items-center justify-between mb-4 shrink-0">
                             <TabsList>
                                 <TabsTrigger value="library" className="gap-2">
-                                    <Database className="h-4 w-4" />
+                                    <Database className="h-4 w-4" aria-hidden="true" />
                                     規格庫
                                 </TabsTrigger>
                                 <TabsTrigger value="config" className="gap-2 relative">
@@ -127,10 +126,10 @@ const CategoryDialog = ({
                             </TabsList>
                             <div className="text-xs text-muted-foreground flex items-center gap-4">
                                 <div className="flex items-center gap-1">
-                                    <div className="w-2 h-2 rounded-full bg-blue-500" /> 手動選取
+                                    <div className="w-2 h-2 rounded-full bg-blue-500" aria-hidden="true" /> 手動選取
                                 </div>
                                 <div className="flex items-center gap-1">
-                                    <div className="w-2 h-2 rounded-full bg-slate-300" /> 連動產生
+                                    <div className="w-2 h-2 rounded-full bg-slate-300" aria-hidden="true" /> 連動產生
                                 </div>
                             </div>
                         </div>

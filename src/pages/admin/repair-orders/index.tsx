@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Search, Wrench, Smartphone, Phone, Calendar } from 'lucide-react';
 import { DataTable } from '@/components/shared/DataTable';
 import { ColumnDef } from '@tanstack/react-table';
-import { formatDate } from '@/lib/formatters';
+import { formatDate, formatCurrency } from '@/lib/formatters';
 import { useRepairOrders } from '@/hooks/useRepairOrders';
 import { REPAIR_ORDER_STATUS_LABELS, REPAIR_ORDER_STATUS_COLORS, RepairOrder as RepairOrderType } from '@/types/repair';
 import { useAuth } from '@/hooks/useAuth';
@@ -100,7 +100,7 @@ export default function AdminRepairOrders() {
       accessorKey: 'total_price',
       cell: ({ row }) => (
         <div className="text-right">
-          <div className="text-sm font-semibold">${row.original.total_price?.toLocaleString()}</div>
+          <div className="text-sm font-semibold">{formatCurrency(row.original.total_price || 0)}</div>
           {row.original.deposit > 0 && (
             <div className="text-xs text-muted-foreground">定金 ${row.original.deposit}</div>
           )}
@@ -129,20 +129,20 @@ export default function AdminRepairOrders() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Wrench className="h-6 w-6" />
+            <Wrench className="h-6 w-6" aria-hidden="true" />
             維修管理
           </h1>
           <p className="text-muted-foreground text-sm mt-1">管理所有手機維修訂單與收據</p>
         </div>
         <Button onClick={() => navigate('/admin/repair-orders/new')}>
-          <Plus className="mr-2 h-4 w-4" />
+          <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
           新增維修單
         </Button>
       </div>
 
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-4 bg-muted/20 border rounded-xl">
         <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-50" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-50" aria-hidden="true" />
           <Input
             placeholder="搜尋客戶、單號、IMEI..."
             value={search}

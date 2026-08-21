@@ -6,7 +6,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Send } from "lucide-react";
 import { useCreateOrder } from "@/hooks/useCreateOrder";
+import { formatCurrency } from "@/lib/formatters";
 import CartPanel from "./CartPanel";
+import { MobileFooter } from "@/components/layout/MobileFooter";
 
 interface CheckoutFormProps {
   storeId: string;
@@ -69,7 +71,7 @@ export default function CheckoutForm({
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 pb-24 md:pb-0">
       {/* 左側：備註卡 */}
       <Card className="space-y-4 lg:col-span-3">
         <CardHeader>
@@ -91,11 +93,11 @@ export default function CheckoutForm({
           <CardTitle className="flex justify-between">
             <span>訂單總金額</span>
             <span className="text-2xl font-bold text-primary">
-              ${totalAmount.toLocaleString()}
+              {formatCurrency(totalAmount)}
             </span>
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="hidden md:block">
           <Button
             size="lg"
             className="w-full"
@@ -121,6 +123,33 @@ export default function CheckoutForm({
       <div className="lg:col-span-5">
         <CartPanel storeId={storeId} showCheckoutButton={false} />
       </div>
+
+      {/* Mobile Checkout Footer */}
+      <MobileFooter>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-base font-semibold">
+            <span>總計</span>
+            <span className="text-primary">{formatCurrency(totalAmount)}</span>
+          </div>
+          <Button
+            size="lg"
+            className="w-full"
+            onClick={() => createOrder()}
+            disabled={isPending}
+          >
+            <Send className="h-5 w-5 mr-2" />
+            {isPending ? "提交中..." : "確認送出訂單"}
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => navigate(catalogPath)}
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            繼續購物
+          </Button>
+        </div>
+      </MobileFooter>
     </div>
   );
 }

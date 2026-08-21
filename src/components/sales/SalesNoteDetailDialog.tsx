@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { getErrorMessage } from '@/lib/errorMessages';
+import { formatCurrency } from '@/lib/formatters';
 import { Card, CardContent } from '@/components/ui/card';
 import z from "zod";
 
@@ -298,7 +299,7 @@ export function SalesNoteDetailDialog({
                     {totalAmount > 0 && (
                         <div className="flex justify-end items-baseline gap-2 pt-2">
                             <span className="text-sm text-muted-foreground">總計</span>
-                            <span className="text-xl font-bold text-primary">${totalAmount.toLocaleString()}</span>
+                            <span className="text-xl font-bold text-primary">{formatCurrency(totalAmount)}</span>
                         </div>
                     )}
 
@@ -385,7 +386,7 @@ function PaymentForm({ accounts, amount: initialAmount, onSubmit, isLoading }: {
                     <SelectContent>
                         {accounts.map((acc) => (
                             <SelectItem key={acc.id} value={acc.id}>
-                                {acc.name} (餘額: ${acc.balance.toLocaleString()})
+                                {acc.name} (餘額: {formatCurrency(acc.balance)})
                             </SelectItem>
                         ))}
                     </SelectContent>

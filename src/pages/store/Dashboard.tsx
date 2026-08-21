@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ShoppingCart, Package, Truck, Clock } from 'lucide-react';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function StoreDashboard() {
@@ -56,12 +57,11 @@ export default function StoreDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">儀表板</h1>
-        <p className="text-muted-foreground">
-          歡迎回來，{storeRoles[0]?.store_name}
-        </p>
-      </div>
+      <PageHeader
+        title="儀表板"
+        subtitle={`歡迎回來，${storeRoles[0]?.store_name}`}
+        icon={<ShoppingCart className="h-5 w-5" />}
+      />
 
       <div className="grid gap-4 md:grid-cols-3">
         {statCards.map((stat) => (

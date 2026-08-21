@@ -268,7 +268,7 @@ export function VariantSection({ product }: { product: any }) {
         <div>
           <h3 className="font-medium">變體清單</h3>
           <p className="text-xs text-muted-foreground">
-            {isLoading ? '讀取中...' : `目前此產品共有 ${variants?.length || 0} 個規格選項`}
+            {isLoading ? <span role="status" aria-live="polite">讀取中...</span> : `目前此產品共有 ${variants?.length || 0} 個規格選項`}
           </p>
         </div>
         <div className="flex gap-2">

@@ -75,7 +75,7 @@ export function DeviceModelDialog({
                     </SelectContent>
                   </Select>
                   <Button variant="outline" size="icon" onClick={() => setNewBrandOpen(true)} title="快速新增廠牌">
-                    <Plus className="h-4 w-4" />
+                    <Plus className="h-4 w-4" aria-hidden="true" />
                   </Button>
                 </div>
               </div>

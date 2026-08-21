@@ -192,7 +192,7 @@ export function ProductImageManager({ entityType, entityId, className }: Product
                     onChange={(e) => handleFiles(e.target.files)}
                 />
                 {uploadMutation.isPending ? (
-                    <div className="flex flex-col items-center gap-2">
+                    <div className="flex flex-col items-center gap-2" role="status" aria-live="polite">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
                         <span className="text-sm text-muted-foreground">上傳中...</span>
                     </div>
@@ -207,7 +207,7 @@ export function ProductImageManager({ entityType, entityId, className }: Product
 
             {/* 圖片 Grid */}
             {isLoading ? (
-                <div className="flex justify-center py-4">
+                <div className="flex justify-center py-4" role="status" aria-live="polite">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
             ) : images.length === 0 ? (

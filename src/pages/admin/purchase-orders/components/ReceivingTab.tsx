@@ -10,6 +10,7 @@ import { PackageCheck, ChevronDown, ChevronRight, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
+import { formatCurrency } from '@/lib/formatters';
 
 interface ReceivingItem {
   id: string;
@@ -126,7 +127,7 @@ export function ReceivingTab() {
   if (receivingOrders.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
-        <PackageCheck className="h-12 w-12 mx-auto mb-4 opacity-30" />
+        <PackageCheck className="h-12 w-12 mx-auto mb-4 opacity-30" aria-hidden="true" />
         <p className="text-lg font-medium">目前沒有待收貨的採購單</p>
         <p className="text-sm">將採購單狀態設為「已下單」後，才會出现在此列表</p>
       </div>
@@ -244,7 +245,7 @@ export function ReceivingTab() {
                               </select>
                             </td>
                             <td className="text-right py-2 px-3 text-muted-foreground">
-                              ${item.unit_cost.toLocaleString()}
+                              {formatCurrency(item.unit_cost)}
                             </td>
                           </tr>
                         );
@@ -258,7 +259,7 @@ export function ReceivingTab() {
                     disabled={receiveMutation.isPending}
                     className="bg-green-600 hover:bg-green-700"
                   >
-                    <Check className="h-4 w-4 mr-1" />
+                    <Check className="h-4 w-4 mr-1" aria-hidden="true" />
                     {receiveMutation.isPending ? '處理中...' : '確認收貨'}
                   </Button>
                 </div>

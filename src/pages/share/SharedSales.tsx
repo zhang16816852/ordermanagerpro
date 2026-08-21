@@ -14,6 +14,7 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import { useState, useEffect, useRef } from "react";
 import { PrintDialog, PrintOptions } from "@/components/PrintDialog";
 import { QRCodeSVG } from "qrcode.react";
+import { formatCurrency } from "@/lib/formatters";
 
 interface SharedSalesData {
   sales_note: {
@@ -188,7 +189,7 @@ export default function SharedSales() {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
+      <div className="flex justify-center items-center min-h-screen" role="status" aria-live="polite">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -288,8 +289,8 @@ export default function SharedSales() {
                   <TableCell className="text-right pr-6">{item.quantity}</TableCell>
                   {showPrice && (
                     <>
-                      <TableCell className="text-right pr-6">${item.unit_price?.toLocaleString()}</TableCell>
-                      <TableCell className="text-right pr-6">${(item.unit_price * item.quantity).toLocaleString()}</TableCell>
+                      <TableCell className="text-right pr-6">{formatCurrency(item.unit_price ?? 0)}</TableCell>
+                      <TableCell className="text-right pr-6">{formatCurrency((item.unit_price ?? 0) * item.quantity)}</TableCell>
                     </>
                   )}
                 </TableRow>
@@ -298,7 +299,7 @@ export default function SharedSales() {
                 <TableRow className="bg-muted/50">
                   <TableCell colSpan={3} className="text-right font-bold pr-6">總計</TableCell>
                   <TableCell className="text-right font-bold pr-6 text-lg">
-                    ${items.reduce((sum: number, item: any) => sum + (item.unit_price * item.quantity), 0).toLocaleString()}
+                    {formatCurrency(items.reduce((sum: number, item: any) => sum + ((item.unit_price ?? 0) * item.quantity), 0))}
                   </TableCell>
                 </TableRow>
               )}
@@ -314,7 +315,7 @@ export default function SharedSales() {
                 className="bg-green-600 hover:bg-green-700 text-white"
               >
                 <Check className="mr-2 h-4 w-4" />
-                {confirmReceiveMutation.isPending ? "確認中..." : "確認收貨"}
+                {confirmReceiveMutation.isPending ? "確認中…" : "確認收貨"}
               </Button>
             </div>
           )}

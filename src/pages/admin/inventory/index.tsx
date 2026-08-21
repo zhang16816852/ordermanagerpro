@@ -51,6 +51,7 @@ function QuantityCell({ row, updateInventory }: { row: any; updateInventory: Use
                         className="h-7 w-7 text-blue-600"
                         onClick={() => setShowAdjust(true)}
                         disabled={updateInventory.isPending}
+                        aria-label="儲存庫存"
                     >
                         <Save className="h-4 w-4" />
                     </Button>
@@ -272,6 +273,7 @@ export default function AdminInventory() {
                         variantId: row.original.variantId,
                         name: row.original.name
                     })}
+                    aria-label="查看異動紀錄"
                 >
                     <History className="h-4 w-4" />
                 </Button>

@@ -60,11 +60,11 @@ const SortableConfigItem = ({ node, specDefinitions, index, onToggle, onSortOrde
                             {...listeners}
                             className="p-1 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-600 transition-colors"
                         >
-                            <GripVertical className="h-4 w-4" />
+                            <GripVertical className="h-4 w-4" aria-hidden="true" />
                         </div>
                     ) : (
                         <div className="w-6 h-6 flex items-center justify-center">
-                            <LinkIcon className="h-3 w-3 text-slate-300" />
+                            <LinkIcon className="h-3 w-3 text-slate-300" aria-hidden="true" />
                         </div>
                     )}
                     <div className="flex flex-col items-center gap-1 min-w-[2.5rem]">

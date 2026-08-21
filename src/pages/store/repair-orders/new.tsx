@@ -14,6 +14,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { RepairOrderInsert } from '@/types/repair';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
+import { formatCurrency } from '@/lib/formatters';
 
 export default function StoreRepairOrderForm() {
   const navigate = useNavigate();
@@ -151,7 +152,7 @@ export default function StoreRepairOrderForm() {
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard/repair-orders')}>
+          <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard/repair-orders')} aria-label="返回維修單列表">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h1 className="text-2xl font-bold tracking-tight">{isEdit ? '編輯維修單' : '新增維修單'}</h1>
@@ -251,7 +252,7 @@ export default function StoreRepairOrderForm() {
                 placeholder="價格"
                 className="w-24 text-right"
               />
-              <Button variant="ghost" size="icon" className="text-destructive shrink-0" onClick={() => removeItem(item.id)}>
+              <Button variant="ghost" size="icon" className="text-destructive shrink-0" onClick={() => removeItem(item.id)} aria-label="刪除項目">
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
@@ -269,7 +270,7 @@ export default function StoreRepairOrderForm() {
         <CardContent className="space-y-3">
           <div className="flex justify-between text-lg font-bold">
             <span>合計</span>
-            <span className="font-mono">${totalPrice.toLocaleString()}</span>
+            <span className="font-mono">{formatCurrency(totalPrice)}</span>
           </div>
           <div className="space-y-2">
             <Label>已收定金</Label>

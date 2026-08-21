@@ -90,13 +90,13 @@ export default function StoreReceiving() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Truck className="h-5 w-5" />
+            <Truck className="h-5 w-5" aria-hidden="true" />
             待收貨銷售單
           </CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">載入中...</div>
+            <div className="text-center py-8 text-muted-foreground" role="status" aria-live="polite">載入中…</div>
           ) : salesNotes?.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               目前沒有待收貨的銷售單
@@ -144,7 +144,7 @@ export default function StoreReceiving() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5" />
+              <Package className="h-5 w-5" aria-hidden="true" />
               銷售單詳情
             </DialogTitle>
             <DialogDescription>
@@ -209,7 +209,7 @@ export default function StoreReceiving() {
               disabled={confirmReceiveMutation.isPending}
             >
               <CheckCircle className="h-4 w-4 mr-2" />
-              {confirmReceiveMutation.isPending ? "處理中..." : "確認收貨"}
+              {confirmReceiveMutation.isPending ? "處理中…" : "確認收貨"}
             </Button>
           </DialogFooter>
         </DialogContent>

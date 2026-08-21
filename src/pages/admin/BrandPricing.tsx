@@ -308,7 +308,7 @@ export default function AdminStorePricing() {
                 disabled={saveMutation.isPending || !selectedStore}
               >
                 <Save className="mr-2 h-4 w-4" />
-                {saveMutation.isPending ? '儲存中...' : '儲存選定項目'}
+                {saveMutation.isPending ? '儲存中…' : '儲存選定項目'}
               </Button>
             </div>
           </CardContent>
@@ -341,6 +341,8 @@ export default function AdminStorePricing() {
 
       {/* 產品列表 */}
       <div className="rounded-lg border bg-card shadow-soft">
+        {/* Desktop: Table */}
+        <div className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -400,7 +402,7 @@ export default function AdminStorePricing() {
                         <TableCell>
                           {hasVariants && (
                             <CollapsibleTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-6 w-6">
+                              <Button variant="ghost" size="icon" className="h-6 w-6" aria-label={isExpanded ? "收合變體" : "展開變體"}>
                                 {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                               </Button>
                             </CollapsibleTrigger>
@@ -493,6 +495,73 @@ export default function AdminStorePricing() {
             )}
           </TableBody>
         </Table>
+        </div>
+
+        {/* Mobile: Cards */}
+        <div className="md:hidden">
+          {isLoading ? (
+            <div className="p-4 space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-24 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">沒有找到產品</div>
+          ) : (
+            <div className="divide-y">
+              {filteredProducts.map((product) => {
+                const variants = getProductVariants(product.id);
+                const hasVariants = variants.length > 0;
+                const productEntry = priceEntries[product.id];
+                const hasCustomPrice = !!productEntry?.wholesalePrice;
+
+                return (
+                  <div key={product.id} className="p-4 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{product.name}</p>
+                        <p className="font-mono text-xs text-muted-foreground">{product.code}</p>
+                      </div>
+                      {hasVariants && (
+                        <Badge variant="outline" className="text-xs flex-shrink-0">
+                          <Layers className="h-3 w-3 mr-1" />
+                          {variants.length} 變體
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-muted-foreground text-xs">批發價</p>
+                        <p>{calculatePriceRange(undefined, variants.map(v => v.wholesale_price)).display}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs">零售價</p>
+                        <p>{calculatePriceRange(undefined, variants.map(v => v.retail_price)).display}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!hasVariants && (
+                        <Input
+                          type="number"
+                          placeholder="連鎖批發價"
+                          value={productEntry?.wholesalePrice || ''}
+                          onChange={(e) => handlePriceChange(product.id, product.id, undefined, e.target.value)}
+                          className="flex-1 text-right text-sm h-8"
+                        />
+                      )}
+                      {!hasVariants && hasCustomPrice && (
+                        <Badge variant="outline" className="text-xs">已設定</Badge>
+                      )}
+                      {hasVariants && (
+                        <span className="text-xs text-muted-foreground">展開變體設定價格</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -66,6 +66,7 @@ export function QuickColorAdd({ initialName = '', onSuccess, onCancel }: QuickCo
           size="icon"
           className="h-5 w-5"
           onClick={onCancel}
+          aria-label="關閉"
         >
           <X className="h-3 w-3" />
         </Button>

@@ -201,7 +201,7 @@ export function VariantModelMatrix({ productId }: VariantModelMatrixProps) {
     const isLoading = modelsLoading || groupsLoading || variantsLoading || linksLoading;
 
     if (isLoading) {
-        return <div className="flex items-center gap-2 p-8 justify-center text-muted-foreground"><Loader2 className="animate-spin" /> 讀取型號矩陣中...</div>;
+        return <div className="flex items-center gap-2 p-8 justify-center text-muted-foreground" role="status" aria-live="polite"><Loader2 className="animate-spin" /> 讀取型號矩陣中...</div>;
     }
 
     if (variants.length === 0) return null;

@@ -87,12 +87,14 @@ export function SpecCard({ spec, relation, onEdit, onDelete, showRelations = tru
                 <Button
                     variant="ghost" size="icon" className="h-7 w-7 hover:bg-background shadow-sm"
                     onClick={() => onEdit(spec)}
+                    aria-label="編輯規格"
                 >
                     <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
                 <Button
                     variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10"
                     onClick={() => onDelete(spec)}
+                    aria-label="刪除規格"
                 >
                     <Trash2 className="h-3.5 w-3.5" />
                 </Button>

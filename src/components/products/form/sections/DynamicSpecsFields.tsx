@@ -23,7 +23,7 @@ export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
     // 使用中央計算器 (v5.1 支持 DSL)
     const visibleInfo = getVisibleSpecsTree(specFields, specValues, specTriggers);
 
-    if (isLoadingSpecs) return <div className="py-4 text-center">正在載入規格...</div>;
+    if (isLoadingSpecs) return <div className="py-4 text-center" role="status" aria-live="polite">正在載入規格...</div>;
     
     // 如果規格定義 Map 還沒載入好，先顯示提示
     if (specMap.size === 0 && specFields.length > 0) {

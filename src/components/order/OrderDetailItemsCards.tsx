@@ -1,6 +1,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { OrderStatusBadge } from './OrderStatusBadge';
 import { OrderItem } from '@/types/order';
+import { formatCurrency } from '@/lib/formatters';
 
 interface OrderItemsCardsProps {
     items: OrderItem[];
@@ -22,7 +23,7 @@ export function OrderDetailItemsCards({ items }: OrderItemsCardsProps) {
                         <div className="grid grid-cols-2 gap-2 min-w-0">
                             <div>
                                 <span className="text-muted-foreground">單價：</span>
-                                ${item.unit_price.toFixed(2)}
+                                {formatCurrency(item.unit_price)}
                             </div>
 
                             <div>

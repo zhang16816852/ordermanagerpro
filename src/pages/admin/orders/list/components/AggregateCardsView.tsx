@@ -54,7 +54,7 @@ export function AggregateCardsView({
   }
 
   return (
-    <div className="space-y-3 pb-20">
+    <div className="space-y-3 pb-20 flex-1 overflow-y-auto">
       {items.map((item) => {
         const key = getItemKey(item);
         const isSelected = selectedItems.has(key);

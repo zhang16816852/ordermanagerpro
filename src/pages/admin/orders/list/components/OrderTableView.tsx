@@ -10,8 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Eye, Pencil, RotateCcw } from 'lucide-react';
+import { Eye, Pencil, RotateCcw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { format } from 'date-fns';
+import { formatCurrency } from '@/lib/formatters';
 import { zhTW } from 'date-fns/locale';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import { Order, OrderItem } from '@/types/order';
@@ -26,6 +27,10 @@ interface OrderTableViewProps {
   onView: (order: Order) => void;
   onEdit: (id: string) => void;
   onReverseShipment?: (order: Order) => void;
+  sortField: string;
+  sortDirection: 'asc' | 'desc';
+  onSort: (field: string) => void;
+  poLinkMap: Map<string, { poCount: number; poIds: string[] }>;
 }
 
 export function OrderTableView({
@@ -38,6 +43,10 @@ export function OrderTableView({
   onView,
   onEdit,
   onReverseShipment,
+  sortField,
+  sortDirection,
+  onSort,
+  poLinkMap,
 }: OrderTableViewProps) {
   const getOrderShipmentStatus = (items: OrderItem[]) => {
     if (items.length === 0) return 'waiting';
@@ -60,6 +69,24 @@ export function OrderTableView({
     return '後台';
   };
 
+  const SortableHead = ({ field, children }: { field: string; children: React.ReactNode }) => (
+    <TableHead>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-8 px-2 -ml-2 font-medium text-muted-foreground hover:text-foreground"
+        onClick={() => onSort(field)}
+      >
+        {children}
+        {sortField === field ? (
+          sortDirection === 'asc' ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="ml-1 h-3 w-3 opacity-30" />
+        )}
+      </Button>
+    </TableHead>
+  );
+
   return (
     <div className="rounded-lg border bg-card shadow-soft flex-1 flex flex-col overflow-hidden">
       <Table containerClassName="h-full">
@@ -73,14 +100,14 @@ export function OrderTableView({
                 />
               </TableHead>
             )}
-            <TableHead>訂單編號</TableHead>
-            <TableHead>店鋪</TableHead>
-            <TableHead>品項數</TableHead>
+            <SortableHead field="code">訂單編號</SortableHead>
+            <SortableHead field="store_name">店鋪</SortableHead>
+            <SortableHead field="item_count">品項數（數量）</SortableHead>
             <TableHead className="text-right">金額</TableHead>
             <TableHead>來源</TableHead>
             <TableHead>訂單狀態</TableHead>
             <TableHead>出貨狀態</TableHead>
-            <TableHead>建立時間</TableHead>
+            <SortableHead field="created_at">建立時間</SortableHead>
             <TableHead className="text-right">操作</TableHead>
           </TableRow>
         </TableHeader>
@@ -126,14 +153,24 @@ export function OrderTableView({
                       {order.consignment_mode && (
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
                       )}
+                      {poLinkMap.has(order.id) && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal border-amber-500 text-amber-600">
+                          已轉採購
+                        </Badge>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="font-medium">{order.stores?.name}</div>
                     {order.stores?.code && <div className="text-xs text-muted-foreground">{order.stores.code}</div>}
                   </TableCell>
-                  <TableCell>{order.order_items.length}</TableCell>
-                  <TableCell className="text-right font-bold">${getOrderTotal(order.order_items).toLocaleString()}</TableCell>
+                  <TableCell>
+                    {order.order_items.length}
+                    <span className="text-muted-foreground ml-1">
+                      ({order.order_items.reduce((sum, i) => sum + i.quantity, 0)})
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right font-bold">{formatCurrency(getOrderTotal(order.order_items))}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{getSourceLabel(order.source_type)}</Badge>
                     </TableCell>

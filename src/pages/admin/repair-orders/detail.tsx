@@ -7,7 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { ArrowLeft, Edit, Printer, Smartphone, User, DollarSign, Clock, History } from 'lucide-react';
 import { useRepairOrderDetail } from '@/hooks/useRepairOrders';
 import { REPAIR_ORDER_STATUS_LABELS, REPAIR_ORDER_STATUS_COLORS, REPAIR_ITEM_TYPE_LABELS, REPAIR_ORDER_STATUS_STEPS } from '@/types/repair';
-import { formatDate } from '@/lib/formatters';
+import { formatDate, formatCurrency } from '@/lib/formatters';
 import { useReactToPrint } from 'react-to-print';
 
 const STATUS_STEPS = REPAIR_ORDER_STATUS_STEPS;
@@ -112,7 +112,7 @@ export default function AdminRepairOrderDetail() {
               {item.item_type === 'service' ? '[服務]' : '[零件]'} {item.service_name || item.part_name}
               {item.quantity > 1 ? ` x${item.quantity}` : ''}
             </span>
-            <span className="font-mono">${(item.unit_price * item.quantity).toLocaleString()}</span>
+            <span className="font-mono">{formatCurrency((item.unit_price * item.quantity))}</span>
           </div>
         ))}
       </div>
@@ -120,24 +120,24 @@ export default function AdminRepairOrderDetail() {
       <div className="mb-3 pb-3 border-b">
         <div className="flex justify-between font-bold">
           <span>總金額</span>
-          <span>${finalPrice.toLocaleString()}</span>
+          <span>{formatCurrency(finalPrice)}</span>
         </div>
         {order.discount > 0 && (
           <div className="flex justify-between text-xs text-gray-500">
             <span>折扣</span>
-            <span>-${order.discount.toLocaleString()}</span>
+            <span>-{formatCurrency(order.discount)}</span>
           </div>
         )}
         {order.deposit > 0 && (
           <div className="flex justify-between text-xs">
             <span>已付定金</span>
-            <span>${order.deposit.toLocaleString()}</span>
+            <span>{formatCurrency(order.deposit)}</span>
           </div>
         )}
         {order.deposit > 0 && (
           <div className="flex justify-between text-xs font-bold text-blue-600">
             <span>尚欠金額</span>
-            <span>${(finalPrice - order.deposit).toLocaleString()}</span>
+            <span>{formatCurrency(finalPrice - order.deposit)}</span>
           </div>
         )}
       </div>
@@ -160,7 +160,7 @@ export default function AdminRepairOrderDetail() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/repair-orders')}>
+          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/repair-orders')} aria-label="返回維修單列表">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
@@ -348,8 +348,8 @@ export default function AdminRepairOrderDetail() {
                           <td className="py-2 font-medium">{item.service_name || item.part_name || '-'}</td>
                           <td className="py-2 text-muted-foreground text-xs">{item.description || '-'}</td>
                           <td className="py-2 text-center">{item.quantity}</td>
-                          <td className="py-2 text-right font-mono">${(item.unit_price || 0).toLocaleString()}</td>
-                          <td className="py-2 text-right font-mono font-medium">${((item.unit_price || 0) * item.quantity).toLocaleString()}</td>
+                          <td className="py-2 text-right font-mono">{formatCurrency(item.unit_price || 0)}</td>
+                          <td className="py-2 text-right font-mono font-medium">{formatCurrency((item.unit_price || 0) * item.quantity)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -366,40 +366,40 @@ export default function AdminRepairOrderDetail() {
                 <CardContent className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">零件成本</span>
-                    <span className="font-mono">${totalPartsCost.toLocaleString()}</span>
+                    <span className="font-mono">{formatCurrency(totalPartsCost)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">工資收入</span>
-                    <span className="font-mono">${order.labor_fee?.toLocaleString() || '0'}</span>
+                    <span className="font-mono">{formatCurrency(order.labor_fee || 0)}</span>
                   </div>
                   {order.discount > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">折扣</span>
-                      <span className="font-mono text-red-500">-${order.discount.toLocaleString()}</span>
+                      <span className="font-mono text-red-500">-{formatCurrency(order.discount)}</span>
                     </div>
                   )}
                   <Separator />
                   <div className="flex justify-between font-bold text-base">
                     <span>應收總額</span>
-                    <span className="font-mono">${finalPrice.toLocaleString()}</span>
+                    <span className="font-mono">{formatCurrency(finalPrice)}</span>
                   </div>
                   {order.deposit > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">已收定金</span>
-                      <span className="font-mono text-blue-600">${order.deposit.toLocaleString()}</span>
+                      <span className="font-mono text-blue-600">{formatCurrency(order.deposit)}</span>
                     </div>
                   )}
                   {order.deposit > 0 && (
                     <div className="flex justify-between font-bold text-sm text-blue-700">
                       <span>待收款</span>
-                      <span className="font-mono">${(finalPrice - order.deposit).toLocaleString()}</span>
+                      <span className="font-mono">{formatCurrency(finalPrice - order.deposit)}</span>
                     </div>
                   )}
                   <Separator />
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">利潤</span>
                     <span className={`font-mono font-bold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      ${profit.toLocaleString()}
+                      {formatCurrency(profit)}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">

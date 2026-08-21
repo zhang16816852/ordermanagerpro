@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Store, Package, ShoppingCart, FileText, TrendingUp, Users } from 'lucide-react';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { StatCard } from '@/components/shared/charts/StatCard';
 import { TrendChart } from '@/components/shared/charts/TrendChart';
 import { PieDistributionChart } from '@/components/shared/charts/PieDistributionChart';
@@ -109,15 +110,11 @@ export default function AdminDashboard() {
 
     return (
         <div className="space-y-8 pb-10">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-extrabold tracking-tight">數據決策中心</h1>
-                    <p className="text-muted-foreground mt-1 flex items-center gap-2">
-                        <TrendingUp className="h-4 w-4 text-emerald-500" />
-                        這是基於即時數據生成的系統概況。
-                    </p>
-                </div>
-            </div>
+            <PageHeader
+                title="數據決策中心"
+                subtitle="這是基於即時數據生成的系統概況。"
+                icon={<TrendingUp className="h-5 w-5 text-emerald-500" />}
+            />
 
             {/* 統計卡片 */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

@@ -287,7 +287,7 @@ export function CategoryTab() {
                         variant="outline" size="sm"
                         onClick={() => handleCategoryExport(specDefinitions)}
                     >
-                        <Download className="h-4 w-4 mr-2" />
+                        <Download className="h-4 w-4 mr-2" aria-hidden="true" />
                         匯出 CSV
                     </Button>
                     <Label htmlFor="category-import" className="cursor-pointer">
@@ -297,13 +297,13 @@ export function CategoryTab() {
                         />
                         <Button variant="outline" size="sm" asChild>
                             <span>
-                                <Upload className="h-4 w-4 mr-2" />
+                                <Upload className="h-4 w-4 mr-2" aria-hidden="true" />
                                 匯入 CSV
                             </span>
                         </Button>
                     </Label>
                     <Button size="sm" onClick={() => openDialog()}>
-                        <Plus className="h-4 w-4 mr-2" />
+                        <Plus className="h-4 w-4 mr-2" aria-hidden="true" />
                         新增分類
                     </Button>
                 </div>
@@ -316,7 +316,7 @@ export function CategoryTab() {
                 </CardHeader>
                 <CardContent>
                     {isLoadingCats ? (
-                        <div className="py-12 text-center text-muted-foreground">載入中...</div>
+                        <div className="py-12 text-center text-muted-foreground" role="status" aria-live="polite">載入中…</div>
                     ) : categories.length === 0 ? (
                         <div className="py-12 text-center border-2 border-dashed rounded-xl space-y-3">
                             <FolderTree className="h-12 w-12 text-muted-foreground/30 mx-auto" />

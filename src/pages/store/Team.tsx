@@ -150,7 +150,7 @@ export default function StoreTeam() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
+            <Users className="h-5 w-5" aria-hidden="true" />
             團隊成員
           </CardTitle>
         </CardHeader>
@@ -195,7 +195,7 @@ export default function StoreTeam() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Mail className="h-5 w-5" />
+              <Mail className="h-5 w-5" aria-hidden="true" />
               待處理邀請
             </CardTitle>
           </CardHeader>

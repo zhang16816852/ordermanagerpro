@@ -38,7 +38,7 @@ export function SupplierTab({
               <CardTitle className="text-lg font-bold">{supplier.name}</CardTitle>
               <div className="flex gap-1 ml-auto">
                 <Button variant="outline" size="sm" onClick={() => setMappingSupplier(supplier)}>
-                  <FileEdit className="h-4 w-4 mr-2" />
+                  <FileEdit className="h-4 w-4 mr-2" aria-hidden="true" />
                   對照設定
                 </Button>
               </div>
@@ -46,19 +46,19 @@ export function SupplierTab({
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 gap-2 text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground">
-                  <User className="h-4 w-4" />
+                  <User className="h-4 w-4" aria-hidden="true" />
                   <span>{supplier.contact_name || '無聯絡人資訊'}</span>
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
-                  <Phone className="h-4 w-4" />
+                  <Phone className="h-4 w-4" aria-hidden="true" />
                   <span>{supplier.phone || '無電話'}</span>
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
-                  <Mail className="h-4 w-4" />
+                  <Mail className="h-4 w-4" aria-hidden="true" />
                   <span className="truncate">{supplier.email || '無電子郵件'}</span>
                 </div>
                 <div className="flex items-center gap-2 text-muted-foreground">
-                  <MapPin className="h-4 w-4" />
+                  <MapPin className="h-4 w-4" aria-hidden="true" />
                   <span className="truncate">{supplier.address || '無地址資訊'}</span>
                 </div>
               </div>
@@ -74,7 +74,7 @@ export function SupplierTab({
                   className="w-full text-muted-foreground"
                   onClick={() => setExportSupplier(supplier)}
                 >
-                  <Download className="h-4 w-4 mr-1" /> 匯出對照
+                  <Download className="h-4 w-4 mr-1" aria-hidden="true" /> 匯出對照
                 </Button>
               </div>
             </CardContent>

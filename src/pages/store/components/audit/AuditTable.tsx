@@ -25,7 +25,7 @@ export function AuditTable({ logs, isLoading, onSelectLog }: AuditTableProps) {
   };
 
   if (isLoading) {
-    return <div className="text-center py-8 text-muted-foreground">載入中...</div>;
+    return <div className="text-center py-8 text-muted-foreground" role="status" aria-live="polite">載入中…</div>;
   }
 
   if (!logs || logs.length === 0) {
@@ -76,6 +76,7 @@ export function AuditTable({ logs, isLoading, onSelectLog }: AuditTableProps) {
                 variant="ghost"
                 size="sm"
                 onClick={() => onSelectLog(log)}
+                aria-label="查看日誌詳情"
               >
                 <Eye className="h-4 w-4" />
               </Button>

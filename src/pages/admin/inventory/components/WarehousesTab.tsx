@@ -89,7 +89,7 @@ function SortableWarehouseRow({
       </div>
 
       <div className="flex gap-1 shrink-0">
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(warehouse)}>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(warehouse)} aria-label="編輯倉庫">
           <Pencil className="h-3 w-3" />
         </Button>
         <Button variant="ghost" size="sm" className="h-7 text-[10px] px-1" onClick={() => onToggleActive(warehouse)}>

@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Plus, PackageCheck, CreditCard, Download, FileSpreadsheet } from 'lucide-react';
+import { formatCurrency } from '@/lib/formatters';
 import { PurchaseOrder, PurchaseOrderItem, ProductWithPrice } from '../types';
 import { ItemForm } from './ItemForm';
 import { ImportFromOrdersDialog } from './ImportFromOrdersDialog';
@@ -244,8 +245,8 @@ export function OrderDetailDialog({
                       {item.received_quantity}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right">${item.unit_cost.toLocaleString()}</TableCell>
-                  <TableCell className="text-right font-bold">${(item.quantity * item.unit_cost).toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(item.unit_cost)}</TableCell>
+                  <TableCell className="text-right font-bold">{formatCurrency(item.quantity * item.unit_cost)}</TableCell>
                 </TableRow>
               );
             })}
@@ -297,7 +298,7 @@ export function OrderDetailDialog({
 
         <div className="text-right space-y-1">
           <p className="text-sm text-muted-foreground">總計金額</p>
-          <p className="text-3xl font-bold text-primary">${order.total_amount.toLocaleString()}</p>
+          <p className="text-3xl font-bold text-primary">{formatCurrency(order.total_amount)}</p>
         </div>
       </div>
     </div>

@@ -298,7 +298,8 @@ export function ProductDetailDialog({
 
     const handleAddProduct = () => {
         if (!product) return;
-        if ((product as any).has_variants && !selectedVariantId) {
+        const hasOptions = (product as any).option_groups?.length > 0;
+        if (((product as any).has_variants || hasOptions) && !selectedVariantId) {
             toast.error("請先選擇規格");
             return;
         }
@@ -471,10 +472,10 @@ export function ProductDetailDialog({
                                 onClick={handleAddProduct}
                                 className="w-full"
                                 variant={qty > 0 ? "secondary" : "default"}
-                                disabled={(product as any).has_variants && !selectedVariantId}
+                                disabled={((product as any).has_variants || (product as any).option_groups?.length > 0) && !selectedVariantId}
                             >
                                 <ShoppingCart className="mr-2 h-4 w-4" />
-                                {(product as any).has_variants && !selectedVariantId
+                                {((product as any).has_variants || (product as any).option_groups?.length > 0) && !selectedVariantId
                                     ? "請先選擇規格選項"
                                     : qty > 0
                                         ? `已在購物車中 (x${qty})`

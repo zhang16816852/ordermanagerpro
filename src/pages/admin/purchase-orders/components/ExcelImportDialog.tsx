@@ -157,7 +157,7 @@ export function ExcelImportDialog({ supplierId, supplierName, onImport, isLoadin
     <div className="space-y-4">
       {!config ? (
         <div className="bg-red-50 text-red-600 p-4 rounded-md flex items-start gap-2">
-          <AlertTriangle className="h-5 w-5 mt-0.5" />
+          <AlertTriangle className="h-5 w-5 mt-0.5" aria-hidden="true" />
           <div>
             <p className="font-bold">尚未設定匯入規則</p>
             <p className="text-sm">請先至「供應商管理 &gt; 對照管理」設定此廠商的 Excel 欄位對應規則，才能使用檔案匯入功能。</p>

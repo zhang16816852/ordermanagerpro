@@ -172,6 +172,7 @@ export function usePurchaseOrders(viewingOrderId?: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-links'] });
       toast.success('採購訂單已刪除');
     },
     onError: () => toast.error('刪除失敗'),
@@ -210,6 +211,70 @@ export function usePurchaseOrders(viewingOrderId?: string) {
       toast.success('品項已新增');
     },
     onError: () => toast.error('新增失敗'),
+  });
+
+  const updateItemMutation = useMutation({
+    mutationFn: async ({ itemId, quantity, unit_cost }: { itemId: string; quantity: number; unit_cost: number }) => {
+      const { error } = await (supabase as any)
+        .from('purchase_order_items')
+        .update({ quantity, unit_cost })
+        .eq('id', itemId);
+      if (error) throw error;
+
+      // Recalculate PO total
+      if (viewingOrderId) {
+        const { data: items } = await (supabase as any)
+          .from('purchase_order_items')
+          .select('quantity, unit_cost');
+        const newTotal = (items || []).reduce((sum: number, i: any) => sum + (i.quantity || 0) * (i.unit_cost || 0), 0);
+        await (supabase as any)
+          .from('purchase_orders')
+          .update({ total_amount: newTotal })
+          .eq('id', viewingOrderId);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-items', viewingOrderId] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      toast.success('品項已更新');
+    },
+    onError: () => toast.error('更新失敗'),
+  });
+
+  const deleteItemMutation = useMutation({
+    mutationFn: async (itemId: string) => {
+      // Get item info before deleting for total recalculation
+      const { data: item } = await (supabase as any)
+        .from('purchase_order_items')
+        .select('quantity, unit_cost')
+        .eq('id', itemId)
+        .single();
+
+      const { error } = await (supabase as any)
+        .from('purchase_order_items')
+        .delete()
+        .eq('id', itemId);
+      if (error) throw error;
+
+      // Recalculate PO total
+      if (viewingOrderId) {
+        const { data: items } = await (supabase as any)
+          .from('purchase_order_items')
+          .select('quantity, unit_cost');
+        const newTotal = (items || []).reduce((sum: number, i: any) => sum + (i.quantity || 0) * (i.unit_cost || 0), 0);
+        await (supabase as any)
+          .from('purchase_orders')
+          .update({ total_amount: newTotal })
+          .eq('id', viewingOrderId);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-items', viewingOrderId] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-links'] });
+      toast.success('品項已刪除');
+    },
+    onError: () => toast.error('刪除失敗'),
   });
 
   const receiveItemsMutation = useMutation({
@@ -273,6 +338,8 @@ export function usePurchaseOrders(viewingOrderId?: string) {
     deleteOrderMutation,
     createSupplierMutation,
     addItemMutation,
+    updateItemMutation,
+    deleteItemMutation,
     receiveItemsMutation,
     // Provide a way to record payment
     makePaymentMutation: useMutation({

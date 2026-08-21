@@ -27,13 +27,13 @@ export function CategoryForm({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label>類型名稱</Label>
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="如：運費" />
+        <Label htmlFor="category-name">類型名稱</Label>
+        <Input id="category-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="如：運費" />
       </div>
       <div className="space-y-2">
-        <Label>收支類型</Label>
+        <Label htmlFor="category-type">收支類型</Label>
         <Select value={type} onValueChange={(v: 'income' | 'expense') => setType(v)}>
-          <SelectTrigger>
+          <SelectTrigger id="category-type">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

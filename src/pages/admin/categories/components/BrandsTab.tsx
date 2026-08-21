@@ -53,10 +53,10 @@ function SortableSeriesItem({
                 )}
             </div>
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(series)}>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(series)} aria-label="編輯系列">
                     <Pencil className="h-3.5 w-3.5" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => onDelete(series)}>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => onDelete(series)} aria-label="刪除系列">
                     <Trash2 className="h-3.5 w-3.5" />
                 </Button>
             </div>
@@ -224,12 +224,12 @@ export function BrandsTab() {
                                 管理系列
                             </Button>
                             <div className="flex gap-1">
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openBrandDialog(brand)}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openBrandDialog(brand)} aria-label="編輯品牌">
                                     <Pencil className="h-3.5 w-3.5" />
                                 </Button>
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => {
                                     if (confirm(`確定要刪除品牌「${brand.name}」嗎？`)) deleteBrand(brand.id, brand.name);
-                                }}>
+                                }} aria-label="刪除品牌">
                                     <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                             </div>

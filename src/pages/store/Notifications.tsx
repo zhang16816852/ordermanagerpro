@@ -150,6 +150,7 @@ export default function StoreNotifications() {
                             e.stopPropagation();
                             markAsReadMutation.mutate(notification.id);
                           }}
+                          aria-label="標示為已讀"
                         >
                           <Check className="h-4 w-4" />
                         </Button>

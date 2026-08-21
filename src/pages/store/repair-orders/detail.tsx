@@ -7,7 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { ArrowLeft, Smartphone, User, DollarSign, Printer } from 'lucide-react';
 import { useRepairOrderDetail } from '@/hooks/useRepairOrders';
 import { REPAIR_ORDER_STATUS_LABELS, REPAIR_ORDER_STATUS_COLORS, REPAIR_ITEM_TYPE_LABELS } from '@/types/repair';
-import { formatDate } from '@/lib/formatters';
+import { formatDate, formatCurrency } from '@/lib/formatters';
 
 export default function StoreRepairOrderDetail() {
   const { id } = useParams();
@@ -26,7 +26,7 @@ export default function StoreRepairOrderDetail() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard/repair-orders')}>
+          <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard/repair-orders')} aria-label="返回維修單列表">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
@@ -146,7 +146,7 @@ export default function StoreRepairOrderDetail() {
                         {item.description && <span className="text-xs text-muted-foreground ml-2">{item.description}</span>}
                       </td>
                       <td className="py-2 text-center">{item.quantity}</td>
-                      <td className="py-2 text-right font-mono">${((item.unit_price || 0) * item.quantity).toLocaleString()}</td>
+                      <td className="py-2 text-right font-mono">{formatCurrency((item.unit_price || 0) * item.quantity)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -163,17 +163,17 @@ export default function StoreRepairOrderDetail() {
             <CardContent className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">零件成本</span>
-                <span className="font-mono">${totalPartsCost.toLocaleString()}</span>
+                <span className="font-mono">{formatCurrency(totalPartsCost)}</span>
               </div>
               <Separator />
               <div className="flex justify-between font-bold text-base">
                 <span>應收總額</span>
-                <span className="font-mono">${finalPrice.toLocaleString()}</span>
+                <span className="font-mono">{formatCurrency(finalPrice)}</span>
               </div>
               {order.deposit > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">已付定金</span>
-                  <span className="font-mono">${order.deposit.toLocaleString()}</span>
+                  <span className="font-mono">{formatCurrency(order.deposit)}</span>
                 </div>
               )}
             </CardContent>

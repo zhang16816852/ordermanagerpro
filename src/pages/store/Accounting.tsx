@@ -23,6 +23,7 @@ import { Calculator, TrendingUp, Package, DollarSign } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
+import { formatCurrency } from '@/lib/formatters';
 
 export default function StoreAccounting() {
   const { storeId } = useAuth();
@@ -117,17 +118,17 @@ export default function StoreAccounting() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">本月進貨總額</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <DollarSign className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalAmount.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{formatCurrency(totalAmount)}</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">進貨品項數</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+            <Package className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalItems}</div>
@@ -137,7 +138,7 @@ export default function StoreAccounting() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">銷貨單數量</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <TrendingUp className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalNotes}</div>
@@ -149,7 +150,7 @@ export default function StoreAccounting() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Calculator className="h-5 w-5" />
+            <Calculator className="h-5 w-5" aria-hidden="true" />
             銷貨單明細
           </CardTitle>
           <CardDescription>
@@ -199,14 +200,14 @@ export default function StoreAccounting() {
                       <TableCell className="text-right">{itemCount}</TableCell>
                       <TableCell className="text-right">{totalQuantity}</TableCell>
                       <TableCell className="text-right font-medium">
-                        ${amount.toLocaleString()}
+                        {formatCurrency(amount)}
                       </TableCell>
                     </TableRow>
                   );
                 })}
                 <TableRow className="bg-muted/50 font-semibold">
                   <TableCell colSpan={4}>合計</TableCell>
-                  <TableCell className="text-right">${totalAmount.toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(totalAmount)}</TableCell>
                 </TableRow>
               </TableBody>
             </Table>

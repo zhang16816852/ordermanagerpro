@@ -57,8 +57,10 @@ export default function Auth() {
   //監控變化
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const handleEmailChange = (value: string) => {
     setLoginEmail(value);
+    setSelectedIndex(-1);
 
     const atIndex = value.indexOf("@");
 
@@ -81,6 +83,32 @@ export default function Auth() {
     const prefix = loginEmail.split("@")[0];
     setLoginEmail(`${prefix}@${domain}`);
     setShowSuggestions(false);
+    setSelectedIndex(-1);
+  };
+
+  const handleEmailKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showSuggestions || suggestions.length === 0) return;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedIndex(prev => (prev < suggestions.length - 1 ? prev + 1 : 0));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedIndex(prev => (prev > 0 ? prev - 1 : suggestions.length - 1));
+        break;
+      case 'Enter':
+        if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
+          e.preventDefault();
+          selectDomain(suggestions[selectedIndex]);
+        }
+        break;
+      case 'Escape':
+        setShowSuggestions(false);
+        setSelectedIndex(-1);
+        break;
+    }
   };
 
   useEffect(() => {
@@ -154,8 +182,8 @@ export default function Auth() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen flex items-center justify-center bg-background" role="status" aria-live="polite">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
       </div>
     );
   }
@@ -166,7 +194,7 @@ export default function Auth() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center mb-4 shadow-glow">
-            <Package className="h-8 w-8 text-primary-foreground" />
+            <Package className="h-8 w-8 text-primary-foreground" aria-hidden="true" />
           </div>
           <h1 className="text-2xl font-bold text-foreground">訂單處理系統</h1>
           <p className="text-muted-foreground mt-1">高效管理您的店鋪訂單</p>
@@ -199,7 +227,7 @@ export default function Auth() {
                     <Label htmlFor="login-email">電子信箱</Label>
 
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                       <Input
                         id="login-email"
                         type="email"
@@ -209,17 +237,31 @@ export default function Auth() {
                         onChange={(e) => handleEmailChange(e.target.value)}
                         onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
                         onFocus={() => loginEmail.includes("@") && setShowSuggestions(true)}
+                        onKeyDown={handleEmailKeyDown}
+                        role="combobox"
+                        aria-expanded={showSuggestions && suggestions.length > 0}
+                        aria-controls="email-suggestions-listbox"
+                        aria-autocomplete="list"
+                        aria-activedescendant={selectedIndex >= 0 ? `email-suggestion-${selectedIndex}` : undefined}
                       />
                     </div>
 
                     {showSuggestions && (
-                      <div className="absolute z-10 mt-1 w-full rounded-md border bg-background shadow">
-                        {suggestions.map(domain => (
+                      <div
+                        id="email-suggestions-listbox"
+                        role="listbox"
+                        className="absolute z-10 mt-1 w-full rounded-md border bg-background shadow"
+                      >
+                        {suggestions.map((domain, index) => (
                           <button
                             key={domain}
+                            id={`email-suggestion-${index}`}
                             type="button"
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                            role="option"
+                            aria-selected={index === selectedIndex}
+                            className={`w-full px-3 py-2 text-left text-sm hover:bg-muted${index === selectedIndex ? ' bg-muted' : ''}`}
                             onMouseDown={() => selectDomain(domain)}
+                            onMouseEnter={() => setSelectedIndex(index)}
                           >
                             {loginEmail.split("@")[0]}@{domain}
                           </button>
@@ -236,7 +278,7 @@ export default function Auth() {
                   <div className="space-y-2">
                     <Label htmlFor="login-password">密碼</Label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                       <Input
                         id="login-password"
                         type="password"
@@ -250,7 +292,7 @@ export default function Auth() {
                   </div>
 
                   <Button type="submit" className="w-full" disabled={loading}>
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
                     登入
                   </Button>
                 </form>
@@ -261,7 +303,7 @@ export default function Auth() {
                   <div className="space-y-2">
                     <Label htmlFor="signup-name">姓名</Label>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                       <Input
                         id="signup-name"
                         type="text"
@@ -277,7 +319,7 @@ export default function Auth() {
                   <div className="space-y-2">
                     <Label htmlFor="signup-email">電子信箱</Label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                       <Input
                         id="signup-email"
                         type="email"
@@ -293,7 +335,7 @@ export default function Auth() {
                   <div className="space-y-2">
                     <Label htmlFor="signup-password">密碼</Label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                       <Input
                         id="signup-password"
                         type="password"
@@ -309,7 +351,7 @@ export default function Auth() {
                   <div className="space-y-2">
                     <Label htmlFor="confirm-password">確認密碼</Label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                       <Input
                         id="confirm-password"
                         type="password"
@@ -323,7 +365,7 @@ export default function Auth() {
                   </div>
 
                   <Button type="submit" className="w-full" disabled={loading}>
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
                     註冊
                   </Button>
 

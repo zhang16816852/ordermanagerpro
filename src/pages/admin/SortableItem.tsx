@@ -26,7 +26,7 @@ export function SortableItem({ id, children }) {
             {/* 或者透過 React.cloneElement 傳下去，但更簡單的做法是：*/}
             <div className="flex gap-2 items-center">
                 <div {...attributes} {...listeners} className="cursor-move">
-                    <Database className="h-4 w-4" />
+                    <Database className="h-4 w-4" aria-hidden="true" />
                 </div>
                 {children}
             </div>

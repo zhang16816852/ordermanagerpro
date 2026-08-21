@@ -14,8 +14,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Search, Package, Truck, Send, Store, Trash2 } from "lucide-react";
+import { PageHeader } from '@/components/layout/PageHeader';
+import { MobileFooter } from '@/components/layout/MobileFooter';
 import { toast } from "sonner";
 import { getErrorMessage } from '@/lib/errorMessages';
+import { formatCurrency } from '@/lib/formatters';
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
@@ -280,11 +283,12 @@ export default function AdminShippingPool() {
   const { data: poolStock } = usePoolStock(selectedPoolItems);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">出貨池</h1>
-        <p className="text-muted-foreground">將待出貨項目合併為銷售單後出貨</p>
-      </div>
+    <div className="space-y-6 pb-24 md:pb-0">
+      <PageHeader
+        title="出貨池"
+        subtitle="將待出貨項目合併為銷售單後出貨"
+        icon={<Package className="h-5 w-5" />}
+      />
 
       <Card>
         <CardHeader>
@@ -296,6 +300,7 @@ export default function AdminShippingPool() {
             <Button
               onClick={() => setShowShipDialog(true)}
               disabled={selectedStores.size === 0}
+              className="hidden md:flex"
             >
               <Truck className="h-4 w-4 mr-2" />
               確認出貨 ({selectedStores.size} 店家)
@@ -413,10 +418,10 @@ export default function AdminShippingPool() {
                               </TableCell>
                               <TableCell className="text-right">{item.quantity}</TableCell>
                               <TableCell className="text-right">
-                                ${item.order_item?.unit_price.toFixed(2)}
+                                {formatCurrency(item.order_item?.unit_price)}
                               </TableCell>
                               <TableCell className="text-right font-medium">
-                                ${(item.quantity * (item.order_item?.unit_price || 0)).toFixed(2)}
+                                {formatCurrency(item.quantity * (item.order_item?.unit_price || 0))}
                               </TableCell>
                               <TableCell className="text-muted-foreground">
                                 {format(new Date(item.created_at), "MM/dd HH:mm")}
@@ -426,6 +431,7 @@ export default function AdminShippingPool() {
                                   variant="ghost"
                                   size="icon"
                                   className="text-destructive hover:text-destructive"
+                                  aria-label="刪除項目"
                                   onClick={() => removeItemMutation.mutate(item.id)}
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -513,8 +519,8 @@ export default function AdminShippingPool() {
                               {isConsignment && <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>}
                             </TableCell>
                             <TableCell className="text-right">{item.quantity}</TableCell>
-                            <TableCell className="text-right">${item.order_item?.unit_price.toFixed(2)}</TableCell>
-                            <TableCell className="text-right font-medium">${(item.quantity * (item.order_item?.unit_price || 0)).toFixed(2)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.order_item?.unit_price)}</TableCell>
+                            <TableCell className="text-right font-medium">{formatCurrency(item.quantity * (item.order_item?.unit_price || 0))}</TableCell>
                             <TableCell className="text-center">
                               {isConsignment ? (
                                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
@@ -555,7 +561,7 @@ export default function AdminShippingPool() {
                     </TableBody>
                   </Table>
                   <div className="text-right text-sm font-bold">
-                    合計：${groupTotal.toFixed(2)}
+                    合計：{formatCurrency(groupTotal)}
                   </div>
                 </div>
               );
@@ -594,6 +600,24 @@ export default function AdminShippingPool() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Mobile Ship Footer */}
+      <MobileFooter visible={selectedStores.size > 0}>
+        <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-muted-foreground">已選擇 {summary.storeCount} 店家</p>
+            <p className="text-xs text-muted-foreground">{summary.totalQuantity} 件商品</p>
+          </div>
+          <Button
+            onClick={() => setShowShipDialog(true)}
+            disabled={shipMutation.isPending}
+            className="shrink-0"
+          >
+            <Truck className="h-4 w-4 mr-2" />
+            確認出貨
+          </Button>
+        </div>
+      </MobileFooter>
     </div>
   );
 }

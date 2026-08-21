@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -10,8 +11,9 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Trash2, Package, Tag, Calculator, Save } from 'lucide-react';
+import { Trash2, Package, Tag, Calculator, Save, LayoutList, Rows3 } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
+import { formatCurrency } from '@/lib/formatters';
 
 export interface OrderItemRow {
     id: string;
@@ -35,6 +37,8 @@ interface OrderItemsTableProps {
     isEditable: boolean;
     priceSyncMap?: Record<string, boolean>;
     onTogglePriceSync?: (id: string, checked: boolean) => void;
+    defaultCompact?: boolean;
+    priceLabel?: string;
 }
 
 export function OrderItemsTable({
@@ -46,17 +50,20 @@ export function OrderItemsTable({
     isEditable,
     priceSyncMap,
     onTogglePriceSync,
+    defaultCompact = false,
+    priceLabel = '單價',
 }: OrderItemsTableProps) {
+    const [compact, setCompact] = useState(defaultCompact);
 
     const getComponentInfo = (item: OrderItemRow) => {
-        if (item.productName && item.sku) {
-            return { name: item.productName, sku: item.sku };
+        if (item.productName) {
+            return { name: item.productName };
         }
         if (products) {
             const p = products.find(p => p.id === item.productId);
-            if (p) return { name: p.name, sku: p.code };
+            if (p) return { name: p.name };
         }
-        return { name: '未知產品', sku: '' };
+        return { name: '未知產品' };
     };
 
     const getTotalAmount = () => {
@@ -68,16 +75,41 @@ export function OrderItemsTable({
 
     return (
         <div className="space-y-4">
+            {/* View mode toggle */}
+            <div className="flex items-center gap-2">
+                <Button
+                    variant={compact ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setCompact(true)}
+                >
+                    <LayoutList className="h-3.5 w-3.5 mr-1" />簡潔
+                </Button>
+                <Button
+                    variant={!compact ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setCompact(false)}
+                >
+                    <Rows3 className="h-3.5 w-3.5 mr-1" />詳細
+                </Button>
+            </div>
+
             {/* Desktop Table */}
             <div className="hidden md:block rounded-md border">
                 <Table>
                     <TableHeader className="bg-muted/50">
                         <TableRow>
-                            <TableHead className="w-[140px]">SKU</TableHead>
-                            <TableHead className="w-[120px]">變體</TableHead>
-                            <TableHead>產品名稱</TableHead>
-                            <TableHead className="text-right w-28">單價</TableHead>
+                            {compact ? (
+                                <TableHead>產品</TableHead>
+                            ) : (
+                                <>
+                                    <TableHead>產品名稱</TableHead>
+                                    <TableHead className="w-[120px]">變體</TableHead>
+                                </>
+                            )}
                             <TableHead className="w-24">數量</TableHead>
+                            <TableHead className="text-right w-28">{priceLabel}</TableHead>
                             <TableHead className="text-right w-28">小計</TableHead>
                             {showPriceSync && <TableHead className="w-24 text-center">存為店價</TableHead>}
                             {isEditable && <TableHead className="w-12"></TableHead>}
@@ -85,32 +117,33 @@ export function OrderItemsTable({
                     </TableHeader>
                     <TableBody>
                         {items.map((item, index) => {
-                            const { name, sku } = getComponentInfo(item);
+                            const { name } = getComponentInfo(item);
                             return (
                                 <TableRow key={item.id}>
-                                    <TableCell className="font-mono text-sm">
-                                        {sku}
-                                        {item.isNew && <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 border-green-200">新增</Badge>}
-                                    </TableCell>
-                                    <TableCell className="text-sm text-muted-foreground">
-                                        {item.variantName || '-'}
-                                        {item.selectedModelName && (
-                                            <div className="text-xs text-muted-foreground/70">{item.selectedModelName}</div>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="font-medium">{name}</TableCell>
-                                    <TableCell className="text-right">
-                                        {showPriceInput ? (
-                                            <Input
-                                                type="number"
-                                                value={item.unitPrice}
-                                                onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)}
-                                                className="w-24 text-right ml-auto h-8"
-                                            />
-                                        ) : (
-                                            <span>${item.unitPrice.toFixed(2)}</span>
-                                        )}
-                                    </TableCell>
+                                    {compact ? (
+                                        <TableCell className="font-medium">
+                                            <div className="flex flex-col">
+                                                <span>{name} - {item.variantName || '無變體'}</span>
+                                                <span className="text-xs font-mono text-muted-foreground">
+
+                                                    {item.selectedModelName && <span className="ml-2">{item.selectedModelName}</span>}
+                                                </span>
+                                            </div>
+                                        </TableCell>
+                                    ) : (
+                                        <>
+                                            <TableCell className="font-medium">
+                                                {name}
+                                                {item.isNew && <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 border-green-200">新增</Badge>}
+                                            </TableCell>
+                                            <TableCell className="text-sm text-muted-foreground">
+                                                {item.variantName || '-'}
+                                                {item.selectedModelName && (
+                                                    <div className="text-xs text-muted-foreground/70">{item.selectedModelName}</div>
+                                                )}
+                                            </TableCell>
+                                        </>
+                                    )}
                                     <TableCell>
                                         {isEditable ? (
                                             <Input
@@ -124,8 +157,20 @@ export function OrderItemsTable({
                                             <span>{item.quantity}</span>
                                         )}
                                     </TableCell>
+                                    <TableCell className="text-right">
+                                        {showPriceInput ? (
+                                            <Input
+                                                type="number"
+                                                value={item.unitPrice}
+                                                onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)}
+                                                className="w-24 text-right ml-auto h-8"
+                                            />
+                                        ) : (
+                                            <span>{formatCurrency(item.unitPrice)}</span>
+                                        )}
+                                    </TableCell>
                                     <TableCell className="text-right font-semibold">
-                                        ${(item.quantity * item.unitPrice).toFixed(2)}
+                                        {formatCurrency(item.quantity * item.unitPrice)}
                                     </TableCell>
                                     {showPriceSync && (
                                         <TableCell className="text-center">
@@ -157,7 +202,7 @@ export function OrderItemsTable({
             {/* Mobile Cards */}
             <div className="md:hidden space-y-3">
                 {items.map((item, index) => {
-                    const { name, sku } = getComponentInfo(item);
+                    const { name } = getComponentInfo(item);
                     return (
                         <div key={item.id} className="bg-card border rounded-lg p-4 shadow-sm space-y-3 relative overflow-hidden">
                             {item.isNew && (
@@ -168,13 +213,23 @@ export function OrderItemsTable({
 
                             <div className="flex justify-between items-start pt-1">
                                 <div className="space-y-1">
-                                    <div className="text-xs font-mono text-muted-foreground">{sku}</div>
-                                    <div className="font-bold text-sm leading-snug">{name}</div>
-                                    {item.variantName && (
-                                        <div className="text-xs text-muted-foreground">{item.variantName}</div>
-                                    )}
-                                    {item.selectedModelName && (
-                                        <div className="text-xs text-muted-foreground/70">型號: {item.selectedModelName}</div>
+                                    <div className="font-bold text-sm leading-snug">
+                                        {compact ? `${name} - ${item.variantName || '無變體'}` : name}
+                                        {item.isNew && <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 border-green-200">新增</Badge>}
+                                    </div>
+                                    {compact ? (
+                                        item.selectedModelName && (
+                                            <div className="text-xs text-muted-foreground">{item.selectedModelName}</div>
+                                        )
+                                    ) : (
+                                        <>
+                                            {item.variantName && (
+                                                <div className="text-xs text-muted-foreground">{item.variantName}</div>
+                                            )}
+                                            {item.selectedModelName && (
+                                                <div className="text-xs text-muted-foreground/70">型號: {item.selectedModelName}</div>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                                 {isEditable && (
@@ -192,21 +247,6 @@ export function OrderItemsTable({
                             <div className="grid grid-cols-2 gap-4 pt-2 border-t border-dashed">
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                        <Tag className="h-3 w-3" /> 單價
-                                    </label>
-                                    {showPriceInput ? (
-                                        <Input
-                                            type="number"
-                                            value={item.unitPrice}
-                                            onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)}
-                                            className="h-9"
-                                        />
-                                    ) : (
-                                        <div className="font-medium p-1.5 text-sm">${item.unitPrice.toFixed(2)}</div>
-                                    )}
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-[10px] text-muted-foreground flex items-center gap-1">
                                         <Package className="h-3 w-3" /> 數量
                                     </label>
                                     {isEditable ? (
@@ -219,6 +259,21 @@ export function OrderItemsTable({
                                         />
                                     ) : (
                                         <div className="font-medium p-1.5 text-sm">{item.quantity}</div>
+                                    )}
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                        <Tag className="h-3 w-3" /> {priceLabel}
+                                    </label>
+                                    {showPriceInput ? (
+                                        <Input
+                                            type="number"
+                                            value={item.unitPrice}
+                                            onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)}
+                                            className="h-9"
+                                        />
+                                    ) : (
+                                        <div className="font-medium p-1.5 text-sm">{formatCurrency(item.unitPrice)}</div>
                                     )}
                                 </div>
                             </div>
@@ -240,8 +295,8 @@ export function OrderItemsTable({
                                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                                     <Calculator className="h-3 w-3" /> 小計
                                 </span>
-                                <span className="font-bold text-primary">
-                                    ${(item.quantity * item.unitPrice).toFixed(2)}
+                                    <span className="font-bold text-primary">
+                                    {formatCurrency(item.quantity * item.unitPrice)}
                                 </span>
                             </div>
                         </div>
@@ -252,7 +307,7 @@ export function OrderItemsTable({
             <div className="flex justify-between items-center mt-6 pt-4 border-t">
                 <div className="text-sm text-muted-foreground">共計 {items.length} 項產品</div>
                 <div className="text-xl font-bold text-primary">
-                    總計：${getTotalAmount().toFixed(2)}
+                    總計：{formatCurrency(getTotalAmount())}
                 </div>
             </div>
         </div>

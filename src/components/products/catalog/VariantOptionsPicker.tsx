@@ -6,10 +6,11 @@ interface VariantOptionsPickerProps {
     product: any;
     onVariantSelect: (variant: any | null) => void;
     onSelectionChange?: (selectedOptions: Record<string, string | null>) => void;
+    onHasRequiredOptions?: (required: boolean) => void;
     getVariantQuantity?: (variantId: string) => number;
 }
 
-export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChange, getVariantQuantity }: VariantOptionsPickerProps) {
+export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChange, onHasRequiredOptions, getVariantQuantity }: VariantOptionsPickerProps) {
     const [selectedOptions, setSelectedOptions] = useState<Record<string, string | null>>({});
 
     const optionDimensions = useMemo(() => {
@@ -71,6 +72,10 @@ export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChan
             setSelectedOptions(initial);
         }
     }, [product?.id]);
+
+    useEffect(() => {
+        onHasRequiredOptions?.(optionDimensions.length > 0);
+    }, [optionDimensions.length, onHasRequiredOptions]);
 
     const isOptionAvailable = useCallback((dimKey: string, valueIdOrLabel: string) => {
         const testOptions = { ...selectedOptions, [dimKey]: valueIdOrLabel };

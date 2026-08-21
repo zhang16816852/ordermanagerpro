@@ -108,6 +108,16 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 
 **10 張表 RLS 未啟用**（任何人持 anon key 可直接讀寫）：`categories`、`specification_definitions`、`category_spec_links`、`category_hierarchy`、`product_category_links`、`data_change_logs`、`data_snapshots`、`storefront_items`、`table_templates`、`table_template_variants`。修復前需先補對應 policies。
 
+## 近期變更（AdminOrderForm 重構）
+
+- `useStoreProductCache(storeId, brand?)` 新增第二參數 `brand`，查詢 `store_products` 時加 `.eq('brand', brand)` server-side 過濾
+- `AdminOrderForm` 改為單頁兩欄佈局：左側 OrderItemsTable + 右側 ProductCatalog（含 CatalogSidebar）
+- ProductCatalog 加入品項走 Zustand（`useStoreDraft`），AdminOrderForm 透過 `useEffect` 同步到本地 `items` state
+- 編輯 OrderItemsTable 時同步回 Zustand（`updateQuantity` / `updateItemPrice` / `removeItem`）
+- 店家切換時自動 re-price 已有品項（從新 brand 的 `store_products` 取價格）
+- 採購/寄賣選供應商時自動帶入 `supplier_product_mappings.vendor_unit_cost`
+- 右側面板支援點擊展開/收縮（CSS flex transition，`activePanel` state 控制）
+
 ## 專案慣例
 
 - 文件與程式碼註解使用**繁體中文**

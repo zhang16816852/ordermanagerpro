@@ -25,6 +25,34 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
     shippingPoolItems.map(item => [item.order_item_id, item.quantity]) || []
   );
 
+  // 1b. Purchase Order linkage — reverse lookup: orderId → { poCount, poIds }
+  const { data: poLinkItems = [] } = useQuery({
+    queryKey: ['purchase-order-links'],
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from('purchase_order_items') as any)
+        .select('source_order_ids, purchase_order_id');
+      if (error) throw error;
+      return (data || []) as { source_order_ids: string[] | null; purchase_order_id: string }[];
+    },
+  });
+
+  const poLinkMap = new Map<string, { poCount: number; poIds: string[] }>();
+  for (const poi of poLinkItems) {
+    if (!poi.source_order_ids) continue;
+    for (const orderId of poi.source_order_ids) {
+      const existing = poLinkMap.get(orderId);
+      if (existing) {
+        if (!existing.poIds.includes(poi.purchase_order_id)) {
+          existing.poIds.push(poi.purchase_order_id);
+          existing.poCount = existing.poIds.length;
+        }
+      } else {
+        poLinkMap.set(orderId, { poCount: 1, poIds: [poi.purchase_order_id] });
+      }
+    }
+  }
+
   // 2. Stores list for filter — only stores with orders of this status
   const { data: stores = [] } = useQuery({
     queryKey: ['stores-list', statusTab],
@@ -237,6 +265,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
     orders,
     isLoading,
     shippingPoolMap,
+    poLinkMap,
     getPendingQuantity,
     syncOrdersMutation,
     confirmOrdersMutation,

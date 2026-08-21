@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Wallet, Building, Plus } from 'lucide-react';
 import { Account } from '../types';
+import { formatCurrency } from '@/lib/formatters';
 
 interface AccountsTabProps {
   accounts: Account[];
@@ -33,7 +34,7 @@ export function AccountsTab({ accounts, onAdd, isLoading }: AccountsTabProps) {
               )}
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${account.balance.toLocaleString()}</div>
+              <div className="text-2xl font-bold">{formatCurrency(account.balance)}</div>
               <p className="text-xs text-muted-foreground">
                 {account.type === 'cash' ? '現金' : '銀行帳戶'}
               </p>

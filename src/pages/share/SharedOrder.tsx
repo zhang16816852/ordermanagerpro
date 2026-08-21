@@ -13,6 +13,7 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import { useState, useEffect, useRef } from "react";
 import { PrintDialog, PrintOptions } from "@/components/PrintDialog";
 import { QRCodeSVG } from "qrcode.react";
+import { formatCurrency } from "@/lib/formatters";
 
 interface SharedOrderData {
   order: {
@@ -219,8 +220,8 @@ export default function SharedOrder() {
                   <TableCell className="text-right pr-6">{item.quantity}</TableCell>
                   {showPrice && (
                     <>
-                      <TableCell className="text-right pr-6">${item.unit_price?.toLocaleString()}</TableCell>
-                      <TableCell className="text-right pr-6">${(item.unit_price * item.quantity).toLocaleString()}</TableCell>
+                      <TableCell className="text-right pr-6">{formatCurrency(item.unit_price ?? 0)}</TableCell>
+                      <TableCell className="text-right pr-6">{formatCurrency((item.unit_price ?? 0) * item.quantity)}</TableCell>
                     </>
                   )}
                 </TableRow>
@@ -229,7 +230,7 @@ export default function SharedOrder() {
                 <TableRow className="bg-muted/50">
                   <TableCell colSpan={3} className="text-right font-bold pr-6">總計</TableCell>
                   <TableCell className="text-right font-bold pr-6 text-lg">
-                    ${items.reduce((sum: number, item: any) => sum + (item.unit_price * item.quantity), 0).toLocaleString()}
+                    {formatCurrency(items.reduce((sum: number, item: any) => sum + ((item.unit_price ?? 0) * item.quantity), 0))}
                   </TableCell>
                 </TableRow>
               )}

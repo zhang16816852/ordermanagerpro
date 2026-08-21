@@ -25,6 +25,7 @@ interface ItemTableViewProps {
   onToggleAll: (checked: boolean) => void;
   onUpdateQuantity: (id: string, quantity: number) => void;
   onRestoreItem: (id: string) => void;
+  poLinkMap: Map<string, { poCount: number; poIds: string[] }>;
 }
 
 export function ItemTableView({
@@ -37,6 +38,7 @@ export function ItemTableView({
   onToggleAll,
   onUpdateQuantity,
   onRestoreItem,
+  poLinkMap,
 }: ItemTableViewProps) {
   return (
     <div className="rounded-lg border bg-card shadow-soft flex-1 flex flex-col overflow-hidden">
@@ -111,6 +113,11 @@ export function ItemTableView({
                         <span className="text-muted-foreground ml-1">
                           - {item.product_variant.name}
                         </span>
+                      )}
+                      {item.orderId && poLinkMap.has(item.orderId) && (
+                        <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0 font-normal border-amber-500 text-amber-600">
+                          已轉採購
+                        </Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-right">{item.quantity}</TableCell>

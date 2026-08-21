@@ -52,7 +52,7 @@ export default function StoreAudit() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
+            <FileText className="h-5 w-5" aria-hidden="true" />
             操作記錄
           </CardTitle>
         </CardHeader>

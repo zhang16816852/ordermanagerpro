@@ -239,7 +239,7 @@ export default function MarketCreatePage() {
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
       <div className="sticky top-0 z-20 flex items-center gap-2 px-4 py-3 bg-background/80 backdrop-blur-md border-b border-white/8">
-        <Button variant="ghost" size="icon" className="-ml-2 h-9 w-9" onClick={() => navigate(-1)}>
+        <Button variant="ghost" size="icon" className="-ml-2 h-9 w-9" onClick={() => navigate(-1)} aria-label="返回">
           <ChevronLeft className="h-5 w-5" />
         </Button>
         <span className="text-sm font-semibold flex-1">
@@ -254,7 +254,7 @@ export default function MarketCreatePage() {
             <div key={num} className="flex items-center flex-1 last:flex-initial">
               <div
                 className={cn(
-                  "w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold border transition-all duration-300",
+                  "w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold border transition-colors duration-300",
                   step === num
                     ? "bg-primary text-primary-foreground border-primary"
                     : step > num
@@ -267,7 +267,7 @@ export default function MarketCreatePage() {
               {num < 3 && (
                 <div
                   className={cn(
-                    "flex-1 h-0.5 mx-2 transition-all duration-300",
+                    "flex-1 h-0.5 mx-2 transition-colors duration-300",
                     step > num ? "bg-primary/50" : "bg-white/10"
                   )}
                 />
@@ -289,7 +289,7 @@ export default function MarketCreatePage() {
                   type="button"
                   onClick={() => setListingType("sell")}
                   className={cn(
-                    "py-2 px-4 rounded-xl border font-medium text-sm transition-all",
+                    "py-2 px-4 rounded-xl border font-medium text-sm transition-colors duration-200",
                     listingType === "sell"
                       ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
                       : "bg-muted/40 text-muted-foreground border-white/10"
@@ -301,7 +301,7 @@ export default function MarketCreatePage() {
                   type="button"
                   onClick={() => setListingType("buy")}
                   className={cn(
-                    "py-2 px-4 rounded-xl border font-medium text-sm transition-all",
+                    "py-2 px-4 rounded-xl border font-medium text-sm transition-colors duration-200",
                     listingType === "buy"
                       ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
                       : "bg-muted/40 text-muted-foreground border-white/10"
@@ -322,7 +322,7 @@ export default function MarketCreatePage() {
                     type="button"
                     onClick={() => setSubCategory(cat)}
                     className={cn(
-                      "px-3 py-1.5 rounded-full text-xs border transition-all whitespace-nowrap",
+                      "px-3 py-1.5 rounded-full text-xs border transition-colors duration-200 whitespace-nowrap",
                       subCategory === cat
                         ? "bg-primary text-primary-foreground border-primary"
                         : "bg-muted/40 text-muted-foreground border-white/10"
@@ -368,7 +368,7 @@ export default function MarketCreatePage() {
                     type="button"
                     onClick={() => setCondition(cond.value)}
                     className={cn(
-                      "py-2 px-3 text-left rounded-xl border transition-all flex flex-col justify-center",
+                      "py-2 px-3 text-left rounded-xl border transition-colors duration-200 flex flex-col justify-center",
                       condition === cond.value
                         ? "bg-primary/10 text-primary border-primary"
                         : "bg-muted/30 text-muted-foreground border-white/5"
@@ -481,7 +481,7 @@ export default function MarketCreatePage() {
                       type="button"
                       onClick={() => setContactMethod(item.value as any)}
                       className={cn(
-                        "py-3 px-2 rounded-xl border flex flex-col items-center justify-center gap-1.5 font-medium text-xs transition-all",
+                        "py-3 px-2 rounded-xl border flex flex-col items-center justify-center gap-1.5 font-medium text-xs transition-colors duration-200",
                         contactMethod === item.value
                           ? item.color + " border-current"
                           : "bg-muted/30 text-muted-foreground border-white/5"

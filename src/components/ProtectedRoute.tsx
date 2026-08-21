@@ -14,7 +14,7 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
 
   if (loading || (requireAdmin && !rolesReady)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center bg-background" role="status" aria-live="polite">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );

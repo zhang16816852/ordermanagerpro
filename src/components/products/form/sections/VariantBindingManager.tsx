@@ -99,7 +99,7 @@ export function VariantBindingManager({ variantId }: VariantBindingManagerProps)
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-4">
+        <div className="flex items-center justify-center py-4" role="status" aria-live="polite">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       ) : (

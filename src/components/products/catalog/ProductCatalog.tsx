@@ -184,7 +184,8 @@ export default function ProductCatalog({
   }, [allTemplates, filteredVariantIds]);
 
   const handleProductClick = (product: ProductWithPricing) => {
-    if (product.variants && product.variants.length > 1) {
+    const hasOptions = (product as any).option_groups?.length > 0;
+    if ((product.variants && product.variants.length > 1) || hasOptions) {
       setVariantDialogProduct(product);
     } else {
       handleOpenDetail(product);
@@ -235,7 +236,7 @@ export default function ProductCatalog({
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">載入中...</div>
+            <div className="text-center py-8 text-muted-foreground" role="status" aria-live="polite">載入中...</div>
           ) : filteredProducts.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">沒有找到符合的產品</div>
           ) : viewMode === 'products' ? (

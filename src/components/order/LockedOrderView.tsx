@@ -9,6 +9,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { ArrowLeft, Lock } from 'lucide-react';
+import { formatCurrency } from '@/lib/formatters';
 
 interface LockedOrderViewProps {
     orderId: string;
@@ -67,17 +68,17 @@ export function LockedOrderView({ orderId, orderItems, onBack }: LockedOrderView
                             {orderItems.map((item) => (
                                 <TableRow key={item.id}>
                                     <TableCell>{item.products?.name}</TableCell>
-                                    <TableCell className="text-right">${item.unit_price}</TableCell>
+                                    <TableCell className="text-right">{formatCurrency(item.unit_price)}</TableCell>
                                     <TableCell className="text-right">{item.quantity}</TableCell>
                                     <TableCell className="text-right font-medium">
-                                        ${(item.quantity * item.unit_price).toFixed(2)}
+                                        {formatCurrency(item.quantity * item.unit_price)}
                                     </TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
                     </Table>
                     <div className="text-right mt-4 text-lg font-semibold">
-                        總計：${total.toFixed(2)}
+                        總計：{formatCurrency(total)}
                     </div>
                 </CardContent>
             </Card>

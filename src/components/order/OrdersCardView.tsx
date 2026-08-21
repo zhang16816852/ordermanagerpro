@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { OrderStatusBadge } from './OrderStatusBadge';
 import { Order, OrderItem } from '@/types/order';
+import { formatCurrency } from '@/lib/formatters';
 
 interface OrdersCardViewProps {
     orders: Order[] | undefined;
@@ -97,7 +98,7 @@ export function OrdersCardView({
                                 {/* 底部：金額 */}
                                 <div className="flex justify-between items-center">
                                     <span className="text-xs text-muted-foreground">訂單金額</span>
-                                    <span className="text-lg font-bold text-primary">${getOrderTotal(order.order_items).toFixed(2)}</span>
+                                    <span className="text-lg font-bold text-primary">{formatCurrency(getOrderTotal(order.order_items))}</span>
                                 </div>
                             </CardContent>
                         </Card>

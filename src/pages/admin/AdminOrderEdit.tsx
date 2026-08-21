@@ -230,7 +230,7 @@ export default function AdminOrderEdit() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">載入中...</div>
+        <div className="text-muted-foreground" role="status" aria-live="polite">載入中…</div>
       </div>
     );
   }
@@ -387,7 +387,7 @@ export default function AdminOrderEdit() {
               disabled={updateOrderMutation.isPending}
             >
               <Save className="mr-2 h-4 w-4" />
-              {updateOrderMutation.isPending ? '儲存中...' : '儲存變更'}
+              {updateOrderMutation.isPending ? '儲存中…' : '儲存變更'}
             </Button>
           </div>
         </CardContent>

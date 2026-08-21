@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { getErrorMessage } from '@/lib/errorMessages';
 import { cn } from "@/lib/utils";
+import { formatTWD } from "@/lib/formatters";
 
 interface MyListing {
   id: string;
@@ -155,7 +156,7 @@ export default function MyListingsPage() {
       <Card
         key={l.id}
         onClick={() => navigate(`/market/${l.id}`)}
-        className="overflow-hidden border border-white/8 bg-card/30 backdrop-blur-sm hover:bg-card/50 transition-all duration-300 rounded-2xl cursor-pointer group flex flex-row h-28"
+        className="overflow-hidden border border-white/8 bg-card/30 backdrop-blur-sm hover:bg-card/50 transition-colors duration-300 rounded-2xl cursor-pointer group flex flex-row h-28"
       >
         {/* Left image */}
         <div className="w-28 h-full bg-muted/20 relative flex-shrink-0">
@@ -185,7 +186,7 @@ export default function MyListingsPage() {
               {l.title}
             </h3>
             <p className="text-sm font-bold text-primary">
-              {l.price != null ? `NT$${l.price.toLocaleString()}` : "面議"}
+              {l.price != null ? formatTWD(l.price) : "面議"}
             </p>
           </div>
 
@@ -213,7 +214,7 @@ export default function MyListingsPage() {
                     variant="ghost"
                     onClick={(e) => handleMarkCompleteQuick(l.id, e)}
                     className="h-7 w-7 rounded-full text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
-                    title="標示為已成交"
+                    aria-label="標示為已成交"
                   >
                     <CheckCircle className="h-3.5 w-3.5" />
                   </Button>
@@ -222,7 +223,7 @@ export default function MyListingsPage() {
                     variant="ghost"
                     onClick={(e) => handleTakeDownQuick(l.id, e)}
                     className="h-7 w-7 rounded-full text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
-                    title="下架轉為草稿"
+                    aria-label="下架轉為草稿"
                   >
                     <EyeOff className="h-3.5 w-3.5" />
                   </Button>
@@ -234,7 +235,7 @@ export default function MyListingsPage() {
                   variant="ghost"
                   onClick={(e) => handleRepublish(l.id, e)}
                   className="h-7 w-7 rounded-full text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
-                  title="重新上架"
+                  aria-label="重新上架"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                 </Button>
@@ -244,7 +245,7 @@ export default function MyListingsPage() {
                 variant="ghost"
                 onClick={() => navigate(`/market/create?edit=${l.id}`)}
                 className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground"
-                title="編輯"
+                aria-label="編輯"
               >
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
@@ -253,7 +254,7 @@ export default function MyListingsPage() {
                 variant="ghost"
                 onClick={(e) => handleDelete(l.id, e)}
                 className="h-7 w-7 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10"
-                title="刪除"
+                aria-label="刪除"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
@@ -285,7 +286,7 @@ export default function MyListingsPage() {
     <div className="min-h-screen bg-background pb-20">
       {/* Sticky Header */}
       <div className="sticky top-0 z-20 flex items-center gap-2 px-4 py-3 bg-background/80 backdrop-blur-md border-b border-white/8">
-        <Button variant="ghost" size="icon" className="-ml-2 h-9 w-9" onClick={() => navigate("/market")}>
+        <Button variant="ghost" size="icon" className="-ml-2 h-9 w-9" onClick={() => navigate("/market")} aria-label="返回">
           <ChevronLeft className="h-5 w-5" />
         </Button>
         <span className="text-sm font-semibold flex-1">我的刊登紀錄</span>

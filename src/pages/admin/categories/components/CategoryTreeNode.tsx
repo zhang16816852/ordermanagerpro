@@ -155,6 +155,7 @@ export function CategoryTreeNode({
                     <Button
                         variant="ghost" size="icon" className="h-7 w-7"
                         title="新增子分類"
+                        aria-label="新增子分類"
                         onClick={(e) => { e.stopPropagation(); openDialog(null, node.id); }}
                     >
                         <Plus className="h-3.5 w-3.5" />
@@ -162,6 +163,7 @@ export function CategoryTreeNode({
                     <Button
                         variant="ghost" size="icon" className="h-7 w-7"
                         title="編輯"
+                        aria-label="編輯分類"
                         onClick={(e) => { e.stopPropagation(); openDialog(node); }}
                     >
                         <Pencil className="h-3.5 w-3.5" />
@@ -169,6 +171,7 @@ export function CategoryTreeNode({
                     <Button
                         variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
                         title="刪除"
+                        aria-label="刪除分類"
                         onClick={handleDelete}
                     >
                         <Trash2 className="h-3.5 w-3.5" />

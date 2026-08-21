@@ -191,6 +191,23 @@ async function createWorkbook(
             row2Instructions.push(instruction);
         });
 
+        const optionGroupMap = new Map<string, { id: string, name: string, sort_order: number }>();
+        groupProducts.forEach(p => {
+            (p.option_groups || []).forEach((og: any) => {
+                if (og?.id && !optionGroupMap.has(og.id)) {
+                    optionGroupMap.set(og.id, { id: og.id, name: og.name || '', sort_order: og.sort_order || 0 });
+                }
+            });
+        });
+        const optionGroups = Array.from(optionGroupMap.values()).sort((a, b) => a.sort_order - b.sort_order);
+
+        optionGroups.forEach(og => {
+            row1Names.push(og.name);
+            row2Instructions.push('');
+            row3Paths.push(og.name);
+            row4Ids.push(`option:${og.id}`);
+        });
+
         const rows: any[] = [row1Names, row2Instructions, row3Paths, row4Ids];
 
         groupProducts.forEach(p => {
@@ -288,7 +305,11 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
     const settings = item.spec_values || {};
 
     headerIds.forEach(key => {
-        if (baseValues[key] !== undefined) {
+        if (key.startsWith('option:')) {
+            const groupId = key.slice('option:'.length);
+            const ov = (item.option_values || []).find((o: any) => o.group_id === groupId);
+            row.push(ov ? (ov.label || ov.value || '') : '');
+        } else if (baseValues[key] !== undefined) {
             row.push(baseValues[key]);
         } else {
             const [parentId, specId] = key.split(':');

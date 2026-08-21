@@ -44,6 +44,8 @@ export default function AdminPurchaseOrders() {
     deleteOrderMutation,
     createSupplierMutation,
     addItemMutation,
+    updateItemMutation,
+    deleteItemMutation,
     receiveItemsMutation,
     makePaymentMutation,
   } = usePurchaseOrders(viewingOrder?.id);
@@ -75,13 +77,13 @@ export default function AdminPurchaseOrders() {
       }} className="space-y-4">
         <TabsList>
           <TabsTrigger value="orders" className="flex items-center gap-2">
-            <ClipboardList className="h-4 w-4" /> 採購單
+            <ClipboardList className="h-4 w-4" aria-hidden="true" /> 採購單
           </TabsTrigger>
           <TabsTrigger value="receiving" className="flex items-center gap-2">
-            <PackageCheck className="h-4 w-4" /> 進貨處理
+            <PackageCheck className="h-4 w-4" aria-hidden="true" /> 進貨處理
           </TabsTrigger>
           <TabsTrigger value="suppliers" className="flex items-center gap-2">
-            <Users className="h-4 w-4" /> 供應商夥伴
+            <Users className="h-4 w-4" aria-hidden="true" /> 供應商夥伴
           </TabsTrigger>
         </TabsList>
 
@@ -189,6 +191,8 @@ export default function AdminPurchaseOrders() {
               }}
               onReceiveItems={(items) => receiveItemsMutation.mutate(items)}
               onMakePayment={(data) => makePaymentMutation.mutate({ orderId: viewingOrder.id, ...data })}
+              onUpdateItem={(itemId, quantity, unit_cost) => updateItemMutation.mutate({ itemId, quantity, unit_cost })}
+              onDeleteItem={(itemId) => deleteItemMutation.mutate(itemId)}
             />
           )}
         </DialogContent>

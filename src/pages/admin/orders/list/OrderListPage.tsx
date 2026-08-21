@@ -5,7 +5,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Package, FileText, Send, Store, RotateCcw } from 'lucide-react';
+import { Plus, Package, FileText, Send, Store, RotateCcw, ClipboardList, PlusCircle } from 'lucide-react';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { WarehouseSelector } from "@/components/WarehouseSelector";
 import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
 import { OrderDetailDialog } from '@/components/order/OrderDetailDialog';
@@ -48,6 +49,11 @@ export default function AdminOrderList() {
   );
   const [search, setSearch] = useState(searchParams.get('id') || searchParams.get('search') || '');
   const [storeFilter, setStoreFilter] = useState<string>(searchParams.get('store') || 'all');
+  const [sortField, setSortField] = useState<string>('created_at');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [poFilter, setPoFilter] = useState<'all' | 'has_po' | 'no_po'>('all');
 
   // 當 URL 參數變動時同步搜尋框
   useEffect(() => {
@@ -83,6 +89,7 @@ export default function AdminOrderList() {
     orders,
     isLoading,
     shippingPoolMap,
+    poLinkMap,
     getPendingQuantity,
     syncOrdersMutation,
     confirmOrdersMutation,
@@ -309,9 +316,57 @@ export default function AdminOrderList() {
   const filteredOrders = useMemo(() => {
     return orders?.filter((order) => {
       if (viewMode !== 'orders') return true;
-      return matchesSearch(order);
+      if (!matchesSearch(order)) return false;
+      // 日期範圍篩選
+      if (dateFrom) {
+        const d = new Date(order.created_at);
+        const from = new Date(dateFrom + 'T00:00:00');
+        if (d < from) return false;
+      }
+      if (dateTo) {
+        const d = new Date(order.created_at);
+        const to = new Date(dateTo + 'T23:59:59');
+        if (d > to) return false;
+      }
+      // 採購狀態篩選
+      if (poFilter !== 'all') {
+        const hasPO = poLinkMap.has(order.id);
+        if (poFilter === 'has_po' && !hasPO) return false;
+        if (poFilter === 'no_po' && hasPO) return false;
+      }
+      return true;
     }) || [];
-  }, [orders, viewMode, matchesSearch]);
+  }, [orders, viewMode, matchesSearch, dateFrom, dateTo, poFilter, poLinkMap]);
+
+  const handleSort = useCallback((field: string) => {
+    setSortDirection(prev => sortField === field ? (prev === 'asc' ? 'desc' : 'asc') : 'desc');
+    setSortField(field);
+  }, [sortField]);
+
+  const sortedOrders = useMemo(() => {
+    const arr = [...filteredOrders];
+    arr.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case 'code':
+          cmp = (a.code || a.id).localeCompare(b.code || b.id);
+          break;
+        case 'store_name':
+          cmp = (a.stores?.name || '').localeCompare(b.stores?.name || '');
+          break;
+        case 'item_count':
+          cmp = a.order_items.length - b.order_items.length;
+          break;
+        case 'total_amount':
+          cmp = getOrderTotal(a.order_items) - getOrderTotal(b.order_items);
+          break;
+        default:
+          cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      }
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  }, [filteredOrders, sortField, sortDirection]);
 
   // Filtering Logic (Items - Flattened)
   const allPendingItems = useMemo(() => {
@@ -573,44 +628,110 @@ export default function AdminOrderList() {
   const allSelectedConsignment =
     selectedOrdersArray.length > 0 && selectedOrdersArray.every((o) => o.consignment_mode);
 
+  // 從選取的訂單彙整品項，供「轉採購單」使用
+  const poItemsFromOrders = useMemo(() => {
+    if (viewMode !== 'orders') return [];
+    const grouped = new Map<string, { productId: string; variantId: string | null; quantity: number; maxQuantity: number; productName: string; sku: string; sourceOrderIds: string[] }>();
+    for (const order of orders.filter(o => selectedOrderIds.has(o.id))) {
+      for (const item of order.order_items) {
+        if (item.status === 'cancelled' || item.status === 'discontinued') continue;
+        const pending = item.quantity - item.shipped_quantity;
+        if (pending <= 0) continue;
+        const key = `${item.product_id}_${item.variant_id || 'null'}`;
+        if (grouped.has(key)) {
+          const g = grouped.get(key)!;
+          g.quantity += pending;
+          g.maxQuantity += pending;
+          if (!g.sourceOrderIds.includes(order.id)) g.sourceOrderIds.push(order.id);
+        } else {
+          grouped.set(key, {
+            productId: item.product_id,
+            variantId: item.variant_id || null,
+            quantity: pending,
+            maxQuantity: pending,
+            productName: (item as any).product?.name || '',
+            sku: (item as any).product?.code || '',
+            sourceOrderIds: [order.id],
+          });
+        }
+      }
+    }
+    return Array.from(grouped.values());
+  }, [orders, selectedOrderIds, viewMode]);
+
+  // 決定傳給 AggregateToPODialog 的品項來源
+  const poItemsSource = useMemo(() => {
+    if (viewMode === 'orders') return poItemsFromOrders;
+    return Array.from(selectedAggregateItems.values());
+  }, [viewMode, poItemsFromOrders, selectedAggregateItems]);
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] space-y-4 p-4 md:p-6 overflow-hidden bg-muted/10">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">所有訂單</h1>
-          <p className="text-muted-foreground">查看與管理系統中的所有訂單</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button onClick={() => navigate('/admin/orders/new')} size="sm">
-            <Plus className="mr-2 h-4 w-4" /> 代訂訂單
-          </Button>
-          <Button
-            onClick={async () => {
-                const exportData = filteredOrders.map(o => ({
-                    "店鋪名稱": o.stores?.name,
-                    "訂單ID": o.id,
-                    "訂單編號": o.code || '-',
-                    "狀態": o.status,
-                    "建立日期": new Date(o.created_at).toLocaleString(),
-                    "備註": o.notes || '-'
-                }));
-                await exportToCSV(exportData, `訂單列表_${statusTab}`);
-            }}
-            variant="outline"
-            size="sm"
-          >
-            <FileText className="mr-2 h-4 w-4" /> 匯出 CSV
-          </Button>
-          <Button
-            onClick={() => syncOrdersMutation.mutate()}
-            variant="outline"
-            size="sm"
-            disabled={syncOrdersMutation.isPending}
-          >
-            <Package className="mr-2 h-4 w-4" /> 同步舊訂單狀態
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="所有訂單"
+        subtitle="查看與管理系統中的所有訂單"
+        icon={<ClipboardList className="h-5 w-5" />}
+        actions={
+          <>
+            <Button onClick={() => navigate('/admin/orders/checkout')} size="sm" variant="outline">
+              <PlusCircle className="mr-2 h-4 w-4" /> 建立新單據
+            </Button>
+            <Button onClick={() => navigate('/admin/orders/new')} size="sm">
+              <Plus className="mr-2 h-4 w-4" /> 代訂訂單
+            </Button>
+            <Button
+              onClick={async () => {
+                  const exportData: Record<string, any>[] = [];
+                  for (const o of filteredOrders) {
+                      const items = o.order_items || [];
+                      if (items.length === 0) {
+                          exportData.push({
+                              "訂單編號": o.code || '-',
+                              "店鋪名稱": o.stores?.name || '-',
+                              "狀態": o.status,
+                              "建立日期": new Date(o.created_at).toLocaleString(),
+                              "項目": '-',
+                              "數量": 0,
+                              "單價": 0,
+                              "小計": 0,
+                              "備註": o.notes || '-',
+                          });
+                      } else {
+                          for (const item of items) {
+                              const productName = (item as any).product?.name || '-';
+                              const variantName = (item as any).product_variant?.name;
+                              exportData.push({
+                                  "訂單編號": o.code || '-',
+                                  "店鋪名稱": o.stores?.name || '-',
+                                  "狀態": o.status,
+                                  "建立日期": new Date(o.created_at).toLocaleString(),
+                                  "項目": variantName ? `${productName} - ${variantName}` : productName,
+                                  "數量": item.quantity,
+                                  "單價": item.unit_price,
+                                  "小計": item.quantity * item.unit_price,
+                                  "備註": o.notes || '-',
+                              });
+                          }
+                      }
+                  }
+                  await exportToCSV(exportData, `訂單列表_${statusTab}`);
+              }}
+              variant="outline"
+              size="sm"
+            >
+              <FileText className="mr-2 h-4 w-4" /> 匯出 CSV
+            </Button>
+            <Button
+              onClick={() => syncOrdersMutation.mutate()}
+              variant="outline"
+              size="sm"
+              disabled={syncOrdersMutation.isPending}
+            >
+              <Package className="mr-2 h-4 w-4" /> 同步舊訂單狀態
+            </Button>
+          </>
+        }
+      />
 
       <OrderFilters
         statusTab={statusTab}
@@ -647,6 +768,12 @@ export default function AdminOrderList() {
           }, { replace: true });
         }}
         stores={stores}
+        dateFrom={dateFrom}
+        onDateFromChange={setDateFrom}
+        dateTo={dateTo}
+        onDateToChange={setDateTo}
+        poFilter={poFilter}
+        onPoFilterChange={setPoFilter}
       />
 
       <div className="flex-1 min-h-0 flex flex-col pt-2">
@@ -656,7 +783,7 @@ export default function AdminOrderList() {
             <div className="hidden md:block flex-1 min-h-0">
               <div className="h-full flex flex-col">
                 <OrderTableView
-                  orders={filteredOrders}
+                  orders={sortedOrders}
                   isLoading={isLoading}
                   statusTab={statusTab}
                   selectedOrderIds={selectedOrderIds}
@@ -666,12 +793,16 @@ export default function AdminOrderList() {
                     setSelectedOrderIds(next);
                   }}
                   onToggleAll={(checked) => {
-                    if (checked) setSelectedOrderIds(new Set(filteredOrders.map(o => o.id)));
+                    if (checked) setSelectedOrderIds(new Set(sortedOrders.map(o => o.id)));
                     else setSelectedOrderIds(new Set());
                   }}
                   onView={setViewingOrder}
                   onEdit={(id) => navigate(`/admin/orders/${id}/edit`)}
                   onReverseShipment={handleReverseShipment}
+                  sortField={sortField}
+                  sortDirection={sortDirection}
+                  onSort={handleSort}
+                  poLinkMap={poLinkMap}
                 />
               </div>
             </div>
@@ -745,6 +876,7 @@ export default function AdminOrderList() {
                   }
                 }}
                 onRestoreItem={(id) => cancelItemsMutation.mutate({ itemIds: [id], targetStatus: 'waiting' })}
+                poLinkMap={poLinkMap}
               />
             </div>
             </div>
@@ -1006,9 +1138,10 @@ export default function AdminOrderList() {
       <AggregateToPODialog
         open={convertToPOOpen}
         onOpenChange={setConvertToPOOpen}
-        selectedItems={Array.from(selectedAggregateItems.values())}
+        selectedItems={poItemsSource}
         onCreated={() => {
           setSelectedAggregateItems(new Map());
+          setSelectedOrderIds(new Set());
           setConvertToPOOpen(false);
         }}
       />

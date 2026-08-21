@@ -33,16 +33,19 @@ export function formatTWD(amount: number | string): string {
 /**
  * 格式化日期時間 (例如: 2024-04-10 15:30)
  */
+const dateTimeFormatter = new Intl.DateTimeFormat('zh-TW', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+});
+
 export function formatDate(date: string | Date | null): string {
     if (!date) return '-';
     const d = new Date(date);
     if (isNaN(d.getTime())) return '-';
 
-    const Y = d.getFullYear();
-    const M = String(d.getMonth() + 1).padStart(2, '0');
-    const D = String(d.getDate()).padStart(2, '0');
-    const h = String(d.getHours()).padStart(2, '0');
-    const m = String(d.getMinutes()).padStart(2, '0');
-
-    return `${Y}-${M}-${D} ${h}:${m}`;
+    return dateTimeFormatter.format(d).replace(/\//g, '-');
 }
