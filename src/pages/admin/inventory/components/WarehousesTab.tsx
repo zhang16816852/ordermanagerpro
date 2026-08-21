@@ -79,7 +79,7 @@ function SortableWarehouseRow({
 
       <div className="text-xs text-muted-foreground w-20 truncate hidden sm:block">{warehouse.type || '-'}</div>
 
-      <div className="flex items-center gap-3 text-xs w-28 shrink-0 hidden md:flex">
+      <div className="flex items-center gap-3 text-xs w-28 shrink-0  md:flex">
         <span className={cn(warehouse.include_in_actual ? 'text-emerald-600' : 'text-muted-foreground')}>
           {warehouse.include_in_actual ? '✅ 實際' : '❌ 實際'}
         </span>

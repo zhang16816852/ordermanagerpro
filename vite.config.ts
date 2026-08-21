@@ -29,7 +29,7 @@ export default defineConfig(({ mode }) => ({
           if (/[\\/]node_modules[\\/]@supabase[\\/]/.test(id)) return "supabase";
           if (/[\\/]node_modules[\\/]@radix-ui[\\/]/.test(id)) return "radix-ui";
           if (/[\\/]node_modules[\\/]lucide-react[\\/]/.test(id)) return "icons";
-          if (/[\\/]node_modules[\\/](recharts|d3-[^\\/]*|react-smooth)[\\/]/.test(id)) return "charts";
+          if (/[\\/]node_modules[\\/](recharts|recharts-scale|d3-[^\\/]*|react-smooth|victory-vendor|internmap)[\\/]/.test(id)) return "charts";
           if (/[\\/]node_modules[\\/](react-router|react-router-dom|zustand|idb|date-fns|zod)[\\/]/.test(id)) return "router-store";
           return "vendor";
         },
