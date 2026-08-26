@@ -36,13 +36,14 @@ export function useSpecData() {
             let targetId = editingSpecId;
 
             // [關鍵修正] 剔除 logic_config 與時間戳記，因為連動規則現在儲存在獨立的 specification_triggers 表
-            const { logic_config, created_at, updated_at, ...dbPayload } = spec as any;
+            // 數量連動已合併進 triggers（relation_type='quantity'），故一併剔除舊的 quantity_source_id 欄位
+            const { logic_config, quantity_source_id, created_at, updated_at, ...dbPayload } = spec as any;
 
             if (editingSpecId) {
                 const { error } = await (supabase.from('specification_definitions') as any)
                     .update({
                         ...dbPayload,
-                        quantity_source_id: dbPayload.quantity_source_id || null
+                        quantity_source_id: null
                     })
                     .eq('id', editingSpecId);
                 if (error) throw error;
@@ -53,7 +54,7 @@ export function useSpecData() {
                     configuration: dbPayload.configuration ?? null,
                     options: dbPayload.options ?? [],
                     sort_order: dbPayload.sort_order ?? 0,
-                    quantity_source_id: dbPayload.quantity_source_id || null
+                    quantity_source_id: null
                 };
                 const { data: newSpec, error } = await (supabase.from('specification_definitions') as any)
                     .insert([finalSpec])
@@ -68,12 +69,14 @@ export function useSpecData() {
                 // 先刪除舊規則
                 await (supabase.from('specification_triggers') as any).delete().eq('source_spec_id', targetId);
 
-                // 將 logic_config.triggers 陣列轉換成資料庫列格式
+                // 將 logic_config.triggers 陣列轉換成資料庫列格式（含 relation_type：visibility / quantity）
                 const triggerRows = spec.logic_config.triggers.flatMap((t: any) => {
+                    const isQuantity = t.type === 'quantity';
                     return (t.targets || []).map((tar: any) => ({
                         source_spec_id: targetId,
                         target_spec_id: tar.id,
-                        condition_dsl: {
+                        relation_type: isQuantity ? 'quantity' : 'visibility',
+                        condition_dsl: isQuantity ? {} : {
                             operator: t.operator || 'eq',
                             on_value: t.on_value,
                             is_quantity_detail: !!tar.is_quantity_detail
@@ -166,9 +169,9 @@ export function useSpecData() {
                 try {
                     const json = JSON.parse(event.target?.result as string);
                     const items = Array.isArray(json) ? json : [json];
-                    const cleanedItems = items.map(({ logic_config, created_at, updated_at, ...rest }: any) => ({
+                    const cleanedItems = items.map(({ logic_config, quantity_source_id, created_at, updated_at, ...rest }: any) => ({
                         ...rest,
-                        quantity_source_id: rest.quantity_source_id || null
+                        quantity_source_id: null
                     }));
                     resolve(cleanedItems);
                 } catch (err: any) {
@@ -223,10 +226,10 @@ export function useSpecData() {
                 const json = JSON.parse(event.target?.result as string);
                 const items = Array.isArray(json) ? json : [json];
 
-                // [關鍵修正] 剔除 logic_config 與時間戳記
-                const cleanedItems = items.map(({ logic_config, created_at, updated_at, ...rest }: any) => ({
+                // [關鍵修正] 剔除 logic_config 與時間戳記（數量連動已合併進 triggers，舊欄位置 null）
+                const cleanedItems = items.map(({ logic_config, quantity_source_id, created_at, updated_at, ...rest }: any) => ({
                     ...rest,
-                    quantity_source_id: rest.quantity_source_id || null
+                    quantity_source_id: null
                 }));
 
                 // 批次 Upsert，以 ID 或名稱為基準

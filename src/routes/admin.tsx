@@ -11,6 +11,7 @@ import AdminAccounting from "@/pages/admin/accounting/index";
 import AdminPurchaseOrders from "@/pages/admin/purchase-orders/index";
 import AdminConsignment from "@/pages/admin/consignment/index";
 import AdminCategories from "@/pages/admin/categories/index";
+import CategoryEditor from "@/pages/admin/categories/CategoryEditor";
 import AdminInventory from "@/pages/admin/inventory/index";
 import AdminAuditLogs from "@/pages/admin/audit-logs/index";
 import AdminOrderGridTemplates from "@/pages/admin/order-grid-templates/index";
@@ -24,6 +25,8 @@ export const adminRoutes = [
     { path: "/admin/inventory", element: <AdminInventory /> },
     { path: "/admin/products", element: <AdminProducts /> },
     { path: "/admin/categories", element: <AdminCategories /> },
+    { path: "/admin/categories/new", element: <CategoryEditor /> },
+    { path: "/admin/categories/:categoryId", element: <CategoryEditor /> },
     { path: "/admin/stores", element: <AdminStores /> },
     { path: "/admin/orders", element: <AdminOrderList /> },
     { path: "/admin/orders/new", element: <AdminOrderComposer /> },

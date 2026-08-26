@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,10 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Plus, FolderTree, Download, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { CategoryTreeNode } from './CategoryTreeNode';
-import CategoryDialog from './CategoryDialog';
 import { useCategoryData } from '../hooks/useCategoryData';
 import { useSpecData } from '../hooks/useSpecData';
-import { useSpecEngine } from '../hooks/useSpecEngine';
 import { Category, CategoryHierarchy } from '../types';
 import { ImportPreviewDialog, ImportColumn } from '@/components/shared/ImportPreviewDialog';
 import {
@@ -81,7 +79,6 @@ export function CategoryTab() {
         isLoadingCats,
         categorySpecLinks,
         categoryHierarchy,
-        categoryMutation,
         reorderMutation,
         handleCategoryExport,
         handleCategoryImport,
@@ -137,8 +134,6 @@ export function CategoryTab() {
     ];
 
     const { specDefinitions } = useSpecData();
-    // 門面模式：一切規格邏輯交由此 Hook
-    const { engine, activeConfiguration } = useSpecEngine(specDefinitions);
 
     // DnD Sensors
     const sensors = useSensors(
@@ -197,10 +192,8 @@ export function CategoryTab() {
     };
 
     const [searchParams, setSearchParams] = useSearchParams();
+    const navigate = useNavigate();
     const initExpanded = searchParams.get('expanded')?.split(',').filter(Boolean) || [];
-    // Dialog 狀態
-    const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const [editingCategory, setEditingCategory] = useState<Category | null>(null);
     const [expandedIds, setExpandedIdsState] = useState<Set<string>>(new Set(initExpanded));
     const setExpandedIds: React.Dispatch<React.SetStateAction<Set<string>>> = (val) => {
         setExpandedIdsState((prev) => {
@@ -216,63 +209,12 @@ export function CategoryTab() {
         });
     };
 
-    // 表單狀態
-    const [name, setName] = useState('');
-    const [parentIds, setParentIds] = useState<string[]>([]);
-
-    // 開啟 Dialog（新增或編輯）
+    // 開啟編輯器（全螢幕路由，取代原 Dialog）
     const openDialog = (cat: Category | null = null, defaultParentId: string | null = null) => {
         if (cat) {
-            setEditingCategory(cat);
-            setName(cat.name);
-            const currentParents = categoryHierarchy
-                .filter(h => h.child_id === cat.id)
-                .map(h => h.parent_id);
-            setParentIds(currentParents);
-
-            // 原子化恢復狀態
-            const snapshot: any = { selected: {} };
-            categorySpecLinks
-                .filter((l: any) => l.category_id === cat.id)
-                .forEach((l: any) => {
-                    snapshot.selected[l.spec_id] = {
-                        manual: l.is_manual ?? true,
-                        sources: [],
-                        sortOrder: l.sort_order || 0
-                    };
-                });
-            engine.restore(snapshot);
+            navigate(`/admin/categories/${cat.id}`);
         } else {
-            setEditingCategory(null);
-            setName('');
-            setParentIds(defaultParentId ? [defaultParentId] : []);
-            engine.restore({ selected: {} });
-        }
-        setIsDialogOpen(true);
-    };
-
-    const closeDialog = () => {
-        setIsDialogOpen(false);
-        setEditingCategory(null);
-    };
-
-    // 提交表單
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        try {
-            await categoryMutation.mutateAsync({
-                name,
-                parentIds,
-                specs: activeConfiguration.map(s => ({
-                    id: s.id,
-                    sortOrder: s.sortOrder,
-                    isManual: s.isManual
-                })),
-                editingCategoryId: editingCategory?.id
-            });
-            closeDialog();
-        } catch (error) {
-            console.error('Submit category error:', error);
+            navigate(defaultParentId ? `/admin/categories/new?parent=${defaultParentId}` : '/admin/categories/new');
         }
     };
 
@@ -367,21 +309,6 @@ export function CategoryTab() {
                 isLoading={isConfirming}
                 error={previewError}
                 confirmText="確認匯入"
-            />
-
-            {/* 新增/編輯 Dialog */}
-            <CategoryDialog
-                open={isDialogOpen}
-                onOpenChange={setIsDialogOpen}
-                name={name}
-                setName={setName}
-                parentIds={parentIds}
-                setParentIds={setParentIds}
-                activeConfiguration={activeConfiguration}
-                engine={engine}
-                categories={categories}
-                specDefinitions={specDefinitions}
-                onSubmit={handleSubmit}
             />
         </>
     );

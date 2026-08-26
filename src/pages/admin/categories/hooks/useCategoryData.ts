@@ -83,11 +83,12 @@ export function useCategoryData() {
             // 更新規格關聯
             await (supabase.from('category_spec_links' as any) as any).delete().eq('category_id', catId);
             if (specs && specs.length > 0) {
-                const links = specs.map((s: { id: string, sortOrder: number, isManual?: boolean }) => ({
+                const links = specs.map((s: { id: string, sortOrder: number, isManual?: boolean, required?: boolean }) => ({
                     category_id: catId,
                     spec_id: s.id,
                     sort_order: s.sortOrder,
-                    is_manual: s.isManual ?? true
+                    is_manual: s.isManual ?? true,
+                    required: s.required ?? false
                 }));
                 await (supabase.from('category_spec_links' as any) as any).insert(links);
             }

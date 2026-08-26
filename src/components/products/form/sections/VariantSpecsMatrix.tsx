@@ -7,21 +7,29 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { Save, Copy, Loader2, ChevronsRight, Wand2, PenLine, Table2 } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, forwardRef, useImperativeHandle, useRef, Fragment } from 'react';
 import { SpecValueEditor } from './SpecValueEditor';
 import { deserializeSpecs, serializeSpecs, getVisibleSpecsTree, getTreeSortedVisiblePaths } from '@/utils/specLogic';
 import { useSpecStore } from '@/store/useSpecStore';
 
+export interface VariantSpecsMatrixHandle {
+    save: () => Promise<void>;
+    isDirty: () => boolean;
+}
+
 interface VariantSpecsMatrixProps {
     productId: string;
     categoryIds: string[];
+    onDirtyChange?: (dirty: boolean) => void;
 }
 
-export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatrixProps) {
+export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSpecsMatrixProps>(
+    ({ productId, categoryIds, onDirtyChange }, ref) => {
     const queryClient = useQueryClient();
-    const { specMap, specTriggers, fetchSpecs } = useSpecStore();
+    const { specMap, specTriggers, fetchSpecs, categories } = useSpecStore();
     const { data: specFields = [], isLoading: specsLoading } = useCategorySpecs(categoryIds);
     const [localData, setLocalData] = useState<Record<string, Record<string, any>>>({});
+    const [savedSnapshot, setSavedSnapshot] = useState<Record<string, Record<string, any>> | null>(null);
     const [editMode, setEditMode] = useState<'table' | 'single'>('table');
     const [batchDialogOpen, setBatchDialogOpen] = useState(false);
     const [batchValues, setBatchValues] = useState<Record<string, any>>({});
@@ -92,8 +100,19 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
             });
             console.log('[VariantMatrix] 同步至 localData:', initial);
             setLocalData(initial);
+            setSavedSnapshot(initial);
         }
     }, [variants]);
+
+    // 計算本地資料是否與已儲存快照不同 (髒狀態)
+    const isDirty = useMemo(() => {
+        if (!savedSnapshot) return false;
+        return JSON.stringify(savedSnapshot) !== JSON.stringify(localData);
+    }, [savedSnapshot, localData]);
+
+    useEffect(() => {
+        onDirtyChange?.(isDirty);
+    }, [isDirty, onDirtyChange]);
 
     /**
      * v5.1 樹狀動態路徑計算 (支援 DSL)
@@ -137,6 +156,30 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
         });
     }, [specFields, localData, specMap, specTriggers]);
 
+    // 依來源分類將規格分組，讓多分類選取時能清楚標示每個規格的歸屬
+    const groupedRows = useMemo(() => {
+        if (visiblePathRows.length === 0) return [];
+        const catNameMap = new Map((categories || []).map((c: any) => [c.id, c.name]));
+        const seen = new Set<string>();
+        const groups: { categoryId: string | null; categoryName: string; rows: any[] }[] = [];
+
+        (categoryIds || []).forEach(catId => {
+            const rows = visiblePathRows.filter(
+                r => (r.spec?.sourceCategoryIds || []).includes(catId) && !seen.has(r.pathKey)
+            );
+            if (rows.length === 0) return;
+            rows.forEach(r => seen.add(r.pathKey));
+            groups.push({ categoryId: catId, categoryName: catNameMap.get(catId) || '分類', rows });
+        });
+
+        const remaining = visiblePathRows.filter(r => !seen.has(r.pathKey));
+        if (remaining.length > 0) {
+            remaining.forEach(r => seen.add(r.pathKey));
+            groups.push({ categoryId: null, categoryName: '其他規格', rows: remaining });
+        }
+        return groups;
+    }, [visiblePathRows, categoryIds, categories]);
+
     const saveMutation = useMutation({
         mutationFn: async () => {
             const results = await Promise.all(
@@ -161,10 +204,16 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
         },
         onSuccess: () => {
             toast.success('變體規格矩陣已同步至雲端 (v6 Engine)');
+            setSavedSnapshot(localData);
             queryClient.invalidateQueries({ queryKey: ['product-variants-specs-v6', productId] });
         },
         onError: (err: any) => toast.error('儲存失敗：' + getErrorMessage(err))
     });
+
+    useImperativeHandle(ref, () => ({
+        save: () => saveMutation.mutateAsync(),
+        isDirty: () => isDirty
+    }), [saveMutation, isDirty]);
 
     const handleValueChange = (variantId: string, pathKey: string, value: any) => {
         setLocalData(prev => ({
@@ -307,8 +356,33 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {visiblePathRows.map(row => {
+                        {groupedRows.map(group => {
+                            const missingRequired = group.rows.filter(
+                                r => r.spec?.required && variants.every(v => !(localData[v.id]?.[r.pathKey]))
+                            ).length;
+
+                            return (
+                                <Fragment key={group.categoryId || 'other'}>
+                                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                        <TableCell
+                                            colSpan={variants.length + 2}
+                                            className="py-1.5 px-4 border-b border-t"
+                                        >
+                                            <div className="flex items-center gap-2 text-xs font-bold text-foreground/80 uppercase tracking-wide">
+                                                <span className="w-1.5 h-4 bg-primary/60 rounded-full" />
+                                                {group.categoryName}
+                                                <span className="text-[10px] font-normal text-muted-foreground normal-case">
+                                                    {group.rows.length} 項規格
+                                                    {missingRequired > 0 && (
+                                                        <span className="text-destructive ml-1">· {missingRequired} 項必填未填</span>
+                                                    )}
+                                                </span>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                    {group.rows.map(row => {
                             const isHeading = row.spec?.type === 'heading';
+                            const isMissing = !isHeading && row.spec?.required && variants.every(v => !(localData[v.id]?.[row.pathKey]));
 
                             return (
                                 <TableRow key={row.pathKey} className={`group hover:bg-muted/5 transition-colors border-b last:border-0 ${isHeading ? 'bg-primary/5' : ''}`}>
@@ -327,13 +401,19 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                                 <div title={`Internal Key: ${row.pathKey}`} className="flex items-center gap-2 cursor-help">
                                                     {row.level > 0 && <ChevronsRight className="h-3 w-3 text-primary/40 shrink-0" />}
                                                     <div className="flex flex-col min-w-0">
-                                                        <span className="text-xs font-bold text-primary truncate">{row.name}</span>
+                                                        <span className="text-xs font-bold text-primary truncate flex items-center gap-1">
+                                                            {row.name}
+                                                            {row.spec?.required && <span className="text-destructive font-bold" title="必填">*</span>}
+                                                        </span>
                                                         {row.level > 0 && (
                                                             <span className="text-[9px] text-muted-foreground/60 truncate">
                                                                 來自: {specMap.get(row.parentId)?.name || '父規格'}
                                                                 {row.triggerInfo?.op === 'ne' ? ' ≠ ' : ' = '}
                                                                 {row.triggerInfo?.val}
                                                             </span>
+                                                        )}
+                                                        {isMissing && (
+                                                            <span className="text-[9px] text-destructive/80 truncate">尚未填寫（必填）</span>
                                                         )}
                                                     </div>
                                                 </div>
@@ -421,10 +501,15 @@ export function VariantSpecsMatrix({ productId, categoryIds }: VariantSpecsMatri
                                     )}
                                 </TableRow>
                             );
+                                    })}
+                                </Fragment>
+                            );
                         })}
                     </TableBody>
                 </Table>
             </div>
         </div>
     );
-}
+});
+
+VariantSpecsMatrix.displayName = 'VariantSpecsMatrix';

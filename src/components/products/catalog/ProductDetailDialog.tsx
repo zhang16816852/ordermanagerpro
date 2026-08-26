@@ -126,7 +126,7 @@ export function ProductDetailDialog({
 
     const toggleShowImages = (checked: boolean) => {
         setShowImages(checked);
-        try { localStorage.setItem(SHOW_IMAGES_KEY, String(checked)); } catch {}
+        try { localStorage.setItem(SHOW_IMAGES_KEY, String(checked)); } catch { /* localStorage 不可用時忽略 */ }
     };
 
     useEffect(() => {
@@ -267,7 +267,7 @@ export function ProductDetailDialog({
             if (isHeading) {
                 const hasVisibleChildrenWithValues = Array.from(specIdAgg.keys()).some(sid => {
                     const childDef = specDefinitions.find((s: any) => s.id === sid);
-                    return childDef?.parent_id === specId && specIdAgg.get(sid)?.rawValues.length! > 0;
+                    return childDef?.parent_id === specId && (specIdAgg.get(sid)?.rawValues.length ?? 0) > 0;
                 });
 
                 if (!isLinkedToCategory && !hasVisibleChildrenWithValues) return null;
@@ -305,10 +305,10 @@ export function ProductDetailDialog({
         }
         if (selectedVariant) {
             addItem(product, selectedVariant);
-            toast.success(`${product.name} (${selectedVariant.name}) 已加入購物車`);
+            toast.success(`${product.name} (${selectedVariant.name}) 已加入購物車`, { id: 'cart-add', duration: 2000 });
         } else {
             addItem(product);
-            toast.success(`${product.name} 已加入購物車`);
+            toast.success(`${product.name} 已加入購物車`, { id: 'cart-add', duration: 2000 });
         }
     };
 

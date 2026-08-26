@@ -20,9 +20,9 @@ import {
     useSensor,
     useSensors,
 } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { SortableItem } from '../../SortableItem';
 import { SpecDefinition } from '../types';
+import { useSpecStore } from '@/store/useSpecStore';
 import { cn } from '@/lib/utils';
 
 interface SpecDialogProps {
@@ -50,6 +50,24 @@ export function SpecDialog({
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
     );
+
+    const { categories, categoryLinks } = useSpecStore();
+    const specCategoryMap = useMemo(() => {
+        const map = new Map<string, string>();
+        (categoryLinks || []).forEach((l: any) => {
+            if (!map.has(l.spec_id)) {
+                const cat = (categories || []).find((c: any) => c.id === l.category_id);
+                if (cat) map.set(l.spec_id, cat.name);
+            }
+        });
+        return map;
+    }, [categories, categoryLinks]);
+
+    const quantitySourceOptions = useMemo(() => {
+        return allSpecs
+            .filter(s => s.id !== editingSpec?.id && s.type !== 'heading')
+            .map(s => ({ id: s.id, name: s.name, group: specCategoryMap.get(s.id) || '未分類' }));
+    }, [allSpecs, editingSpec, specCategoryMap]);
 
     const specLevels = useMemo(() => {
         const levels: Record<string, number> = {};
@@ -126,6 +144,32 @@ export function SpecDialog({
         }));
     };
 
+    // 數量複製（來源視角）：當此規格填入數值 N 時，勾選的下游規格會被複製出 N 份
+    const quantityTargetIds = useMemo(() => {
+        const set = new Set<string>();
+        ((specForm.logic_config?.triggers || []) as any[]).forEach((t) => {
+            if (t.type === 'quantity') (t.targets || []).forEach((tar: any) => set.add(tar.id));
+        });
+        return set;
+    }, [specForm.logic_config]);
+
+    const toggleQuantityTarget = (targetId: string) => {
+        setSpecForm(prev => {
+            const triggers = [...(prev.logic_config?.triggers || [])] as any[];
+            const qTriggers = triggers.filter(t => t.type === 'quantity');
+            const otherTriggers = triggers.filter(t => t.type !== 'quantity');
+            const selectedIds = qTriggers.flatMap(t => (t.targets || []).map((tar: any) => tar.id));
+            const nextIds = selectedIds.includes(targetId)
+                ? selectedIds.filter(id => id !== targetId)
+                : [...selectedIds, targetId];
+            const nextQTriggers = nextIds.map(id => ({ type: 'quantity', targets: [{ id }] }));
+            return {
+                ...prev,
+                logic_config: { ...prev.logic_config, triggers: [...otherTriggers, ...nextQTriggers] } as any
+            };
+        });
+    };
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-0" aria-describedby={undefined}>
@@ -190,21 +234,26 @@ export function SpecDialog({
                         </div>
                     </div>
 
-                    {/* 數量連動設定 (v6) */}
+                    {/* 數量複製設定（來源視角，合併進 triggers） */}
                     <div className="space-y-3 p-3 border rounded-md bg-blue-50/30 border-blue-100">
-                        <h4 className="text-sm font-bold text-blue-800 border-b border-blue-100 pb-1">數量連動設定</h4>
-                        <div className="space-y-1">
-                            <label className="text-[10px] text-muted-foreground font-bold">根據此規格的數值產生對應數量的欄位</label>
-                            <select
-                                className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-                                value={(specForm as any).quantity_source_id || ''}
-                                onChange={(e) => setSpecForm(prev => ({ ...prev, quantity_source_id: e.target.value || null }))}
-                            >
-                                <option value="">無連動 (預設)</option>
-                                {allSpecs.filter(s => s.id !== editingSpec?.id && s.type !== 'heading').map(s => (
-                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                ))}
-                            </select>
+                        <h4 className="text-sm font-bold text-blue-800 border-b border-blue-100 pb-1">數量複製設定（來源視角）</h4>
+                        <p className="text-[10px] text-muted-foreground leading-relaxed">
+                            當此規格填入數值 N 時，下方勾選的下游規格會被自動複製出 N 份（依序號排列）。
+                        </p>
+                        <div className="p-1 border rounded bg-white max-h-56 overflow-y-auto space-y-1">
+                            {quantitySourceOptions.length === 0 && (
+                                <div className="py-4 text-center text-xs text-muted-foreground">暫無可複製的下游規格</div>
+                            )}
+                            {quantitySourceOptions.map(o => {
+                                const isChecked = quantityTargetIds.has(o.id);
+                                return (
+                                    <div key={o.id} className={`flex items-center gap-2 p-1 rounded ${isChecked ? 'bg-blue-50 border border-blue-100' : 'hover:bg-slate-50'}`}>
+                                        <Checkbox checked={isChecked} onCheckedChange={() => toggleQuantityTarget(o.id)} />
+                                        <span className={`text-[11px] ${isChecked ? 'font-bold text-blue-700' : ''}`}>{o.name}</span>
+                                        {o.group && <span className="text-[10px] text-muted-foreground ml-auto">{o.group}</span>}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
 
@@ -258,7 +307,9 @@ export function SpecDialog({
                             <h4 className="text-sm font-bold">連動觸發設定 (Triggers)</h4>
                             <Button variant="ghost" size="sm" className="h-6" onClick={addTrigger}>+ 新增</Button>
                         </div>
-                        {(specForm.logic_config?.triggers || []).map((trigger: any, idx: number) => (
+                        {(specForm.logic_config?.triggers || []).map((trigger: any, idx: number) => {
+                            if (trigger.type === 'quantity') return null;
+                            return (
                             <div key={idx} className="p-2 border rounded bg-background space-y-2 relative">
                                 <Button variant="ghost" size="icon" className="h-5 w-5 absolute -top-1 -right-1" onClick={() => removeTrigger(idx)}><X className="h-3 w-3" /></Button>
                                 <div className="flex gap-1">
@@ -305,7 +356,8 @@ export function SpecDialog({
                                     })}
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
 
                     {/* 選項清單 */}

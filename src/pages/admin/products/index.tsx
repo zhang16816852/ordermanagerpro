@@ -269,7 +269,12 @@ export default function AdminProducts() {
                     } else {
                         try {
                             const newProduct = await createMutation.mutateAsync(values);
-                            setEditingProduct(newProduct as any);
+                            setEditingProduct({
+                                ...newProduct,
+                                category_ids: values.category_ids,
+                                brand_ids: values.brand_ids,
+                                brand_series_ids: values.brand_series_ids,
+                            } as any);
                         } catch {
                             // 錯誤已由 mutation 的 toast 處理
                         }

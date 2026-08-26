@@ -38,7 +38,7 @@
 | `category_hierarchy` | 分類父子層級 | parent_id、child_id |
 | `product_category_links` | 商品↔分類 | product_id、category_id、variant_id |
 | `specification_definitions` | 規格定義 v6 | name、type、expected_type(`spec_value_type`)、options、configuration、dsl_schema_json、quantity_source_id |
-| `specification_triggers` | 規格條件觸發 | source_spec_id、target_spec_id、condition_dsl、priority、max_depth_limit |
+| `specification_triggers` | 規格條件觸發 | source_spec_id、target_spec_id、condition_dsl、priority、max_depth_limit、**relation_type**（`visibility` 預設｜`quantity` 數量複製） |
 | `category_spec_links` | 分類↔規格 | category_id、spec_id、sort_order、is_manual |
 | `entity_spec_values` | 規格值 | entity_id、entity_type(`spec_entity_type`)、spec_id、category_id、value(JSONB)、parent_id、instance_uuid、lifecycle_state |
 
@@ -229,12 +229,11 @@
 
 - `specification_definitions`：定義規格（type + options + configuration），`quantity_source_id` 表示「數量規格」引用
 - `entity_spec_values`：實際值以 JSONB 存於 value；`parent_id` + `instance_uuid` + `spec_id` 組成路徑 key（前端 `pathKey = ${parentId}:${spec_id}:${instance_uuid}`）
-- `specification_triggers`：條件 DSL（`condition_dsl` JSONB），source 規格值觸發 target 規格顯示
+- `specification_triggers`：條件 DSL（`condition_dsl` JSONB），source 規格值觸發 target 規格顯示；`relation_type='quantity'` 表示數量複製（source 為數值型來源、target 為被複製下游，複製份數=source 值），`condition_dsl` 為 `{}`
 - RPC：
-  - `get_visible_specs_v6(p_category_id, p_current_values)` → 依目前值算出可見規格樹（含 level/parent_id）
   - `sync_product_specs_v6(p_category_id, p_entity_id, p_entity_type, p_new_data)` → 同步規格值（含繼承/孤立處理）
-  - `safe_eval_dsl(p_condition, p_type, p_val)` → 安全評估 DSL 條件
   - `migrate_historical_specs_to_v6()` → 歷史資料遷移
+  - 註：`get_visible_specs_v6` / `safe_eval_dsl` 兩支未使用的 RPC 已於 2026-08-25 移除；規格可見性/連動評估統一由前端 `src/utils/specTree.ts` 的 `getVisibleSpecsTree` 負責，後端不再實作評估邏輯
 - 前端實作：`src/utils/SpecEngine.ts`、`specLogic.ts`、`specTree.ts`、`specSerializer.ts`、`specFormatter.ts`、`useSpecStore`
 
 ## 8. 其他商業邏輯

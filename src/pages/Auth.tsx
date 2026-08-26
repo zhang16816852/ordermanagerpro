@@ -108,6 +108,12 @@ export default function Auth() {
         setShowSuggestions(false);
         setSelectedIndex(-1);
         break;
+      case 'Tab':
+        if (suggestions.length > 0) {
+          const domain = suggestions[selectedIndex >= 0 ? selectedIndex : 0];
+          selectDomain(domain);
+        }
+        break;
     }
   };
 

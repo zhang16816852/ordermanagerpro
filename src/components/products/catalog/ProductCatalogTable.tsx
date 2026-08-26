@@ -35,7 +35,7 @@ export function ProductCatalogTable({
         addedCount++;
       }
     });
-    toast.success(`已加入 ${addedCount} 項商品至購物車`);
+    toast.success(`已加入 ${addedCount} 項商品至購物車`, { id: 'cart-add', duration: 2000 });
   };
 
   const handleDirectItemAdd = (

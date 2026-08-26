@@ -1,18 +1,51 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 import { SpecValueEditor } from './SpecValueEditor';
 import { getVisibleSpecsTree, getTreeSortedVisiblePaths } from '@/utils/specLogic';
-import { useCategorySpecs } from '@/hooks/useCategorySpecs';
+import { useCategorySpecs, CategorySpec } from '@/hooks/useCategorySpecs';
 import { useSpecStore } from '@/store/useSpecStore';
 
 interface DynamicSpecsFieldsProps {
     form: UseFormReturn<any>;
+    specFieldsOverride?: CategorySpec[];
 }
 
-export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
+function buildDepChain(pathKey: string, visibleInfo: Map<string, any>): string[] {
+    const segs: string[] = [];
+    let pk: string | undefined = pathKey;
+    while (pk && !pk.startsWith('root:')) {
+        const info = visibleInfo.get(pk);
+        if (!info) break;
+        if (info.isQuantityInstance) {
+            segs.unshift(`第${info.instanceIndex}組·${info.sourceName}`);
+        } else if (info.triggerInfo?.on_value) {
+            segs.unshift(`${info.sourceName} = ${info.triggerInfo.on_value}`);
+        } else if (info.sourceName) {
+            segs.unshift(info.sourceName);
+        }
+        pk = info.parentPathKey;
+    }
+    return segs;
+}
+
+// 數量複製組別配色（依 instanceIndex 循環）：讓甲1 / 乙1 等各組在表單中明顯區隔
+const QTY_GROUP_PALETTE = [
+  { border: 'border-rose-400', tint: 'bg-rose-500/10', pill: 'bg-rose-100 text-rose-700', dot: 'bg-rose-500' },
+  { border: 'border-amber-400', tint: 'bg-amber-500/10', pill: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
+  { border: 'border-emerald-400', tint: 'bg-emerald-500/10', pill: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
+  { border: 'border-sky-400', tint: 'bg-sky-500/10', pill: 'bg-sky-100 text-sky-700', dot: 'bg-sky-500' },
+  { border: 'border-violet-400', tint: 'bg-violet-500/10', pill: 'bg-violet-100 text-violet-700', dot: 'bg-violet-500' },
+  { border: 'border-fuchsia-400', tint: 'bg-fuchsia-500/10', pill: 'bg-fuchsia-100 text-fuchsia-700', dot: 'bg-fuchsia-500' },
+];
+
+export function DynamicSpecsFields({ form, specFieldsOverride }: DynamicSpecsFieldsProps) {
     const selectedCategoryIds = form.watch('category_ids') || [];
-    const { specMap, specTriggers, fetchSpecs } = useSpecStore();
-    const { data: specFields = [], isLoading: isLoadingSpecs } = useCategorySpecs(selectedCategoryIds);
+    const { specMap, specTriggers, fetchSpecs, categories } = useSpecStore();
+    const { data: hookedSpecs = [], isLoading: isLoadingSpecs } = useCategorySpecs(selectedCategoryIds, {
+        includeDescendants: true,
+        includeTriggerDownstream: true,
+    });
+    const specFields = specFieldsOverride ?? hookedSpecs;
     const specValues = form.watch('spec_values') || {};
 
     // 確保規格定義已載入
@@ -23,84 +56,159 @@ export function DynamicSpecsFields({ form }: DynamicSpecsFieldsProps) {
     // 使用中央計算器 (v5.1 支持 DSL)
     const visibleInfo = getVisibleSpecsTree(specFields, specValues, specTriggers);
 
-    if (isLoadingSpecs) return <div className="py-4 text-center" role="status" aria-live="polite">正在載入規格...</div>;
-    
-    // 如果規格定義 Map 還沒載入好，先顯示提示
+    const sortedVisible = getTreeSortedVisiblePaths(specFields, visibleInfo);
+
+    // 依來源分類分組（多分類選取時標示規格歸屬）
+    const grouped = useMemo(() => {
+        if (sortedVisible.length === 0) return [];
+        const catNameMap = new Map((categories || []).map((c: any) => [c.id, c.name]));
+        const seen = new Set<string>();
+        const groups: { categoryId: string | null; categoryName: string; rows: { pathKey: string; level: number }[] }[] = [];
+
+        (selectedCategoryIds || []).forEach(catId => {
+            const rows = sortedVisible.filter(r => {
+                const specId = r.pathKey.split(':')[1];
+                const spec = specFields.find(f => f.id === specId);
+                return (spec?.sourceCategoryIds || []).includes(catId) && !seen.has(r.pathKey);
+            });
+            if (rows.length === 0) return;
+            rows.forEach(r => seen.add(r.pathKey));
+            groups.push({ categoryId: catId, categoryName: catNameMap.get(catId) || '分類', rows });
+        });
+
+        const remaining = sortedVisible.filter(r => !seen.has(r.pathKey));
+        if (remaining.length > 0) {
+            remaining.forEach(r => seen.add(r.pathKey));
+            groups.push({ categoryId: null, categoryName: '其他規格', rows: remaining });
+        }
+        return groups;
+    }, [sortedVisible, selectedCategoryIds, categories, specFields]);
+
+    // 為每個數量實例組別解析顏色：直接實例取自身 instanceIndex，子孫向上回溯繼承所屬組別顏色
+    const colorIndexByPath = useMemo(() => {
+      const m = new Map<string, number>();
+      visibleInfo.forEach((info, pk) => {
+        if (info?.isQuantityInstance && info.instanceIndex) {
+          const ci = ((info.instanceIndex - 1) % QTY_GROUP_PALETTE.length + QTY_GROUP_PALETTE.length) % QTY_GROUP_PALETTE.length;
+          m.set(pk, ci);
+        }
+      });
+      return m;
+    }, [visibleInfo]);
+
+    const resolveGroupColor = (pk: string): number | null => {
+      let cur: string | undefined = pk;
+      let guard = 0;
+      while (cur && guard < 30) {
+        const ci = colorIndexByPath.get(cur);
+        if (ci !== undefined) return ci;
+        cur = visibleInfo.get(cur)?.parentPathKey;
+        guard++;
+      }
+      return null;
+    };
+
+    if (isLoadingSpecs && !specFieldsOverride) return <div className="py-4 text-center" role="status" aria-live="polite">正在載入規格...</div>;
+
     if (specMap.size === 0 && specFields.length > 0) {
         return <div className="py-4 text-center text-muted-foreground">正在初始化規格字典...</div>;
     }
 
     if (!specFields || specFields.length === 0) return null;
 
-    /**
-     * 遞迴渲染規格樹 (v5.1 以 visibleInfo 鍵值為準)
-     */
-    const sortedVisible = getTreeSortedVisiblePaths(specFields, visibleInfo);
-    
-    console.log('[DynamicSpecs] 當前 spec_values:', specValues);
-    console.log('[DynamicSpecs] 排序後的可見路徑:', sortedVisible.map(s => s.pathKey));
+    const groupedEl = (
+        <div className="space-y-6">
+            {grouped.map(group => (
+                <div key={group.categoryId || 'other'} className="space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-bold text-foreground/80 uppercase tracking-wide border-b border-primary/10 pb-1">
+                        <span className="w-1.5 h-4 bg-primary/60 rounded-full" />
+                        {group.categoryName}
+                        <span className="text-[10px] font-normal text-muted-foreground normal-case">{group.rows.length} 項規格</span>
+                    </div>
+                    <div className="space-y-4">
+                        {group.rows.map(({ pathKey, level }) => {
+                            const parts = pathKey.split(':');
+                            const specId = parts[1];
+                            const spec = specFields.find(f => f.id === specId) || specMap.get(specId);
+
+                            if (!spec) return null;
+
+                            const value = specValues[pathKey] || '';
+                            const info = visibleInfo.get(pathKey);
+                            const ci = resolveGroupColor(pathKey);
+                            const pal = ci !== null ? QTY_GROUP_PALETTE[ci] : null;
+
+                            return (
+                                <div
+                                    key={pathKey}
+                                    style={{ marginLeft: `${level * 16}px` }}
+                                    className={`space-y-2 animate-in fade-in slide-in-from-left-2 duration-300 ${pal ? pal.tint + ' rounded-md' : ''}`}
+                                >
+                                    <div className={`p-0.5 rounded-md transition-all ${pal ? `border-l-2 ${pal.border} pl-3` : (level > 0 ? 'border-l-2 border-primary/20 pl-3' : '')}`}>
+                                        {spec.type === 'heading' ? (
+                                            <div className="py-1 border-b border-primary/10 mb-1">
+                                                <div className="text-[10px] font-bold text-primary uppercase tracking-widest flex items-center gap-2">
+                                                    <span className="w-1 h-3 bg-primary rounded-full" />
+                                                    {spec.name}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <label className="text-xs font-semibold text-muted-foreground flex justify-between items-center group mb-1.5">
+                                                    <div className="flex items-center gap-2">
+                                                        {level > 0 && <span className="text-primary/40">↳</span>}
+                                                        <span>
+                                                            {spec.name}
+                                                            {spec.required && <span className="text-destructive font-bold ml-1" title="必填">*</span>}
+                                                        </span>
+                                                        {pal && info?.isQuantityInstance && (
+                                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${pal.pill}`}>
+                                                                第{info.instanceIndex}組
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {info && !pathKey.startsWith('root:') && buildDepChain(pathKey, visibleInfo).length > 0 && (
+                                                        <span className="text-[10px] font-normal text-muted-foreground/70">
+                                                            依賴 ▸ {buildDepChain(pathKey, visibleInfo).join(' ▸ ')}
+                                                        </span>
+                                                    )}
+                                                </label>
+                                                <SpecValueEditor
+                                                    spec={spec}
+                                                    value={value}
+                                                    onChange={(val) => form.setValue(`spec_values.${pathKey}`, val, { shouldDirty: true })}
+                                                    sourceValue={info?.sourceValue}
+                                                    isQuantityDetail={info?.isQuantityDetail}
+                                                    variantMode={false}
+                                                />
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
 
     return (
         <div className="space-y-4 p-4 border rounded-lg bg-muted/10">
             <h3 className="text-sm font-bold flex items-center gap-2">
                 分類特定規格
             </h3>
-            
-            <div className="space-y-4">
-                {sortedVisible.map(({ pathKey, level }) => {
-                    const parts = pathKey.split(':');
-                    const specId = parts[1];
-                    const spec = specFields.find(f => f.id === specId) || specMap.get(specId);
-                    
-                    if (!spec) return null;
-
-                    const value = specValues[pathKey] || '';
-                    const info = visibleInfo.get(pathKey);
-
-                    return (
-                        <div 
-                            key={pathKey} 
-                            style={{ marginLeft: `${level * 16}px` }}
-                            className="space-y-2 animate-in fade-in slide-in-from-left-2 duration-300"
-                        >
-                                <div className={`p-0.5 rounded-md transition-all ${level > 0 ? 'border-l-2 border-primary/20 pl-3' : ''}`}>
-                                    {spec.type === 'heading' ? (
-                                        <div className="py-1 border-b border-primary/10 mb-1">
-                                            <div className="text-[10px] font-bold text-primary uppercase tracking-widest flex items-center gap-2">
-                                                <span className="w-1 h-3 bg-primary rounded-full" />
-                                                {spec.name}
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <label className="text-xs font-semibold text-muted-foreground flex justify-between items-center group mb-1.5">
-                                                <div className="flex items-center gap-2">
-                                                    {level > 0 && <span className="text-primary/40">↳</span>}
-                                                    <span>{spec.name}</span>
-                                                </div>
-                                                {info?.sourceName && (
-                                                    <span className="text-[10px] font-normal opacity-0 group-hover:opacity-60 transition-opacity">
-                                                        依賴於: {info.sourceName} 
-                                                        {info.triggerInfo?.op === 'ne' ? ' ≠ ' : ' = '} 
-                                                        {info.triggerInfo?.val}
-                                                    </span>
-                                                )}
-                                            </label>
-                                            <SpecValueEditor 
-                                                spec={spec}
-                                                value={value}
-                                                onChange={(val) => form.setValue(`spec_values.${pathKey}`, val, { shouldDirty: true })}
-                                                sourceValue={info?.sourceValue}
-                                                isQuantityDetail={info?.isQuantityDetail}
-                                                variantMode={false}
-                                            />
-                                        </>
-                                    )}
-                                </div>
-                        </div>
-                    );
-                })}
-            </div>
+            {colorIndexByPath.size > 0 && (
+                <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                    <span>數量組別：</span>
+                    {Array.from({ length: Math.min(colorIndexByPath.size, QTY_GROUP_PALETTE.length) }).map((_, i) => (
+                        <span key={i} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full ${QTY_GROUP_PALETTE[i].pill}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${QTY_GROUP_PALETTE[i].dot}`} />第{i + 1}組
+                        </span>
+                    ))}
+                </div>
+            )}
+            {groupedEl}
         </div>
     );
 }

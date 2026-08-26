@@ -26,9 +26,11 @@ interface SortableConfigItemProps {
     onToggle: (id: string) => void;
     onSortOrderChange: (id: string, order: number) => void;
     isRoot?: boolean;
+    requiredMap?: Record<string, boolean>;
+    onToggleRequired?: (id: string) => void;
 }
 
-const SortableConfigItem = ({ node, specDefinitions, index, onToggle, onSortOrderChange, isRoot }: SortableConfigItemProps) => {
+const SortableConfigItem = ({ node, specDefinitions, index, onToggle, onSortOrderChange, isRoot, requiredMap = {}, onToggleRequired }: SortableConfigItemProps) => {
     const { config, spec, children } = node;
     const [isExpanded, setIsExpanded] = React.useState(false); // 預設收合
 
@@ -76,6 +78,17 @@ const SortableConfigItem = ({ node, specDefinitions, index, onToggle, onSortOrde
                                 value={config.sortOrder}
                                 onChange={(e) => onSortOrderChange(config.id, parseInt(e.target.value) || 0)}
                             />
+                        )}
+                        {isRoot && onToggleRequired && (
+                            <label className="flex items-center gap-1 text-[10px] text-slate-500 cursor-pointer select-none" title="設為必填規格">
+                                <input
+                                    type="checkbox"
+                                    className="h-3 w-3"
+                                    checked={!!requiredMap[config.id]}
+                                    onChange={() => onToggleRequired(config.id)}
+                                />
+                                必填
+                            </label>
                         )}
                     </div>
                 </div>
@@ -136,15 +149,17 @@ const SortableConfigItem = ({ node, specDefinitions, index, onToggle, onSortOrde
             {hasChildren && isExpanded && (
                 <div className="pl-12 pb-2 bg-slate-50/30 border-l-2 border-slate-100 ml-6 mb-2">
                     {children.map((childNode: any, childIdx: number) => (
-                        <SortableConfigItem
-                            key={childNode.config.id}
-                            node={childNode}
-                            specDefinitions={specDefinitions}
-                            index={childIdx}
-                            onToggle={onToggle}
-                            onSortOrderChange={onSortOrderChange}
-                            isRoot={false}
-                        />
+                                <SortableConfigItem
+                                    key={childNode.config.id}
+                                    node={childNode}
+                                    specDefinitions={specDefinitions}
+                                    index={childIdx}
+                                    onToggle={onToggle}
+                                    onSortOrderChange={onSortOrderChange}
+                                    isRoot={false}
+                                    requiredMap={requiredMap}
+                                    onToggleRequired={onToggleRequired}
+                                />
                     ))}
                 </div>
             )}
@@ -160,12 +175,16 @@ interface CategorySelectedConfigTabProps {
         setSortOrder: (id: string, order: number) => void;
         reorder: (newConfigs: any[]) => void;
     };
+    requiredMap?: Record<string, boolean>;
+    onToggleRequired?: (id: string) => void;
 }
 
 export const CategorySelectedConfigTab = ({
     activeConfiguration,
     specDefinitions,
-    engine
+    engine,
+    requiredMap = {},
+    onToggleRequired
 }: CategorySelectedConfigTabProps) => {
     // 建立已選規格的樹狀結構
     const selectedTree = React.useMemo(() => {
@@ -279,15 +298,17 @@ export const CategorySelectedConfigTab = ({
                     >
                         <div className="flex flex-col">
                             {selectedTree.map((node, index) => (
-                                <SortableConfigItem
-                                    key={node.config.id}
-                                    node={node}
-                                    specDefinitions={specDefinitions}
-                                    index={index}
-                                    onToggle={engine.toggle}
-                                    onSortOrderChange={engine.setSortOrder}
-                                    isRoot={true}
-                                />
+                            <SortableConfigItem
+                                key={node.config.id}
+                                node={node}
+                                specDefinitions={specDefinitions}
+                                index={index}
+                                onToggle={engine.toggle}
+                                onSortOrderChange={engine.setSortOrder}
+                                isRoot={true}
+                                requiredMap={requiredMap}
+                                onToggleRequired={onToggleRequired}
+                            />
                             ))}
                         </div>
                     </SortableContext>

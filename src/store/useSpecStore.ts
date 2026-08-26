@@ -12,6 +12,7 @@ interface SpecTrigger {
   source_spec_id: string;
   target_spec_id: string;
   condition_dsl: any;
+  relation_type?: string;
   max_depth_limit: number;
   priority: number;
   created_at: string;
@@ -93,7 +94,13 @@ const mergeTriggersToDefs = (definitions: any[], triggers: any[]) => {
       };
     }
 
+    // 數量連動 (relation_type='quantity') 與 連動觸發 (relation_type='visibility') 分開處理
+    const quantityEntries: any[] = [];
     const groupedTriggers = specTriggers.reduce((acc, t) => {
+      if (t.relation_type === 'quantity') {
+        quantityEntries.push({ type: 'quantity', targets: [{ id: t.target_spec_id, is_quantity_detail: false }] });
+        return acc;
+      }
       const dsl = (t.condition_dsl as any) || {};
       const key = `${dsl.on_value}-${dsl.operator}`;
       if (!acc[key]) {
@@ -107,7 +114,7 @@ const mergeTriggersToDefs = (definitions: any[], triggers: any[]) => {
       ...def,
       logic_config: {
         ...(def.logic_config as any || {}),
-        triggers: Object.values(groupedTriggers)
+        triggers: [...Object.values(groupedTriggers), ...quantityEntries]
       }
     };
   });
@@ -195,17 +202,26 @@ export const useSpecStore = create<SpecStore>((set, get) => {
             });
           }
 
-          if (categoryLinks.length === 0 || triggers.length === 0) {
-            const [{ data: triggerData }, { data: catLinkData }] = await Promise.all([
-              supabase.from('specification_triggers').select('*').order('priority', { ascending: false }),
-              supabase.from('category_spec_links').select('*')
-            ]);
-            if (triggers.length === 0 && triggerData) triggers = triggerData as unknown as SpecTrigger[];
-            if (categoryLinks.length === 0 && catLinkData) categoryLinks = catLinkData || [];
-          }
+          // [修正] 連動規則與分類連結一律重新抓取，避免增量路徑下 specTriggers 為空，
+          // 造成預覽「全部顯示」與 IndexedDB 版本未隨伺服器推進（卡在舊版本）
+          const [{ data: triggerData }, { data: catLinkData }] = await Promise.all([
+            supabase.from('specification_triggers').select('*').order('priority', { ascending: false }),
+            supabase.from('category_spec_links').select('*')
+          ]);
+          if (triggerData) triggers = triggerData as unknown as SpecTrigger[];
+          if (catLinkData) categoryLinks = catLinkData || [];
 
-          const rawDefinitions = Array.from(defMap.values());
-          definitions = mergeTriggersToDefs(rawDefinitions, triggers);
+          // [修正] 若基底定義為空（store 尚未從快取灌入），改走全量抓取，避免寫入空資料
+          if (defMap.size === 0) {
+            const { data: defData } = await supabase
+              .from('specification_definitions')
+              .select('*')
+              .order('sort_order', { ascending: true });
+            definitions = mergeTriggersToDefs(defData || [], triggers);
+          } else {
+            const rawDefinitions = Array.from(defMap.values());
+            definitions = mergeTriggersToDefs(rawDefinitions, triggers);
+          }
         } else if (force || isLocalEmpty) {
           SyncManager.logTelemetry('📡 執行規格完整重整/修復', '#e67e22', {
             '原因': force ? 'force=true' : '本地規格或關聯快取為空，啟動自我修復'

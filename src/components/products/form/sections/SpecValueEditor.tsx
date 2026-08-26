@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Button } from '@/components/ui/button';
-import { Settings2, X } from 'lucide-react';
+import { Settings2, X, Check, ChevronsUpDown, Copy } from 'lucide-react';
 import { CategorySpec } from '@/hooks/useCategorySpecs';
 import { formatSpecValue } from '@/utils/specLogic';
 import { useSpecStore } from '@/store/useSpecStore';
@@ -33,6 +34,13 @@ function TableSpecEditor({ spec, value, onChange, variantMode }: SpecValueEditor
 
     const removeRow = (idx: number) => {
         onChange(rows.filter((_: any, i: number) => i !== idx));
+    };
+
+    const duplicateRow = (idx: number) => {
+        const copy = JSON.parse(JSON.stringify(rows[idx]));
+        const next = [...rows];
+        next.splice(idx + 1, 0, copy);
+        onChange(next);
     };
 
     const updateCell = (rowIdx: number, colKey: string, val: any) => {
@@ -139,17 +147,29 @@ function TableSpecEditor({ spec, value, onChange, variantMode }: SpecValueEditor
                                         </td>
                                     );
                                 })}
-                                <td className="p-1 text-center">
-                                    <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        type="button"
-                                        className="h-6 w-6 text-muted-foreground hover:text-destructive" 
-                                        onClick={() => removeRow(rowIdx)}
-                                    >
-                                        <X className="h-3.5 w-3.5" />
-                                    </Button>
-                                </td>
+                                                <td className="p-1 text-center">
+                                                    <div className="flex items-center justify-center gap-0.5">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            type="button"
+                                                            className="h-6 w-6 text-muted-foreground hover:text-primary"
+                                                            title="複製此列"
+                                                            onClick={() => duplicateRow(rowIdx)}
+                                                        >
+                                                            <Copy className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="icon" 
+                                                            type="button"
+                                                            className="h-6 w-6 text-muted-foreground hover:text-destructive" 
+                                                            onClick={() => removeRow(rowIdx)}
+                                                        >
+                                                            <X className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </div>
+                                                </td>
                             </tr>
                         ))}
                     </tbody>
@@ -283,44 +303,27 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
         return content;
     },
 
-    // 3. 多選列表 (MultiSelect)
-    multiselect: ({ spec, value, onChange }) => {
-        const currentVals = Array.isArray(value) 
-            ? value 
-            : (typeof value === 'string' && value ? value.split(',') : []);
-            
+    // 3. 多選列表 (MultiSelect) — 加入搜尋過濾
+    multiselect: (props) => <MultiSelectEditor {...props} />,
+
+    // 4. 下拉單選 (Select) — 選項過多時改為可搜尋的組合框
+    select: ({ spec, value, onChange }) => {
+        if (spec.options.length > 8) {
+            return <SearchableSelect options={spec.options} value={value} onChange={onChange} placeholder="請選擇" />;
+        }
         return (
-            <div className="flex flex-col gap-1.5 p-2 border rounded-md bg-background max-h-32 overflow-y-auto shadow-inner">
-                {spec.options?.map((opt) => (
-                    <div key={opt} className="flex items-center gap-2 hover:bg-muted/30 p-1 rounded transition-colors">
-                        <Checkbox
-                            id={`multi-${spec.id}-${opt}`}
-                            checked={currentVals.includes(opt)}
-                            onCheckedChange={(checked) => {
-                                const next = checked ? [...currentVals, opt] : currentVals.filter((v: any) => v !== opt);
-                                onChange(next);
-                            }}
-                        />
-                        <label htmlFor={`multi-${spec.id}-${opt}`} className="text-sm cursor-pointer flex-1">{opt}</label>
-                    </div>
-                ))}
-            </div>
+            <Select value={value || ''} onValueChange={onChange}>
+                <SelectTrigger className="h-9">
+                    <SelectValue placeholder="請選擇" />
+                </SelectTrigger>
+                <SelectContent>
+                    {spec.options.map((opt) => (
+                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
         );
     },
-
-    // 4. 下拉單選 (Select)
-    select: ({ spec, value, onChange }) => (
-        <Select value={value || ''} onValueChange={onChange}>
-            <SelectTrigger className="h-9">
-                <SelectValue placeholder="請選擇" />
-            </SelectTrigger>
-            <SelectContent>
-                {spec.options.map((opt) => (
-                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                ))}
-            </SelectContent>
-        </Select>
-    ),
 
     // 5. 預設輸入框 (Default/Text) - 支援多欄位
     default: ({ spec, value, onChange, sourceValue, variantMode }) => {
@@ -382,6 +385,44 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
     // 6. 表格型規格 (Table/Grid)
     table: (props) => <TableSpecEditor {...props} />
 };
+
+function MultiSelectEditor({ spec, value, onChange }: SpecValueEditorProps) {
+    const [search, setSearch] = useState('');
+    const currentVals = Array.isArray(value)
+        ? value
+        : (typeof value === 'string' && value ? value.split(',') : []);
+    const filteredOptions = (spec.options || []).filter(o =>
+        !search.trim() || o.toLowerCase().includes(search.trim().toLowerCase())
+    );
+
+    return (
+        <div className="flex flex-col gap-1.5 p-2 border rounded-md bg-background shadow-inner">
+            <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="搜尋選項..."
+                className="h-7 text-xs"
+            />
+            <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto">
+                {filteredOptions.length === 0 ? (
+                    <p className="text-[10px] text-center py-2 text-muted-foreground">無符合項目</p>
+                ) : filteredOptions.map((opt) => (
+                    <div key={opt} className="flex items-center gap-2 hover:bg-muted/30 p-1 rounded transition-colors">
+                        <Checkbox
+                            id={`multi-${spec.id}-${opt}`}
+                            checked={currentVals.includes(opt)}
+                            onCheckedChange={(checked) => {
+                                const next = checked ? [...currentVals, opt] : currentVals.filter((v: any) => v !== opt);
+                                onChange(next);
+                            }}
+                        />
+                        <label htmlFor={`multi-${spec.id}-${opt}`} className="text-sm cursor-pointer flex-1">{opt}</label>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
 
 /**
  * 數量配比編輯組件 (觸發總量連動與驗證)
@@ -475,6 +516,45 @@ function QuantityAllocationEditor({ spec, value, onChange, sourceValue, variantM
 /**
  * 主組件：SpecValueEditor
  */
+function SearchableSelect({ options, value, onChange, placeholder }: {
+    options: string[];
+    value: any;
+    onChange: (v: any) => void;
+    placeholder?: string;
+}) {
+    const [open, setOpen] = useState(false);
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" type="button" className="h-9 w-full justify-between font-normal">
+                    <span className="truncate">{value ? String(value) : (placeholder || '請選擇')}</span>
+                    <ChevronsUpDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                <Command>
+                    <CommandInput placeholder="搜尋..." className="h-9" />
+                    <CommandList>
+                        <CommandEmpty>無符合項目</CommandEmpty>
+                        <CommandGroup>
+                            {options.map(opt => (
+                                <CommandItem
+                                    key={opt}
+                                    value={opt}
+                                    onSelect={() => { onChange(opt); setOpen(false); }}
+                                >
+                                    <Check className={`mr-2 h-3.5 w-3.5 ${value === opt ? 'opacity-100' : 'opacity-0'}`} />
+                                    {opt}
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    </CommandList>
+                </Command>
+            </PopoverContent>
+        </Popover>
+    );
+}
+
 export function SpecValueEditor(props: SpecValueEditorProps) {
     const { spec, sourceValue, isQuantityDetail } = props;
 

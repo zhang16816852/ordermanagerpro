@@ -1,13 +1,15 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, ChevronDown, Search } from 'lucide-react';
 import { UseFormReturn } from 'react-hook-form';
 import { supabase } from '@/integrations/supabase/client';
 import { useSpecStore } from '@/store/useSpecStore';
+import { useCategorySpecs } from '@/hooks/useCategorySpecs';
 
 interface CategorySelectFieldProps {
     form: UseFormReturn<any>;
@@ -15,8 +17,11 @@ interface CategorySelectFieldProps {
 
 export function CategorySelectField({ form }: CategorySelectFieldProps) {
     const selectedCategoryIds = form.watch('category_ids') || [];
+    const [search, setSearch] = useState('');
+    const [previewOpen, setPreviewOpen] = useState(false);
 
     const { categories, categoryHierarchy } = useSpecStore();
+    const { data: previewSpecs = [] } = useCategorySpecs(selectedCategoryIds);
 
     // Build flat tree for select using the hierarchy table
     const categoryOptions = useMemo(() => {
@@ -67,6 +72,53 @@ export function CategorySelectField({ form }: CategorySelectFieldProps) {
     const selectedCategories = useMemo(() =>
         categories.filter((c: any) => selectedCategoryIds.includes(c.id)),
         [categories, selectedCategoryIds]);
+
+    // 搜尋過濾：保留符合關鍵字的分支（含其祖先與子孫）以維持階層脈絡
+    const filteredOptions = useMemo(() => {
+        if (!search.trim()) return categoryOptions;
+        const q = search.trim().toLowerCase();
+        const matchIds = new Set<string>();
+        categoryOptions.forEach(o => { if (o.name.toLowerCase().includes(q)) matchIds.add(o.id); });
+        let changed = true;
+        while (changed) {
+            changed = false;
+            categoryOptions.forEach(o => {
+                if (!matchIds.has(o.id)) {
+                    const hasMatchedChild = categoryHierarchy.some(h => h.parent_id === o.id && matchIds.has(h.child_id));
+                    if (hasMatchedChild) { matchIds.add(o.id); changed = true; }
+                }
+            });
+        }
+        let changed2 = true;
+        while (changed2) {
+            changed2 = false;
+            categoryOptions.forEach(o => {
+                if (matchIds.has(o.id)) {
+                    categoryHierarchy.filter(h => h.child_id === o.id).forEach(h => {
+                        if (!matchIds.has(h.parent_id)) { matchIds.add(h.parent_id); changed2 = true; }
+                    });
+                }
+            });
+        }
+        return categoryOptions.filter(o => matchIds.has(o.id));
+    }, [search, categoryOptions, categoryHierarchy]);
+
+    // 規格預覽：依來源分類分組
+    const previewGroups = useMemo(() => {
+        if (previewSpecs.length === 0) return [];
+        const catNameMap = new Map((categories || []).map((c: any) => [c.id, c.name]));
+        const seen = new Set<string>();
+        const groups: { categoryId: string | null; categoryName: string; specs: any[] }[] = [];
+        (selectedCategoryIds || []).forEach(catId => {
+            const specs = previewSpecs.filter(s => (s.sourceCategoryIds || []).includes(catId) && !seen.has(s.id));
+            if (specs.length === 0) return;
+            specs.forEach(s => seen.add(s.id));
+            groups.push({ categoryId: catId, categoryName: catNameMap.get(catId) || '分類', specs });
+        });
+        const remaining = previewSpecs.filter(s => !seen.has(s.id));
+        if (remaining.length > 0) groups.push({ categoryId: null, categoryName: '其他規格', specs: remaining });
+        return groups;
+    }, [previewSpecs, selectedCategoryIds, categories]);
 
     return (
         <FormField
@@ -140,11 +192,27 @@ export function CategorySelectField({ form }: CategorySelectFieldProps) {
                                 </h4>
                             </div>
 
+                            <div className="p-2 border-b">
+                                <div className="relative">
+                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                                    <Input
+                                        value={search}
+                                        onChange={(e) => setSearch(e.target.value)}
+                                        placeholder="搜尋分類..."
+                                        className="h-8 pl-7 text-xs"
+                                    />
+                                </div>
+                            </div>
+
                             <div 
                                 className="max-h-[300px] overflow-y-auto overflow-x-hidden w-full scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent"
                             >
                                 <div className="p-2 space-y-1">
-                                    {categoryOptions.map((cat) => {
+                                    {filteredOptions.length === 0 ? (
+                                        <p className="text-xs text-center py-4 text-muted-foreground">
+                                            找不到符合「{search}」的分類
+                                        </p>
+                                    ) : filteredOptions.map((cat) => {
                                         const isSelected = selectedCategoryIds.includes(cat.id);
 
                                         const toggleCategory = () => {
@@ -217,15 +285,46 @@ export function CategorySelectField({ form }: CategorySelectFieldProps) {
                                             </div>
                                         );
                                     })}
-                                    {categoryOptions.length === 0 && (
-                                        <p className="text-xs text-center py-4 text-muted-foreground">
-                                            尚未建立分類
-                                        </p>
-                                    )}
                                 </div>
                             </div>
                         </PopoverContent>
                     </Popover>
+
+                    {previewGroups.length > 0 && (
+                        <div className="mt-2 border rounded-md bg-muted/5">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-between"
+                                onClick={() => setPreviewOpen(o => !o)}
+                            >
+                                <span className="text-xs text-muted-foreground">
+                                    規格預覽：{previewSpecs.length} 個欄位（來自 {selectedCategoryIds.length} 個分類）
+                                </span>
+                                <ChevronDown className={`h-4 w-4 transition-transform ${previewOpen ? 'rotate-180' : ''}`} />
+                            </Button>
+                            {previewOpen && (
+                                <div className="px-3 pb-3 space-y-3 max-h-[260px] overflow-auto">
+                                    {previewGroups.map(group => (
+                                        <div key={group.categoryId || 'other'}>
+                                            <div className="text-[10px] font-bold uppercase tracking-wide text-foreground/60 mb-1">
+                                                {group.categoryName}
+                                            </div>
+                                            <div className="flex flex-wrap gap-1">
+                                                {group.specs.filter(s => s.type !== 'heading').map(s => (
+                                                    <Badge key={s.id} variant="outline" className="text-[10px] font-normal">
+                                                        {s.name}
+                                                        {s.required && <span className="text-destructive ml-0.5">*</span>}
+                                                    </Badge>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <FormMessage />
                 </FormItem>

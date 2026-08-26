@@ -130,7 +130,7 @@ export function VariantSection({ product }: { product: any }) {
       return;
     }
     store.addItem(firstStoreId, productForCart, variantForCart);
-    toast.success(`${product.name} / ${variant.name} 已加入購物車`);
+    toast.success(`${product.name} / ${variant.name} 已加入購物車`, { id: 'cart-add', duration: 2000 });
   };
 
   // 處理刪除 (範例)

@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -340,18 +340,21 @@ export type Database = {
         Row: {
           category_id: string
           is_manual: boolean | null
+          required: boolean
           sort_order: number | null
           spec_id: string
         }
         Insert: {
           category_id: string
           is_manual?: boolean | null
+          required?: boolean
           sort_order?: number | null
           spec_id: string
         }
         Update: {
           category_id?: string
           is_manual?: boolean | null
+          required?: boolean
           sort_order?: number | null
           spec_id?: string
         }
@@ -2556,6 +2559,7 @@ export type Database = {
           id: string
           max_depth_limit: number | null
           priority: number | null
+          relation_type: string
           source_spec_id: string
           target_spec_id: string
         }
@@ -2565,6 +2569,7 @@ export type Database = {
           id?: string
           max_depth_limit?: number | null
           priority?: number | null
+          relation_type?: string
           source_spec_id: string
           target_spec_id: string
         }
@@ -2574,6 +2579,7 @@ export type Database = {
           id?: string
           max_depth_limit?: number | null
           priority?: number | null
+          relation_type?: string
           source_spec_id?: string
           target_spec_id?: string
         }
@@ -3266,14 +3272,6 @@ export type Database = {
           src: string
         }[]
       }
-      get_visible_specs_v6: {
-        Args: { p_category_id: string; p_current_values: Json }
-        Returns: {
-          level: number
-          parent_id: string
-          spec_id: string
-        }[]
-      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["system_role"]
@@ -3350,14 +3348,6 @@ export type Database = {
           p_note?: string
         }
         Returns: Json
-      }
-      safe_eval_dsl: {
-        Args: {
-          p_condition: Json
-          p_type: Database["public"]["Enums"]["spec_value_type"]
-          p_val: Json
-        }
-        Returns: boolean
       }
       settle_consignment: {
         Args: {

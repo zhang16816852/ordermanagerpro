@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -37,6 +37,55 @@ export function SpecLibraryTab() {
     const [previewMode, setPreviewMode] = useState<'csv' | 'json'>('csv');
     const [previewError, setPreviewError] = useState<string | null>(null);
     const [isConfirming, setIsConfirming] = useState(false);
+    const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+    // 兩側同步：選取節點時，讓金字塔與編輯樹中對應節點同時捲動到可視區
+    useEffect(() => {
+        if (!selectedNodeId) return;
+        const selector = `[data-node-id="${CSS.escape(selectedNodeId)}"]`;
+        document.querySelectorAll(selector).forEach((el) => {
+            (el as HTMLElement).scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        });
+    }, [selectedNodeId]);
+
+    // 金字塔 / 編輯樹 寬度分割（可拖曳，存 localStorage）
+    const SPLIT_KEY = 'spec-tree-split-ratio';
+    const [splitRatio, setSplitRatio] = useState<number>(() => {
+        const v = typeof localStorage !== 'undefined' ? localStorage.getItem(SPLIT_KEY) : null;
+        const n = v ? parseFloat(v) : NaN;
+        return Number.isFinite(n) ? Math.min(0.85, Math.max(0.3, n)) : 0.62;
+    });
+    const [splitH, setSplitH] = useState<number | undefined>(undefined);
+    const splitContainerRef = useRef<HTMLDivElement>(null);
+    const draggingRef = useRef(false);
+
+    useEffect(() => {
+        const onMove = (e: MouseEvent) => {
+            if (!draggingRef.current || !splitContainerRef.current) return;
+            const rect = splitContainerRef.current.getBoundingClientRect();
+            let r = (e.clientX - rect.left) / rect.width;
+            r = Math.min(0.85, Math.max(0.3, r));
+            setSplitRatio(r);
+        };
+        const onUp = () => {
+            if (draggingRef.current) {
+                draggingRef.current = false;
+                document.body.style.userSelect = '';
+                localStorage.setItem(SPLIT_KEY, String(splitRatio));
+            }
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        return () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+    }, [splitRatio]);
+
+    const onSplitDragStart = () => {
+        draggingRef.current = true;
+        document.body.style.userSelect = 'none';
+    };
 
     const handleImportCSVWithPreview = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -100,6 +149,19 @@ export function SpecLibraryTab() {
     const [viewMode, setViewMode] = useState<'grid' | 'tree'>(
         searchParams.get('view') === 'tree' ? 'tree' : 'grid'
     );
+
+    useEffect(() => {
+        const el = splitContainerRef.current;
+        if (!el) return;
+        const measure = () => {
+            const rect = el.getBoundingClientRect();
+            const h = window.innerHeight - rect.top - 16;
+            setSplitH(h > 240 ? h : 240);
+        };
+        measure();
+        window.addEventListener('resize', measure);
+        return () => window.removeEventListener('resize', measure);
+    }, [viewMode]);
     const [specForm, setSpecForm] = useState<Partial<SpecDefinition>>({
         name: '',
         type: 'select',
@@ -172,7 +234,7 @@ export function SpecLibraryTab() {
 
         const query = searchQuery.toLowerCase().trim();
 
-        const buildTree = (spec: SpecDefinition, onValue?: string, parentId?: string, path: string = ''): SpecTreeNode => {
+        const buildTree = (spec: SpecDefinition, onValue?: string, parentId?: string, relationType?: 'visibility' | 'quantity', path: string = ''): SpecTreeNode => {
             // 將觸發條件 (onValue) 納入路徑，確保同一個規格被多次引用時 ID 唯一
             const segment = onValue ? `[${onValue}]${spec.id}` : spec.id;
             const currentPath = path ? `${path}>${segment}` : segment;
@@ -183,16 +245,18 @@ export function SpecLibraryTab() {
                 spec: spec,
                 onValue,
                 parentId,
+                relationType,
                 children: []
             };
 
             const triggers = spec.logic_config?.triggers || [];
             triggers.forEach((t: any) => {
+                const relType = t.type === 'quantity' ? 'quantity' : 'visibility';
                 const prefix = t.operator === 'ne' ? '不等於 ' : '';
                 (t.targets || []).forEach((tar: any) => {
                     const childSpec = specDefinitions.find(s => s.id === tar.id);
                     if (childSpec) {
-                        node.children.push(buildTree(childSpec, prefix + t.on_value, spec.id, currentPath));
+                        node.children.push(buildTree(childSpec, prefix + (t.on_value ?? ''), spec.id, relType, currentPath));
                     }
                 });
             });
@@ -284,7 +348,7 @@ export function SpecLibraryTab() {
         }
     };
 
-    const handleRemoveLink = async (spec: SpecDefinition, parentId?: string) => {
+    const handleRemoveLink = async (spec: SpecDefinition, parentId?: string, relationType?: string) => {
         if (!parentId) {
             return handleDelete(spec);
         }
@@ -292,13 +356,17 @@ export function SpecLibraryTab() {
         const parent = specDefinitions.find(s => s.id === parentId);
         if (!parent) return;
 
-        if (!confirm(`確定要取消從「${parent.name}」到「${spec.name}」的連動關係嗎？\n(規格定義將保留，僅從此樹狀路徑移除)`)) return;
+        const relationLabel = relationType === 'quantity' ? '數量複製' : '連動觸發';
+        if (!confirm(`確定要取消從「${parent.name}」到「${spec.name}」的【${relationLabel}】關係嗎？\n(規格定義將保留，僅從此樹狀路徑移除)`)) return;
 
-        const { error } = await (supabase
+        let query = (supabase
             .from('specification_triggers') as any)
             .delete()
             .eq('source_spec_id', parent.id)
             .eq('target_spec_id', spec.id);
+        if (relationType) query = query.eq('relation_type', relationType);
+
+        const { error } = await query;
 
         if (error) {
             toast.error('移除連動失敗');
@@ -370,7 +438,7 @@ export function SpecLibraryTab() {
 
     return (
         <TooltipProvider>
-            <div className="space-y-6 pb-20">
+            <div className="space-y-6">
                 <Toolbar
                     viewMode={viewMode}
                     onViewModeChange={handleViewModeChange}
@@ -395,12 +463,52 @@ export function SpecLibraryTab() {
                                 onDelete={handleDelete}
                             />
                         ) : (
-                            <TreeView
-                                treeData={treeData}
-                                onEdit={openSpecDialog}
-                                onDelete={handleRemoveLink}
-                                onReorder={handleReorder}
-                            />
+                            <div ref={splitContainerRef} className="flex items-stretch gap-2" style={{ height: splitH ? `${splitH}px` : 'calc(100vh - 16rem)' }}>
+                                {/* 金字塔（寬，預設） */}
+                                <div className="min-w-0 flex flex-col min-h-0" style={{ flex: splitRatio }}>
+                                    <div className="text-xs font-bold mb-2 text-muted-foreground flex items-center gap-1.5 shrink-0">
+                                        <span className="w-1.5 h-4 bg-primary/60 rounded-full" /> 金字塔視圖（唯讀）
+                                    </div>
+                                    <div className="border rounded-xl bg-muted/5 p-3 min-h-0 overflow-auto flex-1">
+                                        <TreeView
+                                            mode="pyramid"
+                                            treeData={treeData}
+                                            onEdit={openSpecDialog}
+                                            onDelete={handleRemoveLink}
+                                            onReorder={handleReorder}
+                                            onSelectNode={(n: any) => setSelectedNodeId(n.id)}
+                                            selectedNodeId={selectedNodeId ?? undefined}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* 拖曳分隔條 */}
+                                <div
+                                    role="separator"
+                                    aria-orientation="vertical"
+                                    onMouseDown={onSplitDragStart}
+                                    className="w-1.5 shrink-0 cursor-col-resize rounded bg-border hover:bg-primary/40 transition-colors"
+                                    title="拖曳調整寬度"
+                                />
+
+                                {/* 編輯樹（窄，獨立捲動） */}
+                                <div className="min-w-0 flex flex-col min-h-0" style={{ flex: 1 - splitRatio }}>
+                                    <div className="text-xs font-bold mb-2 text-muted-foreground flex items-center gap-1.5 shrink-0">
+                                        <span className="w-1.5 h-4 bg-slate-400 rounded-full" /> 編輯樹（可拖曳排序）
+                                    </div>
+                                    <div className="flex-1 min-h-0 overflow-y-auto border rounded-xl bg-muted/5 p-3">
+                                        <TreeView
+                                            mode="edit"
+                                            treeData={treeData}
+                                            onEdit={openSpecDialog}
+                                            onDelete={handleRemoveLink}
+                                            onReorder={handleReorder}
+                                            onSelectNode={(n: any) => setSelectedNodeId(n.id)}
+                                            selectedNodeId={selectedNodeId ?? undefined}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                         )}
                     </>
                 )}

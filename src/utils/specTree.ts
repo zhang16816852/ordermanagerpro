@@ -1,59 +1,6 @@
 import { CategorySpec } from '@/hooks/useCategorySpecs';
 import { generateStableUUID } from './specSerializer';
 
-export function evaluateDSL(value: any, specType: string, condition: any): boolean {
-    if (!condition || !condition.op) return false;
-
-    const op = condition.op;
-    const target = condition.val;
-
-    if (op === 'exists') {
-        return value !== undefined && value !== null && value !== '' && value !== false && value !== 'false';
-    }
-
-    if (value === undefined || value === null) return false;
-
-    switch (specType) {
-        case 'number_with_unit':
-        case 'number': {
-            const numVal = Number(value);
-            const numTarget = Number(target);
-            if (isNaN(numVal) || isNaN(numTarget)) return false;
-            if (op === 'gt') return numVal > numTarget;
-            if (op === 'lt') return numVal < numTarget;
-            if (op === 'eq') return numVal === numTarget;
-            break;
-        }
-        case 'multiselect':
-        case 'array': {
-            if (!Array.isArray(value)) return false;
-            if (op === 'contains') return value.includes(target);
-            if (op === 'overlap') {
-                const targetArr = Array.isArray(target) ? target : [target];
-                return value.some(v => targetArr.includes(v));
-            }
-            if (op === 'eq') return JSON.stringify(value) === JSON.stringify(target);
-            break;
-        }
-        case 'boolean': {
-            const boolVal = value === 'true' || value === true || value === 'on';
-            const boolTarget = target === 'true' || target === true || target === 'on';
-            return boolVal === boolTarget;
-        }
-        case 'select':
-        case 'string':
-        default: {
-            if (op === 'eq') return String(value) === String(target);
-            if (op === 'ne') return String(value) !== String(target);
-            if (op === 'in') {
-                const targetArr = Array.isArray(target) ? target : [target];
-                return targetArr.map(String).includes(String(value));
-            }
-        }
-    }
-    return false;
-}
-
 export function getVisibleSpecsTree(
     specFields: CategorySpec[],
     tableSettings: Record<string, any>,
@@ -66,6 +13,7 @@ export function getVisibleSpecsTree(
         isQuantityDetail?: boolean;
         isQuantityInstance?: boolean;
         instanceIndex?: number;
+        parentPathKey?: string;
     }>();
     if (!specFields || specFields.length === 0) return visible;
 
@@ -73,7 +21,7 @@ export function getVisibleSpecsTree(
     const settings = tableSettings || {};
 
     const targetSpecIdsInTriggers = new Set(specTriggers.map(t => t.target_spec_id));
-    const quantityTargetIds = new Set(specFields.filter(f => f.quantity_source_id).map(f => f.id));
+    const quantityTargetIds = new Set(specTriggers.filter(t => t.relation_type === 'quantity').map(t => t.target_spec_id));
 
     specFields.forEach(f => {
         if (!targetSpecIdsInTriggers.has(f.id) && !quantityTargetIds.has(f.id)) {
@@ -113,25 +61,34 @@ export function getVisibleSpecsTree(
                             sourceName: spec.name,
                             sourceValue: val,
                             triggerInfo: t.condition_dsl,
-                            isQuantityDetail: !!t.condition_dsl?.is_quantity_detail
+                            isQuantityDetail: !!t.condition_dsl?.is_quantity_detail,
+                            parentPathKey: pathKey
                         });
                         changed = true;
                     }
                 }
             });
 
-            const quantityTargets = specFields.filter(f => f.quantity_source_id === specId);
-            quantityTargets.forEach(qTarget => {
+            // 若當前規格本身是 quantity target（處於被複製層），則把上層 branch 帶入，
+            // 避免「數量內再嵌數量」時跨所有一層實例產生相同 pathKey 而彼此碰撞
+            const isNestedQuantity = quantityTargetIds.has(specId);
+            const quantityTriggers = specTriggers.filter(t => t.relation_type === 'quantity' && t.source_spec_id === specId);
+            quantityTriggers.forEach(qt => {
+                const qTarget = specMap.get(qt.target_spec_id);
+                if (!qTarget) return;
                 const count = parseInt(String(val)) || 0;
                 if (count > 0) {
                     for (let i = 1; i <= count; i++) {
-                        const childUuid = generateStableUUID(`${qTarget.id}-${i}`);
+                        const childUuid = isNestedQuantity
+                            ? generateStableUUID(`${pathKey}:${qTarget.id}:${i}`)
+                            : generateStableUUID(`${qTarget.id}-${i}`);
                         const childPathKey = `${specId}:${qTarget.id}:${childUuid}`;
                         if (!visible.has(childPathKey)) {
                             visible.set(childPathKey, {
                                 sourceName: spec.name,
                                 isQuantityInstance: true,
-                                instanceIndex: i
+                                instanceIndex: i,
+                                parentPathKey: pathKey
                             });
                             changed = true;
                         }
@@ -167,20 +124,19 @@ export function getTreeSortedVisiblePaths(
     const sorted: { pathKey: string; level: number }[] = [];
     const visited = new Set<string>();
 
-    const parentIdToChildren = new Map<string, string[]>();
-    visibleInfo.forEach((_, pathKey) => {
-        const parentId = pathKey.split(':')[0];
-        if (!parentIdToChildren.has(parentId)) parentIdToChildren.set(parentId, []);
-        parentIdToChildren.get(parentId)!.push(pathKey);
-    });
-
-    const allVisibleSpecIds = new Set(Array.from(visibleInfo.keys()).map(k => k.split(':')[1]));
+    // 以完整 parentPathKey 建立父子關係：
+    // 同一規格被數量複製出多份時，每份實例擁有各自獨立的 parentPathKey，
+    // 不再用 parts[0]（上層規格 id）當 parent key 而把多份實例的子項併到同一處
+    const childrenByParent = new Map<string, string[]>();
     const topLevelPaths: string[] = [];
 
-    visibleInfo.forEach((_, pathKey) => {
-        const parentId = pathKey.split(':')[0];
-        if (parentId === 'root' || !allVisibleSpecIds.has(parentId)) {
+    visibleInfo.forEach((info, pathKey) => {
+        const p = info.parentPathKey;
+        if (!p || p === 'root' || !visibleInfo.has(p)) {
             topLevelPaths.push(pathKey);
+        } else {
+            if (!childrenByParent.has(p)) childrenByParent.set(p, []);
+            childrenByParent.get(p)!.push(pathKey);
         }
     });
 
@@ -204,19 +160,15 @@ export function getTreeSortedVisiblePaths(
 
         sorted.push({ pathKey, level });
 
-        const currentSpecId = pathKey.split(':')[1];
-        const children = parentIdToChildren.get(currentSpecId) || [];
-
+        const children = childrenByParent.get(pathKey) || [];
         children.sort(sortByKey);
-
-        const nextLevel = level + 1;
-        children.forEach(childKey => traverse(childKey, nextLevel));
+        children.forEach(childKey => traverse(childKey, level + 1));
     };
 
     topLevelPaths.sort(sortByKey);
-
     topLevelPaths.forEach(path => traverse(path, 0));
 
+    // 安全網：任何未被拜訪的孤立節點（parent 不存在）補到最外層
     visibleInfo.forEach((_, pathKey) => {
         if (!visited.has(pathKey)) {
             sorted.push({ pathKey, level: 0 });
@@ -259,11 +211,4 @@ export const checkSpecTriggerMatch = (
 
     const matched = String(val) === onValue;
     return operator === 'ne' ? !matched : matched;
-};
-
-export const getMergedTriggerTargets = (trigger: any) => {
-    return [
-        ...(trigger.targets || []),
-        ...((trigger.target_ids || []).map((id: string) => ({ id, is_quantity_detail: false })))
-    ];
 };

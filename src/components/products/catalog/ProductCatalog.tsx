@@ -194,7 +194,7 @@ export default function ProductCatalog({
 
   const handleVariantSelect = (product: ProductWithPricing, variant: VariantWithPricing) => {
     addItem(product, variant);
-    toast.success(`${variant ? `(${variant.name})` : ''} 已加入購物車`);
+    toast.success(`${variant ? `(${variant.name})` : ''} 已加入購物車`, { id: 'cart-add', duration: 2000 });
     setVariantDialogProduct(null);
   };
 
@@ -364,7 +364,7 @@ export default function ProductCatalog({
                         handleVariantSelect(product, variant as VariantWithPricing);
                       } else {
                         addItem(product);
-                        toast.success(`${product.name} 已加入購物車`);
+                        toast.success(`${product.name} 已加入購物車`, { id: 'cart-add', duration: 2000 });
                       }
                     }}
                   >

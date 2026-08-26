@@ -1,15 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+import { Save, AlertTriangle, Loader2 } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import { supabase } from '@/integrations/supabase/client';
 import { BasicInfoForm } from './BasicInfoForm';
 import { VariantSection } from './VariantSection';
-import { VariantSpecsMatrix } from './sections/VariantSpecsMatrix';
+import { VariantSpecsMatrix, VariantSpecsMatrixHandle } from './sections/VariantSpecsMatrix';
 import { VariantModelMatrix } from './sections/VariantModelMatrix';
+import { DynamicSpecsFields } from './sections/DynamicSpecsFields';
 import { ProductImageManager } from '@/components/products/images/ProductImageManager';
 import { EntityBindingManager } from './sections/EntityBindingManager';
 
@@ -38,10 +43,15 @@ interface ProductFormDialogProps {
 
 import { serializeSpecs, deserializeSpecs } from '@/utils/specLogic';
 import { useSpecStore } from '@/store/useSpecStore';
+import { useCategorySpecs } from '@/hooks/useCategorySpecs';
+import { getVisibleSpecsTree } from '@/utils/specLogic';
 
 export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, isLoading }: ProductFormDialogProps) {
   const [activeTab, setActiveTab] = useState('basic');
-  const { specMap, fetchSpecs } = useSpecStore();
+  const { specMap, fetchSpecs, specTriggers } = useSpecStore();
+  const [matrixDirty, setMatrixDirty] = useState(false);
+  const [unsavedWarning, setUnsavedWarning] = useState(false);
+  const matrixRef = useRef<VariantSpecsMatrixHandle>(null);
 
   // 1. 在父層初始化 Form
   const form = useForm<z.infer<typeof productSchema>>({
@@ -51,6 +61,48 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
       spec_values: {},
     },
   });
+
+  const { data: productSpecFields = [] } = useCategorySpecs(form.watch('category_ids') || []);
+
+  const isDirty = form.formState.isDirty || matrixDirty;
+
+  const requestClose = (next: boolean) => {
+    if (!next && isDirty) {
+      setUnsavedWarning(true);
+      return;
+    }
+    onOpenChange(next);
+  };
+
+  const handleSaveAll = () => {
+    form.handleSubmit(async (values) => {
+      // 驗證產品層級必填規格（僅檢查目前可見者）
+      const specValues = (values.spec_values as Record<string, any>) || {};
+      const visibleInfo = getVisibleSpecsTree(productSpecFields, specValues, specTriggers);
+      const missingNames = productSpecFields
+        .filter(s => {
+          if (!s.required) return false;
+          const pathKey = Array.from(visibleInfo.keys()).find(k => k.split(':')[1] === (s as any).id);
+          if (!pathKey) return false;
+          const v = specValues[pathKey];
+          const empty = v === '' || v === undefined || v === null ||
+            (Array.isArray(v) && v.length === 0) ||
+            (typeof v === 'object' && v && Object.keys(v).length === 0);
+          return empty;
+        })
+        .map(s => (s as any).name);
+
+      if (missingNames.length > 0) {
+        toast.error(`以下必填規格尚未填寫：${missingNames.join('、')}`);
+        return;
+      }
+
+      handleWrappedSubmit(values);
+      await matrixRef.current?.save();
+      form.reset(form.getValues());
+      setMatrixDirty(false);
+    })();
+  };
 
   // 2. 當切換編輯對象或 Dialog 開關時，同步 Form 資料
   useEffect(() => {
@@ -130,7 +182,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={requestClose}>
       <DialogContent
         className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col"
         aria-describedby={undefined}
@@ -138,7 +190,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
         <DialogHeader className="p-6 pb-0">
           <DialogTitle>{initialData ? `編輯產品: ${form.watch('name') || initialData.name}` : '新增產品'}</DialogTitle>
           <DialogDescription>
-            請在此填寫產品的基本資訊、型號與規格。完成後點擊「儲存修改」按鈕以同步資料。
+            請在此填寫產品的基本資訊、型號與規格。完成後點擊「儲存所有變更」按鈕以同步資料。
           </DialogDescription>
         </DialogHeader>
 
@@ -147,6 +199,13 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
             <TabsList className="w-full justify-start h-12 bg-transparent p-0 gap-6">
               <TabsTrigger value="basic" className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none">
                 基本資訊
+              </TabsTrigger>
+              <TabsTrigger
+                value="productSpecs"
+                disabled={(form.watch('category_ids') || []).length === 0}
+                className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
+              >
+                產品規格 {(!initialData || (form.watch('category_ids') || []).length === 0) && '(選擇分類後可用)'}
               </TabsTrigger>
               <TabsTrigger
                 value="images"
@@ -193,8 +252,12 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
                 form={form}
                 onSubmit={handleWrappedSubmit}
                 isLoading={isLoading}
-                onCancel={() => onOpenChange(false)}
+                onCancel={() => requestClose(false)}
               />
+            </TabsContent>
+
+            <TabsContent value="productSpecs" className="m-0 focus-visible:ring-0">
+              <DynamicSpecsFields form={form} />
             </TabsContent>
 
             <TabsContent value="images" className="m-0 focus-visible:ring-0 p-2">
@@ -214,8 +277,10 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
               {initialData && (
                 <div className="space-y-8">
                   <VariantSpecsMatrix
+                    ref={matrixRef}
                     productId={initialData.id}
                     categoryIds={form.watch('category_ids')}
+                    onDirtyChange={setMatrixDirty}
                   />
                 </div>
               )}
@@ -237,7 +302,47 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
             </TabsContent>
           </div>
         </Tabs>
+
+        <div className="px-6 py-4 border-t bg-muted/20 flex items-center justify-between gap-3">
+          {isDirty ? (
+            <span className="text-xs text-amber-600 dark:text-amber-500 flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              有尚未儲存的變更
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">所有變更已儲存</span>
+          )}
+          <Button onClick={handleSaveAll} disabled={!isDirty || isLoading} className="shadow-sm">
+            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            儲存所有變更
+          </Button>
+        </div>
       </DialogContent>
+
+      <AlertDialog open={unsavedWarning} onOpenChange={setUnsavedWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>尚有未儲存的變更</AlertDialogTitle>
+            <AlertDialogDescription>
+              您剛才的修改尚未儲存，關閉後將會遺失。確定要捨棄這些變更嗎？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>繼續編輯</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={() => {
+                form.reset();
+                setMatrixDirty(false);
+                setUnsavedWarning(false);
+                onOpenChange(false);
+              }}
+            >
+              捨棄變更並關閉
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }
