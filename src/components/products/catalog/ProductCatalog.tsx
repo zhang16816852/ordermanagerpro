@@ -255,6 +255,9 @@ export default function ProductCatalog({
                       <div className="flex-1">
                         <div className="font-medium flex items-center gap-2">
                           {product.name}
+                          {product.unified_pricing && (
+                            <Badge className="text-xs bg-emerald-100 text-emerald-700 border-emerald-300">統一價格</Badge>
+                          )}
                           {hasVariants && (
                             <Badge variant="outline" className="text-xs">
                               {product.variants!.length} 變體
@@ -333,11 +336,16 @@ export default function ProductCatalog({
                         <div className="text-primary font-bold">
                           {calculatePriceRange(product.wholesale_price, product.variants?.map(v => v.effective_wholesale_price) || []).display}
                         </div>
-                        {hasVariants && (
-                          <Badge variant="secondary" className="text-[9px] h-4 px-1">
-                            {product.variants!.length} 規格
-                          </Badge>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {product.unified_pricing && (
+                            <Badge className="text-[9px] h-4 px-1 bg-emerald-100 text-emerald-700 border-emerald-300">統一價格</Badge>
+                          )}
+                          {hasVariants && (
+                            <Badge variant="secondary" className="text-[9px] h-4 px-1">
+                              {product.variants!.length} 規格
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -372,6 +380,9 @@ export default function ProductCatalog({
                       <div className="flex-1 min-w-0">
                         <div className="font-medium break-words pr-2">
                           {product.name}
+                          {product.unified_pricing && (
+                            <Badge className="ml-1 text-[9px] h-4 px-1 bg-emerald-100 text-emerald-700 border-emerald-300 align-middle">統一價格</Badge>
+                          )}
                         </div>
                         {variant && (
                           <div className="text-sm text-muted-foreground break-words mt-0.5">

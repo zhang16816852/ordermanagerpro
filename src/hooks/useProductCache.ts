@@ -307,12 +307,16 @@ export const useStoreProductCache = (storeId?: string | null, brand?: string | n
         retail_price: 0,
         has_store_price: !!mainStoreProduct,
         variants: (p.variants || []).map((v: any) => {
-          const variantStoreProduct = storeSettings.find((sp: any) => sp.variant_id === v.id);
+          const isUnified = !!p.unified_pricing;
+          const variantStoreProduct = isUnified ? undefined : storeSettings.find((sp: any) => sp.variant_id === v.id);
+          const effectiveWholesale = isUnified
+            ? (mainStoreProduct?.wholesale_price ?? v.wholesale_price ?? 0)
+            : (variantStoreProduct?.wholesale_price || v.wholesale_price || 0);
           return {
             ...v,
-            effective_wholesale_price: variantStoreProduct?.wholesale_price || v.wholesale_price || 0,
+            effective_wholesale_price: effectiveWholesale,
             effective_retail_price: v.retail_price || 0,
-            has_brand_price: !!variantStoreProduct,
+            has_brand_price: isUnified ? !!mainStoreProduct : !!variantStoreProduct,
             spec_values: v.spec_values
           } as VariantWithPricing;
         })

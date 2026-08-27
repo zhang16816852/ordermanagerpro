@@ -346,7 +346,12 @@ export function ProductDetailDialog({
                     <div className={cn("space-y-4", !showImages && "md:col-span-2")}>
                         <div>
                             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">價格</h3>
-                            <div className="text-2xl font-bold text-primary mt-1">{currentPriceDisplay}</div>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="text-2xl font-bold text-primary">{currentPriceDisplay}</span>
+                                {product.unified_pricing && (
+                                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-300">統一價格</Badge>
+                                )}
+                            </div>
                         </div>
 
                         {((product as any).brand_ids?.length > 0 || (product as any).model) && (

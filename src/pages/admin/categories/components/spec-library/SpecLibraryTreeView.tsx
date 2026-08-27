@@ -130,7 +130,7 @@ function TreeNode({ node, level, onEdit, onDelete, onReorder, onToggleCollapse, 
                     </Badge>
                 )}
                 {node.relationType === 'quantity' && (
-                    <Badge variant="outline" className="text-[9px] h-4 px-1.5 bg-blue-500/5 text-blue-600 border-blue-500/20 font-bold">
+                    <Badge variant="outline" className="text-[9px] h-4 px-1.5 bg-blue-100 text-blue-700 border-blue-300 font-bold animate-in fade-in">
                         數量複製
                     </Badge>
                 )}
@@ -140,7 +140,7 @@ function TreeNode({ node, level, onEdit, onDelete, onReorder, onToggleCollapse, 
                 data-node-id={node.id}
                 onClick={() => onSelectNode?.(node)}
                 title="點選以兩側同步高亮"
-                className={cn('rounded-lg border-l-4 pl-3 cursor-pointer hover:bg-accent/40 transition-colors', depthColor, isSelected && 'ring-2 ring-primary rounded-md')}
+                className={cn('rounded-lg border-l-4 pl-3 cursor-pointer hover:bg-accent/40 transition-colors', node.relationType === 'quantity' ? 'border-l-blue-500 bg-blue-50/50' : depthColor, isSelected && 'ring-2 ring-primary rounded-md')}
             >
                 <SpecCard
                     spec={node.spec}
@@ -308,7 +308,7 @@ function PyramidNode({ node, level, onEdit, onDelete, onReorder, onToggleCollaps
                     </Badge>
                 )}
                 {node.relationType === 'quantity' && (
-                    <Badge variant="outline" className="text-[9px] h-4 px-1.5 bg-blue-500/5 text-blue-600 border-blue-500/20 font-bold">
+                    <Badge variant="outline" className="text-[9px] h-4 px-1.5 bg-blue-100 text-blue-700 border-blue-300 font-bold animate-in fade-in">
                         數量複製
                     </Badge>
                 )}
@@ -318,7 +318,7 @@ function PyramidNode({ node, level, onEdit, onDelete, onReorder, onToggleCollaps
                 data-node-id={node.id}
                 onClick={() => onSelectNode?.(node)}
                 title="點選以兩側同步高亮"
-                className={cn('rounded-lg border-l-4 pl-3 cursor-pointer hover:bg-accent/40 transition-colors', depthColor, isSelected && 'ring-2 ring-primary rounded-md')}
+                className={cn('rounded-lg border-l-4 pl-3 cursor-pointer hover:bg-accent/40 transition-colors', node.relationType === 'quantity' ? 'border-l-blue-500 bg-blue-50/50' : depthColor, isSelected && 'ring-2 ring-primary rounded-md')}
             >
                 <SpecCard
                     spec={node.spec}

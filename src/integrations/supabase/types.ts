@@ -2186,6 +2186,9 @@ export type Database = {
           description: string | null
           id: string
           name: string
+          unified_pricing: boolean
+          unified_retail_price: number | null
+          unified_wholesale_price: number | null
           updated_at: string
         }
         Insert: {
@@ -2194,6 +2197,9 @@ export type Database = {
           description?: string | null
           id?: string
           name: string
+          unified_pricing?: boolean
+          unified_retail_price?: number | null
+          unified_wholesale_price?: number | null
           updated_at?: string
         }
         Update: {
@@ -2202,6 +2208,9 @@ export type Database = {
           description?: string | null
           id?: string
           name?: string
+          unified_pricing?: boolean
+          unified_retail_price?: number | null
+          unified_wholesale_price?: number | null
           updated_at?: string
         }
         Relationships: []

@@ -193,7 +193,7 @@ export default function AdminStorePricing() {
     const allKeys: string[] = [];
     filteredProducts.forEach(p => {
       const variants = getProductVariants(p.id);
-      if (variants.length > 0) {
+      if (variants.length > 0 && !p.unified_pricing) {
         variants.forEach(v => allKeys.push(`${p.id}:${v.id}`));
       } else {
         allKeys.push(p.id);
@@ -383,6 +383,7 @@ export default function AdminStorePricing() {
               filteredProducts.map((product) => {
                 const variants = getProductVariants(product.id);
                 const hasVariants = variants.length > 0;
+                const isUnified = !!product.unified_pricing;
                 const isExpanded = expandedProducts.has(product.id);
                 const productEntry = priceEntries[product.id];
                 const hasCustomPrice = !!productEntry?.wholesalePrice;
@@ -392,7 +393,7 @@ export default function AdminStorePricing() {
                     <>
                       <TableRow className={hasVariants ? 'cursor-pointer hover:bg-muted/50' : ''}>
                         <TableCell>
-                          {!hasVariants && (
+                          {(!hasVariants || isUnified) && (
                             <Checkbox
                               checked={selectedProducts.has(product.id)}
                               onCheckedChange={() => toggleProduct(product.id)}
@@ -409,14 +410,17 @@ export default function AdminStorePricing() {
                           )}
                         </TableCell>
                         <TableCell className="font-mono text-sm">{product.code}</TableCell>
-                        <TableCell className="font-medium">
-                          {product.name}
-                          {hasVariants && (
-                            <Badge variant="outline" className="ml-2 text-xs">
-                              <Layers className="h-3 w-3 mr-1" />
-                              {variants.length} 變體
-                            </Badge>
-                          )}
+                          <TableCell className="font-medium">
+                            {product.name}
+                            {isUnified && (
+                              <Badge className="ml-2 text-xs bg-emerald-100 text-emerald-700 border-emerald-300">統一價格</Badge>
+                            )}
+                            {hasVariants && !isUnified && (
+                              <Badge variant="outline" className="ml-2 text-xs">
+                                <Layers className="h-3 w-3 mr-1" />
+                                {variants.length} 變體
+                              </Badge>
+                            )}
                           {!hasVariants && hasCustomPrice && (
                             <Badge variant="outline" className="ml-2 text-xs">已設定</Badge>
                           )}
@@ -427,22 +431,22 @@ export default function AdminStorePricing() {
                         <TableCell className="text-right text-muted-foreground">
                           {calculatePriceRange(undefined, variants.map(v => v.retail_price)).display}
                         </TableCell>
-                        <TableCell className="text-right">
-                          {!hasVariants ? (
-                            <Input
-                              type="number"
-                              placeholder="輸入批發價"
-                              value={productEntry?.wholesalePrice || ''}
-                              onChange={(e) => handlePriceChange(product.id, product.id, undefined, e.target.value)}
-                              className="w-24 text-right ml-auto"
-                            />
-                          ) : (
-                            <span className="text-muted-foreground text-sm">展開設定</span>
-                          )}
-                        </TableCell>
+                          <TableCell className="text-right">
+                            {(!hasVariants || isUnified) ? (
+                              <Input
+                                type="number"
+                                placeholder="輸入批發價"
+                                value={productEntry?.wholesalePrice || ''}
+                                onChange={(e) => handlePriceChange(product.id, product.id, undefined, e.target.value)}
+                                className="w-24 text-right ml-auto"
+                              />
+                            ) : (
+                              <span className="text-muted-foreground text-sm">展開設定</span>
+                            )}
+                          </TableCell>
                       </TableRow>
 
-                      {hasVariants && (
+                      {hasVariants && !isUnified && (
                         <CollapsibleContent asChild>
                           <>
                             {variants.map((variant) => {
@@ -512,6 +516,7 @@ export default function AdminStorePricing() {
               {filteredProducts.map((product) => {
                 const variants = getProductVariants(product.id);
                 const hasVariants = variants.length > 0;
+                const isUnified = !!product.unified_pricing;
                 const productEntry = priceEntries[product.id];
                 const hasCustomPrice = !!productEntry?.wholesalePrice;
 
@@ -522,7 +527,10 @@ export default function AdminStorePricing() {
                         <p className="font-medium truncate">{product.name}</p>
                         <p className="font-mono text-xs text-muted-foreground">{product.code}</p>
                       </div>
-                      {hasVariants && (
+                      {isUnified && (
+                        <Badge className="text-xs bg-emerald-100 text-emerald-700 border-emerald-300 flex-shrink-0">統一價格</Badge>
+                      )}
+                      {hasVariants && !isUnified && (
                         <Badge variant="outline" className="text-xs flex-shrink-0">
                           <Layers className="h-3 w-3 mr-1" />
                           {variants.length} 變體
@@ -540,7 +548,7 @@ export default function AdminStorePricing() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {!hasVariants && (
+                      {(!hasVariants || isUnified) && (
                         <Input
                           type="number"
                           placeholder="連鎖批發價"
@@ -549,10 +557,10 @@ export default function AdminStorePricing() {
                           className="flex-1 text-right text-sm h-8"
                         />
                       )}
-                      {!hasVariants && hasCustomPrice && (
+                      {(!hasVariants || isUnified) && hasCustomPrice && (
                         <Badge variant="outline" className="text-xs">已設定</Badge>
                       )}
-                      {hasVariants && (
+                      {hasVariants && !isUnified && (
                         <span className="text-xs text-muted-foreground">展開變體設定價格</span>
                       )}
                     </div>

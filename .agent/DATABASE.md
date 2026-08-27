@@ -246,3 +246,10 @@
 - **è¨‚å–®è¡¨æ ¼ç¯„æœ¬**ï¼š`table_templates` å„²å­˜ col/row/tab è¨­å®šï¼ˆJSONBï¼‰ï¼Œ`table_template_variants` ç¶å®šè®Šé«”
 - **å¸‚å ´**ï¼š`market_listings` + `expire_market_listings()` éæœŸä»»å‹™
 - **ç¨½æ ¸**ï¼š`audit_logs` è¨˜éŒ„é—œéµå‹•ä½œï¼ˆå« old/new value JSONBï¼‰
+
+## ²Î¤@»ù®æ¡]unified_pricing¡^
+
+- products.unified_pricing BOOLEAN¡Bunified_wholesale_price NUMERIC¡Bunified_retail_price NUMERIC¡]migration 20260827000001_add_unified_pricing.sql¡^
+- 	rg_enforce_unified_variant_price¡GÅÜÅé INSERT/UPDATE ®É­Y©ÒÄİ²£«~ unified_pricing=true¡A±j¨î wholesale_price/retail_price = ²£«~²Î¤@»ù¡]¥ô¦ó³~®|¬ÒµLªkÅıÅÜÅé»ù®æº}²¾¡^
+- 	rg_sync_unified_price_to_variants¡G²£«~¤Á´«/­×§ï²Î¤@»ù®É¡AUPDATE ©Ò¦³ product_variants ¬°²Î¤@»ù
+- ³sÂê«È¤á»ù®æ¡]store_products¡^¹ï²Î¤@»ù°Ó«~¥H²£«~¼h¯Å (ariant_id = null) Àx¦s¡A¹ï©Ò¦³ÅÜÅé¡]§t¥¼¨Ó·s¼W¡^²Î¤@¥Í®Ä¡FuseStoreProductCache ¹ï²Î¤@»ù°Ó«~©¿²¤³vÅÜÅé store_products ¦C¡A§ï¨ú²£«~¼h¯Å¦C

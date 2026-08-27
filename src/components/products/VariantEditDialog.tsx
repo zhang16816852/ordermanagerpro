@@ -28,6 +28,7 @@ import {
     FormItem,
     FormLabel,
     FormMessage,
+    FormDescription,
 } from "@/components/ui/form";
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
@@ -39,6 +40,14 @@ import { useSpecStore } from '@/store/useSpecStore';
 import { entityRelationService } from '@/services/entityRelationService';
 import { ProductImageManager } from '@/components/products/images/ProductImageManager';
 import { VariantBindingManager } from './form/sections/VariantBindingManager';
+import { ColorSelectField } from './form/ColorSelectField';
+import { useColorStore } from '@/store/useColorStore';
+
+const COLOR_GROUP_NAME_RE = /(顏色|色|color)/i;
+
+function isColorGroupName(name: string): boolean {
+  return COLOR_GROUP_NAME_RE.test(name);
+}
 
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;
@@ -61,7 +70,9 @@ export function VariantEditDialog({
 }: VariantEditDialogProps) {
     const queryClient = useQueryClient();
     const { specMap } = useSpecStore();
+    const { colors: libraryColors, getColorByName, getColorByCode } = useColorStore();
     const [optionGroups, setOptionGroups] = useState<OptionGroupWithValues[]>([]);
+    const isUnified = !!product?.unified_pricing;
 
     const form = useForm({
         defaultValues: {
@@ -92,6 +103,7 @@ export function VariantEditDialog({
 
         const init = async () => {
             useSpecStore.getState().fetchSpecs();
+            useColorStore.getState().fetchColors();
 
             const { data: groups, error: groupsError } = await supabase
                 .from('product_option_groups')
@@ -144,8 +156,8 @@ export function VariantEditDialog({
                     sku: variant.sku,
                     name: variant.name,
                     barcode: variant.barcode || '',
-                    wholesale_price: variant.wholesale_price,
-                    retail_price: variant.retail_price,
+                    wholesale_price: isUnified ? Number((product as any)?.unified_wholesale_price ?? 0) : variant.wholesale_price,
+                    retail_price: isUnified ? Number((product as any)?.unified_retail_price ?? 0) : variant.retail_price,
                     status: variant.status as any,
                     spec_values: deserializeSpecs(specValues.data || []),
                     selectedModelIds: links.data?.map(l => l.model_id) || [],
@@ -159,8 +171,8 @@ export function VariantEditDialog({
                     sku: product ? `${product.code || ''}-` : '',
                     name: '',
                     barcode: '',
-                    wholesale_price: 0,
-                    retail_price: 0,
+                    wholesale_price: isUnified ? Number((product as any)?.unified_wholesale_price ?? 0) : 0,
+                    retail_price: isUnified ? Number((product as any)?.unified_retail_price ?? 0) : 0,
                     status: 'active',
                     spec_values: {},
                     selectedModelIds: [],
@@ -365,7 +377,9 @@ export function VariantEditDialog({
                             <div className="space-y-4">
                                 <Label className="text-sm font-medium">選項</Label>
                                 <div className="grid gap-4 sm:grid-cols-2">
-                                    {optionGroups.map((group) => (
+                                    {optionGroups.map((group) => {
+                                        const isColorGroup = isColorGroupName(group.name);
+                                        return (
                                         <FormField
                                             key={group.id}
                                             control={form.control}
@@ -374,18 +388,34 @@ export function VariantEditDialog({
                                                 <FormItem>
                                                     <FormLabel>{group.name}</FormLabel>
                                                     <FormControl>
-                                                        <OptionValueCombobox
-                                                            group={group}
-                                                            value={field.value || ''}
-                                                            onChange={field.onChange}
-                                                            placeholder={`輸入或選擇${group.name}`}
-                                                        />
+                                                        {isColorGroup ? (
+                                                            <ColorSelectField
+                                                                multiple={false}
+                                                                selectedColorIds={(() => {
+                                                                    const val = field.value || '';
+                                                                    const color = getColorByName(val) ?? getColorByCode(val);
+                                                                    return color ? [color.id] : [];
+                                                                })()}
+                                                                onChange={(ids) => {
+                                                                    const color = libraryColors.find(c => c.id === ids[0]);
+                                                                    field.onChange(color ? color.name : '');
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            <OptionValueCombobox
+                                                                group={group}
+                                                                value={field.value || ''}
+                                                                onChange={field.onChange}
+                                                                placeholder={`輸入或選擇${group.name}`}
+                                                            />
+                                                        )}
                                                     </FormControl>
                                                     <FormMessage />
                                                 </FormItem>
                                             )}
                                         />
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}
@@ -414,10 +444,12 @@ export function VariantEditDialog({
                                             <Input
                                                 type="number"
                                                 step="0.01"
+                                                disabled={isUnified}
                                                 {...field}
                                                 onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                                             />
                                         </FormControl>
+                                        {isUnified && <FormDescription className="text-emerald-600">由產品「統一價格」控制，無法個別修改</FormDescription>}
                                         <FormMessage />
                                     </FormItem>
                                 )}
@@ -435,10 +467,12 @@ export function VariantEditDialog({
                                             <Input
                                                 type="number"
                                                 step="0.01"
+                                                disabled={isUnified}
                                                 {...field}
                                                 onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                                             />
                                         </FormControl>
+                                        {isUnified && <FormDescription className="text-emerald-600">由產品「統一價格」控制，無法個別修改</FormDescription>}
                                         <FormMessage />
                                     </FormItem>
                                 )}

@@ -213,6 +213,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
   const [defaultRetailPrice, setDefaultRetailPrice] = useState('');
   const [generatedVariants, setGeneratedVariants] = useState<GeneratedVariant[]>([]);
   const [diffSummary, setDiffSummary] = useState<{ added: number; kept: number; removed: GeneratedVariant[]; priceUpdated: number } | null>(null);
+  const isUnified = !!product?.unified_pricing;
   const loadExistingDataDbValueToColorId = useRef(new Map<string, string>());
 
   const { models: deviceModels, groups: deviceGroups, fetchData: fetchDeviceData } = useDeviceModelStore();
@@ -406,8 +407,8 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
         toast.error('請至少建立一個選項群組並輸入值，或選擇型號/群組');
         return;
       }
-      const defaultWholesale = parseFloat(defaultWholesalePrice) || 0;
-      const defaultRetail = parseFloat(defaultRetailPrice) || 0;
+      const defaultWholesale = isUnified ? Number(product?.unified_wholesale_price ?? 0) : (parseFloat(defaultWholesalePrice) || 0);
+      const defaultRetail = isUnified ? Number(product?.unified_retail_price ?? 0) : (parseFloat(defaultRetailPrice) || 0);
 
       const modelGroupNames: { name: string; id: string; type: 'model' | 'group' }[] = [
         ...selectedModelIds.map(id => {
@@ -451,8 +452,8 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
       }
     }
 
-    const defaultWholesale = parseFloat(defaultWholesalePrice) || 0;
-    const defaultRetail = parseFloat(defaultRetailPrice) || 0;
+    const defaultWholesale = isUnified ? Number(product?.unified_wholesale_price ?? 0) : (parseFloat(defaultWholesalePrice) || 0);
+    const defaultRetail = isUnified ? Number(product?.unified_retail_price ?? 0) : (parseFloat(defaultRetailPrice) || 0);
 
     // Build price resolution: try value prices in group order, fall back to default
     const resolvePrice = (valueIds: string[]): { wholesale: number; retail: number } => {
@@ -518,7 +519,9 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
         const comboValues = combo.values;
         const valueIds = comboValues.map(v => v.id);
 
-        const { wholesale: finalWholesale, retail: finalRetail } = resolvePrice(valueIds);
+        const { wholesale: finalWholesale, retail: finalRetail } = isUnified
+          ? { wholesale: Number(product?.unified_wholesale_price ?? 0), retail: Number(product?.unified_retail_price ?? 0) }
+          : resolvePrice(valueIds);
         const nameLabels = comboValues.map(v => v.label.trim()).filter(Boolean);
         const skuParts = [codePrefix, ...comboValues.map(getSkuPart)];
         if (modelItem) skuParts.push(modelItem.name);
@@ -1023,7 +1026,8 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                 id="defaultWholesale"
                 type="number"
                 step="0.01"
-                value={defaultWholesalePrice}
+                disabled={isUnified}
+                value={isUnified ? String(product?.unified_wholesale_price ?? 0) : defaultWholesalePrice}
                 onChange={(e) => setDefaultWholesalePrice(e.target.value)}
                 placeholder="0"
               />
@@ -1034,12 +1038,16 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                 id="defaultRetail"
                 type="number"
                 step="0.01"
-                value={defaultRetailPrice}
+                disabled={isUnified}
+                value={isUnified ? String(product?.unified_retail_price ?? 0) : defaultRetailPrice}
                 onChange={(e) => setDefaultRetailPrice(e.target.value)}
                 placeholder="0"
               />
             </div>
           </div>
+          {isUnified && (
+            <p className="text-xs text-emerald-600">此產品為「統一價格」，生成變體將自動套用產品統一價，無需個別設定。</p>
+          )}
 
           <Button onClick={generateVariants} className="w-full" variant="secondary">
             <Sparkles className="mr-2 h-4 w-4" />
@@ -1145,6 +1153,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                           <Input
                             type="number"
                             step="0.01"
+                            disabled={isUnified}
                             value={variant.wholesale_price}
                             onChange={(e) => updateVariantField(index, 'wholesale_price', e.target.value)}
                             className="h-7 w-20 text-right"
@@ -1154,6 +1163,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                           <Input
                             type="number"
                             step="0.01"
+                            disabled={isUnified}
                             value={variant.retail_price}
                             onChange={(e) => updateVariantField(index, 'retail_price', e.target.value)}
                             className="h-7 w-20 text-right"

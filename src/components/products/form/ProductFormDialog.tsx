@@ -6,6 +6,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Save, AlertTriangle, Loader2 } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
@@ -53,6 +58,14 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
   const [unsavedWarning, setUnsavedWarning] = useState(false);
   const matrixRef = useRef<VariantSpecsMatrixHandle>(null);
 
+  // 統一價格狀態
+  const [unifiedPricing, setUnifiedPricing] = useState(false);
+  const [unifiedWholesale, setUnifiedWholesale] = useState('0');
+  const [unifiedRetail, setUnifiedRetail] = useState('0');
+  const [unifiedDirty, setUnifiedDirty] = useState(false);
+  const [confirmOverwrite, setConfirmOverwrite] = useState(false);
+  const initialUnifiedRef = useRef({ unified_pricing: false, unified_wholesale_price: 0, unified_retail_price: 0 });
+
   // 1. 在父層初始化 Form
   const form = useForm<z.infer<typeof productSchema>>({
     resolver: zodResolver(productSchema),
@@ -64,7 +77,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
 
   const { data: productSpecFields = [] } = useCategorySpecs(form.watch('category_ids') || []);
 
-  const isDirty = form.formState.isDirty || matrixDirty;
+  const isDirty = form.formState.isDirty || matrixDirty || unifiedDirty;
 
   const requestClose = (next: boolean) => {
     if (!next && isDirty) {
@@ -74,7 +87,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
     onOpenChange(next);
   };
 
-  const handleSaveAll = () => {
+  const proceedSave = () => {
     form.handleSubmit(async (values) => {
       // 驗證產品層級必填規格（僅檢查目前可見者）
       const specValues = (values.spec_values as Record<string, any>) || {};
@@ -101,7 +114,22 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
       await matrixRef.current?.save();
       form.reset(form.getValues());
       setMatrixDirty(false);
+      setUnifiedDirty(false);
+      initialUnifiedRef.current = {
+        unified_pricing: unifiedPricing,
+        unified_wholesale_price: parseFloat(unifiedWholesale) || 0,
+        unified_retail_price: parseFloat(unifiedRetail) || 0,
+      };
     })();
+  };
+
+  const handleSaveAll = () => {
+    // 首次開啟統一價格時，提醒將覆寫所有現有變體價格
+    if (unifiedPricing && !initialUnifiedRef.current.unified_pricing) {
+      setConfirmOverwrite(true);
+      return;
+    }
+    proceedSave();
   };
 
   // 2. 當切換編輯對象或 Dialog 開關時，同步 Form 資料
@@ -143,6 +171,17 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
             spec_values: deserializeSpecs(currentSpecValues.length > 0 ? currentSpecValues : (initialData as any).spec_values),
           });
           console.log(form)
+
+          // 同步統一價格狀態
+          setUnifiedPricing(!!(initialData as any).unified_pricing);
+          setUnifiedWholesale(String((initialData as any).unified_wholesale_price ?? 0));
+          setUnifiedRetail(String((initialData as any).unified_retail_price ?? 0));
+          setUnifiedDirty(false);
+          initialUnifiedRef.current = {
+            unified_pricing: !!(initialData as any).unified_pricing,
+            unified_wholesale_price: Number((initialData as any).unified_wholesale_price ?? 0),
+            unified_retail_price: Number((initialData as any).unified_retail_price ?? 0),
+          };
           // 讀取型號標籤、群組標籤與排除的關聯
           if (initialData.id) {
             Promise.all([
@@ -160,6 +199,11 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
       name: '', code: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_ids: [], brand_series_ids: [],
             spec_values: {},
           });
+          setUnifiedPricing(false);
+          setUnifiedWholesale('0');
+          setUnifiedRetail('0');
+          setUnifiedDirty(false);
+          initialUnifiedRef.current = { unified_pricing: false, unified_wholesale_price: 0, unified_retail_price: 0 };
         }
       };
 
@@ -177,7 +221,10 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
     );
     onSubmit({
       ...values,
-      spec_values: serializedSettings as any
+      spec_values: serializedSettings as any,
+      unified_pricing: unifiedPricing,
+      unified_wholesale_price: parseFloat(unifiedWholesale) || 0,
+      unified_retail_price: parseFloat(unifiedRetail) || 0,
     });
   };
 
@@ -254,6 +301,60 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
                 isLoading={isLoading}
                 onCancel={() => requestClose(false)}
               />
+
+              {/* 統一價格標記（DAIGO 風格） */}
+              <Card className="mt-6 border-dashed">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-base">統一價格</CardTitle>
+                      {unifiedPricing && (
+                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-300">已啟用</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="unified-pricing"
+                        checked={unifiedPricing}
+                        onCheckedChange={(v) => {
+                          setUnifiedPricing(!!v);
+                          setUnifiedDirty(true);
+                        }}
+                      />
+                      <Label htmlFor="unified-pricing" className="cursor-pointer text-sm font-medium">
+                        此產品所有變體共用同一組價格
+                      </Label>
+                    </div>
+                  </div>
+                  <CardDescription>
+                    勾選後，所有型號／顏色變體的批發價與零售價將被綁定為同一組價格；未來新增變體也會自動繼承。連鎖客戶價格將以產品層級統一生效。
+                  </CardDescription>
+                </CardHeader>
+                {unifiedPricing && (
+                  <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="unified-wholesale" className="text-sm">統一批發價</Label>
+                      <Input
+                        id="unified-wholesale"
+                        type="number"
+                        value={unifiedWholesale}
+                        onChange={(e) => { setUnifiedWholesale(e.target.value); setUnifiedDirty(true); }}
+                        placeholder="批發價"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="unified-retail" className="text-sm">統一零售價</Label>
+                      <Input
+                        id="unified-retail"
+                        type="number"
+                        value={unifiedRetail}
+                        onChange={(e) => { setUnifiedRetail(e.target.value); setUnifiedDirty(true); }}
+                        placeholder="零售價"
+                      />
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
             </TabsContent>
 
             <TabsContent value="productSpecs" className="m-0 focus-visible:ring-0">
@@ -339,6 +440,28 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
               }}
             >
               捨棄變更並關閉
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmOverwrite} onOpenChange={setConfirmOverwrite}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>啟用統一價格</AlertDialogTitle>
+            <AlertDialogDescription>
+              啟用後，此產品「所有現有變體」的批發價與零售價將被覆寫為統一價格，且未來新增變體也會繼承。確定要套用嗎？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmOverwrite(false)}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmOverwrite(false);
+                proceedSave();
+              }}
+            >
+              確認套用統一價格
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

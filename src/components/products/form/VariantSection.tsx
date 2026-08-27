@@ -49,6 +49,7 @@ export function VariantSection({ product }: { product: any }) {
   const [replaceFields, setReplaceFields] = useState<Set<string>>(new Set(['name', 'sku']));
   const queryClient = useQueryClient();
   const store = useOrderDraftStore();
+  const isUnified = !!product?.unified_pricing;
 
   const getVariantQty = (productId: string, variantId?: string) => {
     let total = 0;
@@ -158,13 +159,13 @@ export function VariantSection({ product }: { product: any }) {
     }
   };
 
-  const FIELD_OPTIONS: Array<{ value: string; label: string; type: 'number' | 'text' | 'select' }> = [
-    { value: 'wholesale_price', label: '批發價', type: 'number' },
-    { value: 'retail_price', label: '零售價', type: 'number' },
-    { value: 'status', label: '狀態', type: 'select' },
-    { value: 'name', label: '變體名稱', type: 'text' },
-    { value: 'barcode', label: '條碼', type: 'text' },
-  ];
+  const FIELD_OPTIONS = useMemo<Array<{ value: string; label: string; type: 'number' | 'text' | 'select' }>>(() => ([
+    { value: 'wholesale_price', label: '批發價', type: 'number' as const },
+    { value: 'retail_price', label: '零售價', type: 'number' as const },
+    { value: 'status', label: '狀態', type: 'select' as const },
+    { value: 'name', label: '變體名稱', type: 'text' as const },
+    { value: 'barcode', label: '條碼', type: 'text' as const },
+  ].filter(o => !(isUnified && (o.value === 'wholesale_price' || o.value === 'retail_price')))), [isUnified]);
 
   const REPLACE_FIELDS: Array<{ value: string; label: string }> = [
     { value: 'name', label: '變體名稱' },
@@ -284,6 +285,15 @@ export function VariantSection({ product }: { product: any }) {
           </Button>
         </div>
       </div>
+
+      {isUnified && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800">
+          <Badge className="bg-emerald-100 text-emerald-700 border-emerald-300">統一價格</Badge>
+          <span>
+            所有變體共用：批發價 ${Number(product.unified_wholesale_price ?? 0)} ／ 零售價 ${Number(product.unified_retail_price ?? 0)}。價格由產品設定統一控制，無法逐變體修改。
+          </span>
+        </div>
+      )}
 
       {/* 批次操作列 */}
       {selectedVariantIds.size > 0 && (
