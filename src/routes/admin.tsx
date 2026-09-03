@@ -1,6 +1,7 @@
 import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminOrderList from "@/pages/admin/orders/list/OrderListPage";
 import AdminProducts from "@/pages/admin/products/index";
+import AdminProductFormPage from "@/pages/admin/products/ProductFormPage";
 import AdminStores from "@/pages/admin/Stores";
 import AdminOrderComposer from "@/pages/admin/OrderComposer";
 import AdminOrderForm from "@/pages/admin/AdminOrderForm";
@@ -24,6 +25,8 @@ export const adminRoutes = [
     { path: "/admin", element: <AdminDashboard /> },
     { path: "/admin/inventory", element: <AdminInventory /> },
     { path: "/admin/products", element: <AdminProducts /> },
+    { path: "/admin/products/new", element: <AdminProductFormPage /> },
+    { path: "/admin/products/:productId/edit", element: <AdminProductFormPage /> },
     { path: "/admin/categories", element: <AdminCategories /> },
     { path: "/admin/categories/new", element: <CategoryEditor /> },
     { path: "/admin/categories/:categoryId", element: <CategoryEditor /> },

@@ -173,7 +173,7 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
         },
     });
 
-    const handleCopy = async (product: Product, setEditingProduct: (p: any) => void, setIsDialogOpen: (v: boolean) => void) => {
+    const handleCopy = async (product: Product, onOpenEdit?: (newProductId: string) => void) => {
         const newName = `${product.name} (複製)`;
         const newSku = `${product.code}-COPY-${Math.floor(Math.random() * 1000)}`;
         try {
@@ -185,9 +185,8 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
             if (error) throw error;
             await forceRefresh();
             toast.success('產品及其變體已完整複製');
-            if (newProductId) {
-                const { data: newProduct } = await (supabase.from('products') as any).select('*').eq('id', newProductId).single();
-                if (newProduct) { setEditingProduct(newProduct as any); setIsDialogOpen(true); }
+            if (newProductId && onOpenEdit) {
+                onOpenEdit(newProductId);
             }
         } catch (error: any) { toast.error(`複製失敗：${getErrorMessage(error)}`); }
     };

@@ -26,6 +26,8 @@ App 掛載 → CacheService.init() 完成前顯示「載入中...」
 
 - `ProtectedRoute`（src/components/ProtectedRoute.tsx）+ `AppLayout`（src/components/layout/AppLayout.tsx）
 - 注意：`store.tsx` 中 `StoreRepairOrderEdit` 與 `StoreRepairOrderNew` 都 import 自 `repair-orders/new`（共用同一元件）
+- 產品表單（2026-08-28）：`/admin/products/new` 與 `/admin/products/:productId/edit` 為獨立頁面（`src/pages/admin/products/ProductFormPage.tsx`）；表單本體抽成 `ProductFormBody`（`src/components/products/form/ProductFormDialog.tsx`），由 Dialog 包裝（`ProductFormDialog`，供採購 `UnmappedResolver` 使用）與頁面共用。產品列表「新增產品／編輯／複製」改走路由導航，不再開啟模態 Dialog
+- **共用頁頭介面（PageHeaderContext）**：新增 `src/components/layout/PageHeaderContext.tsx` 提供 `PageHeaderConfig`（`title` / `back` / `onBack` / `actions`）介面 + `usePageHeader()` hook；`AppLayout` 以 Provider 包覆並將 `pageHeader` 傳給 `DesktopHeader`（返回＋標題顯示於左側、actions＋通知於右側）與 `MobileHeader`（漢堡選單＋返回＋標題＋actions＋通知），路由切換（`pathname`）時於 render 階段自動清空。任一頁面呼叫 `setPageHeader({ title, back, actions })` 即可在桌面／手機兩邊共用同一組頁頭；目前僅 `ProductFormPage` 使用（含「預覽」按鈕置於 actions）
 
 ## 3. 狀態管理（src/store/）
 

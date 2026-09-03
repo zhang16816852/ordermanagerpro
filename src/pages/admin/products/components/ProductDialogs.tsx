@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { ProductFormDialog } from '@/components/products/form/ProductFormDialog';
 import { UnifiedProductImport } from '@/components/products/import';
 import { Tables } from '@/integrations/supabase/types';
 import {
@@ -19,17 +18,12 @@ import { VariantOptionsPicker } from '@/components/products/catalog/VariantOptio
 type Product = Tables<'products'>;
 
 interface ProductDialogsProps {
-    isDialogOpen: boolean;
-    setIsDialogOpen: (v: boolean) => void;
     isImportOpen: boolean;
     setIsImportOpen: (v: boolean) => void;
-    editingProduct: Product | null;
     deleteProduct: Product | null;
     setDeleteProduct: (p: Product | null) => void;
-    onFormSubmit: (values: any) => void;
     onDeleteConfirm: (id: string) => void;
     onImportSuccess: () => void;
-    isMutationLoading: boolean;
     isSelectionOpen: boolean;
     setIsSelectionOpen: (v: boolean) => void;
     products: any[];
@@ -274,31 +268,18 @@ function ProductSelectionDialog({
 }
 
 export function ProductDialogs({
-    isDialogOpen,
-    setIsDialogOpen,
     isImportOpen,
     setIsImportOpen,
-    editingProduct,
     deleteProduct,
     setDeleteProduct,
-    onFormSubmit,
     onDeleteConfirm,
     onImportSuccess,
-    isMutationLoading,
     isSelectionOpen,
     setIsSelectionOpen,
     products,
 }: ProductDialogsProps) {
     return (
         <>
-            <ProductFormDialog
-                open={isDialogOpen}
-                onOpenChange={setIsDialogOpen}
-                onSubmit={onFormSubmit}
-                initialData={editingProduct}
-                isLoading={isMutationLoading}
-            />
-
             <AlertDialog open={!!deleteProduct} onOpenChange={() => setDeleteProduct(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>

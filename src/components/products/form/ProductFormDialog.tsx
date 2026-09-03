@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, UseFormReturn } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -38,20 +38,21 @@ const productSchema = z.object({
 
 type Product = Tables<'products'>;
 
-interface ProductFormDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSubmit: (data: any) => void;
-  initialData: Product & { category_ids?: string[] } | null;
-  isLoading?: boolean;
-}
-
 import { serializeSpecs, deserializeSpecs } from '@/utils/specLogic';
 import { useSpecStore } from '@/store/useSpecStore';
 import { useCategorySpecs } from '@/hooks/useCategorySpecs';
 import { getVisibleSpecsTree } from '@/utils/specLogic';
 
-export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, isLoading }: ProductFormDialogProps) {
+interface ProductFormBodyProps {
+  active: boolean;
+  initialData: Product & { category_ids?: string[] } | null;
+  onSubmit: (data: any) => void;
+  isLoading?: boolean;
+  onClose: () => void;
+  registerForm?: (form: UseFormReturn<any>) => void;
+}
+
+export function ProductFormBody({ active, initialData, onSubmit, isLoading, onClose, registerForm }: ProductFormBodyProps) {
   const [activeTab, setActiveTab] = useState('basic');
   const { specMap, fetchSpecs, specTriggers } = useSpecStore();
   const [matrixDirty, setMatrixDirty] = useState(false);
@@ -84,8 +85,13 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
       setUnsavedWarning(true);
       return;
     }
-    onOpenChange(next);
+    onClose();
   };
+
+  useEffect(() => {
+    (form as any).__getVariantSpecs = () => matrixRef.current?.getState?.() ?? null;
+    registerForm?.(form);
+  }, [registerForm, form]);
 
   const proceedSave = () => {
     form.handleSubmit(async (values) => {
@@ -132,9 +138,9 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
     proceedSave();
   };
 
-  // 2. 當切換編輯對象或 Dialog 開關時，同步 Form 資料
+  // 2. 當切換編輯對象或 active 時，同步 Form 資料
   useEffect(() => {
-    if (open) {
+    if (active) {
       // 開啟時同步抓取規格定義（快取會處理避免重複抓取）
       fetchSpecs();
 
@@ -210,7 +216,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
       loadInitialData();
       setActiveTab('basic'); // 每次打開預設回到基本資訊
     }
-  }, [open, initialData, form, fetchSpecs]);
+  }, [active, initialData, form, fetchSpecs]);
 
   // 封裝 Submit 以進行資料轉換 (Object -> Array)
   const handleWrappedSubmit = (values: any) => {
@@ -229,196 +235,184 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
   };
 
   return (
-    <Dialog open={open} onOpenChange={requestClose}>
-      <DialogContent
-        className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col"
-        aria-describedby={undefined}
-      >
-        <DialogHeader className="p-6 pb-0">
-          <DialogTitle>{initialData ? `編輯產品: ${form.watch('name') || initialData.name}` : '新增產品'}</DialogTitle>
-          <DialogDescription>
-            請在此填寫產品的基本資訊、型號與規格。完成後點擊「儲存所有變更」按鈕以同步資料。
-          </DialogDescription>
-        </DialogHeader>
-
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-          <div className="px-6 border-b">
-            <TabsList className="w-full justify-start h-12 bg-transparent p-0 gap-6">
-              <TabsTrigger value="basic" className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none">
-                基本資訊
-              </TabsTrigger>
-              <TabsTrigger
-                value="productSpecs"
-                disabled={(form.watch('category_ids') || []).length === 0}
-                className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
-              >
-                產品規格 {(!initialData || (form.watch('category_ids') || []).length === 0) && '(選擇分類後可用)'}
-              </TabsTrigger>
-              <TabsTrigger
-                value="images"
-                disabled={!initialData}
-                className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
-              >
-                圖片 {!initialData && '(儲存後可用)'}
-              </TabsTrigger>
-              <TabsTrigger
-                value="variants"
-                disabled={!initialData}
-                className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
-              >
-                變體列表 {!initialData && '(儲存後可用)'}
-              </TabsTrigger>
-              <TabsTrigger
-                value="specs"
-                disabled={!initialData}
-                className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
-              >
-                變體規格
-              </TabsTrigger>
-              <TabsTrigger
-                value="models"
-                disabled={!initialData}
-                className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
-              >
-                變體型號
-              </TabsTrigger>
-              <TabsTrigger
-                value="bindings"
-                disabled={!initialData}
-                className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
-              >
-                綁定
-              </TabsTrigger>
-            </TabsList>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-6">
-            <TabsContent value="basic" className="min-h-0 focus-visible:ring-0">
-              {/* 3. 將 form 物件傳遞給子組件 */}
-              <BasicInfoForm
-                form={form}
-                onSubmit={handleWrappedSubmit}
-                isLoading={isLoading}
-                onCancel={() => requestClose(false)}
-              />
-
-              {/* 統一價格標記（DAIGO 風格） */}
-              <Card className="mt-6 border-dashed">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <CardTitle className="text-base">統一價格</CardTitle>
-                      {unifiedPricing && (
-                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-300">已啟用</Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="unified-pricing"
-                        checked={unifiedPricing}
-                        onCheckedChange={(v) => {
-                          setUnifiedPricing(!!v);
-                          setUnifiedDirty(true);
-                        }}
-                      />
-                      <Label htmlFor="unified-pricing" className="cursor-pointer text-sm font-medium">
-                        此產品所有變體共用同一組價格
-                      </Label>
-                    </div>
-                  </div>
-                  <CardDescription>
-                    勾選後，所有型號／顏色變體的批發價與零售價將被綁定為同一組價格；未來新增變體也會自動繼承。連鎖客戶價格將以產品層級統一生效。
-                  </CardDescription>
-                </CardHeader>
-                {unifiedPricing && (
-                  <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="unified-wholesale" className="text-sm">統一批發價</Label>
-                      <Input
-                        id="unified-wholesale"
-                        type="number"
-                        value={unifiedWholesale}
-                        onChange={(e) => { setUnifiedWholesale(e.target.value); setUnifiedDirty(true); }}
-                        placeholder="批發價"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="unified-retail" className="text-sm">統一零售價</Label>
-                      <Input
-                        id="unified-retail"
-                        type="number"
-                        value={unifiedRetail}
-                        onChange={(e) => { setUnifiedRetail(e.target.value); setUnifiedDirty(true); }}
-                        placeholder="零售價"
-                      />
-                    </div>
-                  </CardContent>
-                )}
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="productSpecs" className="m-0 focus-visible:ring-0">
-              <DynamicSpecsFields form={form} />
-            </TabsContent>
-
-            <TabsContent value="images" className="m-0 focus-visible:ring-0 p-2">
-              {initialData && (
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">管理主商品封面與圖庫圖片。第一張圖片會自動設為封面，顯示在商品卡片上。</p>
-                  <ProductImageManager entityType="product" entityId={initialData.id} />
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="variants" className="m-0 focus-visible:ring-0">
-              {initialData && <VariantSection product={initialData} />}
-            </TabsContent>
-
-            <TabsContent value="specs" className="m-0 focus-visible:ring-0">
-              {initialData && (
-                <div className="space-y-8">
-                  <VariantSpecsMatrix
-                    ref={matrixRef}
-                    productId={initialData.id}
-                    categoryIds={form.watch('category_ids')}
-                    onDirtyChange={setMatrixDirty}
-                  />
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="models" className="m-0 focus-visible:ring-0">
-              {initialData && (
-                <div className="space-y-8">
-                  <VariantModelMatrix
-                    productId={initialData.id}
-                  />
-                </div>
-              )}
-            </TabsContent>
-            <TabsContent value="bindings" className="m-0 focus-visible:ring-0">
-              {initialData && (
-                <EntityBindingManager productId={initialData.id} />
-              )}
-            </TabsContent>
-          </div>
-        </Tabs>
-
-        <div className="px-6 py-4 border-t bg-muted/20 flex items-center justify-between gap-3">
-          {isDirty ? (
-            <span className="text-xs text-amber-600 dark:text-amber-500 flex items-center gap-1.5">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              有尚未儲存的變更
-            </span>
-          ) : (
-            <span className="text-xs text-muted-foreground">所有變更已儲存</span>
-          )}
-          <Button onClick={handleSaveAll} disabled={!isDirty || isLoading} className="shadow-sm">
-            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            儲存所有變更
-          </Button>
+    <>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+        <div className="px-6 border-b">
+          <TabsList className="w-full justify-start h-12 bg-transparent p-0 gap-6">
+            <TabsTrigger value="basic" className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none">
+              基本資訊
+            </TabsTrigger>
+            <TabsTrigger
+              value="productSpecs"
+              disabled={(form.watch('category_ids') || []).length === 0}
+              className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
+            >
+              產品規格 {(!initialData || (form.watch('category_ids') || []).length === 0) && '(選擇分類後可用)'}
+            </TabsTrigger>
+            <TabsTrigger
+              value="images"
+              disabled={!initialData}
+              className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
+            >
+              圖片 {!initialData && '(儲存後可用)'}
+            </TabsTrigger>
+            <TabsTrigger
+              value="variants"
+              disabled={!initialData}
+              className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
+            >
+              變體列表 {!initialData && '(儲存後可用)'}
+            </TabsTrigger>
+            <TabsTrigger
+              value="specs"
+              disabled={!initialData}
+              className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
+            >
+              變體規格
+            </TabsTrigger>
+            <TabsTrigger
+              value="models"
+              disabled={!initialData}
+              className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
+            >
+              變體型號
+            </TabsTrigger>
+            <TabsTrigger
+              value="bindings"
+              disabled={!initialData}
+              className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none"
+            >
+              綁定
+            </TabsTrigger>
+          </TabsList>
         </div>
-      </DialogContent>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          <TabsContent value="basic" className="min-h-0 focus-visible:ring-0">
+            {/* 3. 將 form 物件傳遞給子組件 */}
+            <BasicInfoForm
+              form={form}
+              onSubmit={handleWrappedSubmit}
+              isLoading={isLoading}
+              onCancel={() => requestClose(false)}
+            />
+
+            {/* 統一價格標記（DAIGO 風格） */}
+            <Card className="mt-6 border-dashed">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base">統一價格</CardTitle>
+                    {unifiedPricing && (
+                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-300">已啟用</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="unified-pricing"
+                      checked={unifiedPricing}
+                      onCheckedChange={(v) => {
+                        setUnifiedPricing(!!v);
+                        setUnifiedDirty(true);
+                      }}
+                    />
+                    <Label htmlFor="unified-pricing" className="cursor-pointer text-sm font-medium">
+                      此產品所有變體共用同一組價格
+                    </Label>
+                  </div>
+                </div>
+                <CardDescription>
+                  勾選後，所有型號／顏色變體的批發價與零售價將被綁定為同一組價格；未來新增變體也會自動繼承。連鎖客戶價格將以產品層級統一生效。
+                </CardDescription>
+              </CardHeader>
+              {unifiedPricing && (
+                <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="unified-wholesale" className="text-sm">統一批發價</Label>
+                    <Input
+                      id="unified-wholesale"
+                      type="number"
+                      value={unifiedWholesale}
+                      onChange={(e) => { setUnifiedWholesale(e.target.value); setUnifiedDirty(true); }}
+                      placeholder="批發價"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="unified-retail" className="text-sm">統一零售價</Label>
+                    <Input
+                      id="unified-retail"
+                      type="number"
+                      value={unifiedRetail}
+                      onChange={(e) => { setUnifiedRetail(e.target.value); setUnifiedDirty(true); }}
+                      placeholder="零售價"
+                    />
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="productSpecs" className="m-0 focus-visible:ring-0">
+            <DynamicSpecsFields form={form} />
+          </TabsContent>
+
+          <TabsContent value="images" className="m-0 focus-visible:ring-0 p-2">
+            {initialData && (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">管理主商品封面與圖庫圖片。第一張圖片會自動設為封面，顯示在商品卡片上。</p>
+                <ProductImageManager entityType="product" entityId={initialData.id} />
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="variants" className="m-0 focus-visible:ring-0">
+            {initialData && <VariantSection product={initialData} />}
+          </TabsContent>
+
+          <TabsContent value="specs" className="m-0 focus-visible:ring-0">
+            {initialData && (
+              <div className="space-y-8">
+                <VariantSpecsMatrix
+                  ref={matrixRef}
+                  productId={initialData.id}
+                  categoryIds={form.watch('category_ids')}
+                  onDirtyChange={setMatrixDirty}
+                />
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="models" className="m-0 focus-visible:ring-0">
+            {initialData && (
+              <div className="space-y-8">
+                <VariantModelMatrix
+                  productId={initialData.id}
+                />
+              </div>
+            )}
+          </TabsContent>
+          <TabsContent value="bindings" className="m-0 focus-visible:ring-0">
+            {initialData && (
+              <EntityBindingManager productId={initialData.id} />
+            )}
+          </TabsContent>
+        </div>
+      </Tabs>
+
+      <div className="px-6 py-4 border-t bg-muted/20 flex items-center justify-between gap-3">
+        {isDirty ? (
+          <span className="text-xs text-amber-600 dark:text-amber-500 flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            有尚未儲存的變更
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">所有變更已儲存</span>
+        )}
+        <Button onClick={handleSaveAll} disabled={!isDirty || isLoading} className="shadow-sm">
+          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          儲存所有變更
+        </Button>
+      </div>
 
       <AlertDialog open={unsavedWarning} onOpenChange={setUnsavedWarning}>
         <AlertDialogContent>
@@ -436,7 +430,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
                 form.reset();
                 setMatrixDirty(false);
                 setUnsavedWarning(false);
-                onOpenChange(false);
+                onClose();
               }}
             >
               捨棄變更並關閉
@@ -466,6 +460,40 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </>
+  );
+}
+
+interface ProductFormDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (data: any) => void;
+  initialData: Product & { category_ids?: string[] } | null;
+  isLoading?: boolean;
+}
+
+export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, isLoading }: ProductFormDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col"
+        aria-describedby={undefined}
+      >
+        <DialogHeader className="p-6 pb-0">
+          <DialogTitle>{initialData ? `編輯產品: ${initialData.name}` : '新增產品'}</DialogTitle>
+          <DialogDescription>
+            請在此填寫產品的基本資訊、型號與規格。完成後點擊「儲存所有變更」按鈕以同步資料。
+          </DialogDescription>
+        </DialogHeader>
+
+        <ProductFormBody
+          active={open}
+          initialData={initialData}
+          onSubmit={onSubmit}
+          isLoading={isLoading}
+          onClose={() => onOpenChange(false)}
+        />
+      </DialogContent>
     </Dialog>
   );
 }

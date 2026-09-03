@@ -177,7 +177,8 @@ export function useProductsList() {
     };
 
     // --- Event Handlers ---
-    const handleCopy = (product: Product) => mutations.handleCopy(product, setEditingProduct, setIsDialogOpen);
+    const handleCopy = (product: Product, onOpenEdit?: (newProductId: string) => void) =>
+        mutations.handleCopy(product, onOpenEdit);
 
     const handleBatchExportWrapper = () => handleBatchExport(
         products as any, selectedProductIds, getProductVariants, brandMap,

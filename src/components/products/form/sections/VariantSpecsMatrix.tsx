@@ -15,6 +15,7 @@ import { useSpecStore } from '@/store/useSpecStore';
 export interface VariantSpecsMatrixHandle {
     save: () => Promise<void>;
     isDirty: () => boolean;
+    getState: () => Record<string, Record<string, any>>;
 }
 
 interface VariantSpecsMatrixProps {
@@ -212,8 +213,9 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
 
     useImperativeHandle(ref, () => ({
         save: () => saveMutation.mutateAsync(),
-        isDirty: () => isDirty
-    }), [saveMutation, isDirty]);
+        isDirty: () => isDirty,
+        getState: () => localData
+    }), [saveMutation, isDirty, localData]);
 
     const handleValueChange = (variantId: string, pathKey: string, value: any) => {
         setLocalData(prev => ({

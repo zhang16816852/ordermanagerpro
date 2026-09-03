@@ -12,12 +12,22 @@ import {
 import { DesktopSidebar } from './DesktopSidebar';
 import { DesktopHeader } from './DesktopHeader';
 import { MobileHeader } from './MobileHeader';
+import { PageHeaderProvider, usePageHeader } from './PageHeaderContext';
 
 interface AppLayoutProps {
   children: ReactNode;
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
+  return (
+    <PageHeaderProvider>
+      <AppLayoutContent>{children}</AppLayoutContent>
+    </PageHeaderProvider>
+  );
+}
+
+function AppLayoutContent({ children }: AppLayoutProps) {
+  const { pageHeader } = usePageHeader();
   const { user, isAdmin, storeId: currentStoreId, storeRoles, isAuthReady } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -78,12 +88,13 @@ export function AppLayout({ children }: AppLayoutProps) {
         onMouseLeave={handleSidebarMouseLeave}
       />
 
-      <DesktopHeader isExpanded={isExpanded} onToggleCollapse={toggleCollapsed} />
+      <DesktopHeader isExpanded={isExpanded} onToggleCollapse={toggleCollapsed} pageHeader={pageHeader} />
 
       <MobileHeader
         navItems={navItems}
         sidebarOpen={sidebarOpen}
         onSidebarOpenChange={setSidebarOpen}
+        pageHeader={pageHeader}
       />
 
       <main

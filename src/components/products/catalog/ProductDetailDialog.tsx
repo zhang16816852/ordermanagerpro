@@ -13,7 +13,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ProductWithPricing } from "@/types/product";
 import { useStoreDraft } from "@/store/useOrderDraftStore";
 import { toast } from "sonner";
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useSpecStore } from "@/store/useSpecStore";
 import { supabase } from "@/integrations/supabase/client";
 import { CacheService, CACHE, ONE_YEAR_MS } from "@/services/cacheService";
@@ -55,12 +56,19 @@ export function ProductDetailDialog({
     const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
     const [pickerOptions, setPickerOptions] = useState<Record<string, string | null> | null>(null);
     const [showImages, setShowImages] = useState(getShowImagesDefault);
+    const [showSpecs, setShowSpecs] = useState(false);
 
     const [productImages, setProductImages] = useState<ProductImage[]>([]);
     const [variantImageMap, setVariantImageMap] = useState<Map<string, ProductImage[]>>(new Map());
 
     useEffect(() => {
         if (!open || !product) {
+            setProductImages([]);
+            setVariantImageMap(new Map());
+            return;
+        }
+
+        if (!product.id) {
             setProductImages([]);
             setVariantImageMap(new Map());
             return;
@@ -413,9 +421,19 @@ export function ProductDetailDialog({
 
                         {combinedSpecs.length > 0 && (
                             <div className="pt-4 border-t">
-                                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">產品規格</h3>
-                                <div className="space-y-0.5">
-                                    {combinedSpecs.map((spec: any) => {
+                                <Collapsible open={showSpecs} onOpenChange={setShowSpecs}>
+                                    <CollapsibleTrigger className="flex items-center gap-2 w-full">
+                                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                                            <span className="inline-flex items-center gap-2">
+                                                產品規格
+                                                <Badge variant="outline" className="text-[10px] font-normal py-0">{combinedSpecs.length}</Badge>
+                                            </span>
+                                        </h3>
+                                        <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", showSpecs && "rotate-180")} />
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent className="pt-2">
+                                        <div className="space-y-0.5">
+                                            {combinedSpecs.map((spec: any) => {
                                         const parts = spec.id.split(':');
                                         const specId = parts.length >= 2 ? parts[1] : spec.id;
                                         const def = specDefinitions.find((s: any) => s.id === specId);
@@ -461,7 +479,9 @@ export function ProductDetailDialog({
                                             </div>
                                         );
                                     })}
-                                </div>
+                                        </div>
+                                    </CollapsibleContent>
+                                </Collapsible>
                             </div>
                         )}
 

@@ -1,14 +1,29 @@
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NotificationDropdown } from './NotificationDropdown';
+import type { PageHeaderConfig } from './PageHeaderContext';
 
 interface DesktopHeaderProps {
   isExpanded: boolean;
   onToggleCollapse: () => void;
+  pageHeader?: PageHeaderConfig | null;
 }
 
-export function DesktopHeader({ isExpanded, onToggleCollapse }: DesktopHeaderProps) {
+export function DesktopHeader({ isExpanded, onToggleCollapse, pageHeader }: DesktopHeaderProps) {
+  const navigate = useNavigate();
+
+  const handleBack = () => {
+    if (pageHeader?.onBack) {
+      pageHeader.onBack();
+    } else if (pageHeader?.back) {
+      navigate(pageHeader.back);
+    }
+  };
+
+  const hasBack = !!(pageHeader?.back || pageHeader?.onBack);
+
   return (
     <header
       className={cn(
@@ -16,12 +31,21 @@ export function DesktopHeader({ isExpanded, onToggleCollapse }: DesktopHeaderPro
         isExpanded ? 'left-64' : 'left-16'
       )}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 min-w-0">
         <Button variant="ghost" size="icon" onClick={onToggleCollapse} className="h-8 w-8 shrink-0">
           {isExpanded ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </Button>
+        {hasBack && (
+          <Button variant="ghost" size="icon" onClick={handleBack} aria-label="返回" className="h-8 w-8 shrink-0">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        )}
+        {pageHeader?.title && (
+          <span className="text-sm font-semibold tracking-tight truncate min-w-0">{pageHeader.title}</span>
+        )}
       </div>
       <div className="flex items-center gap-4">
+        {pageHeader?.actions}
         <NotificationDropdown />
       </div>
     </header>

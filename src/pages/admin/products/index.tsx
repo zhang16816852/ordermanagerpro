@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -19,16 +20,17 @@ import { useTableTemplates } from '@/hooks/useTableTemplates';
 import type { DimensionConfig } from '@/types/order-grid';
 
 export default function AdminProducts() {
+    const navigate = useNavigate();
     const {
         products, isLoading, version, forceRefresh,
         brandMap,
         search, setSearch, activeTab, setActiveTab,
         selectedProductIds, setSelectedProductIds, toggleSelect, toggleSelectAll, isAllSelected,
         expandedProducts, toggleExpanded, filteredProducts,
-        isDialogOpen, setIsDialogOpen, isImportOpen, setIsImportOpen,
-        editingProduct, setEditingProduct, deleteProduct, setDeleteProduct,
+        isImportOpen, setIsImportOpen,
+        deleteProduct, setDeleteProduct,
         handleCopy, handleBatchExport, handleImportSuccess, getProductVariants, getProductModels, getProductModelGroups,
-        createMutation, updateMutation, deleteMutation, updateVariantPriceMutation,
+        deleteMutation, updateVariantPriceMutation,
         selectedCategory, setSelectedCategory,
         selectedSpecs, setSelectedSpecs,
         selectedBrands, setSelectedBrands,
@@ -36,8 +38,6 @@ export default function AdminProducts() {
         selectedDeviceModels, setSelectedDeviceModels,
         clearFilters
     } = useProductsList();
-
-    const isMutationLoading = createMutation.isPending || updateMutation.isPending;
     const { createTemplate } = useTableTemplates();
     const [quickCreateOpen, setQuickCreateOpen] = useState(false);
     const [isSelectionOpen, setIsSelectionOpen] = useState(false);
@@ -122,7 +122,7 @@ export default function AdminProducts() {
                             <ShoppingCart className="mr-2 h-4 w-4" />
                             選取產品
                         </Button>
-                        <Button size="sm" onClick={() => { setEditingProduct(null); setIsDialogOpen(true); }} className="h-9 shadow-md">
+                        <Button size="sm" onClick={() => navigate('/admin/products/new')} className="h-9 shadow-md">
                             <Plus className="mr-2 h-4 w-4" />
                             新增產品
                         </Button>
@@ -224,8 +224,8 @@ export default function AdminProducts() {
                                 getVariants={getProductVariants}
                                 getModels={getProductModels}
                                 getModelGroups={getProductModelGroups}
-                                onEdit={(p) => { setEditingProduct(p as any); setIsDialogOpen(true); }}
-                                onCopy={(p: any) => handleCopy(p)}
+                                onEdit={(p) => navigate(`/admin/products/${p.id}/edit`)}
+                                onCopy={(p: any) => handleCopy(p, (id) => navigate(`/admin/products/${id}/edit`))}
                                 onDelete={(p) => setDeleteProduct(p as any)}
                                 onUpdateVariant={(id, updates) => updateVariantPriceMutation.mutate({ id, ...updates })}
                             />
@@ -256,30 +256,10 @@ export default function AdminProducts() {
                 isLoading={quickCreateSaving}
             />
             <ProductDialogs
-                isDialogOpen={isDialogOpen}
-                setIsDialogOpen={setIsDialogOpen}
                 isImportOpen={isImportOpen}
                 setIsImportOpen={setIsImportOpen}
-                editingProduct={editingProduct}
                 deleteProduct={deleteProduct}
                 setDeleteProduct={setDeleteProduct as any}
-                onFormSubmit={async (values) => {
-                    if (editingProduct?.id) {
-                        updateMutation.mutate({ id: editingProduct.id, values });
-                    } else {
-                        try {
-                            const newProduct = await createMutation.mutateAsync(values);
-                            setEditingProduct({
-                                ...newProduct,
-                                category_ids: values.category_ids,
-                                brand_ids: values.brand_ids,
-                                brand_series_ids: values.brand_series_ids,
-                            } as any);
-                        } catch {
-                            // 錯誤已由 mutation 的 toast 處理
-                        }
-                    }
-                }}
                 onDeleteConfirm={(id) => {
                     deleteMutation.mutate(id);
                     setSelectedProductIds(prev => {
@@ -289,7 +269,6 @@ export default function AdminProducts() {
                     });
                 }}
                 onImportSuccess={handleImportSuccess}
-                isMutationLoading={isMutationLoading}
                 isSelectionOpen={isSelectionOpen}
                 setIsSelectionOpen={setIsSelectionOpen}
                 products={filteredProducts as any}
