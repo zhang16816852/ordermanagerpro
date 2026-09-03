@@ -137,7 +137,7 @@ export default function AdminOrderCheckout() {
 
       setIsPendingMode2(true);
       try {
-        const payload = items.map((i) => ({
+        const payload = items.map((i, index) => ({
           product_id: i.productId,
           variant_id: i.variantId || null,
           quantity: i.quantity,
@@ -145,6 +145,7 @@ export default function AdminOrderCheckout() {
           selected_model_name: i.selectedModelName || null,
           warehouse_id: consignmentMode ? null : (getItemWarehouse(i.id) || null),
           inventory_source_type: consignmentMode ? "store_consignment" : (itemSources[i.id] || "self"),
+          sort_order: index + 1,
         }));
 
         const { data, error } = await supabase.rpc("create_order_with_sales_note", {

@@ -164,9 +164,15 @@ export function SalesNoteListTable({
                                             <Eye className="h-4 w-4" />
                                         </Button>
                                         {onDelete && (
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive ml-1" onClick={() => onDelete(note.id)}>
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
+                                            note.status === "received" ? (
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground ml-1" disabled title="已收貨不可刪除（收款憑證）">
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            ) : (
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive ml-1" onClick={() => onDelete(note.id)} title="刪除銷貨單（回滾至出貨池）">
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            )
                                         )}
                                     </div>
                                 </TableCell>
@@ -198,9 +204,15 @@ export function SalesNoteListTable({
                                     <Eye className="h-4 w-4" />
                                 </Button>
                                 {onDelete && (
-                                    <Button variant="outline" size="icon" className="h-9 w-9 text-destructive" onClick={() => onDelete(note.id)}>
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
+                                    note.status === "received" ? (
+                                        <Button variant="outline" size="icon" className="h-9 w-9 text-muted-foreground" disabled title="已收貨不可刪除（收款憑證）">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    ) : (
+                                        <Button variant="outline" size="icon" className="h-9 w-9 text-destructive" onClick={() => onDelete(note.id)} title="刪除銷貨單">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    )
                                 )}
                             </div>
                         </div>

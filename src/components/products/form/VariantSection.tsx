@@ -26,6 +26,8 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { Badge } from '@/components/ui/badge';
 import { useOrderDraftStore } from '@/store/useOrderDraftStore';
+import { useTableTemplates } from '@/hooks/useTableTemplates';
+import { OrderGridRenderer } from '@/components/order-grid/OrderGridRenderer';
 import type { ProductWithPricing, VariantWithPricing } from '@/types/product';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -50,6 +52,7 @@ export function VariantSection({ product }: { product: any }) {
   const queryClient = useQueryClient();
   const store = useOrderDraftStore();
   const isUnified = !!product?.unified_pricing;
+  const { templates } = useTableTemplates();
 
   const getVariantQty = (productId: string, variantId?: string) => {
     let total = 0;
@@ -121,6 +124,77 @@ export function VariantSection({ product }: { product: any }) {
   // 刷新函數
   const refreshVariants = () => {
     queryClient.invalidateQueries({ queryKey: ['product-variants', product.id] });
+  };
+
+  // 此產品的所有變體 id（product prop + 已載入的 variants）
+  const productVariantIds = useMemo(() => {
+    const ids = new Set<string>();
+    (product?.variants || []).forEach((v: any) => ids.add(v.id));
+    (variants || []).forEach((v: any) => ids.add(v.id));
+    return ids;
+  }, [product, variants]);
+
+  // 找出含此產品變體的 templates（每個 template 一個獨立表格）
+  const relevantTemplates = useMemo(() => {
+    if (productVariantIds.size === 0) return [];
+    return templates.filter((t) =>
+      (t.template_variants || []).some((tv) => productVariantIds.has(tv.variant_id))
+    );
+  }, [templates, productVariantIds]);
+
+  // 每個相關 template 的「僅此產品變體」子集（持續更新 → renderer 自動重算 grid）
+  const gridTemplateFor = (t: any) => {
+    const keep = new Set(productVariantIds);
+    return {
+      ...t,
+      template_variants: (t.template_variants || []).filter((tv: any) => keep.has(tv.variant_id)),
+    };
+  };
+
+  // 以「此產品」包成 renderer 資料源（僅渲染此產品變體套用規則）
+  const gridProducts = useMemo(() => {
+    if (!product?.id || productVariantIds.size === 0) return [];
+    return [{
+      ...product,
+      variants: (product?.variants || []).filter((v: any) => productVariantIds.has(v.id)),
+    }] as ProductWithPricing[];
+  }, [product, productVariantIds]);
+
+  // grid 表格加購物車（沿用現有 store.addItem）
+  const handleGridAddToCart = (
+    items: { variant: VariantWithPricing; product: ProductWithPricing; quantity: number }[]
+  ) => {
+    if (!firstStoreId) {
+      toast.error('沒有可用的購物車');
+      return;
+    }
+    let total = 0;
+    for (const it of items) {
+      if (!it.variant?.id && !it.product?.id) continue;
+      const productForCart = { ...it.product } as ProductWithPricing;
+      const variantForCart = { ...it.variant } as VariantWithPricing;
+      store.addItem(firstStoreId, productForCart, variantForCart);
+      if (it.quantity > 1) {
+        const itemId = `${it.product.id}-${it.variant.id}`;
+        const current = getVariantQty(it.product.id, it.variant.id);
+        store.updateQuantity(firstStoreId, itemId, current + (it.quantity - 1));
+      }
+      total += it.quantity;
+    }
+    toast.success(`已加入 ${total} 件至購物車`, { id: 'cart-add', duration: 2000 });
+  };
+
+  // grid 表格每個儲存格的直接「＋」累加
+  const handleGridDirectItemAdd = (variant: VariantWithPricing, prod: ProductWithPricing, delta: number) => {
+    if (!firstStoreId || delta <= 0) return;
+    const productForCart = { ...prod } as ProductWithPricing;
+    const variantForCart = { ...variant } as VariantWithPricing;
+    store.addItem(firstStoreId, productForCart, variantForCart);
+    if (delta > 1) {
+      const itemId = `${prod.id}-${variant.id}`;
+      const current = getVariantQty(prod.id, variant.id);
+      store.updateQuantity(firstStoreId, itemId, current + (delta - 1));
+    }
   };
 
   const handleAddToCart = (variant: any) => {
@@ -450,6 +524,32 @@ export function VariantSection({ product }: { product: any }) {
           </TableBody>
         </Table>
       </div>
+
+      {/* 此產品相關的表格範本（每個 template 一個獨立表格，僅套用此產品變體） */}
+      {relevantTemplates.length > 0 && (
+        <div className="space-y-4">
+          {relevantTemplates.map((t) => (
+            <div key={t.id} className="space-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                <Layers className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">表格範本：{t.name}</span>
+                <Badge variant="secondary" className="text-xs">
+                  {gridProducts[0]?.variants?.length || 0} 個變體
+                </Badge>
+              </div>
+              <div className="border rounded-lg p-3">
+                <OrderGridRenderer
+                  template={gridTemplateFor(t)}
+                  products={gridProducts}
+                  onAddToCart={handleGridAddToCart}
+                  onDirectItemAdd={handleGridDirectItemAdd}
+                  getCartQuantity={getVariantQty}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 批次編輯對話框 */}
       <Dialog open={isBatchEditOpen} onOpenChange={setIsBatchEditOpen}>

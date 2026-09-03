@@ -58,7 +58,7 @@
 | 表 | 說明 | 關鍵欄位 |
 |---|---|---|
 | `orders` | 訂單 | store_id、code、status(`order_status`)、source_type(`order_source_type`)、created_by、notes、access_token、consignment_mode(BOOL，整單寄賣模式) |
-| `order_items` | 訂單明細 | order_id、product_id、variant_id、store_id、quantity、unit_price、shipped_quantity、status(`order_item_status`)、selected_model_name |
+| `order_items` | 訂單明細 | order_id、product_id、variant_id、store_id、quantity、unit_price、shipped_quantity、status(`order_item_status`)、selected_model_name、sort_order(INT，品項顯示順序) |
 | `sales_notes` | 銷貨單 | store_id、code、status(`sales_note_status`)、shipped_at、received_at、created_by、access_token |
 | `sales_note_items` | 銷貨單明細 | sales_note_id、order_item_id、quantity |
 | `shipping_pool` | 出貨池（待出貨累積） | order_item_id、quantity、store_id、created_by |
@@ -68,7 +68,7 @@
 |---|---|---|
 | `suppliers` | 供應商 | name、contact_name、phone、email、is_active |
 | `purchase_orders` | 採購單 | supplier_id、status(`purchase_order_status`)、order_date、expected_date、received_date、total_amount |
-| `purchase_order_items` | 採購明細 | purchase_order_id、product_id、variant_id、quantity、received_quantity、unit_cost、source_order_ids |
+| `purchase_order_items` | 採購明細 | purchase_order_id、product_id、variant_id、quantity、received_quantity、unit_cost、source_order_ids、source_quantities(JSONB `{orderId: 數量}`，記錄每個來源訂單貢獻量，供精確扣量與防止重複採購) |
 | `supplier_import_configs` | 供應商 Excel 匯入設定 | supplier_id、header_row、mapping_config(JSONB) |
 | `supplier_product_mappings` | 供應商商品對應 | supplier_id、vendor_product_id、internal_product_id、vendor_unit_cost |
 
@@ -191,10 +191,11 @@
 | `direct_ship_order(p_order_id, p_created_by, p_notes, p_shipped_at, p_warehouse_id, p_warehouse_map, p_source_map)` | 訂單直接轉銷貨：**v1.3 起單一 canonical 7-arg 簽名（舊 overloads 已全數移除）**。非寄賣：建 sales_note → 為剩餘數量建 items → 更新 order_items → 扣庫存 → order 標 shipped；寄賣（orders.consignment_mode=true）：**不建 sales_note**（回傳 sales_note_id=NULL）、依剩餘數量建寄賣層 + movement，order 標 shipped；**v1.5.1**：寄賣與一般分支出貨時皆逐項 `DELETE FROM shipping_pool` |
 | `create_order_with_sales_note(p_store_id, p_created_by, p_notes, p_items JSONB, p_shipped_at, p_warehouse_id, p_consignment_mode)` | 下單即出貨：**v1.3 起單一 canonical 7-arg 簽名（舊 overloads 已全數移除）**。一般：建 order(source_type=admin_proxy, status=shipped) + sales_note + items + 扣庫存；`p_items[]` 逐項可帶 `inventory_source_type`。`p_consignment_mode=true` 時訂單標寄賣、items 一律 store_consignment、**不開銷貨單**、跳過 own 扣庫存、結尾呼叫 layer |
 | `create_consignment_shipment_layer(p_order_items JSONB, p_warehouse_id, p_created_by)` | 訂單轉寄賣中間層（v1.1 新增，v1.2 改判據，v1.3 改簽名）：**v1.3 起改收 `p_order_items`（JSONB 陣列，order_items 全欄位），舊 `(p_sales_note_id, p_warehouse_id, p_created_by)` 簽名已移除**；find-or-create `consignment_order`(send_to_store, source_order_id, draft/active) + `consignment_order_items`（既有 order_item 回填） + `consignment_out_shipment` movement（owner=store_consignment，sign 為負）；**v1.4 改寫**：依 `consignment_order_items.order_item_id` 比對重用既有寄賣品項（草稿鏡像路徑不再重複建列）、既有草稿單轉 active；被 ship_from_pool / direct_ship_order / create_order_with_sales_note / create_consignment_shipment 呼叫；**v1.5.1**：出貨時逐項 `DELETE FROM shipping_pool`（對應 order_item_id） |
-| `delete_sales_note(p_sales_note_id)` | 刪銷貨單：**consignment 來源不得直刪** → reverse `consignment_sales.reversed=true` + 反向 movement（`consignment_sale_reversal`/`consignment_shipment_reversal`）；非寄賣回退 order_items + sales_note_deletion 補庫存 + 回復 shipping_pool；`received` 狀態禁止刪除 |
+| `delete_sales_note(p_sales_note_id)` | 刪銷貨單：**consignment 來源不得直刪** → reverse `consignment_sales.reversed=true` + 反向 movement（`consignment_sale_reversal`/`consignment_shipment_reversal`）；非寄賣回退 order_items + sales_note_deletion 補庫存 + 回復 shipping_pool；`received` 狀態禁止刪除。⚠️（2026-09-01）舊 overload `(p_sales_note_id, p_warehouse_id)` 已移除，避免 PostgREST HTTP 300 |
 | `receive_purchase_items(p_items JSONB)` | 採購入庫：依 items 逐筆 insert purchase_receipt movement（own 倉） |
 | `adjust_inventory(p_id, p_new_quantity, p_created_by, p_note)` | 手動調整：算 diff → insert manual_adjustment movement |
 | `recalculate_inventory(p_created_by)` | 系統重算：以 received - shipped 重算 own 倉餘額，差異 insert system_recalculation movement |
+| `unlink_orders_from_purchase_order(p_purchase_order_id, p_order_ids UUID[])` | 解除訂單↔採購單連結（2026-09-01 新）：逐品項移除被解除訂單的來源連結並**精確扣除未收貨數量**（依 `source_quantities`；多來源舊資料為 NULL→只解除不扣量）；剩餘來源空＋無收貨→刪列；已收貨的保留；重算 total_amount 與狀態。RETURNS JSONB `{removed_item_count, updated_item_count,...}`，供前端批次「解除採購」與採購單明細解除用 |
 
 ### 6.3b 寄賣 RPC（v1，皆 SECURITY DEFINER）
 | RPC | 功能 |
@@ -230,6 +231,7 @@
 - `specification_definitions`：定義規格（type + options + configuration），`quantity_source_id` 表示「數量規格」引用
 - `entity_spec_values`：實際值以 JSONB 存於 value；`parent_id` + `instance_uuid` + `spec_id` 組成路徑 key（前端 `pathKey = ${parentId}:${spec_id}:${instance_uuid}`）
 - `specification_triggers`：條件 DSL（`condition_dsl` JSONB），source 規格值觸發 target 規格顯示；`relation_type='quantity'` 表示數量複製（source 為數值型來源、target 為被複製下游，複製份數=source 值），`condition_dsl` 為 `{}`
+  - `condition_dsl.on_value` 特殊值：`'*'`＝任何非空；`'input'`＝自訂輸入（值不在該規格 `options` 內，由前端 `specTree.checkSpecTriggerMatch` 帶入 `spec.options` 判定）
 - RPC：
   - `sync_product_specs_v6(p_category_id, p_entity_id, p_entity_type, p_new_data)` → 同步規格值（含繼承/孤立處理）
   - `migrate_historical_specs_to_v6()` → 歷史資料遷移
@@ -247,9 +249,9 @@
 - **市場**：`market_listings` + `expire_market_listings()` 過期任務
 - **稽核**：`audit_logs` 記錄關鍵動作（含 old/new value JSONB）
 
-## �Τ@����]unified_pricing�^
+## �Τ@����]unified_pricing�^
 
-- products.unified_pricing BOOLEAN�Bunified_wholesale_price NUMERIC�Bunified_retail_price NUMERIC�]migration 20260827000001_add_unified_pricing.sql�^
-- 	rg_enforce_unified_variant_price�G���� INSERT/UPDATE �ɭY���ݲ��~ unified_pricing=true�A�j�� wholesale_price/retail_price = ���~�Τ@���]����~�|�ҵL�k���������}���^
-- 	rg_sync_unified_price_to_variants�G���~����/�ק�Τ@���ɡAUPDATE �Ҧ� product_variants ���Τ@��
-- �s��Ȥ����]store_products�^��Τ@���ӫ~�H���~�h�� (ariant_id = null) �x�s�A��Ҧ�����]�t���ӷs�W�^�Τ@�ͮġFuseStoreProductCache ��Τ@���ӫ~�����v���� store_products �C�A������~�h�ŦC
+- products.unified_pricing BOOLEAN�Bunified_wholesale_price NUMERIC�Bunified_retail_price NUMERIC�]migration 20260827000001_add_unified_pricing.sql�^
+- 	rg_enforce_unified_variant_price�G���� INSERT/UPDATE �ɭY���ݲ��~ unified_pricing=true�A�j�� wholesale_price/retail_price = ���~�Τ@���]����~�|�ҵL�k���������}���^
+- 	rg_sync_unified_price_to_variants�G���~����/�ק�Τ@���ɡAUPDATE �Ҧ� product_variants ���Τ@��
+- �s��Ȥ����]store_products�^��Τ@���ӫ~�H���~�h�� (ariant_id = null) �x�s�A��Ҧ�����]�t���ӷs�W�^�Τ@�ͮġFuseStoreProductCache ��Τ@���ӫ~�����v���� store_products �C�A������~�h�ŦC

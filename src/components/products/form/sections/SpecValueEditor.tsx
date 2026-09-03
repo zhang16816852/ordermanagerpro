@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -209,6 +209,61 @@ function TableSpecEditor({ spec, value, onChange, variantMode }: SpecValueEditor
     return content;
 }
 
+// 選項值「其他」＝允許自訂輸入的閾值選項；自訂內容視為個例，不會回寫到 spec.options
+export const OTHER_OPTION = '其他';
+
+/**
+ * 「其他」自訂輸入：選了「其他」後出現的文字框＋建議框（採用選項值）
+ */
+function OtherSuggestionInput({
+    sourceOptions,
+    customValue,
+    onCustomChange,
+    onAdopt,
+}: {
+    sourceOptions: string[];
+    customValue: string;
+    onCustomChange: (v: string) => void;
+    onAdopt: (opt: string) => void;
+}) {
+    const inputRef = useRef<HTMLInputElement>(null);
+    useEffect(() => {
+        inputRef.current?.focus();
+    }, []);
+
+    const suggestions = (sourceOptions || []).filter(o => o !== OTHER_OPTION && String(o).trim() !== '');
+
+    return (
+        <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-muted-foreground shrink-0">{OTHER_OPTION}</span>
+                <Input
+                    ref={inputRef}
+                    className="h-8 text-xs"
+                    value={customValue}
+                    onChange={(e) => onCustomChange(e.target.value)}
+                    placeholder="輸入自訂內容..."
+                />
+            </div>
+            {suggestions.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1">
+                    <span className="text-[9px] text-muted-foreground">或採用選項值：</span>
+                    {suggestions.map(opt => (
+                        <button
+                            key={opt}
+                            type="button"
+                            onClick={() => onAdopt(opt)}
+                            className="text-[10px] px-1.5 py-0.5 rounded border border-muted-foreground/20 bg-muted/20 hover:bg-muted/60 text-muted-foreground transition-colors"
+                        >
+                            {opt}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 /**
  * v4.7 物件化編輯器註冊表 (Registry)
  * 每個屬性對應一個特定 spec.type 的渲染組件
@@ -306,24 +361,8 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
     // 3. 多選列表 (MultiSelect) — 加入搜尋過濾
     multiselect: (props) => <MultiSelectEditor {...props} />,
 
-    // 4. 下拉單選 (Select) — 選項過多時改為可搜尋的組合框
-    select: ({ spec, value, onChange }) => {
-        if (spec.options.length > 8) {
-            return <SearchableSelect options={spec.options} value={value} onChange={onChange} placeholder="請選擇" />;
-        }
-        return (
-            <Select value={value || ''} onValueChange={onChange}>
-                <SelectTrigger className="h-9">
-                    <SelectValue placeholder="請選擇" />
-                </SelectTrigger>
-                <SelectContent>
-                    {spec.options.map((opt) => (
-                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-        );
-    },
+    // 4. 下拉單選 (Select) — 選項過多時改為可搜尋的組合框；支援「其他」自訂輸入
+    select: (props) => <SelectSpecEditor {...props} />,
 
     // 5. 預設輸入框 (Default/Text) - 支援多欄位
     default: ({ spec, value, onChange, sourceValue, variantMode }) => {
@@ -386,14 +425,96 @@ const SpecRenderers: Record<string, React.FC<SpecValueEditorProps>> = {
     table: (props) => <TableSpecEditor {...props} />
 };
 
+/**
+ * 下拉單選編輯器：選項含「其他」時，選取後出現自訂文字框＋建議框（採用選項值）
+ */
+function SelectSpecEditor({ spec, value, onChange }: SpecValueEditorProps) {
+    const [otherMode, setOtherMode] = useState(false);
+    const options = spec.options || [];
+    const hasOther = options.includes(OTHER_OPTION);
+
+    const customValue = hasOther && !options.includes(String(value ?? '')) && String(value ?? '').trim() !== ''
+        ? String(value)
+        : null;
+    const showInput = hasOther && (customValue !== null || otherMode);
+
+    // 選項過多時改為可搜尋的組合框
+    if (options.length > 8) {
+        return (
+            <SearchableSelect options={options} value={value} onChange={onChange} placeholder="請選擇" />
+        );
+    }
+
+    const handleChange = (v: string) => {
+        if (v === OTHER_OPTION) {
+            setOtherMode(true);
+            if (customValue !== null) onChange('');
+        } else {
+            setOtherMode(false);
+            onChange(v);
+        }
+    };
+
+    return (
+        <div className="space-y-1.5">
+            <Select value={showInput ? OTHER_OPTION : (value || '')} onValueChange={handleChange}>
+                <SelectTrigger className="h-9">
+                    <SelectValue placeholder="請選擇" />
+                </SelectTrigger>
+                <SelectContent>
+                    {options.map((opt) => (
+                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            {showInput && (
+                <OtherSuggestionInput
+                    sourceOptions={options}
+                    customValue={customValue ?? ''}
+                    onCustomChange={onChange}
+                    onAdopt={(opt) => { setOtherMode(false); onChange(opt); }}
+                />
+            )}
+        </div>
+    );
+}
+
 function MultiSelectEditor({ spec, value, onChange }: SpecValueEditorProps) {
     const [search, setSearch] = useState('');
+    const otherInputRef = useRef<HTMLInputElement>(null);
     const currentVals = Array.isArray(value)
         ? value
         : (typeof value === 'string' && value ? value.split(',') : []);
     const filteredOptions = (spec.options || []).filter(o =>
         !search.trim() || o.toLowerCase().includes(search.trim().toLowerCase())
     );
+
+    const hasOther = (spec.options || []).includes(OTHER_OPTION);
+    const isCustomEntry = (v: any) => String(v ?? '').trim() !== '' && !(spec.options || []).includes(String(v));
+    const customEntries = currentVals.filter(isCustomEntry);
+    const hasPendingMarker = currentVals.filter((v: any) => v === '').length > 0;
+    const otherChecked = customEntries.length > 0 || hasPendingMarker || currentVals.includes(OTHER_OPTION);
+    const otherText = customEntries[0] ?? '';
+
+    const toggleOther = (checked: boolean) => {
+        if (checked) {
+            onChange([...currentVals, '']);
+        } else {
+            onChange(currentVals.filter((v: any) =>
+                (spec.options || []).includes(String(v)) && String(v) !== OTHER_OPTION
+            ));
+        }
+    };
+
+    const handleOtherText = (text: string) => {
+        const idx = currentVals.findIndex((v: any) => isCustomEntry(v) || v === '' || v === OTHER_OPTION);
+        if (idx === -1) onChange([...currentVals, text]);
+        else {
+            const next = [...currentVals];
+            next[idx] = text;
+            onChange(next);
+        }
+    };
 
     return (
         <div className="flex flex-col gap-1.5 p-2 border rounded-md bg-background shadow-inner">
@@ -419,6 +540,28 @@ function MultiSelectEditor({ spec, value, onChange }: SpecValueEditorProps) {
                         <label htmlFor={`multi-${spec.id}-${opt}`} className="text-sm cursor-pointer flex-1">{opt}</label>
                     </div>
                 ))}
+                {hasOther && (
+                    <div className="flex items-center gap-2 hover:bg-muted/30 p-1 rounded transition-colors border-t border-dashed pt-1.5 mt-1">
+                        <Checkbox
+                            id={`multi-${spec.id}-${OTHER_OPTION}`}
+                            checked={otherChecked}
+                            onCheckedChange={(checked) => {
+                                toggleOther(!!checked);
+                                setTimeout(() => otherInputRef.current?.focus(), 0);
+                            }}
+                        />
+                        <label htmlFor={`multi-${spec.id}-${OTHER_OPTION}`} className="text-sm cursor-pointer flex-1">{OTHER_OPTION}</label>
+                        {otherChecked && (
+                            <Input
+                                ref={otherInputRef}
+                                className="h-7 w-32 text-[11px]"
+                                value={otherText}
+                                onChange={(e) => handleOtherText(e.target.value)}
+                                placeholder="自訂..."
+                            />
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -523,35 +666,68 @@ function SearchableSelect({ options, value, onChange, placeholder }: {
     placeholder?: string;
 }) {
     const [open, setOpen] = useState(false);
+    const [otherMode, setOtherMode] = useState(false);
+    const hasOther = options.includes(OTHER_OPTION);
+    const customValue = hasOther && !options.includes(String(value ?? '')) && String(value ?? '').trim() !== ''
+        ? String(value)
+        : null;
+    const showOther = hasOther && (customValue !== null || otherMode);
+
     return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" type="button" className="h-9 w-full justify-between font-normal">
-                    <span className="truncate">{value ? String(value) : (placeholder || '請選擇')}</span>
-                    <ChevronsUpDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                <Command>
-                    <CommandInput placeholder="搜尋..." className="h-9" />
-                    <CommandList>
-                        <CommandEmpty>無符合項目</CommandEmpty>
-                        <CommandGroup>
-                            {options.map(opt => (
-                                <CommandItem
-                                    key={opt}
-                                    value={opt}
-                                    onSelect={() => { onChange(opt); setOpen(false); }}
-                                >
-                                    <Check className={`mr-2 h-3.5 w-3.5 ${value === opt ? 'opacity-100' : 'opacity-0'}`} />
-                                    {opt}
-                                </CommandItem>
-                            ))}
-                        </CommandGroup>
-                    </CommandList>
-                </Command>
-            </PopoverContent>
-        </Popover>
+        <div className="space-y-1.5">
+            <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" type="button" className="h-9 w-full justify-between font-normal">
+                        <span className="truncate">
+                            {customValue !== null ? `${OTHER_OPTION}: ${customValue}` : (value ? String(value) : (placeholder || '請選擇'))}
+                        </span>
+                        <ChevronsUpDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                        <CommandInput placeholder="搜尋..." className="h-9" />
+                        <CommandList>
+                            <CommandEmpty>無符合項目</CommandEmpty>
+                            <CommandGroup>
+                                {options.map(opt => (
+                                    <CommandItem
+                                        key={opt}
+                                        value={opt}
+                                        onSelect={() => { setOtherMode(false); onChange(opt); setOpen(false); }}
+                                    >
+                                        <Check className={`mr-2 h-3.5 w-3.5 ${value === opt ? 'opacity-100' : 'opacity-0'}`} />
+                                        {opt}
+                                    </CommandItem>
+                                ))}
+                                {hasOther && (
+                                    <CommandItem
+                                        key={OTHER_OPTION}
+                                        value={OTHER_OPTION}
+                                        onSelect={() => {
+                                            setOtherMode(true);
+                                            if (customValue !== null) onChange('');
+                                            setOpen(false);
+                                        }}
+                                    >
+                                        <Check className={`mr-2 h-3.5 w-3.5 ${customValue !== null || otherMode ? 'opacity-100' : 'opacity-0'}`} />
+                                        {OTHER_OPTION}
+                                    </CommandItem>
+                                )}
+                            </CommandGroup>
+                        </CommandList>
+                    </Command>
+                </PopoverContent>
+            </Popover>
+            {showOther && (
+                <OtherSuggestionInput
+                    sourceOptions={options}
+                    customValue={customValue ?? ''}
+                    onCustomChange={onChange}
+                    onAdopt={(opt) => { setOtherMode(false); onChange(opt); }}
+                />
+            )}
+        </div>
     );
 }
 

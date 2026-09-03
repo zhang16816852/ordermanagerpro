@@ -20,6 +20,7 @@ const errorMessagePatterns: [RegExp, string][] = [
     [/timeout|timed out/i, '連線逾時，請稍後再試'],
     [/network error|failed to fetch|fetch failed/i, '網路連線異常'],
     [/jwt|token.*expired|invalid.*token/i, '登入已過期，請重新登入'],
+    [/could not find.*candidate.*function|multiple choices|PGRST300/i, '系統函式簽章衝突，請通知管理員套用 20260901000001 修正（delete_sales_note overload）'],
     [/could not find|not found/i, '找不到資料'],
     [/invalid login credentials/i, '帳號或密碼錯誤'],
     [/user already registered/i, '此信箱已註冊'],
@@ -28,26 +29,70 @@ const errorMessagePatterns: [RegExp, string][] = [
     [/invalid email/i, '請輸入有效的電子信箱'],
 ];
 
+function extractRawMessage(error: unknown): string {
+    if (!error) return '';
+    if (typeof error === 'string') return error;
+    const anyErr = error as any;
+    const candidates = [
+        anyErr?.message,
+        anyErr?.error_description,
+        anyErr?.details,
+        anyErr?.hint,
+        anyErr?.msg,
+    ].filter(Boolean).map(String);
+    if (candidates.length) return candidates.join(' | ');
+    if (error instanceof Error) return error.message;
+    try { return String(error); } catch { return ''; }
+}
+
+function extractDetails(error: unknown): string | undefined {
+    const anyErr = error as any;
+    if (!anyErr || typeof anyErr !== 'object') return undefined;
+    const parts: string[] = [];
+    if (anyErr.details) parts.push(String(anyErr.details));
+    if (anyErr.hint) parts.push(`提示: ${String(anyErr.hint)}`);
+    return parts.length ? parts.join(' | ') : undefined;
+}
+
 export function getErrorMessage(error: unknown, fallback = '操作失敗'): string {
     if (!error) return fallback;
 
-    const message = typeof error === 'string'
-        ? error
-        : error instanceof Error
-            ? error.message
-            : String(error);
+    const rawMessage = extractRawMessage(error);
+    if (!rawMessage) return fallback;
 
-    if (!message) return fallback;
+    const code = (error as any)?.code ? String((error as any).code) : '';
+    const details = extractDetails(error);
+    const searchable = [rawMessage, details, code].filter(Boolean).join(' | ');
 
-    const code = (error as any)?.code;
-    if (code && errorCodeMap[code]) return errorCodeMap[code];
-
-    for (const [pattern, translation] of errorMessagePatterns) {
-        if (pattern.test(message)) return translation;
+    if (code && errorCodeMap[code]) {
+        const base = errorCodeMap[code];
+        if (details) return `${base}（${details}）`;
+        return base;
     }
 
-    // 若訊息含有中文，代表已是自訂中文訊息，直接回傳
-    if (/[\u4e00-\u9fff]/.test(message)) return message;
+    for (const [pattern, translation] of errorMessagePatterns) {
+        if (pattern.test(searchable)) {
+            if (details && !translation.includes(details)) return `${translation}（${details}）`;
+            return translation;
+        }
+    }
 
-    return fallback;
+    if (/[\u4e00-\u9fff]/.test(rawMessage)) {
+        if (details && !rawMessage.includes(details)) return `${rawMessage}（${details}）`;
+        return rawMessage;
+    }
+
+    if (code) return `${rawMessage}（${code}）`;
+    if (details) return `${rawMessage}（${details}）`;
+    return rawMessage || fallback;
+}
+
+export function getErrorDetails(error: unknown): { code?: string; message: string; details?: string; hint?: string } {
+    const anyErr = error as any;
+    return {
+        code: anyErr?.code ? String(anyErr.code) : undefined,
+        message: extractRawMessage(error) || '未知錯誤',
+        details: anyErr?.details ? String(anyErr.details) : undefined,
+        hint: anyErr?.hint ? String(anyErr.hint) : undefined,
+    };
 }

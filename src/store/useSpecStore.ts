@@ -7,6 +7,33 @@ import { CacheService, CACHE } from '@/services/cacheService';
 const SPEC_CACHE_CFG = CACHE.specs;
 const CAT_CACHE_CFG = CACHE.categories;
 
+// 版本感知自動刷新：節流間隔（與 heartbeat 相同，控制 data_versions 查詢頻率）
+const VERSION_CHECK_THROTTLE_MS = 30_000;
+let lastVersionCheckAt = 0;
+let refreshingSpecs = false;
+let heartbeatStarted = false;
+let refreshChannel: BroadcastChannel | null = null;
+
+function getRefreshChannel(): BroadcastChannel | null {
+  if (typeof BroadcastChannel === 'undefined') return null;
+  if (!refreshChannel) {
+    try {
+      refreshChannel = new BroadcastChannel('spec-store-refresh');
+    } catch {
+      return null;
+    }
+  }
+  return refreshChannel;
+}
+
+function startVersionHeartbeat() {
+  if (heartbeatStarted) return;
+  heartbeatStarted = true;
+  setInterval(() => {
+    useSpecStore.getState().refreshIfStale(false);
+  }, VERSION_CHECK_THROTTLE_MS);
+}
+
 interface SpecTrigger {
   id: string;
   source_spec_id: string;
@@ -81,6 +108,8 @@ interface SpecStore {
   setDefinitions: (newDefs: any[]) => void;
   fetchSpecs: (force?: boolean, incomingData?: any, version?: string) => Promise<void>;
   fetchCategories: (force?: boolean, incomingData?: any, version?: string) => Promise<void>;
+  /** 版本感知自動刷新：比對 data_versions，落後才全量重抓（節流 + 跨 tab 廣播） */
+  refreshIfStale: (notify?: boolean) => Promise<void>;
 }
 
 const mergeTriggersToDefs = (definitions: any[], triggers: any[]) => {
@@ -361,7 +390,39 @@ export const useSpecStore = create<SpecStore>((set, get) => {
         set({ isLoading: false });
       }
     },
+
+    refreshIfStale: async (notify = true) => {
+      const now = Date.now();
+      if (now - lastVersionCheckAt < VERSION_CHECK_THROTTLE_MS || refreshingSpecs) return;
+      lastVersionCheckAt = now;
+      refreshingSpecs = true;
+      try {
+        const versions = await CacheService.fetchServerVersions();
+        let didRefresh = false;
+
+        if (CacheService.isStale(get().specVersion, versions['specs'] || '0')) {
+          await get().fetchSpecs(true);
+          didRefresh = true;
+        }
+        if (CacheService.isStale(get().categoryVersion, versions['categories'] || '0')) {
+          await get().fetchCategories(true);
+          didRefresh = true;
+        }
+
+        if (didRefresh && notify) getRefreshChannel()?.postMessage('specs-refreshed');
+      } catch (error) {
+        console.warn('[SpecStore] ⚠️ 版本感知刷新失敗（沿用現有快取）:', error);
+      } finally {
+        refreshingSpecs = false;
+      }
+      startVersionHeartbeat();
+    },
   };
+});
+
+// 跨 tab 同步：收到其他分頁已刷新的通知時，也檢查自身版本（不重播，避免廣播回圈）
+getRefreshChannel()?.addEventListener('message', () => {
+  useSpecStore.getState().refreshIfStale(false);
 });
 
 function buildSpecMap(definitions: any[]): Map<string, CategorySpec> {

@@ -137,7 +137,8 @@ export function OrderGridTemplateFormDialog({
     name.trim() &&
     rowConfig.label.trim() &&
     colConfig.label.trim() &&
-    variantIds.length > 0;
+    variantIds.length > 0 &&
+    (!!grid && grid.rowValues.length > 0 && grid.colValues.length > 0);
 
   const handleSave = () => {
     if (!isValid) return;

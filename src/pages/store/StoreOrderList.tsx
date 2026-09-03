@@ -58,13 +58,15 @@ export default function StoreOrderList() {
             shipped_quantity,
             unit_price,
             status,
+            sort_order,
             product:products (name, code),
             product_variant:product_variants (name)
           )
         `)
         .eq('store_id', storeId)
         .eq('status', statusTab)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .order('sort_order', { ascending: true, foreignTable: 'order_items' });
       if (error) throw error;
       return data as unknown as Order[];
     },

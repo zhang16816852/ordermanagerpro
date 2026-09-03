@@ -49,17 +49,21 @@ export function OrdersCardView({
                             <CardContent className="p-4 space-y-3">
                                 {/* 頂部：編號與操作 */}
                                 <div className="flex justify-between items-start">
-                                    <div className="space-y-1">
-                                        <div className="text-xs font-mono text-muted-foreground">
-                                            <span className="flex items-center gap-1.5">
-                                                #{order.code || order.id.slice(0, 8)}
-                                                {order.consignment_mode && (
-                                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
-                                                )}
-                                            </span>
-                                        </div>
-                                        <OrderStatusBadge status={itemStatus} type="shipping" />
+                                <div className="space-y-1">
+                                    {/* 店家名稱 */}
+                                    <div className="font-semibold text-sm leading-snug">
+                                        {order.stores?.name || '未知店家'}
                                     </div>
+                                    <div className="text-xs font-mono text-muted-foreground">
+                                        <span className="flex items-center gap-1.5">
+                                            #{order.code || order.id.slice(0, 8)}
+                                            {order.consignment_mode && (
+                                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
+                                            )}
+                                        </span>
+                                    </div>
+                                    <OrderStatusBadge status={itemStatus} type="shipping" />
+                                </div>
                                     <div className="flex gap-1">
                                         {statusTab === 'shipped' && order.consignment_mode && onReverseShipment && (
                                             <Button

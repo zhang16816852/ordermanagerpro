@@ -9,8 +9,11 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import { Save, Copy, Loader2, ChevronsRight, Wand2, PenLine, Table2 } from 'lucide-react';
 import { useState, useEffect, useMemo, forwardRef, useImperativeHandle, useRef, Fragment } from 'react';
 import { SpecValueEditor } from './SpecValueEditor';
-import { deserializeSpecs, serializeSpecs, getVisibleSpecsTree, getTreeSortedVisiblePaths } from '@/utils/specLogic';
+import { SpecFieldHeader } from './SpecFieldHeader';
+import { QTY_GROUP_PALETTE, buildQuantityColorMap } from './specFieldUi';
+import { serializeSpecs, getVisibleSpecsTree, getTreeSortedVisiblePaths } from '@/utils/specLogic';
 import { useSpecStore } from '@/store/useSpecStore';
+import { cn } from '@/lib/utils';
 
 export interface VariantSpecsMatrixHandle {
     save: () => Promise<void>;
@@ -27,27 +30,33 @@ interface VariantSpecsMatrixProps {
 export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSpecsMatrixProps>(
     ({ productId, categoryIds, onDirtyChange }, ref) => {
     const queryClient = useQueryClient();
-    const { specMap, specTriggers, fetchSpecs, categories } = useSpecStore();
-    const { data: specFields = [], isLoading: specsLoading } = useCategorySpecs(categoryIds);
+    const { specMap, specTriggers, refreshIfStale, categories } = useSpecStore();
+    const { data: specFields = [], isLoading: specsLoading } = useCategorySpecs(categoryIds, {
+        includeDescendants: true,
+        includeTriggerDownstream: true,
+    });
     const [localData, setLocalData] = useState<Record<string, Record<string, any>>>({});
     const [savedSnapshot, setSavedSnapshot] = useState<Record<string, Record<string, any>> | null>(null);
     const [editMode, setEditMode] = useState<'table' | 'single'>('table');
     const [batchDialogOpen, setBatchDialogOpen] = useState(false);
     const [batchValues, setBatchValues] = useState<Record<string, any>>({});
+    const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // 內部 Debug 輔助：將 UUID 路徑轉為可讀名稱 (例如 "手機規格 > 顏色")
-    const getReadablePath = (path: string) => {
-        if (!path) return 'N/A';
-        const parts = path.split(':');
-        if (parts.length < 2) return path;
-        const pName = parts[0] === 'root' ? 'Root' : (specMap.get(parts[0])?.name || '未知父級');
-        const sName = specMap.get(parts[1])?.name || '未知規格';
-        return `${pName} ➔ ${sName}`;
+    // 確保規格定義已載入（比對版本、落後才重抓）
+    useEffect(() => {
+        refreshIfStale();
+    }, []);
+
+    // 單一模式 debounce toast：連續編輯時只在閒置後彈一次，避免洗版
+    const scheduleApplyAllToast = (specId: string) => {
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => {
+            toast.info(`已同步「${specMap.get(specId)?.name || specId}」至所有變體`);
+        }, 1200);
     };
 
-    // 確保規格定義已載入
-    useEffect(() => {
-        fetchSpecs();
+    useEffect(() => () => {
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     }, []);
 
     const { data: variants = [], isLoading: variantsLoading } = useQuery({
@@ -91,15 +100,13 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
         },
         enabled: !!productId
     });
-    console.log("變體", variants)
+
     useEffect(() => {
         if (variants.length > 0) {
-            console.log('[VariantMatrix] 原始變體資料與聚合後的規格:', variants);
             const initial: Record<string, any> = {};
             variants.forEach(v => {
                 initial[v.id] = (v as any).spec_values || {};
             });
-            console.log('[VariantMatrix] 同步至 localData:', initial);
             setLocalData(initial);
             setSavedSnapshot(initial);
         }
@@ -115,27 +122,30 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
         onDirtyChange?.(isDirty);
     }, [isDirty, onDirtyChange]);
 
+    // 所有變體可見規格的聯集（供列舉欄位與組別配色使用）
+    const aggregatedVisible = useMemo(() => {
+        const aggregated = new Map<string, any>();
+        if (specFields.length === 0 || Object.keys(localData).length === 0) return aggregated;
+
+        Object.keys(localData).forEach(vId => {
+            const variantVisible = getVisibleSpecsTree(specFields, localData[vId], specTriggers);
+            variantVisible.forEach((info, path) => {
+                if (!aggregated.has(path)) aggregated.set(path, info);
+            });
+        });
+        return aggregated;
+    }, [specFields, localData, specTriggers]);
+
+    // 數量複製組別配色對照
+    const colorMap = useMemo(() => buildQuantityColorMap(aggregatedVisible), [aggregatedVisible]);
+
     /**
      * v5.1 樹狀動態路徑計算 (支援 DSL)
      */
     const visiblePathRows = useMemo(() => {
         if (specFields.length === 0 || Object.keys(localData).length === 0) {
-            console.warn('[VariantMatrix] 跳過路徑計算: specFields 或 localData 為空', { specFieldsLen: specFields.length, localDataKeys: Object.keys(localData) });
             return [];
         }
-
-        const aggregatedVisible = new Map<string, any>();
-        Object.keys(localData).forEach(vId => {
-            const variantVisible = getVisibleSpecsTree(specFields, localData[vId], specTriggers);
-            variantVisible.forEach((info, path) => aggregatedVisible.set(path, info));
-        });
-
-        // 💡 改進：打印可讀的路徑名稱，方便判定哪個規格被觸發了
-        const debugPaths = Array.from(aggregatedVisible.keys()).map(p => ({
-            name: getReadablePath(p),
-            key: p
-        }));
-        console.log('[VariantMatrix] 矩陣展開路徑:', debugPaths);
 
         const sortedPaths = getTreeSortedVisiblePaths(specFields, aggregatedVisible);
 
@@ -155,7 +165,7 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
                 triggerInfo
             };
         });
-    }, [specFields, localData, specMap, specTriggers]);
+    }, [specFields, aggregatedVisible, specMap, localData]);
 
     // 依來源分類將規格分組，讓多分類選取時能清楚標示每個規格的歸屬
     const groupedRows = useMemo(() => {
@@ -224,7 +234,7 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
         }));
     };
 
-    const applyToAll = (pathKey: string, value: any) => {
+    const applyToAll = (pathKey: string, value: any, silent = false) => {
         setLocalData(prev => {
             const next = { ...prev };
             Object.keys(next).forEach(vId => {
@@ -234,7 +244,11 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
         });
         const parts = pathKey.split(':');
         const specId = parts[1];
-        toast.info(`已同步「${specMap.get(specId)?.name || specId}」至所有變體`);
+        if (silent) {
+            scheduleApplyAllToast(specId);
+        } else {
+            toast.info(`已同步「${specMap.get(specId)?.name || specId}」至所有變體`);
+        }
     };
 
     if (specsLoading || variantsLoading) {
@@ -291,6 +305,20 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
                     儲存矩陣變動
                 </Button>
             </div>
+
+            {colorMap.size > 0 && (
+                <div className="px-4 py-2 border-b bg-muted/10 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                    <span>數量組別：</span>
+                    {Array.from({ length: Math.min(colorMap.size, QTY_GROUP_PALETTE.length) }).map((_, i) => (
+                        <span key={i} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full ${QTY_GROUP_PALETTE[i].pill}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${QTY_GROUP_PALETTE[i].dot}`} />第{i + 1}組
+                        </span>
+                    ))}
+                    {editMode === 'single' && (
+                        <span className="ml-auto text-muted-foreground/80">單一模式：每欄設定後套用至所有變體</span>
+                    )}
+                </div>
+            )}
 
             <div className="max-h-[650px] overflow-auto">
                 <Table className="border-separate border-spacing-0">
@@ -349,11 +377,19 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
                                     </Dialog>
                                 </div>
                             </TableHead>
-                            {variants.map(v => (
+                            {editMode === 'table' && variants.map(v => (
                                 <TableHead key={v.id} className="min-w-[160px] text-center px-4 font-semibold border-r border-b last:border-r-0 text-foreground/80 bg-slate-50 dark:bg-slate-900 sticky top-0 z-10 shadow-[0_1px_0_0_rgba(0,0,0,0.1)]">
                                     <div className="whitespace-normal break-words leading-tight px-1" title={v.name}>{v.name}</div>
                                 </TableHead>
                             ))}
+                            {editMode === 'single' && (
+                                <TableHead className="min-w-[220px] text-center px-4 font-semibold border-r border-b text-foreground/80 bg-slate-50 dark:bg-slate-900 sticky top-0 z-10 shadow-[0_1px_0_0_rgba(0,0,0,0.1)]">
+                                    <div className="text-[11px] flex items-center justify-center gap-1.5 px-1">
+                                        <Wand2 className="h-3 w-3 text-primary" />
+                                        套用至所有變體
+                                    </div>
+                                </TableHead>
+                            )}
                             <TableHead className="w-[80px] text-center font-bold text-primary bg-slate-50 dark:bg-slate-900 sticky top-0 z-10 border-b shadow-[0_1px_0_0_rgba(0,0,0,0.1)]">批次</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -370,7 +406,7 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
                                             colSpan={variants.length + 2}
                                             className="py-1.5 px-4 border-b border-t"
                                         >
-                                            <div className="flex items-center gap-2 text-xs font-bold text-foreground/80 uppercase tracking-wide">
+                                            <div className="flex items-center gap-2 text-xs font-bold text-foreground/80 uppercase tracking-wide border-b border-primary/10 pb-1">
                                                 <span className="w-1.5 h-4 bg-primary/60 rounded-full" />
                                                 {group.categoryName}
                                                 <span className="text-[10px] font-normal text-muted-foreground normal-case">
@@ -386,74 +422,59 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
                             const isHeading = row.spec?.type === 'heading';
                             const isMissing = !isHeading && row.spec?.required && variants.every(v => !(localData[v.id]?.[row.pathKey]));
 
+                            // 單一模式：彙整所有變體的可見性與數值
+                            let singleValue: any = '';
+                            let singleSource: any;
+                            let singleDetail = false;
+                            let visibleCount = 0;
+                            const distinctVals = new Set<string>();
+                            if (editMode === 'single' && !isHeading) {
+                                variants.forEach(v => {
+                                    const vSettings = localData[v.id] || {};
+                                    const vVisiblePaths = getVisibleSpecsTree(specFields, vSettings, specTriggers);
+                                    const vInfo = vVisiblePaths.get(row.pathKey);
+                                    if (!vInfo) return;
+                                    visibleCount++;
+                                    const val = vSettings[row.pathKey];
+                                    distinctVals.add(JSON.stringify(val ?? ''));
+                                    if (visibleCount === 1) {
+                                        singleValue = val ?? '';
+                                        singleSource = vInfo.sourceValue;
+                                        singleDetail = !!vInfo.isQuantityDetail;
+                                    }
+                                });
+                                if (visibleCount === 0) {
+                                    singleValue = localData[variants[0]?.id]?.[row.pathKey] ?? '';
+                                    singleSource = undefined;
+                                    singleDetail = false;
+                                }
+                            }
+                            const hiddenCount = variants.length - visibleCount;
+                            const hasDifferingValues = visibleCount > 1 && distinctVals.size > 1;
+
                             return (
                                 <TableRow key={row.pathKey} className={`group hover:bg-muted/5 transition-colors border-b last:border-0 ${isHeading ? 'bg-primary/5' : ''}`}>
                                     <TableCell
                                         className={`font-medium sticky left-0 z-10 border-r group-hover:bg-muted/30 transition-colors ${isHeading ? 'bg-primary/5' : 'bg-white dark:bg-[#0f172a]'}`}
-                                        style={{ paddingLeft: `${row.level * 1.5 + 1}rem` }}
+                                        style={{ paddingLeft: `${row.level * 0.5 + 0.5}rem` }}
                                         colSpan={isHeading ? variants.length + 2 : 1}
                                     >
-                                        <div className="flex items-center gap-2">
-                                            {isHeading ? (
-                                                <div className="flex items-center gap-2 text-primary font-bold uppercase tracking-wider text-[10px]">
-                                                    <span className="w-1.5 h-4 bg-primary rounded-full" />
-                                                    {row.name}
-                                                </div>
-                                            ) : (
-                                                <div title={`Internal Key: ${row.pathKey}`} className="flex items-center gap-2 cursor-help">
-                                                    {row.level > 0 && <ChevronsRight className="h-3 w-3 text-primary/40 shrink-0" />}
-                                                    <div className="flex flex-col min-w-0">
-                                                        <span className="text-xs font-bold text-primary truncate flex items-center gap-1">
-                                                            {row.name}
-                                                            {row.spec?.required && <span className="text-destructive font-bold" title="必填">*</span>}
-                                                        </span>
-                                                        {row.level > 0 && (
-                                                            <span className="text-[9px] text-muted-foreground/60 truncate">
-                                                                來自: {specMap.get(row.parentId)?.name || '父規格'}
-                                                                {row.triggerInfo?.op === 'ne' ? ' ≠ ' : ' = '}
-                                                                {row.triggerInfo?.val}
-                                                            </span>
-                                                        )}
-                                                        {isMissing && (
-                                                            <span className="text-[9px] text-destructive/80 truncate">尚未填寫（必填）</span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
+                                        <div className="flex items-start gap-2">
+                                            {!isHeading && row.level > 0 && <ChevronsRight className="h-3 w-3 text-primary/40 shrink-0 mt-1" />}
+                                            <div className="flex-1 min-w-0">
+                                                <SpecFieldHeader
+                                                    spec={row.spec}
+                                                    pathKey={row.pathKey}
+                                                    level={row.level}
+                                                    visibleInfo={aggregatedVisible}
+                                                    colorMap={colorMap}
+                                                />
+                                                {isMissing && (
+                                                    <span className="text-[9px] text-destructive/80 truncate block mt-0.5">尚未填寫（必填）</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </TableCell>
-                                    {!isHeading && editMode === 'single' && (
-                                        <>
-                                            <TableCell colSpan={variants.length} className="p-2 border-r last:border-r-0">
-                                                <div className="flex justify-center w-full">
-                                                    {row.spec && (
-                                                        <div className="w-full max-w-[300px]">
-                                                            <SpecValueEditor
-                                                                spec={row.spec}
-                                                                value={localData[variants[0]?.id]?.[row.pathKey] ?? ''}
-                                                                onChange={(val) => applyToAll(row.pathKey, val)}
-                                                                variantMode={false}
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-center bg-primary/5 group-hover:bg-primary/10 transition-colors">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
-                                                    onClick={() => {
-                                                        const firstVData = localData[variants[0].id] || {};
-                                                        const firstValue = firstVData[row.pathKey] || '';
-                                                        applyToAll(row.pathKey, firstValue);
-                                                    }}
-                                                >
-                                                    <Copy className="h-4 w-4" />
-                                                </Button>
-                                            </TableCell>
-                                        </>
-                                    )}
                                     {!isHeading && editMode === 'table' && (
                                         <>
                                             {variants.map(v => {
@@ -473,7 +494,7 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
                                                                         onChange={(val) => handleValueChange(v.id, row.pathKey, val)}
                                                                         sourceValue={vVisiblePaths.get(row.pathKey)?.sourceValue}
                                                                         isQuantityDetail={vVisiblePaths.get(row.pathKey)?.isQuantityDetail}
-                                                                        variantMode={true}
+                                                                        variantMode
                                                                     />
                                                                 </div>
                                                             ) : (
@@ -485,6 +506,55 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
                                                     </TableCell>
                                                 );
                                             })}
+                                            <TableCell className="text-center bg-primary/5 group-hover:bg-primary/10 transition-colors">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
+                                                    onClick={() => {
+                                                        const firstVData = localData[variants[0].id] || {};
+                                                        const firstValue = firstVData[row.pathKey] || '';
+                                                        applyToAll(row.pathKey, firstValue);
+                                                    }}
+                                                >
+                                                    <Copy className="h-4 w-4" />
+                                                </Button>
+                                            </TableCell>
+                                        </>
+                                    )}
+                                    {!isHeading && editMode === 'single' && (
+                                        <>
+                                            <TableCell className="p-3 border-r last:border-r-0">
+                                                <div className="flex flex-col items-center gap-1.5 w-full">
+                                                    {row.spec ? (
+                                                        <div className="w-full max-w-[240px]">
+                                                            <SpecValueEditor
+                                                                spec={row.spec}
+                                                                value={singleValue}
+                                                                onChange={(val) => applyToAll(row.pathKey, val, true)}
+                                                                sourceValue={singleSource}
+                                                                isQuantityDetail={singleDetail}
+                                                                variantMode
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="h-9 w-full max-w-[240px] flex items-center justify-center opacity-30 italic text-[10px]">
+                                                            未定義
+                                                        </div>
+                                                    )}
+                                                    <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-[10px]">
+                                                        {hiddenCount > 0 && (
+                                                            <span className="text-amber-600">未觸發：{hiddenCount} 個變體</span>
+                                                        )}
+                                                        {hasDifferingValues && (
+                                                            <span className="text-amber-600">各變體數值不同·設定後將統一</span>
+                                                        )}
+                                                        {hiddenCount === 0 && !hasDifferingValues && (
+                                                            <span className="text-emerald-600">套用至所有變體</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </TableCell>
                                             <TableCell className="text-center bg-primary/5 group-hover:bg-primary/10 transition-colors">
                                                 <Button
                                                     variant="ghost"

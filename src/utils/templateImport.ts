@@ -19,6 +19,7 @@ function parseDimConfig(row: Record<string, string>, prefix: string): DimensionC
   const valuesStr = (row[`${prefix}值`] || '').trim();
   const values = valuesStr ? valuesStr.split(',').map(v => v.trim()).filter(Boolean) : undefined;
   const specId = (row[`${prefix}SpecID`] || '').trim();
+  const optionGroupId = (row[`${prefix}OptionGroupID`] || '').trim();
   const valueMapStr = (row[`${prefix}ValueMap`] || '').trim();
   let valueMap: Record<string, string> | undefined;
   if (valueMapStr) {
@@ -32,6 +33,7 @@ function parseDimConfig(row: Record<string, string>, prefix: string): DimensionC
     label: label || type,
     ...(field ? { field: field as DimensionConfig['field'] } : {}),
     ...(specId ? { spec_id: specId } : {}),
+    ...(optionGroupId ? { option_group_id: optionGroupId } : {}),
     ...(values?.length ? { values } : {}),
     ...(valueMap ? { valueMap } : {}),
   };

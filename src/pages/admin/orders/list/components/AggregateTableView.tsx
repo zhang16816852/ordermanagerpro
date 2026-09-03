@@ -14,6 +14,7 @@ export interface AggregatedItem {
   sku: string;
   totalPendingQuantity: number;
   sourceOrderIds: string[];
+  sourceQuantities: Record<string, number>;
   storeBreakdown: {
     storeId: string;
     storeName: string;
@@ -25,7 +26,7 @@ export interface AggregatedItem {
 interface AggregateTableViewProps {
   items: AggregatedItem[];
   isLoading: boolean;
-  selectedItems: Map<string, { productId: string; variantId: string | null; quantity: number; maxQuantity: number; productName: string; sku: string; sourceOrderIds: string[] }>;
+  selectedItems: Map<string, { productId: string; variantId: string | null; quantity: number; maxQuantity: number; productName: string; variantName?: string | null; sku: string; sourceOrderIds: string[]; sourceQuantities?: Record<string, number> }>;
   onToggleSelection: (item: AggregatedItem, checked: boolean) => void;
   onToggleAll: (checked: boolean) => void;
   onUpdateQuantity: (key: string, quantity: number) => void;

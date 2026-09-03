@@ -206,6 +206,14 @@ export function useConsignment() {
 
       let orderItemId: string | null = null;
       if (co.direction === 'send_to_store' && co.source_order_id) {
+        const { data: existingItems } = await (supabase as any)
+          .from('order_items')
+          .select('sort_order')
+          .eq('order_id', co.source_order_id);
+        const maxSort = (existingItems || []).reduce(
+          (max: number, i: any) => Math.max(max, i.sort_order || 0),
+          0
+        );
         const { data: inserted, error: oiError } = await (supabase as any)
           .from('order_items')
           .insert({
@@ -217,6 +225,7 @@ export function useConsignment() {
             unit_price: item.unit_price,
             shipped_quantity: 0,
             status: 'waiting',
+            sort_order: maxSort + 1,
           })
           .select('id')
           .single();

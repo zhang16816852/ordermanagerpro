@@ -22,3 +22,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Project local artifacts - never commit
+下載/
+下載 - 複製/
+*.zip
+*.exe
+*.xls
+*.pdf
+OrderItemsTable_v3.tsx
+訂單_*.pdf

@@ -68,6 +68,8 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 ### 訂單資料流（門市端範例）
 `StoreOrderList.tsx` 用 React Query 直接查 Supabase（orders + order_items + 產品資訊），非走快取。建立訂單走 `useCreateOrder` → insert orders → insert order_items；後台「下單即出貨」走 `create_order_with_sales_note` RPC。後台建立訂單可整單切換**寄賣模式**（`orders.consignment_mode`），出貨時由 `create_consignment_shipment_layer` 自動同步建立 send_to_store 寄賣單（`source_order_id` 回填）；寄賣出貨不開銷貨單，店家確認收貨並回報銷售、後台審核後才開立收款銷貨單（v1.3）。後台訂單列表（`src/pages/admin/orders/list/`）在「訂單」tab 的批次操作除「轉銷貨單」外，尚有「轉寄賣」（先標 `consignment_mode=true` 再走 `direct_ship_order` 不開銷貨單）與「轉出貨池」（將整單剩餘品項加入 shipping_pool）。「所有訂單」會顯示 send_to_store 寄賣草稿為**真實來源訂單**：寄賣單一建立即同步建 `orders`（`source_type='consignment'`、`consignment_mode=true`、`status='pending'`）並回填 `consignment_orders.source_order_id`，品項同步建 `order_items` 並回填 `consignment_order_items.order_item_id`（前端 `useConsignment.ts` 的 create/add/remove/cancel 皆同步鏡像）；故草稿在 pending tab 可勾選、批次操作、編輯、商品模式可見數量，出貨時由 `create_consignment_shipment` 重用該來源訂單標 shipped；`receive_from_supplier` 不顯示於訂單列表。
 
+- **品項排序（2026-09-02）**：`order_items` 新增 `sort_order INTEGER NOT NULL DEFAULT 0`（migration `20260902000001`，並以 `created_at,id` backfill 既有資料）。**A 階段**＝「固定持久排序」：建立/新增品項時依當時順序寫入循序 `sort_order`；讀取時 `useOrdersList` / `StoreOrderList` 的 `order_items` 子查詢加 `.order('sort_order', { foreignTable: 'order_items' })`，詳情元件（`OrderDetailItemsTable`/`OrderDetailItemsCards`）再以 `sort_order` 客戶端排序確保順序穩定。**B 階段（已完成）**＝編輯頁拖曳排序 UI：在共用元件 `OrderItemsTable.tsx` 內建 dnd-kit 拖曳（`GripVertical` 拖柄，桌機 table + 行動 cards），`AdminOrderForm`（create/edit）、`AdminOrderEdit` 皆傳入 `onReorder`，拖曳後本地 `items` 順序更新。`OrderReviewPanel` 結帳確認頁亦有 dnd-kit 拖曳（已可持久化）。⚠️ 舊資料沒有 sort_order 時 backfill 已補齊。**C 階段（名稱排序 + edit-mode 持久化）**＝點擊「名稱」欄位標題可循環 default → A→Z → Z→A（`OrderItemsTable` 維護 `nameSort` state，排序經 `onReorder` 路由，拖曳時自動重設為 default）。`AdminOrderForm`/`AdminOrderEdit` 的 edit-mode 查詢加 `.order('sort_order', { foreignTable: 'order_items' })`，儲存時**所有品項**（含既有）寫入 `sort_order: index+1`，使拖曳與名稱排序結果可持久化。
+
 ## 資料庫邏輯重點
 
 ### 版本控制系統
@@ -83,7 +85,8 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 - `inventory_movements` BEFORE INSERT trigger 自動同步 `product_inventory` 餘額
 - `source_type` CHECK 約束綁定單據 FK（purchase_orders / sales_notes / consignment_orders）
 - `sales_note_items.inventory_source_type` 逐項記錄庫存來源（self / supplier_consignment / store_consignment）
-- 關鍵 RPC：`ship_from_pool`、`direct_ship_order`、`create_order_with_sales_note`、`delete_sales_note`、`receive_purchase_items`、`adjust_inventory`、`recalculate_inventory`
+- **採購防重複（2026-09-01）**：`purchase_order_items.source_quantities`（jsonb `{orderId: 數量}`）記錄來源訂單貢獻量；「轉採購單」前端依此扣除已採購量（`purchasedByOrderKey`），`unlink_orders_from_purchase_order` RPC 解除連結時精確扣減未收貨數量（舊多來源 NULL 資料只解除不扣量）；採購單明細與訂單列表 batch 皆可「解除採購」
+- 關鍵 RPC：`ship_from_pool`、`direct_ship_order`、`create_order_with_sales_note`、`delete_sales_note`、`receive_purchase_items`、`adjust_inventory`、`recalculate_inventory`、`unlink_orders_from_purchase_order`
 
 ### 寄賣系統（統一模板 v1）
 - `consignment_orders`（direction = receive_from_supplier | send_to_store，status = draft | active | settled | cancelled，訂單轉寄賣時 `source_order_id` 回填，v1.3 起 send_to_store 非 draft/cancelled 皆強制有 source_order_id）+ `consignment_order_items` + `consignment_order_item_summary`（VIEW，統計計算不落庫）
@@ -100,9 +103,12 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 ### 規格引擎 v6
 - `specification_definitions` + `entity_spec_values`（JSONB 值）+ `specification_triggers`（DSL 條件）
 - RPC：`sync_product_specs_v6`（其餘連動評估邏輯已統一由前端 `src/utils/specTree.ts` 的 `getVisibleSpecsTree` 處理；原 `get_visible_specs_v6` / `safe_eval_dsl` 兩支未使用的 RPC 已於 2026-08-25 移除，勿重建）
-- 前端取數：`useCategorySpecs(categoryIds, options?)` 支援 `includeAncestors` / `includeDescendants` / `includeTriggerDownstream`（預設皆 false，維持精確比對；商品表單 `DynamicSpecsFields` 啟用後兩者以帶出連動鏈）。前端邏輯樹用 `getVisibleSpecsTree`（`src/utils/specTree.ts`）；連動鏈**唯一權威來源是 `specification_triggers` 表**（經 `useSpecStore().specTriggers` 讀取），`logic_config.triggers` JSON 已廢棄（寫入時刻意剔除，僅由 `mergeTriggersToDefs` 合併進 defs 供樹狀展示用）。商品預覽 `CategorySpecPreview` 的下游展開亦改採 `specTriggers` 表（`source_spec_id→target_spec_id`），不再讀 `logic_config.triggers`。後台邏輯樹（`src/pages/admin/categories/components/spec-library/SpecLibraryTreeView.tsx`）在 `viewMode==='tree'` 時**並排兩視圖**：左「金字塔視圖」（置中樹狀圖、唯讀、CSS 連接線呈金字塔輪廓，根容器 `min-w-max mx-auto` 避免寬樹最左文字被裁切）與右「編輯樹」（原有 dnd 拖曳排序）；`index.tsx` 維持一般 `space-y-6` 頁面排版（不強制整頁滿高，避免影響其他分頁寬度），僅 `SpecLibraryTab` 內的樹狀分隔容器**局部測量可用高度**：以 `splitContainerRef` 量得「分隔容器頂端到視窗底部的剩餘高度」（`window.innerHeight - getBoundingClientRect().top - 16`）套用到分隔容器，兩欄 `items-stretch` 等高、各自 `overflow-auto`（金字塔雙軸、編輯樹 `overflow-y-auto`），故金字塔橫向捲軸落在視窗底部、編輯樹獨立上下捲動，且不寫死 `calc(100vh-…)`；兩視圖共用拖曳分隔條（localStorage `spec-tree-split-ratio`），皆支援折疊與選取高亮，選取節點時雙向 `scrollIntoView` 同步。表單/`DynamicSpecsFields` 每個下游欄位**常駐顯示完整依賴鏈**（經 `specTree.ts` 的 `parentPathKey` 往上回溯，如「依賴 ▸ 自帶線數量·第1組 ▸ 自帶線類型 = 吊繩式可拆」），不再只是 hover 才看見、且修正原 `.val` 空白 bug。
+- 前端取數：`useCategorySpecs(categoryIds, options?)` 支援 `includeAncestors` / `includeDescendants` / `includeTriggerDownstream`（預設皆 false，維持精確比對；商品表單 `DynamicSpecsFields` 啟用後兩者以帶出連動鏈）。前端邏輯樹用 `getVisibleSpecsTree`（`src/utils/specTree.ts`）；連動鏈**唯一權威來源是 `specification_triggers` 表**（經 `useSpecStore().specTriggers` 讀取），`logic_config.triggers` JSON 已廢棄（寫入時刻意剔除，僅由 `mergeTriggersToDefs` 合併進 defs 供樹狀展示用）。商品預覽 `CategorySpecPreview` 的下游展開亦改採 `specTriggers` 表（`source_spec_id→target_spec_id`）。
+- **版本感知自動刷新（2026-08-28）**：`useSpecStore` 新增 `refreshIfStale(notify=true)`——比對 `data_versions`（`CacheService.fetchServerVersions`，30 秒節流），`specs`/`categories` 版本落後才 `fetchSpecs(true)`/`fetchCategories(true)` 全量重抓；有刷新且 `notify` 時經 `BroadcastChannel('spec-store-refresh')` 廣播，其他 tab 收到後 `refreshIfStale(false)` 不重播（無回圈）；首次呼叫即啟動 30 秒 heartbeat 讓「躺著不動」的頁面自動跟上。商品表單（`ProductFormDialog` 的 `active` effect）與 `DynamicSpecsFields`／`VariantSpecsMatrix` mount 時皆呼叫 `refreshIfStale()`，修復「分類管理新增規格後，商品表單仍顯示舊版規格結構」的問題（舊行為：三者只呼叫不帶 force 的 `fetchSpecs()`，store 有資料即 return，永遠沿用舊快照）。
+- 後台邏輯樹（`src/pages/admin/categories/components/spec-library/SpecLibraryTreeView.tsx`）在 `viewMode==='tree'` 時**並排兩視圖**：左「金字塔視圖」（置中樹狀圖、唯讀、CSS 連接線呈金字塔輪廓，根容器 `min-w-max mx-auto` 避免寬樹最左文字被裁切）與右「編輯樹」（原有 dnd 拖曳排序）；`index.tsx` 維持一般 `space-y-6` 頁面排版（不強制整頁滿高，避免影響其他分頁寬度），僅 `SpecLibraryTab` 內的樹狀分隔容器**局部測量可用高度**：以 `splitContainerRef` 量得「分隔容器頂端到視窗底部的剩餘高度」（`window.innerHeight - getBoundingClientRect().top - 16`）套用到分隔容器，兩欄 `items-stretch` 等高、各自 `overflow-auto`（金字塔雙軸、編輯樹 `overflow-y-auto`），故金字塔橫向捲軸落在視窗底部、編輯樹獨立上下捲動，且不寫死 `calc(100vh-…)`；兩視圖共用拖曳分隔條（localStorage `spec-tree-split-ratio`），皆支援折疊與選取高亮，選取節點時雙向 `scrollIntoView` 同步。表單/`DynamicSpecsFields` 每個下游欄位**常駐顯示完整依賴鏈**（經 `specTree.ts` 的 `parentPathKey` 往上回溯，如「依賴 ▸ 自帶線數量·第1組 ▸ 自帶線類型 = 吊繩式可拆」），不再只是 hover 才看見、且修正原 `.val` 空白 bug。
 - **數量連動（per-cable / Model B）**：數量複製已**合併進 `specification_triggers`**，以 `relation_type='quantity'` 與一般連動觸發（`relation_type='visibility'`）區分。一筆 quantity 觸發的 `source_spec_id`=數值型來源規格、`target_spec_id`=被複製的下游規格；當來源填入 N 時，下游被複製出 N 份（依序號）。例：行動電源「自帶線數量=N」→ 複製出 N 個「自帶線類型」（trigger：`source=自帶線數量, target=自帶線類型, relation_type='quantity'`），每個 `自帶線類型` 再依各自選值分流帶出 `充電線規格/長度/數量`（visibility 分支）；`充電線規格` 等**不再**設 quantity 觸發。注意：`自帶線數量 → 自帶線類型` 的 `visibility` trigger（on_value='*'）已刪除，避免與數量複製疊加成 N+1。舊 `specification_definitions.quantity_source_id` 欄位已廢棄（僅保留、寫入時恆為 null），資料由 migration 回填為 quantity 觸發。`getVisibleSpecsTree` 讀 specTriggers 中 `relation_type='quantity'` 的 `source_spec_id` 決定複製來源。修改後須 `bump_data_version('specs','specification_definitions')` 已由 `specMutation` 自動處理。
 - **數量連動 UI（來源視角）**：`SpecDialog` 的「數量複製設定（來源視角）」以**多選勾選**列出下游規格（排除自身與 heading），勾選即寫入 `logic_config.triggers` 的 `type:'quantity'` 項（source=目前規格、targets=勾選項）；`specMutation` 同步寫入 `specification_triggers` 時依 `t.type==='quantity'` 設 `relation_type='quantity'`、`condition_dsl={}`。編輯樹/`mergeTriggersToDefs` 會將 quantity 觸發標為 `type:'quantity'`，故 `SpecDialog` 連動觸發編輯器（`type!=='quantity'`）不會顯示它們，`SpecLibraryTreeView` 以「數量複製」徽章區分 display，`handleRemoveLink` 依 `relation_type` 精確移除（避免誤刪同對的 visibility 觸發）。
+- **「其他」自訂輸入＋觸發 `="input"`（2026-08-29）**：使用者可選「其他」並自由輸入，該自訂值視為**個例**（只存於該筆 entity_spec_values，**不回寫 `spec.options`**）。`checkSpecTriggerMatch`（`src/utils/specTree.ts`）新增第 5 參數 `options`；`condition_dsl.on_value='input'`＝「值非空且不在預設選項清單內」（多選＝任一元素符合；`operator='ne'` 反向），`getVisibleSpecsTree` 呼叫時帶入 `spec.options`。前端共用編輯器 `SpecValueEditor`（`src/components/products/form/sections/SpecValueEditor.tsx`，`OTHER_OPTION='其他'`）：`select`／`SearchableSelect`／`multiselect` 的選項含「其他」時顯示自訂文字框（單選另附「採用選項值」建議 chips，點擊改用該選項值），自訂文字直接作為值儲存（多選＝獨立字串陣列元素）。`SpecDialog`「連動觸發設定」選值欄位改 `<Input list>`＋`<datalist>`（列出該規格 options＋特殊項 `input`）方便填入；依賴鏈（`specFieldUi.buildDepChain`）與邏輯樹（`SpecLibraryTreeView`）皆把 `on_value='input'` 顯示為「自訂輸入」。
 - 共用 UI：`src/components/ui/searchable-select.tsx`（`SearchableSelect`，可搜尋單選、依 group 分組、可清除），`StorePicker` 基於此模式；`SpecDialog` 的「數量複製設定」因需多選，改以 `Checkbox` 清單實作。
 
 ### 其他
@@ -116,12 +122,18 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 ## 近期變更（AdminOrderForm 重構）
 
 - `useStoreProductCache(storeId, brand?)` 新增第二參數 `brand`，查詢 `store_products` 時加 `.eq('brand', brand)` server-side 過濾
-- `AdminOrderForm` 改為單頁兩欄佈局：左側 OrderItemsTable + 右側 ProductCatalog（含 CatalogSidebar）
+- **`AdminOrderForm` 拆為獨立元件**（`src/components/order/`）：
+  - `OrderInfoCard.tsx`：訂單資訊＋備註區（含門市/供應商/目標門市選擇、出貨時間、寄賣模式開關、出貨倉設定 Collapsible 與逐項倉/來源下拉；`warehouseExpanded` 為其內部 local state）
+  - `OrderItemsPanel.tsx`：訂單項目面板（CardHeader 可點擊收合，內含 `OrderItemsTable`；type `PanelState = 'items' | 'products' | null` 與 `OrderItemsPanel` 共用）
+  - `ProductSelector.tsx`：商品選擇面板（CardHeader 含檢視模式切換 products/variants/gallery/table 與篩選按鈕；內含 `CatalogSidebar`（桌面固定側欄＋手機 filter sheet）＋ `ProductCatalog`；`catalogSidebarMaxHeight` prop 限制 `CatalogSidebar` 最大高度避免過度捲動；`bare` prop 略過外層 Card wrapper 供行動端 drawer 重複使用）
+- 佈局（AdminOrderForm 以共用 JSX 變數 `orderInfoCard`／`orderItemsPanel`／`renderProductSelector(bare?)` 組合，桌面與行動端共用）：
+  - **桌面（lg+）可收合左右佈局**（容器 `lg:h-[calc(100vh-320px)]`）：左欄（`flex-1`）上下堆疊「訂單資訊（頂、`shrink-0`）＋訂單項目（下、填滿剩餘）」，右側固定寬度（`lg:w-[390px]`）商品選擇側欄；**側欄可完全隱藏**（`desktopCatalogOpen` state，預設展開）——隱藏時寬度歸零、左側填滿，並在上方顯示「展開商品選擇」按鈕，側欄頂部有 X 圖示可隱藏；三者固定佔位、不因切換移位
+  - **行動端（<lg）**：訂單資訊＋訂單項目正常上下堆疊顯示；商品選擇不內嵌，改為**右側 drawer**（`fixed inset-y-0 right-0 w-full max-w-md`，含標題＋關閉按鈕，內容用 `renderProductSelector(true)` bare 模式），未展開時以**固定底部右側浮動圓形按鈕**（`Package` 圖示）開啟；展開時浮動按鈕隱藏。行動 drawer 開關用獨立 `mobileCatalogOpen` state，不與 `activePanel` 混用
 - ProductCatalog 加入品項走 Zustand（`useStoreDraft`），AdminOrderForm 透過 `useEffect` 同步到本地 `items` state
 - 編輯 OrderItemsTable 時同步回 Zustand（`updateQuantity` / `updateItemPrice` / `removeItem`）
 - 店家切換時自動 re-price 已有品項（從新 brand 的 `store_products` 取價格）
 - 採購/寄賣選供應商時自動帶入 `supplier_product_mappings.vendor_unit_cost`
-- 右側面板支援點擊展開/收縮（CSS flex transition，`activePanel` state 控制）
+- **刪除 `AdminOrderEdit.tsx`**（dead code）：`/admin/orders/:orderId/edit` 路由已指向 `AdminOrderForm`，`AdminOrderForm` 本身就有 `isEditMode` 涵蓋所有編輯功能（讀取 order、更新 sort_order、toggleStatus、OrderItemsTable）
 
 ## 近期變更（產品表單改為獨立頁面）
 
@@ -130,6 +142,20 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 - **共用頁頭介面**：新增 `src/components/layout/PageHeaderContext.tsx`（`PageHeaderConfig` 介面：title/back/onBack/actions + `usePageHeader()`），`AppLayout` 提供 Provider 並把 `pageHeader` 傳給 `DesktopHeader`／`MobileHeader`；頁面呼叫 `setPageHeader(...)` 即於桌面＋手機共用同一組「返回＋標題（＋actions）」，路由切換自動清除。目前 `ProductFormPage` 使用，返回與標題及「預覽」按鈕（置於 actions）皆由這組 Header 呈現
 - 預覽鈕以 `ProductDetailDialog`（`storeId=""` no-op 購物車）即時合併目前表單值（名稱/價格/分類/品牌/規格值）顯示快照
 - 產品列表（`src/pages/admin/products/index.tsx`）「新增產品／編輯／複製」改為路由導航；`handleCopy` 改回傳新產品 id 由呼叫端導航（不再開 Dialog）；`ProductDialogs` 僅保留刪除／匯入／選取產品
+
+## 近期變更（紙本列印版型重設計）
+
+- 共用頁使用 `.doc-receipt-wrap` 包裹印刷用 HTML，列印時透過 `window.print()` 印出帶有圖片文字的 PDF（中文為經過 JPEG 圖片渲染，不依賴 jsPDF FontParser），QR Code 使用 `QRCodeSVG` 產生，列印按鈕觸發 `PrintDialog` 或直接 `window.print()`。CSS 類別 `.print-a4`／`.print-middle-cut`／`.print-no-margin`／`.print-hidden` 控制版型與顯示。
+- **套件化共用元件 `SharedReceiptExport`（`src/pages/share/SharedReceiptExport.tsx`）**：`SharedSales.tsx` 與 `SharedOrder.tsx` 共用同一套列印能力。該元件負責：渲染「列印 / PDF / Excel」觸發按鈕 + `PrintDialog` + `.doc-receipt-wrap` 印刷版型 + 三向匯出邏輯（PDF `html2pdf` 圖片引擎／Excel `xlsx`）。版型含店名置中、meta＋QR 靠右、**品項顯示變體名稱（`variant ?? name`）**、**數量分頁**（採**兩層筆數**：前面無底部框頁用 `CHUNK_CAPACITY.max`、最後一頁含總計+備註框用 `last`——A4＝19/16、中一刀＝8/6；`buildPageSizes` 切塊、重複表頭、頁碼「第 N 頁 / 共 M 頁」、序號整單連續）、**統計列**（品項數 X 項／總件數 X 件／總金額）、**手寫備註區**。印刷版型以 **`createPortal(document.body)`** 掛到 body，且**僅在列印模式（`printMode` URL）或 PDF 擷取期間（`isCapturing`）才短暫掛載（`shouldRenderPrint`），平時完全不佔 DOM**——這是避免「一堆框線／按鈕消失」的根治做法（不依賴 CSS 隱藏）。掛載後以 `.is-printing-mode`（PDF 擷取）或 `@media print`（列印）顯示；`handleExport` 會先 `setIsCapturing(true)` → `await 100ms` 等渲染 → `ensurePrintClasses()` → `html2pdf().from(element).save()` → finally `setIsCapturing(false)` 卸載。
+- **欄位寬度（2026-09-03）**：印表欄寬不依賴 `<colgroup>`/`ch`（部分渲染引擎與 html2canvas 不支援會失效，導致名稱欄退回依內容自動寬度、單行/換行寬度不一），改在**第一列 `HeaderRow` 的 `<th>` 直接設百分比寬度**（有價格版：# 5%／名稱 42%／數量 8%／單價 13%／小計 16%／備註 16%；無價格版：# 6%／名稱 60%／數量 14%／備註 20%）配合 `table-layout: fixed`。table-layout:fixed 以「第一列 cell 寬度」決定每欄寬（規格保證），故**所有欄含名稱皆跨頁一致、單行/換行同寬**；`.doc-name` 設 `overflow-wrap: break-word`、`.doc-table td` 設 `overflow:hidden`，長名稱只在同寬欄內折行、不撐開欄寬。
+- **統一列高（2026-09-03）**：`.doc-table tr` 設固定高（`height:40px`，容納 2 行）+ `td` 固定 `line-height:1.35`、`overflow:hidden`，使**每列(row)高度一致**（不管名稱 1 行或折 2 行，皆等高）；長名稱最多顯示 2 行、超過截斷。
+- **垂直框線（2026-09-03）**：印表中間欄不再顯示垂直框線，**僅備註欄（每列最右 `td:last-child`／表頭 `th:last-child`）保留左右垂直線**；其餘欄 `border-left/right:none` 只留水平框線（列間）。`.doc-empty`（填充空列）維持 `border-color:transparent` 全透明。
+- **數字欄對齊（2026-09-03）**：單價與小計皆用 `formatCurrency`（`$` 前綴＋千分位＋`text-align:right`）使兩欄數字右緣對齊一致（單價原用 `toLocaleString()` 無 `$` 會與小計視覺偏移）。
+- **列印模式只顯示列印檔（2026-09-03）**：`SharedOrder.tsx`／`SharedSales.tsx` 的 `?print=true` 時以**早期 return 只渲染 `<SharedReceiptExport printMode>`**（不渲染互動 Card／表格／按鈕），方便直接調版面；`SharedReceiptExport` 的按鈕與 PrintDialog 亦以 `!printMode` 包住（printMode 時完全不渲染互動 UI）。
+- `PrintsOptions`（`src/components/PrintDialog.tsx`）為 `{ output:'pdf'|'excel', paperSize:'a4'|'middle-cut', margin:'standard'(固定), showPrice:boolean, showQR:boolean }`，於點擊「列印 / PDF / Excel」時彈出選擇（無「列印」輸出——`window.print` 會列印當前畫面而非檔案版面，故僅保留 PDF / Excel）。版型細節：標題「{title}：{單號}」（單號移至標題列）、頁碼「第 N 頁 / 共 M 頁」於頁面**右上角**、meta 區僅日期/狀態＋QR、商品名稱區域以每頁 `capacity` 筆填充空列維持**固定表格高度**、每頁底部**不再有備註**（僅保留最後一頁的備註框線區）。
+- **Excel 匯出**（`src/pages/share/exportExcel.ts` 的 `exportDocExcel`）：以 xlsx 匯出表頭／店家／日期／明細（受 `showPrice` 控制是否含單價/小計）／統計／備註。
+- `src/pages/share/SharedSales.tsx` 與 `SharedOrder.tsx` 保留各自螢幕互動 Card（收貨確認、Badge、訪客提示），僅將「列印按鈕＋印刷版型」改由 `<SharedReceiptExport … />` 提供。`SharedOrder` 支援 `?print=true&size=&margin=` URL 自動列印（`printMode` + `defaultPaperSize`/`defaultMargin`）。
+- `src/index.css` 列印區塊：`.print-a4`（210mm 寬）／`.print-middle-cut`（241mm 寬）／`.print-no-margin`／`.print-hidden` 等列印輔助 class，並新增 `.doc-receipt-wrap`（螢幕上定位於畫布外，列印/html2pdf 擷取時顯示）、`.doc-page` 分頁、`.doc-table`／`.doc-title`／`.doc-summary-wrap` 等版型樣式。
 
 ## 近期變更（統一價格 unified_pricing）
 
@@ -140,6 +166,20 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 - `BrandPricing`：統一價商品之連鎖客戶價格改以「產品層級」(`store_products.variant_id = null`) 儲存並套用至所有變體
 - `useStoreProductCache`：統一價商品的門市價改取產品層級 `store_products`（忽略逐變體列），確保未來新增變體也吃到同一連鎖價
 - 商品目錄 / 詳情顯示「統一價格」徽章；因變體價格皆相同，`calculatePriceRange` 自然顯示單一價格
+
+## 近期變更（規格欄位 UI 統一 + SpecDialog 選項拖移）
+
+- 新增共用件 `src/components/products/form/sections/specFieldUi.ts`（`QTY_GROUP_PALETTE`、`SpecVisibleInfo`、`buildDepChain`、`buildQuantityColorMap`、`resolveGroupColor`、`isHeadingSpec`）與 `SpecFieldHeader.tsx`（欄位標籤列：名稱＋必填＊＋第N組 pill＋依賴鏈＋數量組色塊）
+- `DynamicSpecsFields`（產品規格畫面）與 `VariantSpecsMatrix`（變體規格矩陣）共用同一套標籤與 `SpecValueEditor`；矩陣「表格模式」（逐變體）與「單一模式」（一次套用全部變體）UI 一致、僅操作對象不同。單一模式 `applyToAll` 新增第 3 參數 `silent`，搭配 **1200ms debounce toast**（閒置後才彈「已同步至所有變體」），批次套用/複製按鈕維持即時
+- 矩陣 `useCategorySpecs` 啟用 `includeDescendants`＋`includeTriggerDownstream` 對齊連動鏈；`VariantSpecsMatrixHandle` 新增 `getState()`（表單以 `__getVariantSpecs` 掛載）供預覽即時反映未儲存的變體規格值
+- `SpecDialog.tsx`「選項/標籤定義」清單支援 dnd-kit 拖移重排（`SortableOptionItem`＋`GripVertical` 拖柄，`arrayMove` 更新 `specForm.options`），排序即下拉/單位欄位的顯示順序
+- 「其他」自訂輸入（`SpecValueEditor` 的 `select`/`SearchableSelect`/`multiselect`）＋觸發 DSL `="input"`（見上方規格引擎 v6）＋ `SpecDialog` 連動觸發選值欄 `<datalist>` 建議框（該規格 options＋`input`）
+
+## 近期變更（產品表單變體區整合表格範本 + Order Grid 批次維度）
+
+- **`VariantSection`（`src/components/products/form/VariantSection.tsx`）整合 Order Grid 表格範本**：用 `useTableTemplates()` 篩出「含此產品任一變體」的 templates（`relevantTemplates`）；每個相關 template 在變體清單下方各渲染一個 `OrderGridRenderer` 獨立表格，`products` 只傳**此產品**（`gridProducts`，= product.variants 過濾本產品變體）且 `template_variants` 過濾成僅此產品子集（`gridTemplateFor`），故表格只顯示該產品變體套用模板顯示規則（不混其他產品）。資料源為 `product` prop（initialData，含 option/spec/device 完整資料）才能正確依維度渲染。
+- **購物車接線**：`onDirectItemAdd`（button mode 每格「＋」）與 `onAddToCart`（toolbar「加入購物車」）皆接到既有 `store.addItem` 累加——因 `addItem` 只會 +1，數量 >1 時以 `getVariantQty` 讀現量再 `updateQuantity` 補足差額；`getCartQuantity` 接 `getVariantQty` 讓表格即時反映購物車既有數量。
+- **Order Grid 批次維度（同名選項群組逐範本解析 id）**：`OrderGridBatchDimensionDialog.tsx` 批次選取 option 群組時同步記住群組**名稱**（`onConfirm` 回傳 `optionGroupNames`）；`OrderGridTemplateList.tsx` 新增 `resolveOptionGroupId(template, name, fallbackId)`——對每張範本依其變體所屬產品的 `option_groups` 找「同名」群組的 id（找不到才回退批次選的 id），對 row/col/tab 各維度逐範本解析後再 `updateTemplate`。理由：同名「顏色」群組在不同產品有不同 `option_group_id`，統一寫一個 id 會導致部分產品找不到值、grid 空（顯示「無法產生 grid」）。
 
 ## 專案慣例
 

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -256,13 +255,8 @@ export function SalesNoteDetailDialog({
                                     {note.items.map((item) => (
                                         <TableRow key={item.id}>
                                             <TableCell>
-                                                <div className="font-medium">
-                                                    {item.productName}
-                                                    {item.variantName && (
-                                                        <Badge variant="secondary" className="ml-2 text-[10px] h-5 px-1">
-                                                            {item.variantName}
-                                                        </Badge>
-                                                    )}
+                                                <div className="font-medium product-name-cell">
+                                                    {item.variantName ? item.variantName : item.productName}
                                                 </div>
                                                 {showSku && <div className="text-xs text-muted-foreground font-mono mt-0.5">{item.productSku}</div>}
                                             </TableCell>
@@ -281,9 +275,8 @@ export function SalesNoteDetailDialog({
                             {note.items.map((item) => (
                                 <Card key={item.id} className="rounded-xl shadow-none border-muted/60">
                                     <CardContent className="p-3 space-y-2 text-sm">
-                                        <div className="font-medium flex flex-wrap gap-1 items-center">
-                                            {item.productName}
-                                            {item.variantName && <Badge variant="secondary" className="text-[10px] px-1">{item.variantName}</Badge>}
+                                        <div className="font-medium flex flex-wrap gap-1 items-center product-name-cell">
+                                            {item.variantName ? item.variantName : item.productName}
                                         </div>
                                         {showSku && <div className="text-xs text-muted-foreground font-mono">{item.productSku}</div>}
                                         <div className="flex justify-between items-center pt-1">

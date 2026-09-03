@@ -54,7 +54,7 @@ interface ProductFormBodyProps {
 
 export function ProductFormBody({ active, initialData, onSubmit, isLoading, onClose, registerForm }: ProductFormBodyProps) {
   const [activeTab, setActiveTab] = useState('basic');
-  const { specMap, fetchSpecs, specTriggers } = useSpecStore();
+  const { specMap, refreshIfStale, specTriggers } = useSpecStore();
   const [matrixDirty, setMatrixDirty] = useState(false);
   const [unsavedWarning, setUnsavedWarning] = useState(false);
   const matrixRef = useRef<VariantSpecsMatrixHandle>(null);
@@ -141,8 +141,8 @@ export function ProductFormBody({ active, initialData, onSubmit, isLoading, onCl
   // 2. 當切換編輯對象或 active 時，同步 Form 資料
   useEffect(() => {
     if (active) {
-      // 開啟時同步抓取規格定義（快取會處理避免重複抓取）
-      fetchSpecs();
+      // 開啟時確保規格定義為最新（比對版本、落後才重抓，避免沿用舊快取）
+      refreshIfStale();
 
       const loadInitialData = async () => {
         if (initialData) {
@@ -216,7 +216,7 @@ export function ProductFormBody({ active, initialData, onSubmit, isLoading, onCl
       loadInitialData();
       setActiveTab('basic'); // 每次打開預設回到基本資訊
     }
-  }, [active, initialData, form, fetchSpecs]);
+  }, [active, initialData, form, refreshIfStale]);
 
   // 封裝 Submit 以進行資料轉換 (Object -> Array)
   const handleWrappedSubmit = (values: any) => {

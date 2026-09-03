@@ -44,10 +44,9 @@ export default function AdminPurchaseOrders() {
     deleteOrderMutation,
     createSupplierMutation,
     addItemMutation,
-    updateItemMutation,
-    deleteItemMutation,
     receiveItemsMutation,
     makePaymentMutation,
+    unlinkOrdersFromPurchaseMutation,
   } = usePurchaseOrders(viewingOrder?.id);
 
   return (
@@ -191,8 +190,11 @@ export default function AdminPurchaseOrders() {
               }}
               onReceiveItems={(items) => receiveItemsMutation.mutate(items)}
               onMakePayment={(data) => makePaymentMutation.mutate({ orderId: viewingOrder.id, ...data })}
-              onUpdateItem={(itemId, quantity, unit_cost) => updateItemMutation.mutate({ itemId, quantity, unit_cost })}
-              onDeleteItem={(itemId) => deleteItemMutation.mutate(itemId)}
+              onUnlinkOrder={(orderId) => {
+                if (window.confirm(`確定要解除與此訂單（${sourceOrderMap[orderId] || orderId.slice(0, 8)}）的採購關聯嗎？\n未收貨的數量將從採購單中扣除，並可重新進行採購。`)) {
+                  unlinkOrdersFromPurchaseMutation.mutate({ purchaseOrderId: viewingOrder.id, orderIds: [orderId] });
+                }
+              }}
             />
           )}
         </DialogContent>

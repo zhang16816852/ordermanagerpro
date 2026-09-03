@@ -51,7 +51,8 @@ export function getVisibleSpecsTree(
                     spec.type,
                     val,
                     t.condition_dsl?.on_value,
-                    t.condition_dsl?.operator
+                    t.condition_dsl?.operator,
+                    spec.options
                 );
 
                 if (isMatch) {
@@ -183,7 +184,8 @@ export const checkSpecTriggerMatch = (
     specType: string,
     value: any,
     onValue: string | undefined,
-    operator: 'eq' | 'ne' = 'eq'
+    operator: 'eq' | 'ne' = 'eq',
+    options?: string[]
 ): boolean => {
     if (!onValue) return false;
     const val = value === undefined || value === null ? '' : value;
@@ -196,6 +198,16 @@ export const checkSpecTriggerMatch = (
             isNotEmpty = val !== '' && val !== false && val !== 'false';
         }
         return operator === 'ne' ? !isNotEmpty : isNotEmpty;
+    }
+
+    // 「自訂輸入」：值非空且不在預設選項清單內（個例，不被當成預設選項）
+    if (onValue === 'input') {
+        const isCustom = (v: any): boolean => {
+            const s = v === undefined || v === null ? '' : String(v);
+            return s.trim() !== '' && (options && options.length > 0 ? !options.includes(s) : true);
+        };
+        const matched = Array.isArray(val) ? val.some(isCustom) : isCustom(val);
+        return operator === 'ne' ? !matched : matched;
     }
 
     if (Array.isArray(val)) {

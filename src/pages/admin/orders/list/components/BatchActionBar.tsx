@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Truck, CheckSquare, XCircle, Package, Send, Store, ClipboardList, FileText, FileSpreadsheet } from 'lucide-react';
+import { Truck, CheckSquare, XCircle, Package, Send, Store, ClipboardList, FileText, FileSpreadsheet, Unlink } from 'lucide-react';
 import { MobileFooter } from '@/components/layout/MobileFooter';
 
 interface BatchActionBarProps {
@@ -11,6 +11,7 @@ interface BatchActionBarProps {
   hasConsignmentSelection: boolean;
   hasNormalSelection: boolean;
   allSelectedConsignment: boolean;
+  linkedToPO: boolean;
   onConfirmOrders: () => void;
   onShipItems: () => void;
   onCancelItems: () => void;
@@ -18,6 +19,7 @@ interface BatchActionBarProps {
   onConvertToConsignment: () => void;
   onShipOrdersToPool: () => void;
   onConvertToPO: () => void;
+  onUnlinkOrders: () => void;
   onExportAggregateCSV: () => void;
   onExportAggregateExcel: () => void;
   isLoading: boolean;
@@ -32,6 +34,7 @@ export function BatchActionBar({
   hasConsignmentSelection,
   hasNormalSelection,
   allSelectedConsignment,
+  linkedToPO,
   onConfirmOrders,
   onShipItems,
   onCancelItems,
@@ -39,6 +42,7 @@ export function BatchActionBar({
   onConvertToConsignment,
   onShipOrdersToPool,
   onConvertToPO,
+  onUnlinkOrders,
   onExportAggregateCSV,
   onExportAggregateExcel,
   isLoading,
@@ -64,7 +68,7 @@ export function BatchActionBar({
       <div className="hidden md:flex fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
         <div className="bg-primary text-primary-foreground px-6 py-4 rounded-full shadow-2xl flex items-center gap-6 border-4 border-background/20 ring-1 ring-primary/30">
           <div className="flex items-center gap-2 border-r border-primary-foreground/30 pr-6">
-            <Package className="h-5 h-5" />
+            <Package className="h-5" />
             <span className="font-bold text-lg">
               已選擇 {getCount()} {getLabel()}
             </span>
@@ -143,6 +147,18 @@ export function BatchActionBar({
                   <ClipboardList className="h-4 w-4 mr-2" />
                   轉採購單
                 </Button>
+                {linkedToPO && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={onUnlinkOrders}
+                    disabled={isLoading}
+                    className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
+                  >
+                    <Unlink className="h-4 w-4 mr-2" />
+                    解除採購
+                  </Button>
+                )}
               </>
             )}
 
@@ -158,16 +174,28 @@ export function BatchActionBar({
                   <Truck className="h-4 w-4 mr-2" />
                   加入出貨池
                 </Button>
-                <Button
-                  variant="destructive"
+<Button
+                  variant="secondary"
                   size="sm"
-                  onClick={onCancelItems}
+                  onClick={onConvertToPO}
                   disabled={isLoading}
-                  className="rounded-full shadow-lg hover:bg-red-600 active:scale-95 transition-colors duration-150"
+                  className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
                 >
-                  <XCircle className="h-4 w-4 mr-2" />
-                  標記停產/取消
+                  <ClipboardList className="h-4 w-4 mr-2" />
+                  轉採購單
                 </Button>
+                {statusTab === 'processing' && linkedToPO && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={onUnlinkOrders}
+                    disabled={isLoading}
+                    className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
+                  >
+                    <Unlink className="h-4 w-4 mr-2" />
+                    解除採購
+                  </Button>
+                )}
               </>
             )}
 
@@ -246,18 +274,30 @@ export function BatchActionBar({
                     <Send className="h-4 w-4 mr-1.5" />
                     轉銷貨單
                   </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={onConvertToConsignment}
-                    disabled={isLoading}
-                    className="snap-start shrink-0"
-                  >
-                    <Store className="h-4 w-4 mr-1.5" />
-                    轉寄賣
-                  </Button>
-                </>
+<Button
+                variant="secondary"
+                size="sm"
+                onClick={onConvertToPO}
+                disabled={isLoading}
+                className="snap-start shrink-0"
+              >
+                <ClipboardList className="h-4 w-4 mr-1.5" />
+                轉採購單
+              </Button>
+              {statusTab === 'processing' && linkedToPO && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onUnlinkOrders}
+                  disabled={isLoading}
+                  className="snap-start shrink-0"
+                >
+                  <Unlink className="h-4 w-4 mr-1.5" />
+                  解除採購
+                </Button>
               )}
+            </>
+          )}
               {hasConsignmentSelection && (
                 <Button
                   variant="secondary"
@@ -290,6 +330,18 @@ export function BatchActionBar({
                 <ClipboardList className="h-4 w-4 mr-1.5" />
                 轉採購單
               </Button>
+              {linkedToPO && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onUnlinkOrders}
+                  disabled={isLoading}
+                  className="snap-start shrink-0"
+                >
+                  <Unlink className="h-4 w-4 mr-1.5" />
+                  解除採購
+                </Button>
+              )}
             </>
           )}
 

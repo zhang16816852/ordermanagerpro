@@ -15,14 +15,15 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import {
   Plus, Pencil, Trash2, Search, LayoutGrid,
-  Upload, Download,
+  Upload, Download, AlertTriangle,
 } from 'lucide-react';
 import { useTableTemplates } from '@/hooks/useTableTemplates';
-import { useSpecStore } from '@/store/useSpecStore';
 import { OrderGridTemplateFormDialog } from './OrderGridTemplateFormDialog';
+import { OrderGridBatchDimensionDialog } from './OrderGridBatchDimensionDialog';
 import { ImportPreviewDialog } from '@/components/shared/ImportPreviewDialog';
 import { exportTemplatesToExcel } from '@/utils/templateExport';
 import { parseTemplateExcel, type ParsedTemplate } from '@/utils/templateImport';
+import { extractDimensionValues } from '@/lib/order-grid-utils';
 import type { OrderGridTemplateWithProducts, DimensionConfig } from '@/types/order-grid';
 import type { ProductWithPricing } from '@/types/product';
 
@@ -47,14 +48,14 @@ export function OrderGridTemplateList({
     deleteTemplateAsync,
   } = useTableTemplates();
 
-  const { specMap } = useSpecStore();
-
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] =
     useState<OrderGridTemplateWithProducts | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [importOpen, setImportOpen] = useState(false);
+  const [batchDimOpen, setBatchDimOpen] = useState(false);
+  const [batchLoading, setBatchLoading] = useState(false);
   const [importData, setImportData] = useState<ParsedTemplate[]>([]);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -102,9 +103,34 @@ export function OrderGridTemplateList({
     return map;
   }, [products]);
 
+  const templateGridStatus = useMemo(() => {
+    const map = new Map<string, { rowEmpty: boolean; colEmpty: boolean; tabEmpty: boolean }>();
+    for (const t of templates) {
+      const variantSet = new Set(t.template_variants?.map((tv) => tv.variant_id) || []);
+      const productIds = new Set<string>();
+      for (const p of products) {
+        for (const v of p.variants || []) {
+          if (variantSet.has(v.id)) productIds.add(p.id);
+        }
+      }
+      const tp = products
+        .filter((p) => productIds.has(p.id))
+        .map((p) => ({
+          ...p,
+          variants: (p.variants || []).filter((v: any) => variantSet.has(v.id)),
+        }));
+      map.set(t.id, {
+        rowEmpty: extractDimensionValues(t.row_config, tp).length === 0,
+        colEmpty: extractDimensionValues(t.col_config, tp).length === 0,
+        tabEmpty: t.tab_config ? extractDimensionValues(t.tab_config, tp).length === 0 : false,
+      });
+    }
+    return map;
+  }, [templates, products]);
+
   const handleExport = async () => {
     const selected = templates.filter((t) => selectedIds.has(t.id));
-    await exportTemplatesToExcel(selected, variantLookup);
+    await exportTemplatesToExcel(selected, variantLookup, products);
     toast.success(`已匯出 ${selected.length} 個範本`);
   };
 
@@ -185,18 +211,105 @@ export function OrderGridTemplateList({
     setDialogOpen(false);
   };
 
+  const resolveOptionGroupId = (
+    template: OrderGridTemplateWithProducts,
+    chosenName: string | null,
+    fallbackId: string | undefined,
+  ): string | undefined => {
+    if (chosenName) {
+      const variantSet = new Set(template.template_variants?.map((tv) => tv.variant_id) || []);
+      for (const p of products) {
+        const hasVariant = (p.variants || []).some((v: any) => variantSet.has(v.id));
+        if (!hasVariant) continue;
+        const og = ((p as any).option_groups || []).find((g: any) => g.name === chosenName);
+        if (og?.id) return og.id;
+      }
+    }
+    return fallbackId;
+  };
+
+  const handleBatchDimensionConfirm = (data: {
+    row_config: DimensionConfig;
+    col_config: DimensionConfig;
+    tab_config?: DimensionConfig | null;
+    optionGroupNames?: Record<'row' | 'col' | 'tab', string | null>;
+  }) => {
+    const targets = templates.filter((t) => selectedIds.has(t.id));
+    if (targets.length === 0) {
+      toast.error('請先勾選要修改的範本');
+      return;
+    }
+    setBatchLoading(true);
+    for (const t of targets) {
+      const rowConfig = {
+        ...data.row_config,
+        option_group_id: data.row_config.type === 'option'
+          ? resolveOptionGroupId(t, data.optionGroupNames?.row ?? null, data.row_config.option_group_id)
+          : data.row_config.option_group_id,
+      };
+      const colConfig = {
+        ...data.col_config,
+        option_group_id: data.col_config.type === 'option'
+          ? resolveOptionGroupId(t, data.optionGroupNames?.col ?? null, data.col_config.option_group_id)
+          : data.col_config.option_group_id,
+      };
+      const tabConfig = data.tab_config
+        ? {
+            ...data.tab_config,
+            option_group_id: data.tab_config.type === 'option'
+              ? resolveOptionGroupId(t, data.optionGroupNames?.tab ?? null, data.tab_config.option_group_id)
+              : data.tab_config.option_group_id,
+          }
+        : null;
+      updateTemplate(t.id, {
+        row_config: rowConfig,
+        col_config: colConfig,
+        tab_config: tabConfig,
+      });
+    }
+    toast.success(`已將維度套用到 ${targets.length} 個範本`);
+    setBatchLoading(false);
+    setBatchDimOpen(false);
+    setSelectedIds(new Set());
+  };
+
   const formatDimensions = (config: DimensionConfig) => {
     if (config.type === 'variant_field') {
-      return `${config.label} (${config.field})`;
+      return `${config.label} (${config.field || '未指定'})`;
     }
     if (config.type === 'spec') {
-      const specName = config.spec_id ? specMap.get(config.spec_id)?.name : undefined;
-      return `${config.label} (${specName || config.spec_id || '未指定規格'})`;
+      return `${config.label} (${config.spec_id ? '規格#' + config.spec_id.slice(0, 8) : '未指定'})`;
+    }
+    if (config.type === 'option') {
+      return `${config.label} (選項群組)`;
     }
     if (config.type === 'custom') {
       return `${config.label} (${config.values?.length || 0} 個值)`;
     }
+    if (config.type === 'product_list') {
+      return `${config.label} (產品列表)`;
+    }
     return config.label;
+  };
+
+  const renderDimensionBadge = (
+    template: OrderGridTemplateWithProducts,
+    config: DimensionConfig,
+    empty: boolean,
+  ) => {
+    if (empty) {
+      return (
+        <Badge variant="destructive" className="text-xs gap-1">
+          <AlertTriangle className="h-3 w-3" />
+          無法產生 grid
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="outline" className="text-xs">
+        {formatDimensions(config)}
+      </Badge>
+    );
   };
 
   const importColumns = [
@@ -259,6 +372,15 @@ export function OrderGridTemplateList({
             <Download className="h-4 w-4 mr-1.5" />
             匯出{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setBatchDimOpen(true)}
+            disabled={selectedIds.size === 0}
+          >
+            <Pencil className="h-4 w-4 mr-1.5" />
+            批次改維度{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
+          </Button>
           <Button onClick={handleCreate} size="sm">
             <Plus className="h-4 w-4 mr-1.5" />
             新增範本
@@ -301,81 +423,82 @@ export function OrderGridTemplateList({
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((template) => (
-                <TableRow key={template.id}>
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedIds.has(template.id)}
-                      onCheckedChange={() => toggleSelect(template.id)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <LayoutGrid className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <div className="font-medium">{template.name}</div>
-                        {template.description && (
-                          <div className="text-xs text-muted-foreground">
-                            {template.description}
-                          </div>
-                        )}
+              filtered.map((template) => {
+                const status = templateGridStatus.get(template.id);
+                const rowEmpty = status?.rowEmpty ?? false;
+                const colEmpty = status?.colEmpty ?? false;
+                const tabEmpty = status?.tabEmpty ?? false;
+
+                return (
+                  <TableRow key={template.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(template.id)}
+                        onCheckedChange={() => toggleSelect(template.id)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <LayoutGrid className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <div className="font-medium">{template.name}</div>
+                          {template.description && (
+                            <div className="text-xs text-muted-foreground">
+                              {template.description}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">
-                      {formatDimensions(template.row_config)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">
-                      {formatDimensions(template.col_config)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {template.tab_config ? (
-                      <Badge variant="outline" className="text-xs">
-                        {formatDimensions(template.tab_config)}
-                      </Badge>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {template.template_variants?.length || 0}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      {showUseButton && onSelect && (
+                    </TableCell>
+                    <TableCell>
+                      {renderDimensionBadge(template, template.row_config, rowEmpty)}
+                    </TableCell>
+                    <TableCell>
+                      {renderDimensionBadge(template, template.col_config, colEmpty)}
+                    </TableCell>
+                    <TableCell>
+                      {template.tab_config ? (
+                        renderDimensionBadge(template, template.tab_config, tabEmpty)
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {template.template_variants?.length || 0}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        {showUseButton && onSelect && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-xs"
+                            onClick={() => onSelect(template)}
+                          >
+                            使用
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
-                          size="sm"
-                          className="h-8 text-xs"
-                          onClick={() => onSelect(template)}
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleEdit(template)}
                         >
-                          使用
+                          <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => handleEdit(template)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => handleDelete(template)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => handleDelete(template)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -387,6 +510,15 @@ export function OrderGridTemplateList({
         template={editingTemplate}
         products={products}
         onSave={handleSave}
+      />
+
+      <OrderGridBatchDimensionDialog
+        open={batchDimOpen}
+        onOpenChange={setBatchDimOpen}
+        selectedTemplates={templates.filter((t) => selectedIds.has(t.id))}
+        products={products}
+        onConfirm={handleBatchDimensionConfirm}
+        isLoading={batchLoading}
       />
 
       <ImportPreviewDialog

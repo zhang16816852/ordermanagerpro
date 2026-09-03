@@ -126,7 +126,7 @@ function TreeNode({ node, level, onEdit, onDelete, onReorder, onToggleCollapse, 
                 )}
                 {node.onValue && (
                     <Badge variant="outline" className="text-[9px] h-4 px-1.5 bg-orange-500/5 text-orange-600 border-orange-500/20 font-bold">
-                        當值為: {node.onValue} 時觸發
+                        當值為: {node.onValue === 'input' ? '自訂輸入' : node.onValue} 時觸發
                     </Badge>
                 )}
                 {node.relationType === 'quantity' && (
@@ -304,7 +304,7 @@ function PyramidNode({ node, level, onEdit, onDelete, onReorder, onToggleCollaps
                 )}
                 {node.onValue && (
                     <Badge variant="outline" className="text-[9px] h-4 px-1.5 bg-orange-500/5 text-orange-600 border-orange-500/20 font-bold">
-                        當值為: {node.onValue} 時觸發
+                        當值為: {node.onValue === 'input' ? '自訂輸入' : node.onValue} 時觸發
                     </Badge>
                 )}
                 {node.relationType === 'quantity' && (

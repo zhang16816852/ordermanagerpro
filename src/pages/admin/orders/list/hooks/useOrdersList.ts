@@ -26,18 +26,27 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
   );
 
   // 1b. Purchase Order linkage — reverse lookup: orderId → { poCount, poIds }
+  //     + per (orderId, productId, variantId) → 已採購數量（source_quantities）
   const { data: poLinkItems = [] } = useQuery({
     queryKey: ['purchase-order-links'],
     queryFn: async () => {
       const { data, error } = await (supabase
         .from('purchase_order_items') as any)
-        .select('source_order_ids, purchase_order_id');
+        .select('source_order_ids, source_quantities, purchase_order_id, product_id, variant_id');
       if (error) throw error;
-      return (data || []) as { source_order_ids: string[] | null; purchase_order_id: string }[];
+      return (data || []) as {
+        source_order_ids: string[] | null;
+        source_quantities: Record<string, number> | null;
+        purchase_order_id: string;
+        product_id: string | null;
+        variant_id: string | null;
+      }[];
     },
   });
 
   const poLinkMap = new Map<string, { poCount: number; poIds: string[] }>();
+  // key: `${orderId}|${productId}|${variantId ?? 'null'}` → 已採購數量
+  const purchasedByOrderKey = new Map<string, number>();
   for (const poi of poLinkItems) {
     if (!poi.source_order_ids) continue;
     for (const orderId of poi.source_order_ids) {
@@ -49,6 +58,13 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
         }
       } else {
         poLinkMap.set(orderId, { poCount: 1, poIds: [poi.purchase_order_id] });
+      }
+    }
+    // 累計該品項 (orderId × product × variant) 的已採購量
+    if (poi.source_quantities) {
+      for (const [orderId, qty] of Object.entries(poi.source_quantities)) {
+        const key = `${orderId}|${poi.product_id || 'null'}|${poi.variant_id || 'null'}`;
+        purchasedByOrderKey.set(key, (purchasedByOrderKey.get(key) || 0) + (qty || 0));
       }
     }
   }
@@ -100,12 +116,14 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
             store_id,
             product_id,
             variant_id,
+            sort_order,
             product:products (name, code),
             product_variant:product_variants (name)
           )
         `)
         .eq('status', statusTab)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .order('sort_order', { ascending: true, foreignTable: 'order_items' });
 
       if (storeFilter && storeFilter !== 'all') {
         query = query.eq('store_id', storeFilter);
@@ -266,6 +284,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
     isLoading,
     shippingPoolMap,
     poLinkMap,
+    purchasedByOrderKey,
     getPendingQuantity,
     syncOrdersMutation,
     confirmOrdersMutation,

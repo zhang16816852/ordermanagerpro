@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 import { SpecValueEditor } from './SpecValueEditor';
+import { SpecFieldHeader } from './SpecFieldHeader';
+import { QTY_GROUP_PALETTE, buildQuantityColorMap, resolveGroupColor } from './specFieldUi';
 import { getVisibleSpecsTree, getTreeSortedVisiblePaths } from '@/utils/specLogic';
 import { useCategorySpecs, CategorySpec } from '@/hooks/useCategorySpecs';
 import { useSpecStore } from '@/store/useSpecStore';
@@ -10,37 +12,9 @@ interface DynamicSpecsFieldsProps {
     specFieldsOverride?: CategorySpec[];
 }
 
-function buildDepChain(pathKey: string, visibleInfo: Map<string, any>): string[] {
-    const segs: string[] = [];
-    let pk: string | undefined = pathKey;
-    while (pk && !pk.startsWith('root:')) {
-        const info = visibleInfo.get(pk);
-        if (!info) break;
-        if (info.isQuantityInstance) {
-            segs.unshift(`第${info.instanceIndex}組·${info.sourceName}`);
-        } else if (info.triggerInfo?.on_value) {
-            segs.unshift(`${info.sourceName} = ${info.triggerInfo.on_value}`);
-        } else if (info.sourceName) {
-            segs.unshift(info.sourceName);
-        }
-        pk = info.parentPathKey;
-    }
-    return segs;
-}
-
-// 數量複製組別配色（依 instanceIndex 循環）：讓甲1 / 乙1 等各組在表單中明顯區隔
-const QTY_GROUP_PALETTE = [
-  { border: 'border-rose-400', tint: 'bg-rose-500/10', pill: 'bg-rose-100 text-rose-700', dot: 'bg-rose-500' },
-  { border: 'border-amber-400', tint: 'bg-amber-500/10', pill: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
-  { border: 'border-emerald-400', tint: 'bg-emerald-500/10', pill: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
-  { border: 'border-sky-400', tint: 'bg-sky-500/10', pill: 'bg-sky-100 text-sky-700', dot: 'bg-sky-500' },
-  { border: 'border-violet-400', tint: 'bg-violet-500/10', pill: 'bg-violet-100 text-violet-700', dot: 'bg-violet-500' },
-  { border: 'border-fuchsia-400', tint: 'bg-fuchsia-500/10', pill: 'bg-fuchsia-100 text-fuchsia-700', dot: 'bg-fuchsia-500' },
-];
-
 export function DynamicSpecsFields({ form, specFieldsOverride }: DynamicSpecsFieldsProps) {
     const selectedCategoryIds = form.watch('category_ids') || [];
-    const { specMap, specTriggers, fetchSpecs, categories } = useSpecStore();
+    const { specMap, specTriggers, refreshIfStale, categories } = useSpecStore();
     const { data: hookedSpecs = [], isLoading: isLoadingSpecs } = useCategorySpecs(selectedCategoryIds, {
         includeDescendants: true,
         includeTriggerDownstream: true,
@@ -48,9 +22,9 @@ export function DynamicSpecsFields({ form, specFieldsOverride }: DynamicSpecsFie
     const specFields = specFieldsOverride ?? hookedSpecs;
     const specValues = form.watch('spec_values') || {};
 
-    // 確保規格定義已載入
+    // 確保規格定義已載入（比對版本、落後才重抓）
     useEffect(() => {
-        fetchSpecs();
+        refreshIfStale();
     }, []);
 
     // 使用中央計算器 (v5.1 支持 DSL)
@@ -85,28 +59,7 @@ export function DynamicSpecsFields({ form, specFieldsOverride }: DynamicSpecsFie
     }, [sortedVisible, selectedCategoryIds, categories, specFields]);
 
     // 為每個數量實例組別解析顏色：直接實例取自身 instanceIndex，子孫向上回溯繼承所屬組別顏色
-    const colorIndexByPath = useMemo(() => {
-      const m = new Map<string, number>();
-      visibleInfo.forEach((info, pk) => {
-        if (info?.isQuantityInstance && info.instanceIndex) {
-          const ci = ((info.instanceIndex - 1) % QTY_GROUP_PALETTE.length + QTY_GROUP_PALETTE.length) % QTY_GROUP_PALETTE.length;
-          m.set(pk, ci);
-        }
-      });
-      return m;
-    }, [visibleInfo]);
-
-    const resolveGroupColor = (pk: string): number | null => {
-      let cur: string | undefined = pk;
-      let guard = 0;
-      while (cur && guard < 30) {
-        const ci = colorIndexByPath.get(cur);
-        if (ci !== undefined) return ci;
-        cur = visibleInfo.get(cur)?.parentPathKey;
-        guard++;
-      }
-      return null;
-    };
+    const colorMap = useMemo(() => buildQuantityColorMap(visibleInfo), [visibleInfo]);
 
     if (isLoadingSpecs && !specFieldsOverride) return <div className="py-4 text-center" role="status" aria-live="polite">正在載入規格...</div>;
 
@@ -135,8 +88,9 @@ export function DynamicSpecsFields({ form, specFieldsOverride }: DynamicSpecsFie
 
                             const value = specValues[pathKey] || '';
                             const info = visibleInfo.get(pathKey);
-                            const ci = resolveGroupColor(pathKey);
+                            const ci = resolveGroupColor(pathKey, colorMap, visibleInfo);
                             const pal = ci !== null ? QTY_GROUP_PALETTE[ci] : null;
+                            const isHeading = spec.type === 'heading' && !value;
 
                             return (
                                 <div
@@ -144,46 +98,24 @@ export function DynamicSpecsFields({ form, specFieldsOverride }: DynamicSpecsFie
                                     style={{ marginLeft: `${level * 16}px` }}
                                     className={`space-y-2 animate-in fade-in slide-in-from-left-2 duration-300 ${pal ? pal.tint + ' rounded-md' : ''}`}
                                 >
-                                    <div className={`p-0.5 rounded-md transition-all ${pal ? `border-l-2 ${pal.border} pl-3` : (level > 0 ? 'border-l-2 border-primary/20 pl-3' : '')}`}>
-                                        {spec.type === 'heading' ? (
-                                            <div className="py-1 border-b border-primary/10 mb-1">
-                                                <div className="text-[10px] font-bold text-primary uppercase tracking-widest flex items-center gap-2">
-                                                    <span className="w-1 h-3 bg-primary rounded-full" />
-                                                    {spec.name}
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <label className="text-xs font-semibold text-muted-foreground flex justify-between items-center group mb-1.5">
-                                                    <div className="flex items-center gap-2">
-                                                        {level > 0 && <span className="text-primary/40">↳</span>}
-                                                        <span>
-                                                            {spec.name}
-                                                            {spec.required && <span className="text-destructive font-bold ml-1" title="必填">*</span>}
-                                                        </span>
-                                                        {pal && info?.isQuantityInstance && (
-                                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${pal.pill}`}>
-                                                                第{info.instanceIndex}組
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    {info && !pathKey.startsWith('root:') && buildDepChain(pathKey, visibleInfo).length > 0 && (
-                                                        <span className="text-[10px] font-normal text-muted-foreground/70">
-                                                            依賴 ▸ {buildDepChain(pathKey, visibleInfo).join(' ▸ ')}
-                                                        </span>
-                                                    )}
-                                                </label>
-                                                <SpecValueEditor
-                                                    spec={spec}
-                                                    value={value}
-                                                    onChange={(val) => form.setValue(`spec_values.${pathKey}`, val, { shouldDirty: true })}
-                                                    sourceValue={info?.sourceValue}
-                                                    isQuantityDetail={info?.isQuantityDetail}
-                                                    variantMode={false}
-                                                />
-                                            </>
-                                        )}
-                                    </div>
+                                    <SpecFieldHeader
+                                        spec={spec}
+                                        pathKey={pathKey}
+                                        value={value}
+                                        level={level}
+                                        visibleInfo={visibleInfo}
+                                        colorMap={colorMap}
+                                    />
+                                    {!isHeading && (
+                                        <SpecValueEditor
+                                            spec={spec}
+                                            value={value}
+                                            onChange={(val) => form.setValue(`spec_values.${pathKey}`, val, { shouldDirty: true })}
+                                            sourceValue={info?.sourceValue}
+                                            isQuantityDetail={info?.isQuantityDetail}
+                                            variantMode={false}
+                                        />
+                                    )}
                                 </div>
                             );
                         })}
@@ -198,10 +130,10 @@ export function DynamicSpecsFields({ form, specFieldsOverride }: DynamicSpecsFie
             <h3 className="text-sm font-bold flex items-center gap-2">
                 分類特定規格
             </h3>
-            {colorIndexByPath.size > 0 && (
+            {colorMap.size > 0 && (
                 <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
                     <span>數量組別：</span>
-                    {Array.from({ length: Math.min(colorIndexByPath.size, QTY_GROUP_PALETTE.length) }).map((_, i) => (
+                    {Array.from({ length: Math.min(colorMap.size, QTY_GROUP_PALETTE.length) }).map((_, i) => (
                         <span key={i} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full ${QTY_GROUP_PALETTE[i].pill}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${QTY_GROUP_PALETTE[i].dot}`} />第{i + 1}組
                         </span>

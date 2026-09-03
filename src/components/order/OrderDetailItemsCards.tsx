@@ -8,15 +8,15 @@ interface OrderItemsCardsProps {
 }
 
 export function OrderDetailItemsCards({ items }: OrderItemsCardsProps) {
+    const sortedItems = [...items].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
     return (
-        <div className="md:hidden w-full flex flex-col gap-2 overflow-y-auto ">
-            {items.map((item) => (
+        <div className="md:hidden w-full flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto ">
+            {sortedItems.map((item) => (
                 <Card key={item.id} className="rounded-2xl w-full">
                     <CardContent className="p-2 space-y-3 text-sm">
                         <div className="font-medium min-w-0">
                             <span className="block text-muted-foreground ml-1 break-all">
-                                {item.product?.name}
-                                {item.product_variant && ` - ${item.product_variant.name}`}
+                                {item.product_variant?.name || item.product?.name}
                             </span>
                         </div>
 

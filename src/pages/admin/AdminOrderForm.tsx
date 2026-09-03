@@ -7,37 +7,27 @@ import { useStoreProductCache } from '@/hooks/useProductCache';
 import { useStoreDraft } from '@/store/useOrderDraftStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import {
-  Card, CardContent, CardHeader, CardTitle,
-} from '@/components/ui/card';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
-import { ArrowLeft, Save, Lock, Unlock, AlertTriangle, Send, Truck, ShoppingBag, PackageCheck,
-  Filter, ChevronDown, Warehouse,
-} from 'lucide-react';
+import { ArrowLeft, Save, Lock, Unlock, AlertTriangle, Send, Truck, ShoppingBag, PackageCheck, X, Package } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { format } from 'date-fns';
-import { zhTW } from 'date-fns/locale';
-import { OrderItemsTable, OrderItemRow } from '@/components/order/OrderItemsTable';
+import { OrderItemRow } from '@/components/order/OrderItemsTable';
+import { OrderInfoCard } from '@/components/order/OrderInfoCard';
+import { OrderItemsPanel } from '@/components/order/OrderItemsPanel';
+import { ProductSelector } from '@/components/order/ProductSelector';
 import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
 import { useProductSearch } from '@/hooks/useProductSearch';
 import { useBrands } from '@/hooks/useBrands';
 import { WarehouseSelector } from "@/components/WarehouseSelector";
-import { StorePicker } from '@/components/ui/StorePicker';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import ProductCatalog from '@/components/products/catalog/ProductCatalog';
-import { CatalogSidebar } from '@/components/products/catalog/CatalogSidebar';
 
 const statusLabels: Record<string, { label: string; className: string }> = {
   pending: { label: '未確認', className: 'bg-warning text-warning-foreground' },
@@ -76,11 +66,13 @@ export default function AdminOrderForm() {
             shipped_quantity,
             status,
             selected_model_name,
+            sort_order,
             products (name, code),
             product_variants (name)
           )
         `)
         .eq('id', orderId)
+        .order('sort_order', { foreignTable: 'order_items' })
         .single();
       if (error) throw error;
       return data;
@@ -137,11 +129,11 @@ export default function AdminOrderForm() {
   const [itemWarehouses, setItemWarehouses] = useState<Record<string, string>>({});
   const [itemSources, setItemSources] = useState<Record<string, string>>({});
   const [consignmentMode, setConsignmentMode] = useState(false);
-  const [warehouseExpanded, setWarehouseExpanded] = useState(false);
 
   // Product browsing state
   const [activePanel, setActivePanel] = useState<'items' | 'products' | null>(null);
-  const [rightPanelExpanded, setRightPanelExpanded] = useState(true);
+  const [mobileCatalogOpen, setMobileCatalogOpen] = useState(false);
+  const [desktopCatalogOpen, setDesktopCatalogOpen] = useState(true);
   const [productSearch, setProductSearch] = useState('');
   const [viewMode, setViewMode] = useState<'products' | 'variants' | 'gallery' | 'table'>('products');
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
@@ -345,6 +337,9 @@ export default function AdminOrderForm() {
   // Edit mode: populate state from fetched order
   useEffect(() => {
     if (!isEditMode || !order) return;
+    draft.clearDraft();
+    prevDraftItemsRef.current = '[]';
+    skipNextDraftSyncRef.current = true;
     setNotes(order.notes || '');
     setItems(order.order_items.map((item: any) => ({
       id: item.id,
@@ -361,13 +356,17 @@ export default function AdminOrderForm() {
 
   // Sync draft items → local items (ProductCatalog adds to Zustand, we read into local state)
   const prevDraftItemsRef = useRef<string>('[]');
+  const skipNextDraftSyncRef = useRef(false);
   useEffect(() => {
-    if (isEditMode) return;
+    if (skipNextDraftSyncRef.current) {
+      skipNextDraftSyncRef.current = false;
+      return;
+    }
     const draftItemsJson = JSON.stringify(draft.items);
     if (draftItemsJson === prevDraftItemsRef.current) return;
     prevDraftItemsRef.current = draftItemsJson;
 
-    setItems(draft.items.map((item) => {
+    const draftItems = draft.items.map((item) => {
       const mapping = supplierMappings.find(
         (m) => m.internal_product_id === item.productId &&
           (m.internal_variant_id || null) === (item.variantId || null)
@@ -384,7 +383,21 @@ export default function AdminOrderForm() {
         productName: item.productName || item.name,
         variantName: item.variantName,
       };
-    }));
+    });
+
+    // Merge into existing items: update matching id, append new ones (keeps loaded items intact in edit mode)
+    setItems((prev) => {
+      const merged = [...prev];
+      for (const item of draftItems) {
+        const idx = merged.findIndex((i) => i.id === item.id);
+        if (idx >= 0) {
+          merged[idx] = item;
+        } else {
+          merged.push(item);
+        }
+      }
+      return merged;
+    });
     setPriceSyncMap(draft.priceSyncMap);
   }, [draft.items, draft.priceSyncMap, isEditMode, supplierMappings]);
 
@@ -417,6 +430,10 @@ export default function AdminOrderForm() {
     setItems((prev) => prev.filter((_, i) => i !== index));
     if (itemId) draft.removeItem(itemId);
   }, [draft]);
+
+  const handleReorder = useCallback((newItems: OrderItemRow[]) => {
+    setItems(newItems);
+  }, []);
 
   const handleTogglePriceSync = useCallback((id: string, checked: boolean) => {
     setPriceSyncMap((prev) => ({ ...prev, [id]: checked }));
@@ -464,7 +481,11 @@ export default function AdminOrderForm() {
       if (!orderId || !currentOrder) throw new Error('訂單不存在');
       await (supabase.from('orders') as any).update({ notes: currentNotes || null }).eq('id', orderId);
 
-      for (const item of currentItems) {
+      const existingIds = currentOrder.order_items.map((i: any) => i.id);
+      const currentIds = currentItems.filter((i) => !i.isNew).map((i) => i.id);
+      const toDelete = existingIds.filter((id: string) => !currentIds.includes(id));
+
+      for (const [itemIndex, item] of currentItems.entries()) {
         if (item.isNew) {
           const { error } = await (supabase.from('order_items') as any).insert({
             order_id: orderId,
@@ -474,20 +495,18 @@ export default function AdminOrderForm() {
             unit_price: item.unitPrice,
             selected_model_name: item.selectedModelName || null,
             store_id: currentOrder.store_id,
+            sort_order: itemIndex + 1,
           });
           if (error) throw error;
         } else {
           const { error } = await (supabase
             .from('order_items') as any)
-            .update({ quantity: item.quantity, unit_price: item.unitPrice })
+            .update({ quantity: item.quantity, unit_price: item.unitPrice, sort_order: itemIndex + 1 })
             .eq('id', item.id);
           if (error) throw error;
         }
       }
 
-      const existingIds = currentOrder.order_items.map((i: any) => i.id);
-      const currentIds = currentItems.filter((i) => !i.isNew).map((i) => i.id);
-      const toDelete = existingIds.filter((id: string) => !currentIds.includes(id));
       if (toDelete.length > 0) {
         await (supabase.from('order_items') as any).delete().in('id', toDelete);
       }
@@ -521,7 +540,7 @@ export default function AdminOrderForm() {
         .single();
       if (orderError) throw orderError;
 
-      const orderItems = currentItems.map((item) => ({
+      const orderItems = currentItems.map((item, index) => ({
         order_id: newOrder.id,
         product_id: item.productId,
         variant_id: item.variantId || null,
@@ -529,6 +548,7 @@ export default function AdminOrderForm() {
         quantity: item.quantity,
         unit_price: item.unitPrice,
         selected_model_name: item.selectedModelName || null,
+        sort_order: index + 1,
       }));
 
       const { error: itemsError } = await (supabase.from('order_items') as any).insert(orderItems);
@@ -549,7 +569,7 @@ export default function AdminOrderForm() {
     if (isEditMode) return;
     setIsPendingMode2(true);
     try {
-      const payload = items.map((i) => ({
+      const payload = items.map((i, index) => ({
         product_id: i.productId,
         variant_id: i.variantId || null,
         quantity: i.quantity,
@@ -557,6 +577,7 @@ export default function AdminOrderForm() {
         selected_model_name: i.selectedModelName || null,
         warehouse_id: getItemWarehouse(i.id) || null,
         inventory_source_type: itemSources[i.id] || "self",
+        sort_order: index + 1,
       }));
 
       const { data, error } = await supabase.rpc('create_order_with_sales_note', {
@@ -839,6 +860,82 @@ export default function AdminOrderForm() {
     else navigate('/admin/orders');
   };
 
+  const orderInfoCard = (
+    <OrderInfoCard
+      orderType={orderType}
+      isEditMode={isEditMode}
+      order={order}
+      displayStoreName={displayStoreName}
+      displayBrand={displayBrand}
+      storesList={storesList}
+      suppliersList={suppliersList}
+      storeLocked={!!storeIdFromParam && !isEditMode}
+      selectedStoreId={selectedStoreId}
+      onStoreChange={setSelectedStoreId}
+      supplierId={supplierId}
+      onSupplierChange={setSupplierId}
+      targetStoreId={targetStoreId}
+      onTargetStoreChange={setTargetStoreId}
+      expectedDate={expectedDate}
+      onExpectedDateChange={setExpectedDate}
+      supplierOrderNumber={supplierOrderNumber}
+      onSupplierOrderNumberChange={setSupplierOrderNumber}
+      notes={notes}
+      onNotesChange={setNotes}
+      shippedAt={shippedAt}
+      onShippedAtChange={setShippedAt}
+      consignmentMode={consignmentMode}
+      onConsignmentModeChange={setConsignmentMode}
+      items={items}
+      getItemWarehouse={getItemWarehouse}
+      itemWarehouses={itemWarehouses}
+      onItemWarehouseChange={(id, w) => setItemWarehouses(prev => ({ ...prev, [id]: w }))}
+      itemSources={itemSources}
+      onItemSourceChange={(id, src) => setItemSources(prev => ({ ...prev, [id]: src }))}
+    />
+  );
+
+  const renderProductSelector = (bare: boolean = false) => (
+    <ProductSelector
+      products={storeProducts}
+      productsLoading={productsLoading}
+      filteredProducts={filteredProducts}
+      storeId={draftKey}
+      viewMode={viewMode}
+      onViewModeChange={setViewMode}
+      productSearch={productSearch}
+      onSearchChange={setProductSearch}
+      filterSheetOpen={filterSheetOpen}
+      onFilterSheetToggle={() => setFilterSheetOpen(v => !v)}
+      selectedCategory={selectedCategory}
+      onCategoryChange={handleCategoryChange}
+      selectedSpecs={selectedSpecs}
+      onSpecChange={handleSpecChange}
+      selectedBrands={selectedBrandsParam}
+      onBrandChange={handleBrandsChange}
+      onClearFilters={handleClearFilters}
+      activePanel={activePanel}
+      onTogglePanel={() => setActivePanel(activePanel === 'products' ? null : 'products')}
+      bare={bare}
+    />
+  );
+
+  const orderItemsPanel = (
+    <OrderItemsPanel
+      isEditMode={isEditMode}
+      orderType={orderType}
+      items={items}
+      onUpdateQuantity={handleQuantityChange}
+      onUpdatePrice={handlePriceChange}
+      onRemove={handleRemoveItem}
+      onReorder={handleReorder}
+      priceSyncMap={priceSyncMap}
+      onTogglePriceSync={handleTogglePriceSync}
+      activePanel={activePanel}
+      onTogglePanel={() => setActivePanel(activePanel === 'items' ? null : 'items')}
+    />
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -900,326 +997,64 @@ export default function AdminOrderForm() {
         </Alert>
       )}
 
-      {/* Top row: Order info + Notes */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle>{isEditMode ? '訂單資訊' : (
-            orderType === 'purchase' ? '採購資訊' :
-            orderType === 'consignment_receive' ? '寄賣收貨資訊' :
-            orderType === 'consignment_send' ? '寄賣出貨資訊' : '訂單資訊'
-          )}</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            {isEditMode ? (
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">店鋪：</span>
-                  <span className="font-medium">{displayStoreName}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">品牌：</span>
-                  <span className="font-medium">{displayBrand || '-'}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">建立時間：</span>
-                  <span>{format(new Date(order!.created_at), 'yyyy/MM/dd HH:mm', { locale: zhTW })}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">來源：</span>
-                  <span>{order!.source_type === 'frontend' ? '前台' : order!.source_type === 'consignment' ? '寄賣' : '後台'}</span>
-                </div>
+      {/* Main area - DESKTOP (lg+): click panel header to toggle which region expands */}
+      <div className="hidden lg:flex flex-col gap-4 lg:h-[calc(100vh-320px)]">
+        {activePanel === 'items' ? (
+          <>
+            {/* Order items expanded: OrderInfo (top-left) + ProductSelector (top-right, narrowed) | OrderItems (bottom, full width) */}
+            <div className="flex flex-row gap-4 lg:flex-[3] min-h-0">
+              <div className="lg:w-[380px] shrink-0 h-full overflow-auto">{orderInfoCard}</div>
+              <div className="flex-1 min-w-0 h-full overflow-auto">{renderProductSelector()}</div>
+            </div>
+            <div className="lg:flex-[4] min-h-[300px] overflow-auto">{orderItemsPanel}</div>
+          </>
+        ) : (
+          <>
+            {/* Products expanded: OrderInfo (top-left) + OrderItems (bottom-left, shrunk) | ProductSelector (right, full height, wide) */}
+            <div className="flex flex-col lg:flex-row gap-4 min-h-0 lg:flex-1">
+              <div className="flex flex-col gap-4 lg:flex-[3] min-w-0 overflow-hidden">
+                <div className="shrink-0">{orderInfoCard}</div>
+                <div className="flex-1 min-h-0 overflow-auto">{orderItemsPanel}</div>
               </div>
-            ) : (
-              <>
-                {/* Sales: store selector */}
-                {orderType === 'sales' && (
-                  <>
-                    {storeIdFromParam ? (
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-muted-foreground">店鋪：</span>
-                          <span className="font-medium">{displayStoreName}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">品牌：</span>
-                          <span className="font-medium">{displayBrand || '-'}</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <Label>門市</Label>
-                        <StorePicker
-                          stores={storesList}
-                          value={selectedStoreId}
-                          onChange={(v) => setSelectedStoreId(Array.isArray(v) ? v[0] || '' : v)}
-                          valueField="id"
-                          placeholder="搜尋門市名稱或編號..."
-                        />
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Purchase: supplier + dates */}
-                {orderType === 'purchase' && (
-                  <>
-                    <div className="space-y-2">
-                      <Label>供應商</Label>
-                      <Select value={supplierId} onValueChange={setSupplierId}>
-                        <SelectTrigger><SelectValue placeholder="選擇供應商" /></SelectTrigger>
-                        <SelectContent>
-                          {suppliersList.map((s) => (
-                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>預計到貨日（選填）</Label>
-                        <Input type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>廠商單號（選填）</Label>
-                        <Input value={supplierOrderNumber} onChange={(e) => setSupplierOrderNumber(e.target.value)} placeholder="廠商端訂單編號" />
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Consignment receive: supplier */}
-                {orderType === 'consignment_receive' && (
-                  <div className="space-y-2">
-                    <Label>供應商</Label>
-                    <Select value={supplierId} onValueChange={setSupplierId}>
-                      <SelectTrigger><SelectValue placeholder="選擇供應商" /></SelectTrigger>
-                      <SelectContent>
-                        {suppliersList.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {/* Consignment send: supplier + target store */}
-                {orderType === 'consignment_send' && (
-                  <>
-                    <div className="space-y-2">
-                      <Label>供應商</Label>
-                      <Select value={supplierId} onValueChange={setSupplierId}>
-                        <SelectTrigger><SelectValue placeholder="選擇供應商" /></SelectTrigger>
-                        <SelectContent>
-                          {suppliersList.map((s) => (
-                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>目標門市</Label>
-                      <StorePicker
-                        stores={storesList}
-                        value={targetStoreId}
-                        onChange={(v) => setTargetStoreId(Array.isArray(v) ? v[0] || '' : v)}
-                        valueField="id"
-                        placeholder="搜尋門市名稱或編號..."
-                      />
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle>備註</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <Textarea placeholder="輸入備註..." value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} />
-            {!isEditMode && orderType === 'sales' && (
-              <>
-                <div>
-                  <label className="text-sm font-medium">出貨時間</label>
-                  <Input
-                    type="datetime-local"
-                    value={shippedAt}
-                    onChange={(e) => setShippedAt(e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="space-y-0.5">
-                    <div className="text-sm font-medium">寄賣模式</div>
-                    <div className="text-xs text-muted-foreground">
-                      訂單出貨時以店家寄賣方式轉出，不扣自有庫存
-                    </div>
-                  </div>
-                  <Switch checked={consignmentMode} onCheckedChange={setConsignmentMode} />
-                </div>
-              </>
-            )}
-            {!isEditMode && orderType === 'sales' && items.length > 0 && (
-              <Collapsible open={warehouseExpanded} onOpenChange={setWarehouseExpanded}>
-                <CollapsibleTrigger asChild>
-                  <button className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
-                    <Warehouse className="h-4 w-4" />
-                    <span>出貨倉設定</span>
-                    <ChevronDown className={`h-4 w-4 ml-auto transition-transform duration-200 ${warehouseExpanded ? 'rotate-180' : ''}`} />
-                  </button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="mt-2 space-y-2">
-                  {!consignmentMode ? (
-                    items.map((item) => (
-                      <div key={item.id} className="flex items-center gap-2 text-sm">
-                        <span className="w-40 truncate">{item.productName || item.sku || item.id.slice(0, 8)}</span>
-                        <WarehouseSelector
-                          value={getItemWarehouse(item.id)}
-                          onChange={(w) => setItemWarehouses(prev => ({ ...prev, [item.id]: w }))}
-                          productId={item.productId}
-                          variantId={item.variantId}
-                        />
-                        <Select
-                          value={itemSources[item.id] || "self"}
-                          onValueChange={(v) => setItemSources(prev => ({ ...prev, [item.id]: v }))}
-                        >
-                          <SelectTrigger className="h-8 w-40 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="self">自有庫存</SelectItem>
-                            <SelectItem value="supplier_consignment">供應商寄賣</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-sm text-muted-foreground">
-                      寄賣模式：出貨時以店家寄賣方式轉出（庫存來源為「店家寄賣」，不扣自有庫存）。
-                    </div>
-                  )}
-                </CollapsibleContent>
-              </Collapsible>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Two-panel layout: Order Items + Product Catalog */}
-      <div className="flex flex-col lg:flex-row gap-4" style={{ minHeight: 'calc(100vh - 320px)' }}>
-        {/* Left panel: Order items */}
-        <div
-          className={`transition-all duration-300 overflow-auto ${
-            activePanel === 'items' ? 'lg:flex-[3]' : activePanel === 'products' ? 'lg:flex-[1]' : 'lg:flex-1'
-          }`}
-        >
-          <Card className="h-full min-h-[300px]">
-            <CardHeader className="sticky top-0 bg-background z-10 cursor-pointer" onClick={() => setActivePanel(activePanel === 'items' ? null : 'items')}>
-              <CardTitle className="flex items-center justify-between">
-                <span>{isEditMode ? '訂單項目' : (
-                  orderType === 'purchase' ? '採購品項' :
-                  orderType === 'consignment_receive' ? '寄賣收貨品項' :
-                  orderType === 'consignment_send' ? '寄賣出貨品項' : '訂單項目'
-                )}</span>
-                <Badge variant="secondary">{items.length} 項</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent onClick={(e) => e.stopPropagation()}>
-              <OrderItemsTable
-                items={items}
-                onUpdateQuantity={handleQuantityChange}
-                onUpdatePrice={handlePriceChange}
-                onRemove={handleRemoveItem}
-                isEditable={true}
-                priceSyncMap={orderType === 'sales' ? priceSyncMap : undefined}
-                onTogglePriceSync={orderType === 'sales' ? handleTogglePriceSync : undefined}
-                priceLabel={orderType === 'sales' ? '單價' : '進貨價'}
-              />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right panel: Product Catalog */}
-        {(!isEditMode || rightPanelExpanded) && (
-          <div
-            className={`transition-all duration-300 overflow-hidden ${
-              activePanel === 'products' ? 'lg:flex-[3]' : activePanel === 'items' ? 'lg:flex-[1]' : 'lg:flex-[2]'
-            }`}
-          >
-            <Card className="h-full flex flex-col">
-              <CardHeader className="sticky top-0 bg-background z-10 shrink-0 cursor-pointer" onClick={() => setActivePanel(activePanel === 'products' ? null : 'products')}>
-                <div className="flex items-center justify-between">
-                  <CardTitle>商品選擇</CardTitle>
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setFilterSheetOpen(!filterSheetOpen); }}>
-                      <Filter className="h-4 w-4" />
-                    </Button>
-                    <div className="flex bg-muted p-1 rounded-lg">
-                      {(['products', 'variants', 'gallery', 'table'] as const).map((mode) => (
-                        <button
-                          key={mode}
-                          onClick={(e) => { e.stopPropagation(); setViewMode(mode); }}
-                          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors duration-200 ${
-                            viewMode === mode
-                              ? 'bg-background text-foreground shadow-sm'
-                              : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          {mode === 'products' ? '產品' : mode === 'variants' ? '單品' : mode === 'gallery' ? '圖卡' : '表格'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="flex-1 min-h-0 overflow-auto p-0" onClick={(e) => e.stopPropagation()}>
-                <div className="flex h-full">
-                  {/* Sidebar filters (desktop) */}
-                  {!filterSheetOpen && (
-                    <aside className="hidden xl:block w-56 shrink-0 border-r p-2">
-                      <CatalogSidebar
-                        products={storeProducts || []}
-                        selectedCategory={selectedCategory}
-                        onCategoryChange={handleCategoryChange}
-                        selectedSpecs={selectedSpecs}
-                        onSpecChange={handleSpecChange}
-                        selectedBrands={selectedBrandsParam}
-                        onBrandChange={handleBrandsChange}
-                        onClearFilters={handleClearFilters}
-                      />
-                    </aside>
-                  )}
-                  {/* Filter sheet (mobile/tablet) */}
-                  {filterSheetOpen && (
-                    <aside className="w-64 shrink-0 border-r p-2 overflow-auto">
-                      <CatalogSidebar
-                        products={storeProducts || []}
-                        selectedCategory={selectedCategory}
-                        onCategoryChange={(v) => { handleCategoryChange(v); setFilterSheetOpen(false); }}
-                        selectedSpecs={selectedSpecs}
-                        onSpecChange={(key, values) => { handleSpecChange(key, values); setFilterSheetOpen(false); }}
-                        selectedBrands={selectedBrandsParam}
-                        onBrandChange={(v) => { handleBrandsChange(v); setFilterSheetOpen(false); }}
-                        onClearFilters={() => { handleClearFilters(); setFilterSheetOpen(false); }}
-                      />
-                    </aside>
-                  )}
-                  {/* Product grid */}
-                  <div className="flex-1 p-2 overflow-auto">
-                    <ProductCatalog
-                      products={filteredProducts}
-                      isLoading={productsLoading}
-                      storeId={draftKey}
-                      viewMode={viewMode}
-                      search={productSearch}
-                      onSearchChange={setProductSearch}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+              <div className="lg:flex-[7] min-w-0 overflow-auto">{renderProductSelector()}</div>
+            </div>
+          </>
         )}
       </div>
+
+      {/* Main area - MOBILE (<lg): order info + order items inline, catalog in right drawer */}
+      <div className="lg:hidden flex flex-col gap-4">
+        {orderInfoCard}
+        {orderItemsPanel}
+      </div>
+
+      {/* Mobile bottom floating button (hidden when drawer open) */}
+      {!mobileCatalogOpen && (
+        <button
+          type="button"
+          onClick={() => setMobileCatalogOpen(true)}
+          className="lg:hidden fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg"
+          aria-label="開啟商品選擇"
+        >
+          <Package className="h-6 w-6" />
+        </button>
+      )}
+
+      {/* Mobile right-side catalog drawer */}
+      {mobileCatalogOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileCatalogOpen(false)} />
+          <div className="absolute inset-y-0 right-0 w-full max-w-md bg-background shadow-xl flex flex-col">
+            <div className="flex items-center justify-between p-3 border-b shrink-0">
+              <span className="font-semibold">商品選擇</span>
+              <Button variant="ghost" size="icon" onClick={() => setMobileCatalogOpen(false)} aria-label="關閉">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden">{renderProductSelector(true)}</div>
+          </div>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex justify-end gap-3">

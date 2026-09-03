@@ -322,6 +322,27 @@ export function usePurchaseOrders(viewingOrderId?: string) {
     },
   });
 
+  const unlinkOrdersFromPurchaseMutation = useMutation({
+    mutationFn: async ({ purchaseOrderId, orderIds }: { purchaseOrderId: string; orderIds: string[] }) => {
+      const { data, error } = await (supabase as any)
+        .rpc('unlink_orders_from_purchase_order', {
+          p_purchase_order_id: purchaseOrderId,
+          p_order_ids: orderIds,
+        });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-items', viewingOrderId] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-links'] });
+      const removed = data?.removed_item_count ?? 0;
+      const updated = data?.updated_item_count ?? 0;
+      toast.success(`已解除 ${removed + updated} 筆採購連結（移除 ${removed} 筆、更新 ${updated} 筆）`);
+    },
+    onError: () => toast.error('解除採購連結失敗'),
+  });
+
   return {
     suppliers,
     isLoadingSuppliers,
@@ -341,6 +362,7 @@ export function usePurchaseOrders(viewingOrderId?: string) {
     updateItemMutation,
     deleteItemMutation,
     receiveItemsMutation,
+    unlinkOrdersFromPurchaseMutation,
     // Provide a way to record payment
     makePaymentMutation: useMutation({
       mutationFn: async (data: { orderId: string; accountId: string; amount: number; date: string }) => {

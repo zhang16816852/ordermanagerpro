@@ -78,8 +78,14 @@ export default function AdminOrderList() {
   const [itemWarehouses, setItemWarehouses] = useState<Record<string, string>>({});
 
   const getItemWarehouse = (itemId: string) => itemWarehouses[itemId] || defaultWarehouse?.id || '';
+  
+  // Helper: 優先顯示變體名稱，沒有變體才顯示主產品名稱
+  const getDisplayProductName = (productName: string = '', variantName?: string | null) => {
+    return variantName || productName || '未知商品';
+  };
+
   const [convertToPOOpen, setConvertToPOOpen] = useState(false);
-  const [selectedAggregateItems, setSelectedAggregateItems] = useState<Map<string, { productId: string; variantId: string | null; quantity: number; maxQuantity: number; productName: string; sku: string; sourceOrderIds: string[] }>>(new Map());
+  const [selectedAggregateItems, setSelectedAggregateItems] = useState<Map<string, { productId: string; variantId: string | null; quantity: number; maxQuantity: number; productName: string; variantName?: string | null; sku: string; sourceOrderIds: string[]; sourceQuantities: Record<string, number> }>>(new Map());
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -90,12 +96,24 @@ export default function AdminOrderList() {
     isLoading,
     shippingPoolMap,
     poLinkMap,
+    purchasedByOrderKey,
     getPendingQuantity,
     syncOrdersMutation,
     confirmOrdersMutation,
     addToShippingPoolMutation,
     cancelItemsMutation,
   } = useOrdersList(storeFilter, statusTab);
+
+  // 當訂單列表刷新後（如保存後 invalidate），自動同步 viewingOrder 最新資料
+  useEffect(() => {
+    if (viewingOrder) {
+      const updated = orders.find((o) => o.id === viewingOrder.id);
+      if (updated && updated !== viewingOrder) {
+        setViewingOrder(updated);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders]);
 
   const directShipMutation = useMutation({
     mutationFn: async ({
@@ -185,6 +203,40 @@ export default function AdminOrderList() {
     onError: (error: Error) => toast.error(getErrorMessage(error)),
   });
 
+  const unlinkOrdersMutation = useMutation({
+    mutationFn: async (orderIds: string[]) => {
+      // 依 poLinkMap 分組：將所選訂單自其關聯的採購單解除
+      const byPO = new Map<string, string[]>();
+      for (const orderId of orderIds) {
+        const poIds = poLinkMap.get(orderId)?.poIds || [];
+        for (const poId of poIds) {
+          if (!byPO.has(poId)) byPO.set(poId, []);
+          byPO.get(poId)!.push(orderId);
+        }
+      }
+      const results: any[] = [];
+      for (const [poId, ids] of byPO) {
+        const { data, error } = await (supabase as any).rpc('unlink_orders_from_purchase_order', {
+          p_purchase_order_id: poId,
+          p_order_ids: ids,
+        });
+        if (error) throw error;
+        results.push(data as any);
+      }
+      return results;
+    },
+    onSuccess: (results) => {
+      const removed = results.reduce((s, r) => s + (r?.removed_item_count ?? 0), 0);
+      const updated = results.reduce((s, r) => s + (r?.updated_item_count ?? 0), 0);
+      toast.success(`已解除採購關聯（移除 ${removed} 筆、更新 ${updated} 筆）`);
+      setSelectedOrderIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-links'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+    },
+    onError: (error: Error) => toast.error(getErrorMessage(error)),
+  });
+
   const reverseShipmentMutation = useMutation({
     mutationFn: async ({ consignmentOrderId, note }: { consignmentOrderId: string; note: string }) => {
       if (!user) throw new Error('未登入');
@@ -247,7 +299,7 @@ export default function AdminOrderList() {
         }
         grouped[order.store_id].items.push({
           itemId: item.id,
-          productName: item.product?.name || '',
+          productName: getDisplayProductName(item.product?.name, item.product_variant?.name),
           sku: item.product?.code || '',
           quantity: pending,
           maxQuantity: pending,
@@ -302,16 +354,29 @@ export default function AdminOrderList() {
   }, [directShipDialogOpen, selectedOrderIds, orders, defaultWarehouse]);
 
   // Filtering Logic (Orders)
-  const matchesSearch = useCallback((order: Order) => {
+  const itemMatchesSearch = useCallback((item: OrderItem) => {
     if (!search) return true;
     const searchLower = search.toLowerCase();
     return (
+      item.product?.name?.toLowerCase().includes(searchLower) ||
+      item.product?.code?.toLowerCase().includes(searchLower) ||
+      item.product_variant?.name?.toLowerCase().includes(searchLower)
+    );
+  }, [search]);
+
+  const matchesSearch = useCallback((order: Order) => {
+    if (!search) return true;
+    const searchLower = search.toLowerCase();
+    const matchesDirect = (
       order.stores?.name.toLowerCase().includes(searchLower) ||
       order.stores?.code?.toLowerCase().includes(searchLower) ||
       order.id.toLowerCase().includes(searchLower) ||
       (order.code && order.code.toLowerCase().includes(searchLower))
     );
-  }, [search]);
+    if (matchesDirect) return true;
+    // 同時搜尋訂單內的商品（名稱/代碼/變體值），讓「商品搜尋 → 訂單」跨模式一致
+    return (order.order_items || []).some(item => itemMatchesSearch(item));
+  }, [search, itemMatchesSearch]);
 
   const filteredOrders = useMemo(() => {
     return orders?.filter((order) => {
@@ -374,14 +439,7 @@ export default function AdminOrderList() {
     return orders?.flatMap(order =>
       order.order_items
         .filter(item => getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued')
-        .filter(item => {
-          if (!search) return true;
-          const searchLower = search.toLowerCase();
-          return (
-            item.product?.name.toLowerCase().includes(searchLower) ||
-            item.product?.code.toLowerCase().includes(searchLower)
-          );
-        })
+        .filter(item => itemMatchesSearch(item))
         .map(item => ({
           ...item,
           orderId: order.id,
@@ -394,21 +452,14 @@ export default function AdminOrderList() {
           pendingQuantity: getPendingQuantity(item),
         }))
     ) || [];
-  }, [orders, search, viewMode, getPendingQuantity]);
+  }, [orders, viewMode, getPendingQuantity, itemMatchesSearch]);
 
   const allCancelledItems = useMemo(() => {
     if (viewMode !== 'items') return [];
     return orders?.flatMap(order =>
       order.order_items
         .filter(item => item.status === 'cancelled' || item.status === 'discontinued')
-        .filter(item => {
-          if (!search) return true;
-          const searchLower = search.toLowerCase();
-          return (
-            item.product?.name.toLowerCase().includes(searchLower) ||
-            item.product?.code.toLowerCase().includes(searchLower)
-          );
-        })
+        .filter(item => itemMatchesSearch(item))
         .map(item => ({
           ...item,
           orderId: order.id,
@@ -421,7 +472,7 @@ export default function AdminOrderList() {
           pendingQuantity: 0,
         }))
     ) || [];
-  }, [orders, search, viewMode]);
+  }, [orders, viewMode, itemMatchesSearch]);
 
   // Aggregation logic: group pending items by product_id + variant_id across all stores
   const aggregatedItems = useMemo((): AggregatedItem[] => {
@@ -430,14 +481,7 @@ export default function AdminOrderList() {
     const allItems = orders?.flatMap(order =>
       order.order_items
         .filter(item => getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued')
-        .filter(item => {
-          if (!search) return true;
-          const searchLower = search.toLowerCase();
-          return (
-            item.product?.name.toLowerCase().includes(searchLower) ||
-            item.product?.code.toLowerCase().includes(searchLower)
-          );
-        })
+        .filter(item => itemMatchesSearch(item))
         .map(item => ({
           ...item,
           orderId: order.id,
@@ -448,48 +492,54 @@ export default function AdminOrderList() {
         }))
     ) || [];
 
-    // Group by productId + variantId
     const grouped = new Map<string, AggregatedItem>();
     for (const item of allItems) {
       const key = `${item.product_id}_${item.variant_id || 'null'}`;
+      const purchasedKey = `${item.orderId}|${item.product_id}|${item.variant_id || 'null'}`;
+      const alreadyPurchased = purchasedByOrderKey.get(purchasedKey) || 0;
+      const remaining = Math.max(0, item.pendingQuantity - alreadyPurchased);
+      if (remaining <= 0) continue;
+
       if (grouped.has(key)) {
         const existing = grouped.get(key)!;
-        existing.totalPendingQuantity += item.pendingQuantity;
+        existing.totalPendingQuantity += remaining;
         if (!existing.sourceOrderIds.includes(item.orderId)) {
           existing.sourceOrderIds.push(item.orderId);
         }
+        existing.sourceQuantities[item.orderId] = (existing.sourceQuantities[item.orderId] || 0) + remaining;
         const existingStore = existing.storeBreakdown.find(s => s.storeId === item.storeId);
         if (existingStore) {
-          existingStore.quantity += item.pendingQuantity;
+          existingStore.quantity += remaining;
         } else {
           existing.storeBreakdown.push({
             storeId: item.storeId,
             storeName: item.storeName,
             storeCode: item.storeCode,
-            quantity: item.pendingQuantity,
+            quantity: remaining,
           });
         }
       } else {
         grouped.set(key, {
           productId: item.product_id,
           variantId: item.variant_id || null,
-          productName: item.product?.name || '',
+          productName: getDisplayProductName(item.product?.name, item.product_variant?.name),
           variantName: item.product_variant?.name || null,
           sku: item.product?.code || '',
-          totalPendingQuantity: item.pendingQuantity,
+          totalPendingQuantity: remaining,
           sourceOrderIds: [item.orderId],
+          sourceQuantities: { [item.orderId]: remaining },
           storeBreakdown: [{
             storeId: item.storeId,
             storeName: item.storeName,
             storeCode: item.storeCode,
-            quantity: item.pendingQuantity,
+            quantity: remaining,
           }],
         });
       }
     }
 
     return Array.from(grouped.values()).sort((a, b) => a.productName.localeCompare(b.productName));
-  }, [orders, search, viewMode, getPendingQuantity]);
+  }, [orders, viewMode, getPendingQuantity, itemMatchesSearch, purchasedByOrderKey]);
 
   // Helper functions
   const getOrderShipmentStatus = (items: OrderItem[]) => {
@@ -541,8 +591,10 @@ export default function AdminOrderList() {
           quantity: item.totalPendingQuantity,
           maxQuantity: item.totalPendingQuantity,
           productName: item.productName,
+          variantName: item.variantName,
           sku: item.sku,
           sourceOrderIds: item.sourceOrderIds,
+          sourceQuantities: item.sourceQuantities,
         });
       } else {
         next.delete(key);
@@ -553,7 +605,7 @@ export default function AdminOrderList() {
 
   const handleToggleAllAggregate = (checked: boolean) => {
     if (checked) {
-      const next = new Map<string, { productId: string; variantId: string | null; quantity: number; maxQuantity: number; productName: string; sku: string; sourceOrderIds: string[] }>();
+      const next = new Map<string, { productId: string; variantId: string | null; quantity: number; maxQuantity: number; productName: string; variantName?: string | null; sku: string; sourceOrderIds: string[]; sourceQuantities: Record<string, number> }>();
       aggregatedItems.forEach(item => {
         next.set(getAggregateItemKey(item), {
           productId: item.productId,
@@ -561,8 +613,10 @@ export default function AdminOrderList() {
           quantity: item.totalPendingQuantity,
           maxQuantity: item.totalPendingQuantity,
           productName: item.productName,
+          variantName: item.variantName,
           sku: item.sku,
           sourceOrderIds: item.sourceOrderIds,
+          sourceQuantities: item.sourceQuantities,
         });
       });
       setSelectedAggregateItems(next);
@@ -628,36 +682,43 @@ export default function AdminOrderList() {
   const allSelectedConsignment =
     selectedOrdersArray.length > 0 && selectedOrdersArray.every((o) => o.consignment_mode);
 
-  // 從選取的訂單彙整品項，供「轉採購單」使用
+  // 從選取的訂單彙整品項，供「轉採購單」使用（扣除已採購量，避免重複採購）
   const poItemsFromOrders = useMemo(() => {
     if (viewMode !== 'orders') return [];
-    const grouped = new Map<string, { productId: string; variantId: string | null; quantity: number; maxQuantity: number; productName: string; sku: string; sourceOrderIds: string[] }>();
+    const grouped = new Map<string, { productId: string; variantId: string | null; quantity: number; maxQuantity: number; productName: string; variantName?: string | null; sku: string; sourceOrderIds: string[]; sourceQuantities: Record<string, number> }>();
     for (const order of orders.filter(o => selectedOrderIds.has(o.id))) {
       for (const item of order.order_items) {
         if (item.status === 'cancelled' || item.status === 'discontinued') continue;
         const pending = item.quantity - item.shipped_quantity;
         if (pending <= 0) continue;
+        const purchasedKey = `${order.id}|${item.product_id}|${item.variant_id || 'null'}`;
+        const alreadyPurchased = purchasedByOrderKey.get(purchasedKey) || 0;
+        const remaining = Math.max(0, pending - alreadyPurchased);
+        if (remaining <= 0) continue;
         const key = `${item.product_id}_${item.variant_id || 'null'}`;
         if (grouped.has(key)) {
           const g = grouped.get(key)!;
-          g.quantity += pending;
-          g.maxQuantity += pending;
+          g.quantity += remaining;
+          g.maxQuantity += remaining;
           if (!g.sourceOrderIds.includes(order.id)) g.sourceOrderIds.push(order.id);
+          g.sourceQuantities[order.id] = (g.sourceQuantities[order.id] || 0) + remaining;
         } else {
           grouped.set(key, {
             productId: item.product_id,
             variantId: item.variant_id || null,
-            quantity: pending,
-            maxQuantity: pending,
-            productName: (item as any).product?.name || '',
+            quantity: remaining,
+            maxQuantity: remaining,
+            productName: getDisplayProductName((item as any).product?.name, (item as any).product_variant?.name),
+            variantName: (item as any).product_variant?.name || null,
             sku: (item as any).product?.code || '',
             sourceOrderIds: [order.id],
+            sourceQuantities: { [order.id]: remaining },
           });
         }
       }
     }
     return Array.from(grouped.values());
-  }, [orders, selectedOrderIds, viewMode]);
+  }, [orders, selectedOrderIds, viewMode, purchasedByOrderKey]);
 
   // 決定傳給 AggregateToPODialog 的品項來源
   const poItemsSource = useMemo(() => {
@@ -666,7 +727,7 @@ export default function AdminOrderList() {
   }, [viewMode, poItemsFromOrders, selectedAggregateItems]);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] space-y-4 p-4 md:p-6 overflow-hidden bg-muted/10">
+    <div className="flex flex-col min-h-[calc(100vh-4rem)] space-y-4 p-4 md:p-6 bg-muted/10">
       <PageHeader
         title="所有訂單"
         subtitle="查看與管理系統中的所有訂單"
@@ -698,14 +759,13 @@ export default function AdminOrderList() {
                           });
                       } else {
                           for (const item of items) {
-                              const productName = (item as any).product?.name || '-';
-                              const variantName = (item as any).product_variant?.name;
+                              const displayName = getDisplayProductName((item as any).product?.name, (item as any).product_variant?.name);
                               exportData.push({
                                   "訂單編號": o.code || '-',
                                   "店鋪名稱": o.stores?.name || '-',
                                   "狀態": o.status,
                                   "建立日期": new Date(o.created_at).toLocaleString(),
-                                  "項目": variantName ? `${productName} - ${variantName}` : productName,
+                                  "項目": displayName,
                                   "數量": item.quantity,
                                   "單價": item.unit_price,
                                   "小計": item.quantity * item.unit_price,
@@ -807,7 +867,7 @@ export default function AdminOrderList() {
               </div>
             </div>
             {/* Mobile: Cards */}
-            <div className="md:hidden flex-1 min-h-0">
+            <div className="md:hidden flex-1 min-h-0 flex flex-col">
               <OrdersCardView
                 orders={filteredOrders}
                 isLoading={isLoading}
@@ -838,7 +898,7 @@ export default function AdminOrderList() {
                   if (checked) {
                     next.set(item.id, {
                       itemId: item.id,
-                      productName: item.product?.name || '',
+                      productName: getDisplayProductName(item.product?.name, item.product_variant?.name),
                       sku: item.product?.code || '',
                       quantity: item.pendingQuantity,
                       maxQuantity: item.pendingQuantity,
@@ -855,7 +915,7 @@ export default function AdminOrderList() {
                     allPendingItems.forEach(item => {
                       next.set(item.id, {
                         itemId: item.id,
-                        productName: item.product?.name || '',
+                        productName: getDisplayProductName(item.product?.name, item.product_variant?.name),
                         sku: item.product?.code || '',
                         quantity: item.pendingQuantity,
                         maxQuantity: item.pendingQuantity,
@@ -881,7 +941,7 @@ export default function AdminOrderList() {
             </div>
             </div>
             {/* Mobile: Cards */}
-            <div className="md:hidden flex-1 min-h-0">
+            <div className="md:hidden flex-1 min-h-0 flex flex-col">
               <ItemsCardView
                 items={allPendingItems}
                 isLoading={isLoading}
@@ -907,7 +967,7 @@ export default function AdminOrderList() {
               </div>
             </div>
             {/* Mobile: Cards */}
-            <div className="md:hidden flex-1 min-h-0">
+            <div className="md:hidden flex-1 min-h-0 flex flex-col">
               <AggregateCardsView
                 items={aggregatedItems}
                 isLoading={isLoading}
@@ -941,6 +1001,14 @@ export default function AdminOrderList() {
           }
         }}
         onConvertToPO={() => setConvertToPOOpen(true)}
+        linkedToPO={Array.from(selectedOrderIds).some(id => poLinkMap.has(id))}
+        onUnlinkOrders={() => {
+          const ids = Array.from(selectedOrderIds).filter(id => poLinkMap.has(id));
+          if (ids.length === 0) return;
+          if (window.confirm(`確定要解除這 ${ids.length} 個訂單與採購單的關聯嗎？\n未收貨的數量將從採購單中扣除，並可重新進行採購。`)) {
+            unlinkOrdersMutation.mutate(ids);
+          }
+        }}
         onExportAggregateCSV={handleExportAggregateCSV}
         onExportAggregateExcel={handleExportAggregateExcel}
       />
@@ -1055,9 +1123,9 @@ export default function AdminOrderList() {
                       .map(item => (
                         <div key={item.id} className="flex items-center gap-3 px-3 py-2">
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm truncate">{item.product?.name || '未知商品'}</div>
+                            <div className="text-sm truncate">{getDisplayProductName(item.product?.name, item.product_variant?.name)}</div>
                             <div className="text-xs text-muted-foreground">
-                              {item.product?.code}{item.product_variant?.name ? ` / ${item.product_variant.name}` : ''} × {item.quantity - item.shipped_quantity}
+                              {item.product?.code} × {item.quantity - item.shipped_quantity}
                             </div>
                           </div>
                           <WarehouseSelector

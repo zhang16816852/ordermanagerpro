@@ -15,6 +15,7 @@ DECLARE
         'recalculate_inventory',
         'upsert_brand_product_prices',
         'upsert_store_products_batch',
+        'unlink_orders_from_purchase_order',
         'sync_product_specs_v6',
         'sync_storefront_items',
         'migrate_historical_specs_to_v6',

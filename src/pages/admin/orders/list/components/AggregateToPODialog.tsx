@@ -23,14 +23,16 @@ interface EditableItem {
   maxQuantity: number;
   unitCost: number;
   productName: string;
+  variantName?: string | null;
   sku: string;
   sourceOrderIds: string[];
+  sourceQuantities: Record<string, number>;
 }
 
 interface AggregateToPODialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  selectedItems: { productId: string; variantId: string | null; quantity: number; maxQuantity?: number; productName: string; sku: string; sourceOrderIds: string[] }[];
+  selectedItems: { productId: string; variantId: string | null; quantity: number; maxQuantity?: number; productName: string; variantName?: string | null; sku: string; sourceOrderIds: string[]; sourceQuantities?: Record<string, number> }[];
   onCreated: () => void;
 }
 
@@ -64,8 +66,10 @@ export function AggregateToPODialog({
         maxQuantity: item.maxQuantity ?? item.quantity,
         unitCost: 0,
         productName: item.productName,
+        variantName: item.variantName ?? null,
         sku: item.sku,
         sourceOrderIds: item.sourceOrderIds,
+        sourceQuantities: item.sourceQuantities ?? {},
       })));
       setShowAddItem(false);
       setAddProductId('');
@@ -199,8 +203,10 @@ export function AggregateToPODialog({
       maxQuantity: 9999,
       unitCost: cost,
       productName: product?.name || '',
+      variantName: variant?.name || null,
       sku: variant?.sku || product?.code || '',
       sourceOrderIds: [],
+      sourceQuantities: {},
     };
     setEditableItems(prev => [...prev, newItem]);
     setShowAddItem(false);
@@ -254,6 +260,7 @@ export function AggregateToPODialog({
             received_quantity: 0,
             unit_cost: item.unitCost,
             source_order_ids: item.sourceOrderIds.length > 0 ? item.sourceOrderIds : null,
+            source_quantities: item.sourceOrderIds.length > 0 && Object.keys(item.sourceQuantities).length > 0 ? item.sourceQuantities : null,
           });
         if (itemError) throw itemError;
       }
@@ -286,7 +293,7 @@ export function AggregateToPODialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ClipboardList className="h-5 w-5" />
@@ -363,44 +370,22 @@ export function AggregateToPODialog({
           {/* Editable Items List */}
           <div className="space-y-2">
             <Label>產品清單（{editableItems.length} 項）</Label>
-            <ScrollArea className="max-h-[50vh] rounded-md border">
+            <ScrollArea className="max-h-[40vh] rounded-md border">
               <div className="p-2 space-y-1">
                 {editableItems.length === 0 && (
                   <div className="text-sm text-muted-foreground text-center py-4">無產品，請點擊下方新增</div>
                 )}
                 {editableItems.map((item) => (
-                  <div key={item.key} className="flex items-center gap-2 text-sm py-1.5 px-2 rounded bg-muted/30">
-                    <div className="min-w-0 flex-1">
-                      <span className="font-medium truncate block">{item.productName}</span>
-                      <span className="text-xs text-muted-foreground font-mono">{item.sku}</span>
-                      {item.sourceOrderIds.length > 0 && (
-                        <span className="text-[10px] text-muted-foreground/70 block">
-                          來源：{item.sourceOrderIds.length} 張訂單
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <div className="flex flex-col items-end">
-                        <span className="text-[10px] text-muted-foreground">數量</span>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={item.quantity}
-                          onChange={(e) => handleUpdateQuantity(item.key, parseInt(e.target.value) || 1)}
-                          className="w-16 h-7 text-center text-xs"
-                        />
-                      </div>
-                      <div className="flex flex-col items-end">
-                        <span className="text-[10px] text-muted-foreground">單價</span>
-                        <Input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={item.unitCost || ''}
-                          onChange={(e) => handleUpdateUnitCost(item.key, parseFloat(e.target.value) || 0)}
-                          className="w-20 h-7 text-right text-xs"
-                          placeholder="0"
-                        />
+                  <div key={item.key} className="flex flex-col gap-2 text-sm py-2 px-2 rounded bg-muted/30">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <span className="font-medium block break-words">{item.variantName || item.productName}</span>
+                        <span className="text-xs text-muted-foreground font-mono block">{item.sku}</span>
+                        {item.sourceOrderIds.length > 0 && (
+                          <span className="text-[10px] text-muted-foreground/70 block">
+                            來源：{item.sourceOrderIds.length} 張訂單
+                          </span>
+                        )}
                       </div>
                       <Button
                         variant="ghost"
@@ -410,6 +395,30 @@ export function AggregateToPODialog({
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <div className="flex flex-col flex-1">
+                        <span className="text-[10px] text-muted-foreground mb-1">數量</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={item.quantity}
+                          onChange={(e) => handleUpdateQuantity(item.key, parseInt(e.target.value) || 1)}
+                          className="h-7 text-center text-xs"
+                        />
+                      </div>
+                      <div className="flex flex-col flex-1">
+                        <span className="text-[10px] text-muted-foreground mb-1">單價</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={item.unitCost || ''}
+                          onChange={(e) => handleUpdateUnitCost(item.key, parseFloat(e.target.value) || 0)}
+                          className="h-7 text-right text-xs"
+                          placeholder="0"
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}

@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -1677,6 +1677,7 @@ export type Database = {
           quantity: number
           selected_model_name: string | null
           shipped_quantity: number
+          sort_order: number
           status: Database["public"]["Enums"]["order_item_status"]
           store_id: string
           unit_price: number
@@ -1691,6 +1692,7 @@ export type Database = {
           quantity?: number
           selected_model_name?: string | null
           shipped_quantity?: number
+          sort_order?: number
           status?: Database["public"]["Enums"]["order_item_status"]
           store_id: string
           unit_price: number
@@ -1705,6 +1707,7 @@ export type Database = {
           quantity?: number
           selected_model_name?: string | null
           shipped_quantity?: number
+          sort_order?: number
           status?: Database["public"]["Enums"]["order_item_status"]
           store_id?: string
           unit_price?: number
@@ -2257,6 +2260,7 @@ export type Database = {
           quantity: number
           received_quantity: number
           source_order_ids: string[] | null
+          source_quantities: Json | null
           unit_cost: number
           variant_id: string | null
         }
@@ -2268,6 +2272,7 @@ export type Database = {
           quantity?: number
           received_quantity?: number
           source_order_ids?: string[] | null
+          source_quantities?: Json | null
           unit_cost?: number
           variant_id?: string | null
         }
@@ -2279,6 +2284,7 @@ export type Database = {
           quantity?: number
           received_quantity?: number
           source_order_ids?: string[] | null
+          source_quantities?: Json | null
           unit_cost?: number
           variant_id?: string | null
         }
@@ -3208,12 +3214,10 @@ export type Database = {
         }
         Returns: Json
       }
-      delete_sales_note:
-        | { Args: { p_sales_note_id: string }; Returns: undefined }
-        | {
-            Args: { p_sales_note_id: string; p_warehouse_id?: string }
-            Returns: undefined
-          }
+      delete_sales_note: {
+        Args: { p_sales_note_id: string }
+        Returns: undefined
+      }
       direct_ship_order: {
         Args: {
           p_created_by: string
@@ -3394,6 +3398,10 @@ export type Database = {
       sync_storefront_items: {
         Args: { p_product_id: string }
         Returns: undefined
+      }
+      unlink_orders_from_purchase_order: {
+        Args: { p_order_ids: string[]; p_purchase_order_id: string }
+        Returns: Json
       }
       upsert_brand_product_prices: {
         Args: { p_brand: string; p_products: Json }

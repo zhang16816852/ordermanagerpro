@@ -4,16 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, AlertCircle, Package, Printer } from "lucide-react";
+import { Loader2, AlertCircle, Package } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { toast } from "sonner";
-import { getErrorMessage } from '@/lib/errorMessages';
-import { useState, useEffect, useRef } from "react";
-import { PrintDialog, PrintOptions } from "@/components/PrintDialog";
-import { QRCodeSVG } from "qrcode.react";
 import { formatCurrency } from "@/lib/formatters";
+import { SharedReceiptExport } from "./SharedReceiptExport";
 
 interface SharedOrderData {
   order: {
@@ -29,7 +24,7 @@ interface SharedOrderData {
     product_name: string;
     variant_name?: string | null;
     quantity: number;
-    unit_price: number;
+    unit_price: number | null;
   }[];
 }
 
@@ -38,11 +33,8 @@ export default function SharedOrder() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
   const { user, isAdmin, storeRoles } = useAuth();
-  const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
   const isPrintingMode = searchParams.get("print") === "true";
-  const printSize = searchParams.get("size") || "a4";
-  const printMargin = searchParams.get("margin") || "full";
-  const printRef = useRef<HTMLDivElement>(null);
+  const printSize = (searchParams.get("size") as "a4" | "middle-cut") || "a4";
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["shared-order", orderId, token, user?.id, storeRoles],
@@ -62,62 +54,6 @@ export default function SharedOrder() {
     },
     retry: false
   });
-
-  useEffect(() => {
-    if (isPrintingMode && data) {
-      const timer = setTimeout(() => {
-        window.print();
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [isPrintingMode, data]);
-
-  const handlePrint = async (options: PrintOptions) => {
-    if (!printRef.current || !data) return;
-
-    const element = printRef.current;
-
-    const opt = {
-      margin: options.margin === 'full' ? 0 : [10, 10, 10, 10],
-      filename: `訂單_${data.order.code || data.order.id}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        letterRendering: true
-      },
-      jsPDF: {
-        unit: 'mm',
-        format: options.paperSize === 'a4' ? 'a4' : [241, 140],
-        orientation: 'portrait'
-      },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-    };
-
-    element.classList.add('is-printing-mode');
-    const sizeClass = options.paperSize === 'a4' ? 'print-a4' : 'print-middle-cut';
-    const marginClass = options.margin === 'full' ? 'print-no-margin' : '';
-    element.classList.add(sizeClass);
-    if (marginClass) element.classList.add(marginClass);
-
-    toast.info("正在產生 PDF 並匯出...");
-    setIsPrintDialogOpen(false);
-
-    try {
-      const { default: html2pdf } = await import('html2pdf.js');
-      // @ts-expect-error - html2pdf might have type issues depending on version
-      await html2pdf().set(opt).from(element).save();
-      toast.success("PDF 匯出成功");
-    } catch (err) {
-      console.error("PDF error:", err);
-      toast.error("PDF 產生失敗");
-      window.print();
-    } finally {
-      element.classList.remove('is-printing-mode', sizeClass);
-      if (marginClass) element.classList.remove(marginClass);
-    }
-  };
 
   if (isLoading) {
     return (
@@ -145,21 +81,35 @@ export default function SharedOrder() {
   const canViewPrice = user ? (isAdmin || storeRoles.some(r => r.store_id === order.store_id)) : false;
   const showPrice = items.length > 0 && items[0].unit_price !== null && canViewPrice;
 
+  // 列印模式：只顯示列印版型，方便版面調整測試
+  if (isPrintingMode) {
+    return (
+      <SharedReceiptExport
+        items={items.map((item) => ({
+          name: item.product_name,
+          variant: item.variant_name,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+        }))}
+        title="訂單"
+        docTitleLabel="訂購店家"
+        storeName={order.store_name}
+        code={order.code || order.id}
+        createdAt={order.created_at}
+        status={order.status === 'completed' ? '已完成' : '處理中'}
+        notes={order.notes}
+        qrValue={window.location.href.replace(/[?&]print=true.*/, "")}
+        filenamePrefix="訂單"
+        canViewPrice={canViewPrice}
+        printMode
+        defaultPaperSize={printSize}
+      />
+    );
+  }
+
   return (
-    <div
-      ref={printRef}
-      className={`container mx-auto p-4 max-w-3xl space-y-6 ${isPrintingMode ? 'is-printing-mode' : ''
-        } ${isPrintingMode && printSize === 'a4' ? 'print-a4' : isPrintingMode ? 'print-middle-cut' : ''
-        } ${isPrintingMode && printMargin === 'full' ? 'print-no-margin' : ''}`}
-    >
-      {!isPrintingMode && (
-        <PrintDialog
-          isOpen={isPrintDialogOpen}
-          onClose={() => setIsPrintDialogOpen(false)}
-          onPrint={handlePrint}
-        />
-      )}
-      <Card className={isPrintingMode ? 'border-none shadow-none' : ''}>
+    <div className="container mx-auto p-4 max-w-3xl space-y-6">
+      <Card className={isPrintingMode ? 'border-none shadow-none print-no-margin' : ''}>
         <CardHeader className={`border-b bg-muted/40 ${isPrintingMode ? 'bg-white pb-2' : ''}`}>
           <div className="flex justify-between items-start">
             <div>
@@ -171,24 +121,30 @@ export default function SharedOrder() {
                 {order.store_name}
               </p>
             </div>
-            <div className="flex flex-col items-end gap-2">
-              {/* QR Code and Page Info - Only visible in print */}
-              <div className="hidden print:flex print-header-info">
-                <div className="print-qr-code">
-                  <QRCodeSVG value={window.location.href.replace(/[?&]print=true.*/, "")} size={60} />
-                </div>
-                <div className="text-[10px] print-page-info font-mono mt-1 text-right"></div>
-              </div>
-
-              <div className="flex flex-col items-end gap-2 print:hidden">
-                <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
-                  {order.status === 'completed' ? '已完成' : '處理中'}
-                </Badge>
-                <Button variant="outline" size="sm" onClick={() => setIsPrintDialogOpen(true)} className="print:hidden">
-                  <Printer className="h-4 w-4 mr-2" />
-                  列印 / 另存 PDF
-                </Button>
-              </div>
+            <div className="flex flex-col items-end gap-2 print:hidden">
+              <Badge variant={order.status === 'completed' ? 'default' : 'secondary'}>
+                {order.status === 'completed' ? '已完成' : '處理中'}
+              </Badge>
+              <SharedReceiptExport
+                items={items.map((item) => ({
+                  name: item.product_name,
+                  variant: item.variant_name,
+                  quantity: item.quantity,
+                  unit_price: item.unit_price,
+                }))}
+                title="訂單"
+                docTitleLabel="訂購店家"
+                storeName={order.store_name}
+                code={order.code || order.id}
+                createdAt={order.created_at}
+                status={order.status === 'completed' ? '已完成' : '處理中'}
+                notes={order.notes}
+                qrValue={window.location.href.replace(/[?&]print=true.*/, "")}
+                filenamePrefix="訂單"
+                canViewPrice={canViewPrice}
+                printMode={isPrintingMode}
+                defaultPaperSize={printSize}
+              />
             </div>
           </div>
           <div className="text-xs text-muted-foreground mt-2">
@@ -210,12 +166,7 @@ export default function SharedOrder() {
               {items.map((item: any, index: number) => (
                 <TableRow key={index}>
                   <TableCell className="pl-6 font-medium">
-                    {item.product_name}
-                    {item.variant_name && (
-                      <span className="text-muted-foreground ml-1">
-                        - {item.variant_name}
-                      </span>
-                    )}
+                    {item.variant_name || item.product_name}
                   </TableCell>
                   <TableCell className="text-right pr-6">{item.quantity}</TableCell>
                   {showPrice && (

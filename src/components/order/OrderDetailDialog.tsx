@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import {
@@ -25,6 +25,11 @@ interface OrderDetailDialogProps {
 
 export function OrderDetailDialog({ order, open, onOpenChange }: OrderDetailDialogProps) {
     const [isCopied, setIsCopied] = useState(false);
+
+    const sortedOrderItems = useMemo(() =>
+        [...(order?.order_items ?? [])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
+        [order?.order_items]
+    );
 
     if (!order) return null;
 
@@ -57,7 +62,7 @@ export function OrderDetailDialog({ order, open, onOpenChange }: OrderDetailDial
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-1xl max-h-[70vh] flex flex-col">
+            <DialogContent className="max-w-1xl max-h-[85vh] md:max-h-[70vh] flex flex-col">
                 <DialogHeader>
                     <div className="flex items-center justify-between pr-6">
                         <div>
@@ -87,10 +92,10 @@ export function OrderDetailDialog({ order, open, onOpenChange }: OrderDetailDial
                     />
 
                     {/* Order Items - Desktop Table */}
-                    <OrderDetailItemsTable items={order.order_items} />
+                    <OrderDetailItemsTable items={sortedOrderItems} />
 
                     {/* Order Items - Mobile Cards */}
-                    <OrderDetailItemsCards items={order.order_items} />
+                    <OrderDetailItemsCards items={sortedOrderItems} />
 
                     {/* Total Amount */}
                     <div className="flex justify-end text-lg font-semibold text-primary">

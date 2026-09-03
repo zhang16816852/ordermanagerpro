@@ -12,7 +12,7 @@ import { Search, FileText, CalendarIcon, X } from "lucide-react";
 import { SalesNoteListTable } from "@/components/sales/SalesNoteListTable";
 import { SalesNoteDetailDialog, SalesNoteDetail } from "@/components/sales/SalesNoteDetailDialog";
 import { toast } from "sonner";
-import { getErrorMessage } from '@/lib/errorMessages';
+import { getErrorDetails, getErrorMessage } from '@/lib/errorMessages';
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -122,8 +122,16 @@ export default function AdminSalesNotes() {
       queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
       queryClient.invalidateQueries({ queryKey: ["shipping-pool-items"] });
     },
-    onError: (error: Error) => {
-      toast.error(`刪除失敗：${getErrorMessage(error)}`);
+    onError: (error: unknown) => {
+      const details = getErrorDetails(error);
+      console.error("[delete_sales_note]", details, error);
+      const msg = getErrorMessage(error);
+      const suffix = details.code ? `（${details.code}）` : "";
+      const description = [details.details, details.hint].filter(Boolean).join(" | ") || undefined;
+      toast.error(`刪除失敗：${msg}${suffix}`, {
+        description,
+        duration: 6000,
+      });
     },
   });
 
@@ -326,12 +334,16 @@ export default function AdminSalesNotes() {
             data={tableData}
             isLoading={isLoading}
             onView={(note) => {
-              // Note: the 'note' from tableData is just summary, we find the full note from salesNotes
               const fullNote = salesNotes?.find(n => n.id === note.id);
               setSelectedNote(fullNote);
             }}
             onDelete={(id) => {
-              if (window.confirm("確定要刪除此銷貨單嗎？\n\n注意：刪除後，商品將會回滾至出貨池（變回未出貨狀態）。")) {
+              const target = salesNotes?.find(n => n.id === id);
+              if (target?.status === "received") {
+                toast.error("已收貨的銷貨單不可刪除", { description: `單號 ${target.code || id.slice(0, 8)} 已簽收，屬收款憑證不可作廢刪除。` });
+                return;
+              }
+              if (window.confirm("確定要刪除此銷貨單嗎？\n\n注意：刪除後，商品將會回滾至出貨池（變回未出貨狀態）。寄賣收款單（已收貨）不可刪除。")) {
                 deleteMutation.mutate(id);
               }
             }}

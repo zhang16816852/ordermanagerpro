@@ -1,4 +1,5 @@
 import type { OrderGridTemplateWithProducts, DimensionConfig } from '@/types/order-grid';
+import type { ProductWithPricing } from '@/types/product';
 
 export interface VariantLookup {
   sku: string;
@@ -7,13 +8,49 @@ export interface VariantLookup {
   productId: string;
 }
 
-function dimConfigToCols(config: DimensionConfig, prefix: string): Record<string, string> {
+function collectOptionGroupValues(
+  groupId: string | undefined,
+  products: ProductWithPricing[],
+  variantIds: Set<string> | null,
+): string[] {
+  if (!groupId) return [];
+  const values = new Set<string>();
+  products.forEach((p) => {
+    const ogroups = (p as any).option_groups || [];
+    const groupIds = new Set(
+      ogroups.filter((g: any) => g.id === groupId).map((g: any) => g.id),
+    );
+    if (groupIds.size === 0) return;
+    p.variants?.forEach((v: any) => {
+      if (variantIds && !variantIds.has(v.id)) return;
+      (v.option_values || []).forEach((ov: any) => {
+        if (groupIds.has(ov.group_id) && (ov.label || ov.value)) {
+          values.add(ov.label || ov.value);
+        }
+      });
+    });
+  });
+  return Array.from(values);
+}
+
+function dimConfigToCols(
+  config: DimensionConfig,
+  prefix: string,
+  products: ProductWithPricing[],
+  variantIds: Set<string> | null,
+): Record<string, string> {
+  let values = config.values || [];
+  if (config.type === 'option') {
+    const collected = collectOptionGroupValues(config.option_group_id, products, variantIds);
+    if (collected.length > 0) values = collected;
+  }
   return {
     [`${prefix}類型`]: config.type,
     [`${prefix}欄位`]: config.field || '',
     [`${prefix}標籤`]: config.label,
-    [`${prefix}值`]: (config.values || []).join(','),
+    [`${prefix}值`]: values.join(','),
     [`${prefix}SpecID`]: config.spec_id || '',
+    [`${prefix}OptionGroupID`]: config.option_group_id || '',
     [`${prefix}ValueMap`]: config.valueMap ? JSON.stringify(config.valueMap) : '',
   };
 }
@@ -21,16 +58,19 @@ function dimConfigToCols(config: DimensionConfig, prefix: string): Record<string
 export async function exportTemplatesToExcel(
   templates: OrderGridTemplateWithProducts[],
   variantLookup: Map<string, VariantLookup>,
+  products: ProductWithPricing[] = [],
 ): Promise<void> {
   const XLSX = await import('xlsx');
   const rows: Record<string, string>[] = [];
 
   for (const t of templates) {
     const variants = t.template_variants || [];
-    const rc = dimConfigToCols(t.row_config, 'Row維度');
-    const cc = dimConfigToCols(t.col_config, 'Col維度');
-    const tc = t.tab_config ? dimConfigToCols(t.tab_config, 'Tab維度') : {
+    const variantIds = new Set<string>(variants.map((tv) => tv.variant_id));
+    const rc = dimConfigToCols(t.row_config, 'Row維度', products, variantIds);
+    const cc = dimConfigToCols(t.col_config, 'Col維度', products, variantIds);
+    const tc = t.tab_config ? dimConfigToCols(t.tab_config, 'Tab維度', products, variantIds) : {
       'Tab維度類型': '', 'Tab維度欄位': '', 'Tab維度標籤': '', 'Tab維度值': '',
+      'Tab維度SpecID': '', 'Tab維度OptionGroupID': '', 'Tab維度ValueMap': '',
     };
 
     if (variants.length === 0) {

@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, PackageCheck, CreditCard, Download, FileSpreadsheet } from 'lucide-react';
+import { Plus, PackageCheck, CreditCard, Download, FileSpreadsheet, X } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 import { PurchaseOrder, PurchaseOrderItem, ProductWithPrice } from '../types';
 import { ItemForm } from './ItemForm';
@@ -39,6 +39,7 @@ interface OrderDetailDialogProps {
   onImportItems: (items: any[]) => void;
   onReceiveItems: (data: any) => void;
   onMakePayment: (data: any) => void;
+  onUnlinkOrder: (orderId: string) => void;
   isLoading: boolean;
 }
 
@@ -53,6 +54,7 @@ export function OrderDetailDialog({
   onImportItems,
   onReceiveItems,
   onMakePayment,
+  onUnlinkOrder,
   isLoading
 }: OrderDetailDialogProps) {
   const [addItemOpen, setAddItemOpen] = useState(false);
@@ -230,9 +232,19 @@ export function OrderDetailDialog({
                     {(item.source_order_ids || []).length > 0 ? (
                       <div className="flex flex-wrap gap-1">
                         {item.source_order_ids!.map(id => (
-                          <Badge key={id} variant="outline" className="text-xs">
-                            {sourceOrderMap[id] || id.slice(0, 8)}
-                          </Badge>
+                          <span key={id} className="inline-flex items-center gap-1">
+                            <Badge variant="outline" className="text-xs">
+                              {sourceOrderMap[id] || id.slice(0, 8)}
+                            </Badge>
+                            <button
+                              type="button"
+                              title="解除與此訂單的採購關聯"
+                              onClick={() => onUnlinkOrder(id)}
+                              className="text-muted-foreground hover:text-destructive"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
                         ))}
                       </div>
                     ) : (

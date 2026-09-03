@@ -49,7 +49,7 @@ export function useCreateOrder({
 
       if (orderError) throw orderError;
 
-      const orderItems = items.map((item: OrderDraftItem) => ({
+      const orderItems = items.map((item: OrderDraftItem, index) => ({
         order_id: order.id,
         product_id: item.productId,
         variant_id: item.variantId || null,
@@ -57,6 +57,7 @@ export function useCreateOrder({
         quantity: item.quantity,
         unit_price: item.price,
         selected_model_name: item.selectedModelName || null,
+        sort_order: index + 1,
       }));
 
       const { error: itemsError } = await (supabase

@@ -138,7 +138,10 @@
 
   /* Accessibility: Respect user motion preferences */
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
+
+    *,
+    *::before,
+    *::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
@@ -147,7 +150,10 @@
   }
 
   /* Accessibility: Tabular numbers for all table cells and number displays */
-  td, th, [role="cell"], [role="columnheader"] {
+  td,
+  th,
+  [role="cell"],
+  [role="columnheader"] {
     font-variant-numeric: tabular-nums;
   }
 
@@ -192,6 +198,7 @@
   .hover-lift {
     transition: transform 0.2s ease, box-shadow 0.2s ease;
   }
+
   .hover-lift:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px -2px hsl(220 25% 15% / 0.1), 0 8px 24px -4px hsl(220 25% 15% / 0.15);
@@ -201,6 +208,7 @@
   .active-press {
     transition: transform 0.1s ease;
   }
+
   .active-press:active {
     transform: scale(0.97);
   }
@@ -216,6 +224,7 @@
     opacity: 0;
     transform: translateY(12px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -313,6 +322,229 @@
   background-color: white !important;
   box-shadow: none !important;
 }
+
+/* ===== Doc Receipt Print Layout (SharedSale / SharedOrder) ===== */
+/* 螢幕置於畫面外（fixed 脫離版面），僅於列印 / html2pdf 擷取時顯示 */
+.doc-receipt-wrap {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  background: #fff;
+  z-index: -1;
+}
+
+.doc-receipt-wrap.is-printing-mode,
+.is-printing-mode .doc-receipt-wrap {
+  position: static;
+  left: 0;
+  z-index: auto;
+}
+
+@media print {
+  .doc-receipt-wrap {
+    position: static !important;
+    left: 0 !important;
+  }
+
+  .doc-page {
+    page-break-after: always;
+  }
+}
+
+.doc-page {
+  padding: 16px 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-head-wrap {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.doc-title {
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+  padding: 0 70px;
+}
+
+.doc-page-no {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 11px;
+  color: #555;
+  white-space: nowrap;
+}
+
+.doc-store {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.doc-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-top: 1px solid #333;
+  border-bottom: 1px solid #333;
+  padding: 6px 2px;
+}
+
+.doc-meta {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.doc-qr svg {
+  display: block;
+}
+
+.doc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  table-layout: fixed;
+}
+
+/* 統一列高：每列固定容納 2 行高度，長名稱在欄內折行、短名稱留白，所有列等高 */
+.doc-table tr {
+  height: 40px;
+}
+
+.doc-table .doc-head th {
+  border: 1px solid #333;
+  border-left: none;
+  border-right: none;
+  padding: 4px 6px;
+  font-weight: 700;
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* 單價、小計欄標題靠右對齊，與內容 td.doc-right 一致 */
+.doc-table .doc-head th:nth-child(4),
+.doc-table .doc-head th:nth-child(5) {
+  text-align: right;
+}
+
+/* 表頭：僅備註欄（最右列）保留垂直框線 */
+.doc-table .doc-head th:last-child {
+  border-left: 1px solid #333;
+  border-right: 1px solid #333;
+}
+
+.doc-table td {
+  border: 1px solid #ccc;
+  border-left: none;
+  border-right: none;
+  padding: 1px 6px 12px;
+  line-height: 1.35;
+  vertical-align: middle;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* 內容列：僅備註欄（最右列）保留垂直框線 */
+.doc-table td:last-child {
+  border-left: 1px solid #ccc;
+  border-right: 1px solid #ccc;
+}
+
+/* 商品名稱區域：固定表格高度（依每頁筆數填充空列，各頁高度一致） */
+.doc-empty td {
+  border-color: transparent;
+}
+
+.doc-center {
+  text-align: center;
+}
+
+.doc-right {
+  text-align: right;
+}
+
+.doc-note {
+  text-align: left;
+}
+
+.doc-num {
+  white-space: nowrap;
+}
+
+/* 名稱欄：寬度由「第一列 th 百分比」固定（table-layout:fixed），單行/換行同寬，長名稱僅在同寬欄內折行 */
+.doc-name {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* 統計 + 手寫備註區（最後一頁） */
+.doc-summary-wrap {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 20px;
+  padding: 10px 20px 24px;
+  page-break-inside: avoid;
+}
+
+.doc-summary-notes {
+  flex: 1;
+  border: 1px dashed #999;
+  min-height: 96px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-summary-notes .doc-summary-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #777;
+  margin-bottom: 4px;
+}
+
+.doc-summary-notes-body {
+  font-size: 12px;
+  flex: 1;
+  min-height: 60px;
+}
+
+.doc-summary-stats {
+  min-width: 200px;
+  border: 1px solid #333;
+}
+
+.doc-summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-size: 13px;
+  border-bottom: 1px solid #eee;
+}
+
+.doc-summary-row:last-child {
+  border-bottom: none;
+}
+
+.doc-summary-total {
+  background: #f7f7f7;
+  font-weight: 700;
+}
+
+.doc-qr-code {
+  width: 60px;
+  height: 60px;
+}
+
+/* ===== End Doc Receipt Print Layout ===== */
 
 /* Safe area padding for iPhone bottom bar */
 .safe-area-pb {

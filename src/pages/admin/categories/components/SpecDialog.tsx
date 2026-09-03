@@ -11,16 +11,22 @@ import {
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { X, Search } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { X, Search, GripVertical } from 'lucide-react';
 import {
     DndContext,
     closestCenter,
     PointerSensor,
     useSensor,
     useSensors,
+    DragEndEvent,
 } from '@dnd-kit/core';
-import { SortableItem } from '../../SortableItem';
+import {
+    SortableContext,
+    verticalListSortingStrategy,
+    arrayMove,
+    useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { SpecDefinition } from '../types';
 import { useSpecStore } from '@/store/useSpecStore';
 import { cn } from '@/lib/utils';
@@ -34,6 +40,39 @@ interface SpecDialogProps {
     onSubmit: () => void;
     allSpecs?: SpecDefinition[];
     isPending: boolean;
+}
+
+// 選項清單的可拖移列（用 GripVertical 當拖柄）
+function SortableOptionItem({
+    indexId,
+    value,
+    onChange,
+    onDelete,
+}: {
+    indexId: string;
+    value: string;
+    onChange: (v: string) => void;
+    onDelete: () => void;
+}) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: indexId });
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 50 : undefined,
+        opacity: isDragging ? 0.5 : 1,
+    };
+
+    return (
+        <div ref={setNodeRef} style={style} className="flex gap-2 items-center">
+            <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 hover:bg-muted rounded shrink-0">
+                <GripVertical className="h-4 w-4 text-muted-foreground/50" />
+            </div>
+            <Input className="h-8 text-sm" value={value} onChange={(e) => onChange(e.target.value)} />
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onDelete}>
+                <X className="h-3 w-3" />
+            </Button>
+        </div>
+    );
 }
 
 export function SpecDialog({
@@ -168,6 +207,17 @@ export function SpecDialog({
                 logic_config: { ...prev.logic_config, triggers: [...otherTriggers, ...nextQTriggers] } as any
             };
         });
+    };
+
+    // 拖移重排選項／標籤的順序（決定下拉選單、單位欄位的顯示順序）
+    const handleOptionDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+        const opts = specForm.options || [];
+        const oldIndex = opts.findIndex((_, i) => String(i) === active.id);
+        const newIndex = opts.findIndex((_, i) => String(i) === over.id);
+        if (oldIndex < 0 || newIndex < 0) return;
+        setSpecForm(prev => ({ ...prev, options: arrayMove(prev.options || [], oldIndex, newIndex) }));
     };
 
     return (
@@ -317,7 +367,13 @@ export function SpecDialog({
                                         <option value="eq">=</option>
                                         <option value="ne">≠</option>
                                     </select>
-                                    <Input className="h-7 text-xs flex-1" value={trigger.on_value} onChange={(e) => updateTrigger(idx, 'on_value', e.target.value)} placeholder="觸發值 (如: true, *)" />
+                                    <Input className="h-7 text-xs flex-1" list={`trigger-on-value-${idx}`} value={trigger.on_value} onChange={(e) => updateTrigger(idx, 'on_value', e.target.value)} placeholder="觸發值（選項值 / * / input＝自訂輸入）" />
+                                    <datalist id={`trigger-on-value-${idx}`}>
+                                        {(editingSpec?.options || []).map(opt => (
+                                            <option key={opt} value={opt} />
+                                        ))}
+                                        <option value="input">input＝自訂輸入（其他）</option>
+                                    </datalist>
                                 </div>
                                 <div className="p-1 border rounded bg-slate-50 max-h-56 overflow-y-auto space-y-1">
                                     <div className="relative">
@@ -364,16 +420,27 @@ export function SpecDialog({
                     {(['select', 'multiselect', 'text', 'number_with_unit'].includes(specForm.type || '')) && (
                         <div className="space-y-2">
                             <label className="text-sm font-medium">選項/標籤定義</label>
-                            {(specForm.options || []).map((opt: string, i: number) => (
-                                <div key={i} className="flex gap-2">
-                                    <Input className="h-8 text-sm" value={opt} onChange={(e) => {
-                                        const newOpts = [...(specForm.options || [])];
-                                        newOpts[i] = e.target.value;
-                                        setSpecForm(prev => ({ ...prev, options: newOpts }));
-                                    }} />
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSpecForm(prev => ({ ...prev, options: (prev.options || []).filter((_, idx) => idx !== i) }))}><X className="h-3 w-3" /></Button>
-                                </div>
-                            ))}
+                            <p className="text-[10px] text-muted-foreground -mt-1">拖移 <GripVertical className="inline h-3 w-3 text-muted-foreground/60" /> 可調整顯示順序</p>
+                            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleOptionDragEnd}>
+                                <SortableContext
+                                    items={(specForm.options || []).map((_, i) => String(i))}
+                                    strategy={verticalListSortingStrategy}
+                                >
+                                    {(specForm.options || []).map((opt: string, i: number) => (
+                                        <SortableOptionItem
+                                            key={i}
+                                            indexId={String(i)}
+                                            value={opt}
+                                            onChange={(v) => {
+                                                const newOpts = [...(specForm.options || [])];
+                                                newOpts[i] = v;
+                                                setSpecForm(prev => ({ ...prev, options: newOpts }));
+                                            }}
+                                            onDelete={() => setSpecForm(prev => ({ ...prev, options: (prev.options || []).filter((_, idx) => idx !== i) }))}
+                                        />
+                                    ))}
+                                </SortableContext>
+                            </DndContext>
                             <Button variant="outline" size="sm" className="w-full" onClick={() => setSpecForm(prev => ({ ...prev, options: [...(prev.options || []), ''] }))}>+ 新增選項</Button>
                         </div>
                     )}

@@ -16,6 +16,7 @@ export interface OrderItem {
     unit_price: number;
     status: OrderItemStatus;
     store_id: string;
+    sort_order?: number;
     product?: {
         name: string;
         code: string;

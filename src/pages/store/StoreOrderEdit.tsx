@@ -54,6 +54,7 @@ export default function StoreOrderEdit() {
             unit_price,
             shipped_quantity,
             status,
+            sort_order,
             products (name, code)
           )
         `)
@@ -90,6 +91,11 @@ export default function StoreOrderEdit() {
       if (orderError) throw orderError;
 
       // 更新現有項目
+      const maxSortOrder = order.order_items.reduce(
+        (max: number, i: any) => Math.max(max, i.sort_order || 0),
+        0
+      );
+      let nextSort = maxSortOrder + 1;
       for (const item of orderItems) {
         if (item.isNew) {
           const { error } = await (supabase
@@ -100,8 +106,10 @@ export default function StoreOrderEdit() {
               quantity: item.quantity,
               unit_price: item.unitPrice,
               store_id: order.store_id,
+              sort_order: nextSort,
             });
           if (error) throw error;
+          nextSort += 1;
         } else {
           const { error } = await (supabase
             .from('order_items') as any)

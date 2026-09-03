@@ -7,14 +7,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, AlertCircle, FileText, Printer, Download, Check } from "lucide-react";
+import { Loader2, AlertCircle, FileText, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { getErrorMessage } from '@/lib/errorMessages';
-import { useState, useEffect, useRef } from "react";
-import { PrintDialog, PrintOptions } from "@/components/PrintDialog";
-import { QRCodeSVG } from "qrcode.react";
+import { useState, useEffect } from "react";
 import { formatCurrency } from "@/lib/formatters";
+import { SharedReceiptExport } from "./SharedReceiptExport";
 
 interface SharedSalesData {
   sales_note: {
@@ -29,7 +28,7 @@ interface SharedSalesData {
     product_name: string;
     variant_name?: string | null;
     quantity: number;
-    unit_price: number;
+    unit_price: number | null;
   }[];
 }
 
@@ -39,13 +38,8 @@ export default function SharedSales() {
   const token = searchParams.get("token");
   const { user, isAdmin } = useAuth();
   const queryClient = useQueryClient();
-  const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false);
   const isPrintingMode = searchParams.get("print") === "true";
-  const printSize = searchParams.get("size") || "a4";
-  const printMargin = searchParams.get("margin") || "full";
-  const printRef = useRef<HTMLDivElement>(null);
-
-
+  const printSize = (searchParams.get("size") as "a4" | "middle-cut") || "a4";
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["shared-sale", salesNoteId, token, user?.id],
@@ -65,15 +59,7 @@ export default function SharedSales() {
     },
     retry: false
   });
-  useEffect(() => {
-    if (isPrintingMode && data) {
-      // Small delay to ensure QR code and styles are rendered
-      const timer = setTimeout(() => {
-        window.print();
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [isPrintingMode, data]);
+
   const confirmReceiveMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("請先登入");
@@ -99,94 +85,6 @@ export default function SharedSales() {
     },
   });
 
-  const handleDownloadCSV = () => {
-    if (!data) return;
-    const { sales_note, items } = data;
-    const showPrice = items.length > 0 && items[0].unit_price !== null;
-
-    // 建立 CSV 內容
-    let csvContent = "\uFEFF"; // BOM for Excel Chinese support
-    csvContent += `銷貨單號,${sales_note.code || sales_note.id}\n`;
-    csvContent += `店家,${sales_note.store_name}\n`;
-    csvContent += `日期,${new Date(sales_note.created_at).toLocaleDateString()}\n\n`;
-
-    csvContent += showPrice
-      ? "商品名稱,數量,單價,小計\n"
-      : "商品名稱,數量\n";
-
-    items.forEach((item: any) => {
-      const row = [
-        `"${item.product_name.replace(/"/g, '""')}"`, // Escape quotes
-        item.quantity,
-      ];
-      if (showPrice) {
-        row.push(item.unit_price, item.unit_price * item.quantity);
-      }
-      csvContent += row.join(",") + "\n";
-    });
-
-    // 下載檔案
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `銷貨單_${sales_note.code || sales_note.id}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast.success("已開始下載 CSV");
-  };
-
-  const handlePrint = async (options: PrintOptions) => {
-    if (!printRef.current || !data) return;
-
-    const element = printRef.current;
-
-    // 預設匯出設定
-    const opt = {
-      margin: options.margin === 'full' ? 0 : [10, 10, 10, 10],
-      filename: `銷貨單_${data.sales_note.code || data.sales_note.id}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        letterRendering: true
-      },
-      jsPDF: {
-        unit: 'mm',
-        format: options.paperSize === 'a4' ? 'a4' : [241, 140],
-        orientation: 'portrait'
-      },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-    };
-
-    // 暫時加上列印樣式類別以進行擷取
-    element.classList.add('is-printing-mode');
-    const sizeClass = options.paperSize === 'a4' ? 'print-a4' : 'print-middle-cut';
-    const marginClass = options.margin === 'full' ? 'print-no-margin' : '';
-    element.classList.add(sizeClass);
-    if (marginClass) element.classList.add(marginClass);
-
-    toast.info("正在產生 PDF 並匯出...");
-    setIsPrintDialogOpen(false);
-
-    try {
-      const { default: html2pdf } = await import('html2pdf.js');
-      // @ts-expect-error - html2pdf might have type issues depending on version
-      await html2pdf().set(opt).from(element).save();
-      toast.success("PDF 匯出成功");
-    } catch (err) {
-      console.error("PDF generation error:", err);
-      toast.error("PDF 產生失敗，請確認瀏覽器權限或試試列印功能");
-      // 如果失敗，可以退回到傳統列印
-      window.print();
-    } finally {
-      // 移除列印專用類別
-      element.classList.remove('is-printing-mode', sizeClass);
-      if (marginClass) element.classList.remove(marginClass);
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen" role="status" aria-live="polite">
@@ -210,21 +108,35 @@ export default function SharedSales() {
   const { sales_note, items } = data;
   const showPrice = items.length > 0 && items[0].unit_price !== null;
 
+  // 列印模式：只顯示列印版型，方便版面調整測試
+  if (isPrintingMode) {
+    return (
+      <SharedReceiptExport
+        items={items.map((item) => ({
+          name: item.product_name,
+          variant: item.variant_name,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+        }))}
+        title="銷貨單"
+        docTitleLabel="店名"
+        storeName={sales_note.store_name}
+        code={sales_note.code || sales_note.id}
+        createdAt={sales_note.created_at}
+        status={sales_note.status === 'completed' ? '已完成' : '處理中'}
+        notes={sales_note.notes}
+        qrValue={window.location.href.replace(/[?&]print=true.*/, "")}
+        filenamePrefix="銷貨單"
+        canViewPrice={showPrice}
+        printMode
+        defaultPaperSize={printSize}
+      />
+    );
+  }
+
   return (
-    <div
-      ref={printRef}
-      className={`container mx-auto p-4 max-w-3xl space-y-6 ${isPrintingMode ? 'is-printing-mode' : ''
-        } ${isPrintingMode && printSize === 'a4' ? 'print-a4' : isPrintingMode ? 'print-middle-cut' : ''
-        } ${isPrintingMode && printMargin === 'full' ? 'print-no-margin' : ''}`}
-    >
-      {!isPrintingMode && (
-        <PrintDialog
-          isOpen={isPrintDialogOpen}
-          onClose={() => setIsPrintDialogOpen(false)}
-          onPrint={handlePrint}
-        />
-      )}
-      <Card className={isPrintingMode ? 'border-none shadow-none' : ''}>
+    <div className="container mx-auto p-4 max-w-3xl space-y-6">
+      <Card className={isPrintingMode ? 'border-none shadow-none print-no-margin' : ''}>
         <CardHeader className={`border-b bg-muted/40 ${isPrintingMode ? 'bg-white pb-2' : ''}`}>
           <div className="flex justify-between items-start">
             <div>
@@ -234,29 +146,31 @@ export default function SharedSales() {
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">{sales_note.store_name}</p>
             </div>
-            <div className="flex flex-col items-end gap-2">
-              {/* QR Code and Page Info - Only visible in print */}
-              <div className="hidden print:flex print-header-info">
-                <div className="print-qr-code">
-                  <QRCodeSVG value={window.location.href.replace(/[?&]print=true.*/, "")} size={60} />
-                </div>
-                <div className="text-[10px] print-page-info font-mono mt-1 text-right"></div>
-              </div>
-
-              <div className="flex flex-col items-end gap-2 print:hidden">
-                <Badge variant={sales_note.status === 'completed' ? 'default' : 'secondary'}>
-                  {sales_note.status === 'completed' ? '已完成' : '處理中'}
-                </Badge>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={handleDownloadCSV}>
-                    <Download className="h-4 w-4 mr-2" />
-                    匯出 Excel
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setIsPrintDialogOpen(true)}>
-                    <Printer className="h-4 w-4 mr-2" />
-                    列印 / PDF
-                  </Button>
-                </div>
+            <div className="flex flex-col items-end gap-2 print:hidden">
+              <Badge variant={sales_note.status === 'completed' ? 'default' : 'secondary'}>
+                {sales_note.status === 'completed' ? '已完成' : '處理中'}
+              </Badge>
+              <div className="flex gap-2">
+                <SharedReceiptExport
+                  items={items.map((item) => ({
+                    name: item.product_name,
+                    variant: item.variant_name,
+                    quantity: item.quantity,
+                    unit_price: item.unit_price,
+                  }))}
+                  title="銷貨單"
+                  docTitleLabel="店名"
+                  storeName={sales_note.store_name}
+                  code={sales_note.code || sales_note.id}
+                  createdAt={sales_note.created_at}
+                  status={sales_note.status === 'completed' ? '已完成' : '處理中'}
+                  notes={sales_note.notes}
+                  qrValue={window.location.href.replace(/[?&]print=true.*/, "")}
+                  filenamePrefix="銷貨單"
+                  canViewPrice={showPrice}
+                  printMode={isPrintingMode}
+                  defaultPaperSize={printSize}
+                />
               </div>
             </div>
           </div>
@@ -279,12 +193,7 @@ export default function SharedSales() {
               {items.map((item: any, index: number) => (
                 <TableRow key={index}>
                   <TableCell className="pl-6 font-medium">
-                    {item.product_name}
-                    {item.variant_name && (
-                      <span className="text-muted-foreground ml-1">
-                        - {item.variant_name}
-                      </span>
-                    )}
+                    {item.variant_name || item.product_name}
                   </TableCell>
                   <TableCell className="text-right pr-6">{item.quantity}</TableCell>
                   {showPrice && (
@@ -306,7 +215,6 @@ export default function SharedSales() {
             </TableBody>
           </Table>
 
-          {/* Hide receipt confirm button during print */}
           {!isPrintingMode && user && !isAdmin && sales_note.status === 'shipped' && (
             <div className="flex justify-end p-4 border-t bg-muted/10">
               <Button
@@ -328,10 +236,6 @@ export default function SharedSales() {
           <a href="/login" className="underline ml-1 hover:text-primary">登入</a> 以查看價格。
         </div>
       )}
-      {/* Print Footer for Page Numbers */}
-      <div className="hidden print:block print-footer">
-        頁碼：<span className="print-page-number"></span>
-      </div>
     </div>
   );
 }

@@ -35,6 +35,7 @@ export interface PurchaseOrderItem {
   received_quantity: number;
   unit_cost: number;
   source_order_ids?: string[] | null;
+  source_quantities?: Record<string, number> | null;
   product?: { id: string; name: string; code: string };
   variant?: { id: string; name: string; sku: string };
 }

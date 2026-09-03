@@ -15,6 +15,7 @@ interface OrderItemsTableProps {
 }
 
 export function OrderDetailItemsTable({ items }: OrderItemsTableProps) {
+    const sortedItems = [...items].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
     return (
         <div className="hidden md:block border rounded-lg flex-1 min-h-0 overflow-y-auto">
             <Table>
@@ -28,15 +29,10 @@ export function OrderDetailItemsTable({ items }: OrderItemsTableProps) {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {items.map((item) => (
+                    {sortedItems.map((item) => (
                         <TableRow key={item.id}>
                             <TableCell>
-                                {item.product?.name}
-                                {item.product_variant && (
-                                    <span className="text-muted-foreground ml-1">
-                                        - {item.product_variant.name}
-                                    </span>
-                                )}
+                                {item.product_variant?.name || item.product?.name}
                             </TableCell>
                             <TableCell className="text-right">
                                 {formatCurrency(item.unit_price)}
