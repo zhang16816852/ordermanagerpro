@@ -9,9 +9,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CreditCard, Edit, Trash2, Eye } from 'lucide-react';
+import { CreditCard, Edit, Trash2, Eye, ArrowRight, FileText } from 'lucide-react';
 import { format } from 'date-fns';
-import { AccountingEntry, PaymentStatus } from '../types';
+import { AccountingEntry, EntryType, PaymentStatus, ENTRY_TYPE_LABELS } from '../types';
 import { formatCurrency } from '@/lib/formatters';
 
 interface EntriesTabProps {
@@ -23,6 +23,79 @@ interface EntriesTabProps {
   onViewReference?: (referenceType: string, referenceId: string) => void;
 }
 
+function getEntryTypeBadge(type: EntryType) {
+  switch (type) {
+    case 'income':
+      return <Badge className="bg-green-600 hover:bg-green-700">收入</Badge>;
+    case 'expense':
+      return <Badge variant="destructive">支出</Badge>;
+    case 'transfer':
+      return <Badge className="bg-blue-600 hover:bg-blue-700">互轉</Badge>;
+    case 'settlement':
+      return <Badge className="bg-purple-600 hover:bg-purple-700">結帳</Badge>;
+    case 'topup':
+      return <Badge className="bg-amber-500 hover:bg-amber-600">儲值</Badge>;
+    case 'currency_exchange':
+      return <Badge className="bg-cyan-600 hover:bg-cyan-700">換匯</Badge>;
+    default:
+      return <Badge variant="secondary">{type}</Badge>;
+  }
+}
+
+function getStatusBadge(status: PaymentStatus) {
+  switch (status) {
+    case 'paid': return <Badge className="bg-green-600 hover:bg-green-700">已付清</Badge>;
+    case 'partial': return <Badge className="bg-amber-500 hover:bg-amber-600">部分付款</Badge>;
+    case 'unpaid': return <Badge variant="destructive">未付</Badge>;
+  }
+}
+
+function EntryDescription({ entry }: { entry: AccountingEntry }) {
+  const isTransfer = entry.type === 'transfer' || entry.type === 'currency_exchange' || entry.type === 'topup';
+  const isSettlement = entry.type === 'settlement';
+
+  if (isTransfer && entry.transferToAccount) {
+    return (
+      <div className="flex items-center gap-1 text-sm">
+        <span className="font-medium">{entry.account?.name || '?'}</span>
+        <ArrowRight className="h-3 w-3 text-muted-foreground" />
+        <span className="font-medium">{entry.transferToAccount.name}</span>
+        {entry.original_currency && entry.exchange_rate && (
+          <span className="text-xs text-muted-foreground ml-1">
+            ({entry.original_amount} {entry.original_currency} × {entry.exchange_rate})
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  if (isSettlement && entry.references && entry.references.length > 0) {
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center gap-1 text-sm">
+          <FileText className="h-3 w-3 text-muted-foreground" />
+          <span>關聯 {entry.references.length} 筆單據</span>
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {entry.references.slice(0, 3).map((ref, i) => (
+            <span key={i}>
+              {ref.item_name}{ref.item_name ? ` $${ref.amount_applied}` : ` $${ref.amount_applied}`}
+              {i < Math.min(entry.references!.length, 3) - 1 ? '、' : ''}
+            </span>
+          ))}
+          {entry.references.length > 3 && <span>...等 {entry.references.length} 筆</span>}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <span className="text-sm text-muted-foreground truncate block max-w-[200px]">
+      {entry.description || '-'}
+    </span>
+  );
+}
+
 export function EntriesTab({
   entries,
   isLoading,
@@ -31,14 +104,6 @@ export function EntriesTab({
   onPay,
   onViewReference,
 }: EntriesTabProps) {
-  const getStatusBadge = (status: PaymentStatus) => {
-    switch (status) {
-      case 'paid': return <Badge className="bg-green-600 hover:bg-green-700">已付清</Badge>;
-      case 'partial': return <Badge className="bg-amber-500 hover:bg-amber-600">部分付款</Badge>;
-      case 'unpaid': return <Badge variant="destructive">未付</Badge>;
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -56,6 +121,18 @@ export function EntriesTab({
       </div>
     );
   }
+
+  const getAmountDisplay = (entry: AccountingEntry) => {
+    const isTransfer = entry.type === 'transfer' || entry.type === 'currency_exchange' || entry.type === 'topup';
+    if (isTransfer) {
+      return <span className="font-bold">{formatCurrency(entry.amount)}</span>;
+    }
+    return (
+      <span className={`font-bold ${entry.type === 'income' ? 'text-green-600' : 'text-destructive'}`}>
+        {entry.type === 'income' ? '+' : '-'}{formatCurrency(entry.amount)}
+      </span>
+    );
+  };
 
   return (
     <>
@@ -78,18 +155,10 @@ export function EntriesTab({
             {entries.map((entry) => (
               <TableRow key={entry.id} className="hover:bg-muted/30 transition-colors">
                 <TableCell className="font-medium">{format(new Date(entry.transaction_date), 'MM/dd')}</TableCell>
-                <TableCell>
-                  <Badge variant={entry.type === 'income' ? 'default' : 'secondary'}>
-                    {entry.type === 'income' ? '收入' : '支出'}
-                  </Badge>
-                </TableCell>
+                <TableCell>{getEntryTypeBadge(entry.type)}</TableCell>
                 <TableCell className="text-sm">{entry.category?.name || '-'}</TableCell>
-                <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">
-                  {entry.description || '-'}
-                </TableCell>
-                <TableCell className={`text-right font-bold ${entry.type === 'income' ? 'text-green-600' : 'text-destructive'}`}>
-                  {entry.type === 'income' ? '+' : '-'}{formatCurrency(entry.amount)}
-                </TableCell>
+                <TableCell><EntryDescription entry={entry} /></TableCell>
+                <TableCell className="text-right">{getAmountDisplay(entry)}</TableCell>
                 <TableCell className="text-right text-sm">
                   {formatCurrency(entry.paid_amount)}
                 </TableCell>
@@ -106,7 +175,7 @@ export function EntriesTab({
                         title="查看來源單據"
                       >
                         <Eye className="h-4 w-4" aria-hidden="true" />
-</Button>
+                      </Button>
                     )}
                     {entry.payment_status !== 'paid' && (
                       <Button
@@ -150,24 +219,17 @@ export function EntriesTab({
         {entries.map((entry) => (
           <div key={entry.id} className="border rounded-lg p-4 bg-card shadow-soft space-y-2">
             <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium text-sm">{format(new Date(entry.transaction_date), 'MM/dd')}</span>
-                <Badge variant={entry.type === 'income' ? 'default' : 'secondary'}>
-                  {entry.type === 'income' ? '收入' : '支出'}
-                </Badge>
+                {getEntryTypeBadge(entry.type)}
                 {getStatusBadge(entry.payment_status)}
               </div>
-              <span className={`font-bold ${entry.type === 'income' ? 'text-green-600' : 'text-destructive'}`}>
-                {entry.type === 'income' ? '+' : '-'}{formatCurrency(entry.amount)}
-              </span>
+              {getAmountDisplay(entry)}
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground truncate">{entry.category?.name || '-'}</span>
-              <span className="text-xs text-muted-foreground">已付 {formatCurrency(entry.paid_amount)}</span>
+            <div className="text-sm">
+              <span className="text-muted-foreground">{entry.category?.name || '-'}</span>
             </div>
-            {entry.description && (
-              <p className="text-xs text-muted-foreground truncate">{entry.description}</p>
-            )}
+            <EntryDescription entry={entry} />
             <div className="flex items-center gap-1 pt-1 border-t">
               {entry.reference_type && entry.reference_id && onViewReference && (
                 <Button
@@ -180,7 +242,7 @@ export function EntriesTab({
                   <Eye className="h-4 w-4" />
                 </Button>
               )}
-{entry.payment_status !== 'paid' && (
+              {entry.payment_status !== 'paid' && (
                 <Button
                   variant="ghost"
                   size="icon"

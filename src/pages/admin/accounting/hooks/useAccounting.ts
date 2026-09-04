@@ -2,9 +2,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
-import { getErrorMessage } from '@/lib/errorMessages';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
-import { Account, AccountingCategory, AccountingEntry, PaymentStatus } from '../types';
+import { Account, AccountingCategory, AccountingEntry, AccountingEntryReference, PaymentStatus } from '../types';
+
+interface CreateEntryPayload {
+  data: Partial<AccountingEntry>;
+  references?: AccountingEntryReference[];
+}
 
 export function useAccounting(selectedMonth?: string) {
   const { user } = useAuth();
@@ -39,7 +43,7 @@ export function useAccounting(selectedMonth?: string) {
     },
   });
 
-  // 3. Entries (Filtered by Month)
+  // 3. Entries (Filtered by Month) with references
   const { data: entries = [], isLoading: isLoadingEntries } = useQuery({
     queryKey: ['accounting-entries', selectedMonth, categories, accounts],
     queryFn: async () => {
@@ -57,26 +61,85 @@ export function useAccounting(selectedMonth?: string) {
 
       if (error) throw error;
 
-      return ((data || []) as any[]).map((entry) => ({
-        ...entry,
-        category: categories.find(c => c.id === entry.category_id),
-        account: accounts.find(a => a.id === entry.account_id),
-      })) as AccountingEntry[];
+      const entriesWithRefs = await Promise.all(
+        (data || []).map(async (entry: any) => {
+          let references: AccountingEntryReference[] = [];
+          if (entry.type === 'settlement') {
+            const { data: refs } = await (supabase as any)
+              .from('accounting_entry_references')
+              .select('*')
+              .eq('entry_id', entry.id);
+            references = refs || [];
+          }
+          return {
+            ...entry,
+            category: categories.find(c => c.id === entry.category_id),
+            account: accounts.find(a => a.id === entry.account_id),
+            transferToAccount: accounts.find(a => a.id === entry.transfer_to_account_id),
+            references,
+          } as AccountingEntry;
+        })
+      );
+
+      return entriesWithRefs;
     },
     enabled: !!selectedMonth && categories.length >= 0 && accounts.length >= 0,
   });
 
   // Mutations
   const createEntryMutation = useMutation({
-    mutationFn: async (data: Partial<AccountingEntry>) => {
-      const { error } = await (supabase as any).from('accounting_entries').insert({
-        ...data,
-        created_by: user?.id,
-      });
+    mutationFn: async ({ data, references }: CreateEntryPayload) => {
+      const { data: newEntry, error } = await (supabase as any)
+        .from('accounting_entries')
+        .insert({ ...data, created_by: user?.id })
+        .select('id')
+        .single();
       if (error) throw error;
+
+      if (references && references.length > 0 && newEntry) {
+        const refsToInsert = references.map(ref => ({
+          entry_id: newEntry.id,
+          reference_type: ref.reference_type,
+          reference_id: ref.reference_id,
+          item_name: ref.item_name,
+          amount_applied: ref.amount_applied,
+        }));
+        const { error: refError } = await (supabase as any)
+          .from('accounting_entry_references')
+          .insert(refsToInsert);
+        if (refError) throw refError;
+      }
+
+      // For transfers: adjust both account balances
+      if (data.type === 'transfer' || data.type === 'currency_exchange' || data.type === 'topup') {
+        if (data.account_id) {
+          const sourceAccount = accounts.find(a => a.id === data.account_id);
+          if (sourceAccount) {
+            const { error: e } = await (supabase as any)
+              .from('accounts')
+              .update({ balance: sourceAccount.balance - (data.amount || 0) })
+              .eq('id', data.account_id);
+            if (e) throw e;
+          }
+        }
+        if (data.transfer_to_account_id) {
+          const destAccount = accounts.find(a => a.id === data.transfer_to_account_id);
+          if (destAccount) {
+            const receivedAmount = data.type === 'currency_exchange' && data.exchange_rate
+              ? (data.original_amount || 0) * data.exchange_rate
+              : (data.amount || 0);
+            const { error: e } = await (supabase as any)
+              .from('accounts')
+              .update({ balance: destAccount.balance + receivedAmount })
+              .eq('id', data.transfer_to_account_id);
+            if (e) throw e;
+          }
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounting-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
       toast.success('記錄已新增');
     },
     onError: () => toast.error('新增失敗'),
@@ -96,7 +159,31 @@ export function useAccounting(selectedMonth?: string) {
 
   const deleteEntryMutation = useMutation({
     mutationFn: async (entry: AccountingEntry) => {
-      if (entry.paid_amount > 0 && entry.account_id) {
+      // Reverse account balance changes
+      if (entry.type === 'transfer' || entry.type === 'currency_exchange' || entry.type === 'topup') {
+        if (entry.account_id) {
+          const sourceAccount = accounts.find(a => a.id === entry.account_id);
+          if (sourceAccount) {
+            await (supabase as any)
+              .from('accounts')
+              .update({ balance: sourceAccount.balance + entry.amount })
+              .eq('id', entry.account_id);
+          }
+        }
+        if (entry.transfer_to_account_id) {
+          const destAccount = accounts.find(a => a.id === entry.transfer_to_account_id);
+          if (destAccount) {
+            const receivedAmount = entry.type === 'currency_exchange' && entry.exchange_rate
+              ? (entry.original_amount || 0) * entry.exchange_rate
+              : entry.amount;
+            await (supabase as any)
+              .from('accounts')
+              .update({ balance: destAccount.balance - receivedAmount })
+              .eq('id', entry.transfer_to_account_id);
+          }
+        }
+      } else if (entry.paid_amount > 0 && entry.account_id) {
+        // Regular income/expense: reverse paid amount
         const account = accounts.find(a => a.id === entry.account_id);
         if (account) {
           const balanceChange = entry.type === 'income' ? -entry.paid_amount : entry.paid_amount;
@@ -107,6 +194,9 @@ export function useAccounting(selectedMonth?: string) {
           if (accountError) throw accountError;
         }
       }
+
+      // Delete references (CASCADE will handle this, but explicit for clarity)
+      await (supabase as any).from('accounting_entry_references').delete().eq('entry_id', entry.id);
 
       const { error } = await (supabase as any).from('accounting_entries').delete().eq('id', entry.id);
       if (error) throw error;

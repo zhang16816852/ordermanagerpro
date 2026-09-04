@@ -148,6 +148,33 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 - **編輯/新增收支 Dialog 獨立成組件 + 帳戶欄位（2026-09-04）**：新增 `accounting/components/EntryDialog.tsx`（包 `Dialog`＋`EntryForm`，供其他頁面重複使用），`AccountingPage` 改用之；`EntryForm` 新增 `accounts` prop 與「帳戶」下拉（`account_id`，顯示錢歸入/支出自哪個帳戶，編輯時可見）。`SalesNoteDetailDialog` 的 `existingPayment` 查詢改為 `paid_amount>0`＋`.limit(1)`（原只要存在任意 income 分錄即判定「已完成收款」、且 `maybeSingle` 遇到歷史重複列會報錯）——回退付款已刪除分錄後，`登記收款` 按鈕即可重新點選。
 - **後台頁面改名**：`src/pages/admin/` 下 9 個 `index.tsx` 改名為語意化檔名（`accounting/AccountingPage.tsx`、`audit-logs/AuditLogsPage.tsx`、`categories/CategoriesPage.tsx`、`consignment/ConsignmentPage.tsx`、`inventory/InventoryPage.tsx`、`order-grid-templates/OrderGridTemplatesPage.tsx`、`products/ProductsPage.tsx`、`purchase-orders/PurchaseOrdersPage.tsx`、`repair-orders/RepairOrdersPage.tsx`），`routes/admin.tsx` 對應 import 已更新；並補上 `AdminReps` import（`@/pages/admin/Reps`，修復未定義錯誤）。
 
+## 近期變更（會計模組：多幣別帳戶 + 帳戶互轉 + 跨單結帳）
+
+### 多幣別帳戶（2026-09-04）
+- `accounts` 新增 `currency` 欄位（text，NOT NULL DEFAULT 'TWD'），支援 TWD/USD/JPY/CNY/EUR/HKD/KRW/GBP
+- `AccountForm` 新增幣別下拉選擇；`AccountsTab` 每個帳戶卡片顯示幣別 Badge + `formatCurrency(balance, currency)`
+- `StatsCards` 多幣別帳戶分組顯示餘額，`formatCurrency` 改傳入 currency 參數
+- Migration：`20260904000004_account_currency.sql`
+
+### 帳戶互轉 + 幣值換算（2026-09-04）
+- `accounting_entries` 新增欄位：`transfer_to_account_id`（目的地帳戶）、`exchange_rate`、`original_currency`、`original_amount`
+- `accounting_categories.type` 擴展新值：`transfer`（帳戶互轉）、`currency_exchange`（幣值換算）、`topup`（儲值）、`settlement`（跨單結帳）
+- `EntryForm` 依分類 type 分流：普通收支（維持原樣）、帳戶互轉（來源/目的地帳戶 + 同幣別直接轉/跨幣別帶匯率換算）、跨單結帳（母子單）
+- 轉帳類型在 `EntriesTab` 顯示「來源帳戶 → 目的地帳戶」箭頭 + 幣別/匯率資訊
+- `useAccounting` 的 `createEntryMutation` 處理轉帳：從來源帳戶扣款、加入目的地帳戶；`deleteEntryMutation` 反向回退雙帳戶餘額
+- Migration：`20260904000005_accounting_transfer_fields.sql`
+
+### 跨單多筆結帳（母子單）（2026-09-04）
+- 新表 `accounting_entry_references`：`entry_id`（母單 FK）、`reference_type`（order/sales_note/purchase_order/repair_order）、`reference_id`、`item_name`、`amount_applied`
+- `EntryForm` settlement 模式：選來源帳戶 → 選關聯單據類型（訂單/銷貨單/採購單/維修單）→ 從列表勾選加入 → 自動帶入原始金額可微調 → 母單金額自動加總
+- `EntriesTab` settlement 類型顯示關聯單據摘要（N 筆單據 + 各筆金額）
+- `useAccounting` 的 `entries` 查詢對 settlement 類型自動 fetch `accounting_entry_references`
+- Migration：`20260904000006_accounting_entry_references.sql`
+
+### 會計分類管理擴展
+- `CategoryForm` 新增 transfer/settlement/topup/currency_exchange 四種分類類型可選
+- `CategoriesTab` 分四組顯示：收入類型、支出類型（維持原樣）+ 特殊類型（transfer/currency_exchange/topup）+ 結帳類型（settlement），每類有獨立圖示與顏色
+
 ## 近期變更（AdminOrderForm 重構）
 
 - `useStoreProductCache(storeId, brand?)` 新增第二參數 `brand`，查詢 `store_products` 時加 `.eq('brand', brand)` server-side 過濾

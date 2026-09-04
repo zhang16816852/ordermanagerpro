@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Wallet, Building, Plus } from 'lucide-react';
 import { Account } from '../types';
 import { formatCurrency } from '@/lib/formatters';
@@ -11,6 +12,8 @@ interface AccountsTabProps {
 }
 
 export function AccountsTab({ accounts, onAdd, isLoading }: AccountsTabProps) {
+  const loading = isLoading;
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -27,14 +30,17 @@ export function AccountsTab({ accounts, onAdd, isLoading }: AccountsTabProps) {
           <Card key={account.id} className="hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{account.name}</CardTitle>
-              {account.type === 'cash' ? (
-                <Wallet className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <Building className="h-4 w-4 text-muted-foreground" />
-              )}
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs font-mono">{account.currency}</Badge>
+                {account.type === 'cash' ? (
+                  <Wallet className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <Building className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(account.balance)}</div>
+              <div className="text-2xl font-bold">{formatCurrency(account.balance, account.currency)}</div>
               <p className="text-xs text-muted-foreground">
                 {account.type === 'cash' ? '現金' : '銀行帳戶'}
               </p>

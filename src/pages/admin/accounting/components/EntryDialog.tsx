@@ -5,7 +5,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { AccountingEntry, AccountingCategory, Account } from '../types';
+import { AccountingEntry, AccountingCategory, Account, AccountingEntryReference } from '../types';
 import { EntryForm } from './EntryForm';
 
 interface EntryDialogProps {
@@ -15,7 +15,7 @@ interface EntryDialogProps {
   categories: AccountingCategory[];
   accounts: Account[];
   isLoading: boolean;
-  onSubmit: (data: Partial<AccountingEntry>) => void;
+  onSubmit: (data: Partial<AccountingEntry>, references?: AccountingEntryReference[]) => void;
 }
 
 export function EntryDialog({
@@ -29,11 +29,11 @@ export function EntryDialog({
 }: EntryDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{entry ? '編輯收支記錄' : '新增收支記錄'}</DialogTitle>
           <DialogDescription>
-            記錄店鋪的日常收入或支出明細，包含日期、類型、帳戶以及金額。
+            記錄店鋪的收入、支出、帳戶互轉或跨單結帳等明細。
           </DialogDescription>
         </DialogHeader>
         <EntryForm

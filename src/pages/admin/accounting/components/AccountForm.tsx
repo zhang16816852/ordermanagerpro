@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DialogFooter } from '@/components/ui/dialog';
-import { Account } from '../types';
+import { Account, CURRENCY_OPTIONS } from '../types';
 
 interface AccountFormProps {
   onSubmit: (data: Partial<Account>) => void;
@@ -24,6 +24,7 @@ export function AccountForm({
 }: AccountFormProps) {
   const [name, setName] = useState('');
   const [type, setType] = useState('bank');
+  const [currency, setCurrency] = useState('TWD');
   const [balance, setBalance] = useState('0');
   const [description, setDescription] = useState('');
 
@@ -33,17 +34,32 @@ export function AccountForm({
         <Label htmlFor="account-name">帳戶名稱</Label>
         <Input id="account-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="如：玉山銀行" />
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="account-type">類型</Label>
-        <Select value={type} onValueChange={setType}>
-          <SelectTrigger id="account-type">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="cash">現金</SelectItem>
-            <SelectItem value="bank">銀行</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="account-type">類型</Label>
+          <Select value={type} onValueChange={setType}>
+            <SelectTrigger id="account-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="cash">現金</SelectItem>
+              <SelectItem value="bank">銀行</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="account-currency">幣別</Label>
+          <Select value={currency} onValueChange={setCurrency}>
+            <SelectTrigger id="account-currency">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CURRENCY_OPTIONS.map((c) => (
+                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <div className="space-y-2">
         <Label htmlFor="account-balance">初始餘額</Label>
@@ -55,7 +71,7 @@ export function AccountForm({
       </div>
       <DialogFooter>
         <Button
-          onClick={() => onSubmit({ name, type, balance: parseFloat(balance), description: description || null })}
+          onClick={() => onSubmit({ name, type, currency, balance: parseFloat(balance), description: description || null })}
           disabled={!name || isLoading}
         >
           {isLoading ? '處理中...' : '新增'}

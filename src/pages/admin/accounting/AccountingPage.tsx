@@ -163,13 +163,13 @@ export default function AdminAccounting() {
         categories={categories}
         accounts={accounts}
         isLoading={createEntryMutation.isPending || updateEntryMutation.isPending}
-        onSubmit={(data) => {
+        onSubmit={(data, references) => {
           if (editingEntry) {
             updateEntryMutation.mutate({ id: editingEntry.id, ...data }, {
               onSuccess: () => setEntryDialogOpen(false)
             });
           } else {
-            createEntryMutation.mutate(data, {
+            createEntryMutation.mutate({ data, references }, {
               onSuccess: () => setEntryDialogOpen(false)
             });
           }
