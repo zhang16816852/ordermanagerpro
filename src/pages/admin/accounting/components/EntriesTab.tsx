@@ -9,7 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CreditCard, Edit, Trash2 } from 'lucide-react';
+import { CreditCard, Edit, Trash2, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { AccountingEntry, PaymentStatus } from '../types';
 import { formatCurrency } from '@/lib/formatters';
@@ -18,8 +18,9 @@ interface EntriesTabProps {
   entries: AccountingEntry[];
   isLoading: boolean;
   onEdit: (entry: AccountingEntry) => void;
-  onDelete: (id: string) => void;
+  onDelete: (entry: AccountingEntry) => void;
   onPay: (entry: AccountingEntry) => void;
+  onViewReference?: (referenceType: string, referenceId: string) => void;
 }
 
 export function EntriesTab({
@@ -28,6 +29,7 @@ export function EntriesTab({
   onEdit,
   onDelete,
   onPay,
+  onViewReference,
 }: EntriesTabProps) {
   const getStatusBadge = (status: PaymentStatus) => {
     switch (status) {
@@ -94,6 +96,18 @@ export function EntriesTab({
                 <TableCell>{getStatusBadge(entry.payment_status)}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
+                    {entry.reference_type && entry.reference_id && onViewReference && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => onViewReference(entry.reference_type!, entry.reference_id!)}
+                        aria-label="查看單據"
+                        title="查看來源單據"
+                      >
+                        <Eye className="h-4 w-4" aria-hidden="true" />
+</Button>
+                    )}
                     {entry.payment_status !== 'paid' && (
                       <Button
                         variant="ghost"
@@ -118,7 +132,7 @@ export function EntriesTab({
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-destructive"
-                      onClick={() => onDelete(entry.id)}
+                      onClick={() => onDelete(entry)}
                       aria-label="刪除"
                     >
                       <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -155,7 +169,18 @@ export function EntriesTab({
               <p className="text-xs text-muted-foreground truncate">{entry.description}</p>
             )}
             <div className="flex items-center gap-1 pt-1 border-t">
-              {entry.payment_status !== 'paid' && (
+              {entry.reference_type && entry.reference_id && onViewReference && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => onViewReference(entry.reference_type!, entry.reference_id!)}
+                  aria-label="查看單據"
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+              )}
+{entry.payment_status !== 'paid' && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -179,7 +204,7 @@ export function EntriesTab({
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-destructive"
-                onClick={() => onDelete(entry.id)}
+                onClick={() => onDelete(entry)}
                 aria-label="刪除"
               >
                 <Trash2 className="h-4 w-4" />

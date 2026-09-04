@@ -202,6 +202,8 @@ export default function AdminUsers() {
     switch (role) {
       case "admin":
         return <Badge className="bg-red-500">管理員</Badge>;
+      case "rep":
+        return <Badge className="bg-emerald-600">業務</Badge>;
       case "customer":
         return <Badge variant="secondary">用戶</Badge>;
       default:

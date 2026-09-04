@@ -11,7 +11,7 @@ import MarketPage from "@/pages/market/index";
 import MarketDetailPage from "@/pages/market/detail";
 
 function RootRedirect() {
-    const { user, isAdmin, loading } = useAuth();
+    const { user, isAdmin, isRep, loading } = useAuth();
 
     if (loading) {
         return (
@@ -25,7 +25,7 @@ function RootRedirect() {
         return <Navigate to="/auth" replace />;
     }
 
-    return isAdmin ?
+    return (isAdmin || isRep) ?
         <Navigate to="/admin" replace /> :
         <Navigate to="/dashboard" replace />;
 }

@@ -43,6 +43,7 @@ export function useCreateOrder({
           created_by: userId,
           notes: notes.trim() || null,
           source_type: sourceType,
+          access_token: crypto.randomUUID(),
         })
         .select()
         .single();

@@ -24,6 +24,7 @@ import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 
 import { useOrdersList } from './hooks/useOrdersList';
+import { useRepCommission } from '@/hooks/useRepCommission';
 import { OrderFilters } from './components/OrderFilters';
 import { OrderTableView } from './components/OrderTableView';
 import { ItemTableView } from './components/ItemTableView';
@@ -104,6 +105,25 @@ export default function AdminOrderList() {
     cancelItemsMutation,
   } = useOrdersList(storeFilter, statusTab);
 
+  // 業務佣金換算
+  const { isRep, computeOrder: computeRepOrder } = useRepCommission();
+
+  const commissionByOrder = useMemo(() => {
+    if (!isRep) return undefined;
+    const map = new Map<string, { totalProfit: number; totalCommission: number }>();
+    for (const order of orders) {
+      map.set(order.id, computeRepOrder(
+        order.order_items.map(i => ({
+          productId: i.product_id,
+          variantId: i.variant_id,
+          unitPrice: i.unit_price,
+          quantity: i.quantity,
+        }))
+      ));
+    }
+    return map;
+  }, [isRep, orders, computeRepOrder]);
+
   // 當訂單列表刷新後（如保存後 invalidate），自動同步 viewingOrder 最新資料
   useEffect(() => {
     if (viewingOrder) {
@@ -153,7 +173,7 @@ export default function AdminOrderList() {
           label: '複製連結',
           onClick: () => {
             const r = results[0] as any;
-            const link = `${window.location.origin}/share/sales-note/${r.sales_note_code || r.sales_note_id}?token=${r.access_token}`;
+            const link = `${window.location.origin}/share/sale/${r.sales_note_code || r.sales_note_id}?token=${r.access_token}`;
             navigator.clipboard.writeText(link);
             toast.success('連結已複製');
           },
@@ -737,9 +757,11 @@ export default function AdminOrderList() {
             <Button onClick={() => navigate('/admin/orders/checkout')} size="sm" variant="outline">
               <PlusCircle className="mr-2 h-4 w-4" /> 建立新單據
             </Button>
-            <Button onClick={() => navigate('/admin/orders/new')} size="sm">
-              <Plus className="mr-2 h-4 w-4" /> 代訂訂單
-            </Button>
+            {!isRep && (
+              <Button onClick={() => navigate('/admin/orders/new')} size="sm">
+                <Plus className="mr-2 h-4 w-4" /> 代訂訂單
+              </Button>
+            )}
             <Button
               onClick={async () => {
                   const exportData: Record<string, any>[] = [];
@@ -863,6 +885,7 @@ export default function AdminOrderList() {
                   sortDirection={sortDirection}
                   onSort={handleSort}
                   poLinkMap={poLinkMap}
+                  commissionByOrder={commissionByOrder}
                 />
               </div>
             </div>
@@ -877,6 +900,7 @@ export default function AdminOrderList() {
                 statusTab={statusTab}
                 getOrderShipmentStatus={getOrderShipmentStatus}
                 getOrderTotal={getOrderTotal}
+                commissionByOrder={commissionByOrder}
               />
             </div>
           </>
@@ -1011,6 +1035,7 @@ export default function AdminOrderList() {
         }}
         onExportAggregateCSV={handleExportAggregateCSV}
         onExportAggregateExcel={handleExportAggregateExcel}
+        isRep={isRep}
       />
 
       {/* Confirmation Dialogs */}

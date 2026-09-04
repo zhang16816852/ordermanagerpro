@@ -24,8 +24,9 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
+import { StorePicker } from '@/components/ui/StorePicker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Pencil, Search, Users, Store, Mail, Copy, Trash2, UserPlus, X } from 'lucide-react';
+import { Plus, Pencil, Search, Users, Store, Mail, Copy, Trash2, UserPlus, UserCog, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -78,6 +79,11 @@ export default function AdminStores() {
   // --- Invite state ---
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+
+  // --- System role (業務) state ---
+  const [showRoleDialog, setShowRoleDialog] = useState(false);
+  const [roleUserId, setRoleUserId] = useState<string | null>(null);
+  const [roleValue, setRoleValue] = useState<string>('customer');
 
   // ==================== QUERIES ====================
 
@@ -267,6 +273,44 @@ export default function AdminStores() {
     onError: (err: Error) => toast.error(getErrorMessage(err)),
   });
 
+  // 設定系統角色（業務 / 管理員 / 用戶）
+  const systemRoleMutation = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
+      if (role === 'customer') {
+        const { error } = await (supabase
+          .from('user_roles') as any)
+          .delete()
+          .eq('user_id', userId);
+        if (error) throw error;
+        return;
+      }
+      const { error } = await (supabase
+        .from('user_roles') as any)
+        .upsert(
+          { user_id: userId, role },
+          { onConflict: 'user_id,role' }
+        );
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('系統角色已更新');
+      setShowRoleDialog(false);
+      setRoleUserId(null);
+      queryClient.invalidateQueries({ queryKey: ['admin-user-roles'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-reps'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-rep-profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-rep-assignments'] });
+    },
+    onError: (err: Error) => toast.error(getErrorMessage(err)),
+  });
+
+  const openRoleDialog = (userId: string, roles: string[]) => {
+    const current = roles.find((r) => r === 'rep') || roles.find((r) => r === 'admin') || roles[0] || 'customer';
+    setRoleUserId(userId);
+    setRoleValue(current);
+    setShowRoleDialog(true);
+  };
+
   // ==================== HELPERS ====================
 
   const getUserRoles = (userId: string) =>
@@ -282,6 +326,7 @@ export default function AdminStores() {
     switch (role) {
       case 'admin': return <Badge className="bg-red-500">管理員</Badge>;
       case 'customer': return <Badge variant="secondary">用戶</Badge>;
+      case 'rep': return <Badge className="bg-emerald-600">業務</Badge>;
       default: return <Badge variant="outline">{role}</Badge>;
     }
   };
@@ -644,6 +689,7 @@ export default function AdminStores() {
                 <SelectContent>
                   <SelectItem value="all">所有角色</SelectItem>
                   <SelectItem value="admin">管理員</SelectItem>
+                  <SelectItem value="rep">業務</SelectItem>
                   <SelectItem value="customer">用戶</SelectItem>
                 </SelectContent>
               </Select>
@@ -733,9 +779,14 @@ export default function AdminStores() {
                           {format(new Date(profile.created_at), 'yyyy/MM/dd')}
                         </TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="icon" aria-label="指派門市" onClick={() => openAssignDialog(profile.id)}>
-                            <UserPlus className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="icon" aria-label="系統角色" title="設定系統角色" onClick={() => openRoleDialog(profile.id, roles)}>
+                              <UserCog className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" aria-label="指派門市" onClick={() => openAssignDialog(profile.id)}>
+                              <UserPlus className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -871,23 +922,19 @@ export default function AdminStores() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="assign-store">店鋪</Label>
-              <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
-                <SelectTrigger id="assign-store">
-                  <SelectValue placeholder="選擇店鋪" />
-                </SelectTrigger>
-                <SelectContent>
-                  {storesList?.map((store) => (
-                    <SelectItem key={store.id} value={store.id}>
-                      {store.code ? `${store.code} - ${store.name}` : store.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="assign-role">角色</Label>
-              <Select value={selectedRole} onValueChange={setSelectedRole}>
+<Label htmlFor="assign-store">店鋪</Label>
+               <StorePicker
+                 stores={storesList || []}
+                 value={selectedStoreId}
+                 onChange={(v) => setSelectedStoreId(Array.isArray(v) ? v[0] : v)}
+                 placeholder="選擇店鋪"
+                 searchPlaceholder="搜尋店鋪..."
+                 notFoundText="找不到符合的店鋪"
+               />
+             </div>
+             <div>
+               <Label htmlFor="assign-role">角色</Label>
+               <Select value={selectedRole} onValueChange={setSelectedRole}>
                 <SelectTrigger id="assign-role"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="founder">創辦人</SelectItem>
@@ -922,16 +969,14 @@ export default function AdminStores() {
             </div>
             <div>
               <Label htmlFor="invite-store">店鋪</Label>
-              <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
-                <SelectTrigger id="invite-store"><SelectValue placeholder="選擇店鋪" /></SelectTrigger>
-                <SelectContent>
-                  {storesList?.map((store) => (
-                    <SelectItem key={store.id} value={store.id}>
-                      {store.code ? `${store.code} - ${store.name}` : store.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <StorePicker
+                stores={storesList || []}
+                value={selectedStoreId}
+                onChange={(v) => setSelectedStoreId(Array.isArray(v) ? v[0] : v)}
+                placeholder="選擇店鋪"
+                searchPlaceholder="搜尋店鋪..."
+                notFoundText="找不到符合的店鋪"
+              />
             </div>
             <div>
               <Label htmlFor="invite-role">角色</Label>
@@ -949,6 +994,49 @@ export default function AdminStores() {
             <Button variant="outline" onClick={() => setShowInviteDialog(false)}>取消</Button>
             <Button onClick={() => inviteMutation.mutate()} disabled={!inviteEmail || !selectedStoreId || inviteMutation.isPending}>
               {inviteMutation.isPending ? '處理中...' : '發送邀請'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ==================== SYSTEM ROLE DIALOG ==================== */}
+      <Dialog open={showRoleDialog} onOpenChange={setShowRoleDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>設定系統角色</DialogTitle>
+            <DialogDescription>
+              設定使用者的系統身分。選擇「業務」即授予業務身分（跨店、名下店家由業務管理頁分配）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="role-user">用戶</Label>
+              <div className="text-sm font-medium">
+                {roleUserId ? profiles?.find((p) => p.id === roleUserId)?.full_name || '未設定' : '—'}
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="role-value">系統角色</Label>
+              <Select value={roleValue} onValueChange={setRoleValue}>
+                <SelectTrigger id="role-value"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="rep">業務</SelectItem>
+                  <SelectItem value="admin">管理員</SelectItem>
+                  <SelectItem value="customer">用戶</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRoleDialog(false)}>取消</Button>
+            <Button
+              onClick={() => {
+                if (!roleUserId) return;
+                systemRoleMutation.mutate({ userId: roleUserId, role: roleValue });
+              }}
+              disabled={!roleUserId || systemRoleMutation.isPending}
+            >
+              {systemRoleMutation.isPending ? '儲存中...' : '儲存'}
             </Button>
           </DialogFooter>
         </DialogContent>

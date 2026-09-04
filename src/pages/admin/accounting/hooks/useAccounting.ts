@@ -95,12 +95,33 @@ export function useAccounting(selectedMonth?: string) {
   });
 
   const deleteEntryMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await (supabase as any).from('accounting_entries').delete().eq('id', id);
+    mutationFn: async (entry: AccountingEntry) => {
+      if (entry.paid_amount > 0 && entry.account_id) {
+        const account = accounts.find(a => a.id === entry.account_id);
+        if (account) {
+          const balanceChange = entry.type === 'income' ? -entry.paid_amount : entry.paid_amount;
+          const { error: accountError } = await (supabase as any)
+            .from('accounts')
+            .update({ balance: account.balance + balanceChange })
+            .eq('id', entry.account_id);
+          if (accountError) throw accountError;
+        }
+      }
+
+      const { error } = await (supabase as any).from('accounting_entries').delete().eq('id', entry.id);
       if (error) throw error;
+
+      if (entry.reference_type === 'sales_note' && entry.reference_id) {
+        const { error: noteError } = await (supabase as any)
+          .rpc('sync_sales_note_payment_status', { p_sales_note_id: entry.reference_id });
+        if (noteError) throw noteError;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounting-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-sales-notes'] });
+      queryClient.invalidateQueries({ queryKey: ['store-sales-notes'] });
       toast.success('記錄已刪除');
     },
     onError: () => toast.error('刪除失敗'),
@@ -129,10 +150,18 @@ export function useAccounting(selectedMonth?: string) {
           .eq('id', accountId);
         if (accountError) throw accountError;
       }
+
+      if (entry.reference_type === 'sales_note' && entry.reference_id) {
+        const { error: noteError } = await (supabase as any)
+          .rpc('sync_sales_note_payment_status', { p_sales_note_id: entry.reference_id });
+        if (noteError) throw noteError;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounting-entries'] });
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-sales-notes'] });
+      queryClient.invalidateQueries({ queryKey: ['store-sales-notes'] });
       toast.success('付款已記錄');
     },
     onError: () => toast.error('記錄付款失敗'),

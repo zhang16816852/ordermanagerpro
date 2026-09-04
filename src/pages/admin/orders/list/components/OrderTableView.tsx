@@ -31,6 +31,7 @@ interface OrderTableViewProps {
   sortDirection: 'asc' | 'desc';
   onSort: (field: string) => void;
   poLinkMap: Map<string, { poCount: number; poIds: string[] }>;
+  commissionByOrder?: Map<string, { totalProfit: number; totalCommission: number }>;
 }
 
 export function OrderTableView({
@@ -47,6 +48,7 @@ export function OrderTableView({
   sortDirection,
   onSort,
   poLinkMap,
+  commissionByOrder,
 }: OrderTableViewProps) {
   const getOrderShipmentStatus = (items: OrderItem[]) => {
     if (items.length === 0) return 'waiting';
@@ -104,6 +106,7 @@ export function OrderTableView({
             <SortableHead field="store_name">店鋪</SortableHead>
             <SortableHead field="item_count">品項數（數量）</SortableHead>
             <TableHead className="text-right">金額</TableHead>
+            {commissionByOrder && <TableHead className="text-right">估佣（利潤）</TableHead>}
             <TableHead>來源</TableHead>
             <TableHead>訂單狀態</TableHead>
             <TableHead>出貨狀態</TableHead>
@@ -120,6 +123,7 @@ export function OrderTableView({
                 <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-8" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                {commissionByOrder && <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>}
                 <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-12" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-16" /></TableCell>
@@ -129,7 +133,7 @@ export function OrderTableView({
             ))
           ) : orders.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={(statusTab === 'pending' || statusTab === 'processing') ? 10 : 9} className="text-center py-12 text-muted-foreground italic">
+              <TableCell colSpan={(statusTab === 'pending' || statusTab === 'processing') ? (commissionByOrder ? 11 : 10) : (commissionByOrder ? 10 : 9)} className="text-center py-12 text-muted-foreground italic">
                 沒有找到符合條件的訂單
               </TableCell>
             </TableRow>
@@ -171,6 +175,21 @@ export function OrderTableView({
                     </span>
                   </TableCell>
                   <TableCell className="text-right font-bold">{formatCurrency(getOrderTotal(order.order_items))}</TableCell>
+                  {commissionByOrder && (() => {
+                    const c = commissionByOrder.get(order.id);
+                    return (
+                      <TableCell className="text-right">
+                        {c ? (
+                          <div className="text-xs">
+                            <div className="font-semibold text-amber-600">{formatCurrency(c.totalCommission)}</div>
+                            <div className="text-muted-foreground">利潤 {formatCurrency(c.totalProfit)}</div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
+                      </TableCell>
+                    );
+                  })()}
                     <TableCell>
                       <Badge variant="outline">{getSourceLabel(order.source_type)}</Badge>
                     </TableCell>

@@ -43,7 +43,7 @@ export default function AdminOrderForm() {
   const [selectedStoreId, setSelectedStoreId] = useState(storeIdFromParam);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, isRep, repAssignedStores } = useAuth();
 
   const isEditMode = !!orderId;
 
@@ -83,8 +83,7 @@ export default function AdminOrderForm() {
   // Unified order type
   const [orderType, setOrderType] = useState<'sales' | 'purchase' | 'consignment_receive' | 'consignment_send'>(
     (searchParams.get('type') as any) || 'sales'
-  );
-  const [supplierId, setSupplierId] = useState('');
+  );  const [supplierId, setSupplierId] = useState('');
   const [targetStoreId, setTargetStoreId] = useState('');
   const [expectedDate, setExpectedDate] = useState('');
   const [supplierOrderNumber, setSupplierOrderNumber] = useState('');
@@ -121,6 +120,8 @@ export default function AdminOrderForm() {
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<OrderItemRow[]>([]);
   const [priceSyncMap, setPriceSyncMap] = useState<Record<string, boolean>>({});
+  // 軟刪除：已移除的既有品項 id，待儲存時再一次提交給 update_order_with_items
+  const [pendingDeletedIds, setPendingDeletedIds] = useState<string[]>([]);
   const [isPendingMode2, setIsPendingMode2] = useState(false);
   const { defaultWarehouse, warehouses } = useWarehouses();
   const [directShipDialogOpen, setDirectShipDialogOpen] = useState(false);
@@ -248,12 +249,24 @@ export default function AdminOrderForm() {
 
   // Stores list (for consignment_send type)
   const { data: storesList = [] } = useQuery({
-    queryKey: ['stores-for-order-form'],
+    queryKey: ['stores-for-order-form', isRep ? (user?.id ?? '') : 'all'],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      let query = (supabase as any)
         .from('stores')
         .select('id, name, code, brand')
         .order('name');
+      if (isRep && user) {
+        // 業務只能選名下店家
+        const { data: assignments, error: asnError } = await (supabase as any)
+          .from('rep_store_assignments')
+          .select('store_id')
+          .eq('rep_id', user.id);
+        if (asnError) throw asnError;
+        const ids = (assignments || []).map((a: any) => a.store_id);
+        if (ids.length === 0) return [];
+        query = query.in('id', ids);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       return (data || []) as { id: string; name: string; code: string | null; brand: string | null }[];
     },
@@ -333,6 +346,8 @@ export default function AdminOrderForm() {
   consignmentModeRef.current = consignmentMode;
   const orderRef = useRef(order);
   orderRef.current = order;
+  const pendingDeletedIdsRef = useRef(pendingDeletedIds);
+  pendingDeletedIdsRef.current = pendingDeletedIds;
 
   // Edit mode: populate state from fetched order
   useEffect(() => {
@@ -341,6 +356,7 @@ export default function AdminOrderForm() {
     prevDraftItemsRef.current = '[]';
     skipNextDraftSyncRef.current = true;
     setNotes(order.notes || '');
+    setPendingDeletedIds([]);
     setItems(order.order_items.map((item: any) => ({
       id: item.id,
       productId: item.product_id,
@@ -426,9 +442,35 @@ export default function AdminOrderForm() {
   }, [draft]);
 
   const handleRemoveItem = useCallback((index: number) => {
-    const itemId = itemsRef.current[index]?.id;
+    const item = itemsRef.current[index];
+    if (!item) return;
+
+    if (item.isNew) {
+      // 本次新加的品項（來自商品目錄）→ 直接移除，無需還原
+      setItems((prev) => prev.filter((_, i) => i !== index));
+      draft.removeItem(item.id);
+      return;
+    }
+
+    // 既有品項 → 軟刪除（隱藏 + toast 還原），儲存時再一次提交
     setItems((prev) => prev.filter((_, i) => i !== index));
-    if (itemId) draft.removeItem(itemId);
+    setPendingDeletedIds((prev) => [...prev, item.id]);
+
+    toast.success('已移除品項', {
+      action: {
+        label: '還原',
+        onClick: () => {
+          // 還原：插回原位並移出 pending deleted
+          setItems((prev) => {
+            const next = [...prev];
+            next.splice(index, 0, item);
+            return next;
+          });
+          setPendingDeletedIds((prev) => prev.filter((id) => id !== item.id));
+        },
+      },
+      duration: 8000,
+    });
   }, [draft]);
 
   const handleReorder = useCallback((newItems: OrderItemRow[]) => {
@@ -477,42 +519,30 @@ export default function AdminOrderForm() {
     mutationFn: async () => {
       const currentItems = itemsRef.current;
       const currentNotes = notesRef.current;
-      const currentOrder = orderRef.current;
-      if (!orderId || !currentOrder) throw new Error('訂單不存在');
-      await (supabase.from('orders') as any).update({ notes: currentNotes || null }).eq('id', orderId);
+      const currentDeletedIds = pendingDeletedIdsRef.current;
+      if (!orderId) throw new Error('訂單不存在');
 
-      const existingIds = currentOrder.order_items.map((i: any) => i.id);
-      const currentIds = currentItems.filter((i) => !i.isNew).map((i) => i.id);
-      const toDelete = existingIds.filter((id: string) => !currentIds.includes(id));
+      const payload = currentItems.map((item, index) => ({
+        id: item.isNew ? null : item.id,
+        product_id: item.productId,
+        variant_id: item.variantId || null,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        selected_model_name: item.selectedModelName || null,
+        sort_order: index + 1,
+      }));
 
-      for (const [itemIndex, item] of currentItems.entries()) {
-        if (item.isNew) {
-          const { error } = await (supabase.from('order_items') as any).insert({
-            order_id: orderId,
-            product_id: item.productId,
-            variant_id: item.variantId || null,
-            quantity: item.quantity,
-            unit_price: item.unitPrice,
-            selected_model_name: item.selectedModelName || null,
-            store_id: currentOrder.store_id,
-            sort_order: itemIndex + 1,
-          });
-          if (error) throw error;
-        } else {
-          const { error } = await (supabase
-            .from('order_items') as any)
-            .update({ quantity: item.quantity, unit_price: item.unitPrice, sort_order: itemIndex + 1 })
-            .eq('id', item.id);
-          if (error) throw error;
-        }
-      }
-
-      if (toDelete.length > 0) {
-        await (supabase.from('order_items') as any).delete().in('id', toDelete);
-      }
+      const { error } = await supabase.rpc('update_order_with_items', {
+        p_order_id: orderId,
+        p_notes: currentNotes || null,
+        p_items: payload,
+        p_deleted_item_ids: currentDeletedIds.length > 0 ? currentDeletedIds : undefined,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       toast.success('訂單已更新');
+      setPendingDeletedIds([]);
       queryClient.invalidateQueries({ queryKey: ['order-detail'] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       navigate('/admin/orders');
@@ -532,9 +562,11 @@ export default function AdminOrderForm() {
         .insert({
           store_id: storeId,
           created_by: user?.id,
+          sales_rep_id: isRep ? user?.id : null,
           source_type: 'admin_proxy',
           notes: currentNotes.trim() || null,
           consignment_mode: consignmentModeRef.current,
+          access_token: crypto.randomUUID(),
         })
         .select('id')
         .single();
@@ -594,7 +626,7 @@ export default function AdminOrderForm() {
       if (consignmentModeRef.current) {
         toast.success('訂單已建立並以店家寄賣方式出貨，確認售出後才開立銷貨單');
       } else {
-        const link = `${window.location.origin}/share/sales-note/${(data as any).sales_note_code || (data as any).sales_note_id}?token=${(data as any).access_token}`;
+        const link = `${window.location.origin}/share/sale/${(data as any).sales_note_code || (data as any).sales_note_id}?token=${(data as any).access_token}`;
         toast.success('訂單已建立並開立銷貨單！', {
           duration: 10000,
           action: {
@@ -659,7 +691,7 @@ export default function AdminOrderForm() {
     },
     onSuccess: (result) => {
       if (result?.sales_note_id) {
-        const link = `${window.location.origin}/share/sales-note/${result.sales_note_code || result.sales_note_id}?token=${result.access_token}`;
+        const link = `${window.location.origin}/share/sale/${result.sales_note_code || result.sales_note_id}?token=${result.access_token}`;
         toast.success('訂單已轉為銷貨單！', {
           duration: 10000,
           action: {
@@ -968,7 +1000,7 @@ export default function AdminOrderForm() {
       </div>
 
       {/* Type selector (create mode only) */}
-      {!isEditMode && (
+      {!isEditMode && !isRep && (
         <Tabs value={orderType} onValueChange={(v) => setOrderType(v as any)}>
           <TabsList>
             <TabsTrigger value="sales" className="gap-1.5">
@@ -1065,7 +1097,7 @@ export default function AdminOrderForm() {
         )}
         {isEditMode ? (
           <>
-            {order?.status === 'processing' && (
+            {order?.status === 'processing' && !isRep && (
               <Button variant="default" onClick={() => setDirectShipDialogOpen(true)} disabled={isSubmitting}>
                 <Send className="mr-2 h-4 w-4" />
                 {order?.consignment_mode ? '寄賣出貨' : '轉銷貨單'}
@@ -1081,9 +1113,11 @@ export default function AdminOrderForm() {
             <Button onClick={() => createPendingMutation.mutate()} disabled={isSubmitting || items.length === 0}>
               {createPendingMutation.isPending ? '建立中…' : '建立訂單'}
             </Button>
-            <Button onClick={handleCreateWithSalesNote} disabled={isSubmitting || items.length === 0} variant="default">
-              {consignmentMode ? '建立訂單並寄賣出貨' : '建立訂單並開立銷貨單'}
-            </Button>
+            {!isRep && (
+              <Button onClick={handleCreateWithSalesNote} disabled={isSubmitting || items.length === 0} variant="default">
+                {consignmentMode ? '建立訂單並寄賣出貨' : '建立訂單並開立銷貨單'}
+              </Button>
+            )}
           </>
         ) : orderType === 'purchase' ? (
           <Button onClick={() => createPurchaseOrderMutation.mutate()} disabled={isSubmitting || items.length === 0 || !supplierId}>

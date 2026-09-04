@@ -24,6 +24,7 @@ interface SalesNoteWithItems {
   id: string;
   code?: string;
   status: 'draft' | 'shipped' | 'received';
+  payment_status?: string;
   shipped_at: string | null;
   received_at: string | null;
   notes: string | null;
@@ -99,6 +100,7 @@ export default function StoreSalesNotes() {
           id,
           code,
           status,
+          payment_status,
           shipped_at,
           received_at,
           notes,
@@ -246,6 +248,7 @@ export default function StoreSalesNotes() {
       id: note.id,
       code: note.code,
       status: note.status,
+      payment_status: note.payment_status,
       itemCount: note.sales_note_items.length,
       created_at: note.created_at,
       shipped_at: note.shipped_at,
@@ -262,6 +265,7 @@ export default function StoreSalesNotes() {
       id: note.id,
       code: note.code,
       status: note.status,
+      payment_status: note.payment_status,
       created_at: note.created_at,
       shipped_at: note.shipped_at,
       received_at: note.received_at,

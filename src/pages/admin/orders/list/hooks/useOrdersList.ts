@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 
 export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'processing' | 'shipped') {
-  const { user } = useAuth();
+  const { user, isRep } = useAuth();
   const queryClient = useQueryClient();
 
   // 1. Shipping Pool items (for pending quantity calculation)
@@ -92,7 +92,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
 
   // 3. Main Orders Query
   const { data: orders = [], isLoading } = useQuery({
-    queryKey: ['admin-orders', storeFilter, statusTab],
+    queryKey: ['admin-orders', storeFilter, statusTab, isRep ? user?.id : null],
     queryFn: async () => {
       let query = (supabase
         .from('orders') as any)
@@ -124,6 +124,11 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
         .eq('status', statusTab)
         .order('created_at', { ascending: false })
         .order('sort_order', { ascending: true, foreignTable: 'order_items' });
+
+      if (isRep && user) {
+        // 業務只看自己建立（sales_rep_id = 自己）的訂單
+        query = query.eq('sales_rep_id', user.id);
+      }
 
       if (storeFilter && storeFilter !== 'all') {
         query = query.eq('store_id', storeFilter);

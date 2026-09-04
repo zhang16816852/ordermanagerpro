@@ -1754,6 +1754,7 @@ export type Database = {
           created_by: string
           id: string
           notes: string | null
+          sales_rep_id: string | null
           source_type: Database["public"]["Enums"]["order_source_type"]
           status: Database["public"]["Enums"]["order_status"]
           store_id: string
@@ -1767,6 +1768,7 @@ export type Database = {
           created_by: string
           id?: string
           notes?: string | null
+          sales_rep_id?: string | null
           source_type?: Database["public"]["Enums"]["order_source_type"]
           status?: Database["public"]["Enums"]["order_status"]
           store_id: string
@@ -1780,6 +1782,7 @@ export type Database = {
           created_by?: string
           id?: string
           notes?: string | null
+          sales_rep_id?: string | null
           source_type?: Database["public"]["Enums"]["order_source_type"]
           status?: Database["public"]["Enums"]["order_status"]
           store_id?: string
@@ -2365,6 +2368,74 @@ export type Database = {
           },
         ]
       }
+      rep_product_costs: {
+        Row: {
+          cost: number
+          id: string
+          product_id: string
+          rep_id: string
+          variant_id: string | null
+        }
+        Insert: {
+          cost?: number
+          id?: string
+          product_id: string
+          rep_id: string
+          variant_id?: string | null
+        }
+        Update: {
+          cost?: number
+          id?: string
+          product_id?: string
+          rep_id?: string
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rep_product_costs_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rep_product_costs_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rep_store_assignments: {
+        Row: {
+          assigned_at: string
+          id: string
+          rep_id: string
+          store_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          id?: string
+          rep_id: string
+          store_id: string
+        }
+        Update: {
+          assigned_at?: string
+          id?: string
+          rep_id?: string
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rep_store_assignments_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sales_note_items: {
         Row: {
           created_at: string
@@ -2415,6 +2486,7 @@ export type Database = {
           created_by: string
           id: string
           notes: string | null
+          payment_status: string
           received_at: string | null
           received_by: string | null
           shipped_at: string | null
@@ -2430,6 +2502,7 @@ export type Database = {
           created_by: string
           id?: string
           notes?: string | null
+          payment_status?: string
           received_at?: string | null
           received_by?: string | null
           shipped_at?: string | null
@@ -2445,6 +2518,7 @@ export type Database = {
           created_by?: string
           id?: string
           notes?: string | null
+          payment_status?: string
           received_at?: string | null
           received_by?: string | null
           shipped_at?: string | null
@@ -3010,18 +3084,21 @@ export type Database = {
       }
       user_roles: {
         Row: {
+          commission_rate: number
           created_at: string
           id: string
           role: Database["public"]["Enums"]["system_role"]
           user_id: string
         }
         Insert: {
+          commission_rate?: number
           created_at?: string
           id?: string
           role: Database["public"]["Enums"]["system_role"]
           user_id: string
         }
         Update: {
+          commission_rate?: number
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["system_role"]
@@ -3263,6 +3340,7 @@ export type Database = {
         Args: { p_variant_id: string }
         Returns: string[]
       }
+      get_rep_commission_rate: { Args: { _user_id: string }; Returns: number }
       get_shared_order_details: {
         Args: { p_identifier: string; p_token: string }
         Returns: Json
@@ -3293,6 +3371,11 @@ export type Database = {
         Returns: boolean
       }
       import_product_batch: { Args: { p_items: Json }; Returns: Json }
+      is_rep: { Args: { _user_id: string }; Returns: boolean }
+      is_rep_store: {
+        Args: { _store_id: string; _user_id: string }
+        Returns: boolean
+      }
       is_store_member: {
         Args: { _store_id: string; _user_id: string }
         Returns: boolean
@@ -3323,6 +3406,10 @@ export type Database = {
             Args: { p_items: Json; p_warehouse_id?: string }
             Returns: undefined
           }
+      remove_items_from_shipping_pool: {
+        Args: { p_created_by: string; p_pool_ids: string[] }
+        Returns: Json
+      }
       report_consignment_sale: {
         Args: {
           p_consignment_order_item_id: string
@@ -3403,6 +3490,19 @@ export type Database = {
         Args: { p_order_ids: string[]; p_purchase_order_id: string }
         Returns: Json
       }
+      update_order_with_items: {
+        Args: {
+          p_deleted_item_ids?: string[]
+          p_items?: Json
+          p_notes?: string
+          p_order_id: string
+        }
+        Returns: Json
+      }
+      update_sales_note_shipped_date: {
+        Args: { p_date: string; p_sales_note_id: string }
+        Returns: undefined
+      }
       upsert_brand_product_prices: {
         Args: { p_brand: string; p_products: Json }
         Returns: undefined
@@ -3439,7 +3539,7 @@ export type Database = {
       spec_instance_state: "active" | "orphaned" | "migrated" | "deleted"
       spec_value_type: "string" | "number" | "boolean" | "array" | "object"
       store_role: "founder" | "manager" | "employee"
-      system_role: "admin" | "customer"
+      system_role: "admin" | "customer" | "rep"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3455,12 +3555,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3484,11 +3584,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3509,11 +3609,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3534,11 +3634,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3551,11 +3651,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3595,7 +3695,7 @@ export const Constants = {
       spec_instance_state: ["active", "orphaned", "migrated", "deleted"],
       spec_value_type: ["string", "number", "boolean", "array", "object"],
       store_role: ["founder", "manager", "employee"],
-      system_role: ["admin", "customer"],
+      system_role: ["admin", "customer", "rep"],
     },
   },
 } as const

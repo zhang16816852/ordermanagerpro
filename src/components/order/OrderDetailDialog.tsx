@@ -16,6 +16,7 @@ import { Order } from '@/types/order';
 import { Check, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/formatters';
+import { useRepCommission } from '@/hooks/useRepCommission';
 
 interface OrderDetailDialogProps {
     order: Order | null;
@@ -25,6 +26,7 @@ interface OrderDetailDialogProps {
 
 export function OrderDetailDialog({ order, open, onOpenChange }: OrderDetailDialogProps) {
     const [isCopied, setIsCopied] = useState(false);
+    const { isRep, computeOrder } = useRepCommission();
 
     const sortedOrderItems = useMemo(() =>
         [...(order?.order_items ?? [])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
@@ -38,6 +40,15 @@ export function OrderDetailDialog({ order, open, onOpenChange }: OrderDetailDial
             (sum, item) => sum + item.quantity * item.unit_price,
             0
         );
+
+    const repSummary = isRep
+        ? computeOrder(order.order_items.map(i => ({
+            productId: i.product_id,
+            variantId: i.variant_id,
+            unitPrice: i.unit_price,
+            quantity: i.quantity,
+          })))
+        : null;
 
     const formattedDate = format(new Date(order.created_at), 'yyyy/MM/dd HH:mm', {
         locale: zhTW,
@@ -101,6 +112,18 @@ export function OrderDetailDialog({ order, open, onOpenChange }: OrderDetailDial
                     <div className="flex justify-end text-lg font-semibold text-primary">
                         總計：{formatCurrency(getTotalAmount())}
                     </div>
+
+                    {/* 業務利潤 / 佣金 */}
+                    {repSummary && (
+                        <div className="flex justify-end gap-6 text-sm border-t pt-2 mt-1">
+                            <span className="text-muted-foreground">
+                                業務利潤：<span className="font-semibold text-emerald-600">{formatCurrency(repSummary.totalProfit)}</span>
+                            </span>
+                            <span className="text-muted-foreground">
+                                估佣：<span className="font-semibold text-amber-600">{formatCurrency(repSummary.totalCommission)}</span>
+                            </span>
+                        </div>
+                    )}
                 </div>
             </DialogContent>
         </Dialog>

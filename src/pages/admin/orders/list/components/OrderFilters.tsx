@@ -2,6 +2,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { StorePicker } from '@/components/ui/StorePicker';
 import { Search, Package, Truck, CheckSquare, List, LayoutGrid, ClipboardList, Calendar } from 'lucide-react';
 
 interface OrderFiltersProps {
@@ -94,19 +95,14 @@ export function OrderFilters({
             className="pl-9 h-10 border-muted"
           />
         </div>
-        <Select value={storeFilter} onValueChange={onStoreFilterChange}>
-          <SelectTrigger className="w-48 h-10 border-muted">
-            <SelectValue placeholder="選擇店鋪" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">全部店鋪</SelectItem>
-            {stores.map((store) => (
-              <SelectItem key={store.id} value={store.id}>
-                {store.code ? `${store.code} - ${store.name}` : store.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <StorePicker
+          stores={[{ id: 'all', name: '全部店鋪' }, ...(stores || [])]}
+          value={storeFilter || 'all'}
+          onChange={(v) => onStoreFilterChange((v as string) === '' ? 'all' : (v as string))}
+          placeholder="選擇店鋪"
+          searchPlaceholder="搜尋店鋪..."
+          disabled={stores.length === 0}
+        />
         <div className="flex items-center gap-1.5">
           <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
           <Input

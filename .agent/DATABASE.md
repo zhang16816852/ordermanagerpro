@@ -59,7 +59,7 @@
 |---|---|---|
 | `orders` | 訂單 | store_id、code、status(`order_status`)、source_type(`order_source_type`)、created_by、notes、access_token、consignment_mode(BOOL，整單寄賣模式) |
 | `order_items` | 訂單明細 | order_id、product_id、variant_id、store_id、quantity、unit_price、shipped_quantity、status(`order_item_status`)、selected_model_name、sort_order(INT，品項顯示順序) |
-| `sales_notes` | 銷貨單 | store_id、code、status(`sales_note_status`)、shipped_at、received_at、created_by、access_token |
+| `sales_notes` | 銷貨單 | store_id、code、status(`sales_note_status`)、shipped_at、received_at、created_by、access_token、payment_status(text：`unpaid`/`paid`，收款狀態，與 status 收貨狀態分離) |
 | `sales_note_items` | 銷貨單明細 | sales_note_id、order_item_id、quantity |
 | `shipping_pool` | 出貨池（待出貨累積） | order_item_id、quantity、store_id、created_by |
 
@@ -97,6 +97,8 @@
 | `accounting_categories` | 會計分類 | name、type、description、is_active |
 | `accounting_entries` | 會計分錄 | account_id、category_id、type、amount、paid_amount、payment_status(`payment_status`)、transaction_date、due_date、reference_id/type |
 
+- **收款狀態連動**：`sales_notes.payment_status`（`unpaid`/`paid`）與收貨狀態 `status` 分離；`public.sync_sales_note_payment_status(p_sales_note_id uuid)`（SECURITY DEFINER，revoke public/anon、grant authenticated）統一計算「該銷貨單只要有任一 `accounting_entries`（`reference_type='sales_note'`、`type='income'`、`payment_status IN ('paid','partial')`）→ `paid`，否則 `unpaid`」，供付款/回退/刪除三流程連動（`useAccounting` 的 `recordPaymentMutation`/`reversePaymentMutation`/`deleteEntryMutation`）。
+
 ### 維修單
 | 表 | 說明 | 關鍵欄位 |
 |---|---|---|
@@ -120,7 +122,7 @@
 
 ## 2. Enums
 
-- `system_role`: admin | customer
+- `system_role`: admin | customer | rep
 - `store_role`: founder | manager | employee
 - `order_status`: pending | processing | shipped
 - `order_source_type`: frontend | admin_proxy | consignment
@@ -144,9 +146,27 @@
 ## 3. RLS 概況
 
 - RLS helper 函式：`has_role(system_role)`、`is_store_member(store_id)`、`get_store_role(store_id, user_id)`、`bind_user_to_store(p_user_id, p_store_id, p_role)`
-- 授權模式：admin 全權限；門市成員對自己 store_id 的資料有權限
+- **業務（rep）helper**：`is_rep(user_id)`、`get_rep_commission_rate(user_id)`（回傳 `user_roles.commission_rate`）、`is_rep_store(user_id, store_id)`（業務是否被分配到該店家）
+- 授權模式：admin 全權限；門市成員對自己 store_id 的資料有權限；業務對自己建立的訂單（`orders.sales_rep_id = auth.uid()`）與名下店家（`is_rep_store`）資料有權限
 - ⚠️ **10 張表 RLS 未啟用**（anon key 可直接讀寫）：`categories`、`specification_definitions`、`category_spec_links`、`category_hierarchy`、`product_category_links`、`data_change_logs`、`data_snapshots`、`storefront_items`、`table_templates`、`table_template_variants`
 - 啟用 RLS 前需先建立 policies，否則會鎖死所有存取
+
+## 3.5 業務（rep）身分系統（2026-09-04）
+
+- `system_role` enum 新增 `'rep'`（跨店、非單店成員）；登入後由 `useAuth` 讀取，進 `/admin`。
+- **新表**：
+  - `rep_store_assignments(id, rep_id→auth.users, store_id→stores, assigned_at, UNIQUE(rep_id,store_id))`：業務↔店家分配；RLS：admin 全權（`has_role(admin)`）、業務只讀自己（`auth.uid()=rep_id`）。
+  - `rep_product_costs(id, rep_id→auth.users, product_id→products, variant_id→product_variants, cost NUMERIC DEFAULT 0, UNIQUE(rep_id,product_id,variant_id))`：業務自有進貨成本；RLS：admin 全權、業務只讀自己。
+- **欄位**：`user_roles.commission_rate`（NUMERIC(5,2)，業務級固定比例，ADMIN 設定）；`orders.sales_rep_id→auth.users`（業務建立/負責的訂單，`idx_orders_sales_rep`）。
+- **Helper**：`is_rep(user_id)`、`get_rep_commission_rate(user_id)`（回傳 commission_rate，無則 0）、`is_rep_store(user_id, store_id)`（業務是否分配到店家）。皆 SECURITY DEFINER STABLE。
+- **RLS 更新**：
+  - `stores` SELECT：admin / store member / `is_rep_store`。
+  - `orders`：INSERT 允許 admin 或 rep 在名下店家建單（`is_rep AND is_rep_store(store_id)`）；SELECT 允許 admin / store member / `sales_rep_id=auth.uid()`；UPDATE 允許 admin / pending 的 store member / `sales_rep_id=auth.uid()`。
+  - `sales_notes` / `sales_note_items` SELECT：admin / store member / `is_rep_store(store_id)`。
+  - `order_items` SELECT/INSERT：以 `orders` 權限為準（含 `o.sales_rep_id=auth.uid()`）。
+- **`update_order_with_items` 授權加固**：允許 admin / store member / `v_order.sales_rep_id=auth.uid()`。
+- **佣金公式**（前端 `useRepCommission` 換算）：佣金 = (售價 − 業務成本) × commission_rate / 100，成本取自 `rep_product_costs`（無則視為 0）。
+- ⚠️ 出貨僅 admin 處理（業務不出貨）；RLS 已預留，系統穩定後可下放。
 
 ## 4. 版本控制系統（快取校驗的骨幹）- `data_versions.table_name` 與實際表名**不完全一致**：
   - `specs` ← specification_definitions / category_spec_links / specification_triggers（由 `trigger_bump_specs_version` 觸發）
@@ -188,6 +208,7 @@
 | RPC | 功能 |
 |---|---|
 | `ship_from_pool(p_store_ids, p_created_by, p_notes, p_shipped_at, p_warehouse_id, p_warehouse_map, p_source_map, p_consignment_override_map)` | 從出貨池批次出貨：依門市建 sales_note(status=shipped) → 產生 sales_note_items → 更新 order_items.shipped_quantity/status → 扣庫存 → 清空該門市 pool → 更新 order.status；`p_source_map` 逐項指定庫存來源（self 扣 own 倉 / supplier_consignment 走 allocate_inventory）。**寄賣判定**：`p_consignment_override_map`（order_item_id→boolean）有該 item 時以 override 為準，否則回歸 `orders.consignment_mode`；寄賣品項只寫 sales_note_items(inventory_source_type='store_consignment')、不扣自有庫存。⚠️ **v1.2 起改單一 canonical 簽名（舊 overloads 已全數移除）**，v1.3 起寄賣品項不進 sales_note_items（純寄賣店家 sales_note_id=NULL），單店送完後呼叫 `create_consignment_shipment_layer` 自動建寄賣單 |
+| `remove_items_from_shipping_pool(p_pool_ids uuid[], p_created_by uuid)` | **批次回滾成訂單（移出出貨池，2026-09-03）**：單一 RPC 一次寫入取代前端逐筆 `DELETE FROM shipping_pool`；守門 `p_pool_ids` 非空。收集受影響 order_id 集合 → `DELETE FROM shipping_pool WHERE id = ANY(p_pool_ids)` → 對每個受影響訂單，僅當**出貨池已無該訂單任何剩餘品項**且 `status='processing'` 才回退 `pending`（對齊「全數移出才回退」）。回傳 `{deleted_count, reverted_order_ids}` |
 | `direct_ship_order(p_order_id, p_created_by, p_notes, p_shipped_at, p_warehouse_id, p_warehouse_map, p_source_map)` | 訂單直接轉銷貨：**v1.3 起單一 canonical 7-arg 簽名（舊 overloads 已全數移除）**。非寄賣：建 sales_note → 為剩餘數量建 items → 更新 order_items → 扣庫存 → order 標 shipped；寄賣（orders.consignment_mode=true）：**不建 sales_note**（回傳 sales_note_id=NULL）、依剩餘數量建寄賣層 + movement，order 標 shipped；**v1.5.1**：寄賣與一般分支出貨時皆逐項 `DELETE FROM shipping_pool` |
 | `create_order_with_sales_note(p_store_id, p_created_by, p_notes, p_items JSONB, p_shipped_at, p_warehouse_id, p_consignment_mode)` | 下單即出貨：**v1.3 起單一 canonical 7-arg 簽名（舊 overloads 已全數移除）**。一般：建 order(source_type=admin_proxy, status=shipped) + sales_note + items + 扣庫存；`p_items[]` 逐項可帶 `inventory_source_type`。`p_consignment_mode=true` 時訂單標寄賣、items 一律 store_consignment、**不開銷貨單**、跳過 own 扣庫存、結尾呼叫 layer |
 | `create_consignment_shipment_layer(p_order_items JSONB, p_warehouse_id, p_created_by)` | 訂單轉寄賣中間層（v1.1 新增，v1.2 改判據，v1.3 改簽名）：**v1.3 起改收 `p_order_items`（JSONB 陣列，order_items 全欄位），舊 `(p_sales_note_id, p_warehouse_id, p_created_by)` 簽名已移除**；find-or-create `consignment_order`(send_to_store, source_order_id, draft/active) + `consignment_order_items`（既有 order_item 回填） + `consignment_out_shipment` movement（owner=store_consignment，sign 為負）；**v1.4 改寫**：依 `consignment_order_items.order_item_id` 比對重用既有寄賣品項（草稿鏡像路徑不再重複建列）、既有草稿單轉 active；被 ship_from_pool / direct_ship_order / create_order_with_sales_note / create_consignment_shipment 呼叫；**v1.5.1**：出貨時逐項 `DELETE FROM shipping_pool`（對應 order_item_id） |

@@ -23,12 +23,13 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { DialogFooter } from '@/components/ui/dialog';
 import { format } from 'date-fns';
-import { AccountingEntry, AccountingCategory } from '../types';
+import { AccountingEntry, AccountingCategory, Account } from '../types';
 import { formatCurrency } from '@/lib/formatters';
 
 interface EntryFormProps {
   entry: AccountingEntry | null;
   categories: AccountingCategory[];
+  accounts: Account[];
   onSubmit: (data: Partial<AccountingEntry>) => void;
   isLoading: boolean;
 }
@@ -36,12 +37,14 @@ interface EntryFormProps {
 export function EntryForm({
   entry,
   categories,
+  accounts,
   onSubmit,
   isLoading,
 }: EntryFormProps) {
   const [mode, setMode] = useState<'manual' | 'import'>('manual');
   const [type, setType] = useState<'income' | 'expense'>(entry?.type || 'expense');
   const [categoryId, setCategoryId] = useState(entry?.category_id || '');
+  const [accountId, setAccountId] = useState(entry?.account_id || '');
   const [amount, setAmount] = useState(entry?.amount?.toString() || '');
   const [description, setDescription] = useState(entry?.description || '');
   const [transactionDate, setTransactionDate] = useState(entry?.transaction_date || format(new Date(), 'yyyy-MM-dd'));
@@ -77,25 +80,32 @@ export function EntryForm({
   });
 
   const { data: salesOrders = [] } = useQuery({
-    queryKey: ['available-sales-orders'],
+    queryKey: ['available-sales-notes'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('orders')
+      const { data, error } = await (supabase as any)
+        .from('sales_notes')
         .select(`
           id,
+          code,
           created_at,
           status,
-          store:stores(name),
-          order_items(quantity, unit_price)
+          store:stores(name, code),
+          sales_note_items(
+            quantity,
+            order_item:order_items(unit_price)
+          )
         `)
         .order('created_at', { ascending: false })
         .limit(50);
 
       if (error) throw error;
 
-      return (data || []).map((order: any) => ({
-        ...order,
-        total_amount: order.order_items.reduce((sum: number, item: any) => sum + (item.quantity * item.unit_price), 0)
+      return (data || []).map((note: any) => ({
+        ...note,
+        total_amount: (note.sales_note_items || []).reduce(
+          (sum: number, item: any) => sum + (item.quantity * (item.order_item?.unit_price || 0)),
+          0
+        )
       }));
     },
     enabled: mode === 'import' && importType === 'order',
@@ -118,9 +128,9 @@ export function EntryForm({
     setAmount(total.toString());
 
     if (selectedItems.length > 0) {
-      const ids = selectedItems.map((item: any) => item.id.slice(0, 8));
+      const refs = selectedItems.map((item: any) => item.code || item.id.slice(0, 8));
       const prefix = importType === 'purchase' ? '採購單' : '銷售單';
-      setDescription(`${prefix}: ${ids.join(', ')}`);
+      setDescription(`${prefix}: ${refs.join(', ')}`);
     } else {
       setDescription('');
     }
@@ -215,20 +225,20 @@ export function EntryForm({
                     salesOrders.length === 0 ? (
                       <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">無資料</TableCell></TableRow>
                     ) : (
-                      salesOrders.map((order: any) => (
-                        <TableRow key={order.id}>
+                      salesOrders.map((note: any) => (
+                        <TableRow key={note.id}>
                           <TableCell>
                             <Checkbox
-                              checked={selectedIds.has(order.id)}
-                              onCheckedChange={(c) => handleImportSelection(order.id, order.total_amount, `銷售單 ${order.id.slice(0, 8)}`, !!c)}
+                              checked={selectedIds.has(note.id)}
+                              onCheckedChange={(c) => handleImportSelection(note.id, note.total_amount, `銷售單 ${note.code || note.id.slice(0, 8)}`, !!c)}
                             />
                           </TableCell>
                           <TableCell>
-                            <div className="line-clamp-1">{order.store?.name}</div>
-                            <div className="text-xs text-muted-foreground font-mono">{order.id.slice(0, 8)}</div>
+                            <div className="line-clamp-1">{note.store?.name}</div>
+                            <div className="text-xs text-muted-foreground font-mono">{note.code || note.id.slice(0, 8)}</div>
                           </TableCell>
-                          <TableCell className="text-xs">{format(new Date(order.created_at), 'MM/dd')}</TableCell>
-                           <TableCell className="text-right">{formatCurrency(order.total_amount)}</TableCell>
+                          <TableCell className="text-xs">{format(new Date(note.created_at), 'MM/dd')}</TableCell>
+                           <TableCell className="text-right">{formatCurrency(note.total_amount)}</TableCell>
                         </TableRow>
                       ))
                     )
@@ -262,6 +272,20 @@ export function EntryForm({
           <SelectContent>
             {filteredCategories.map((cat) => (
               <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label>帳戶</Label>
+        <Select value={accountId} onValueChange={setAccountId}>
+          <SelectTrigger>
+            <SelectValue placeholder="選擇帳戶（錢歸入/支出自哪個帳戶）" />
+          </SelectTrigger>
+          <SelectContent>
+            {accounts.map((acc) => (
+              <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -310,11 +334,12 @@ export function EntryForm({
           onClick={() => onSubmit({
             type,
             category_id: categoryId || null,
+            account_id: accountId || null,
             amount: parseFloat(amount),
             description: description || null,
             transaction_date: transactionDate,
             due_date: dueDate || null,
-            reference_type: mode === 'import' && selectedIds.size === 1 ? (importType === 'purchase' ? 'purchase_order' : 'order') : null,
+            reference_type: mode === 'import' && selectedIds.size === 1 ? (importType === 'purchase' ? 'purchase_order' : 'sales_note') : null,
             reference_id: mode === 'import' && selectedIds.size === 1 ? Array.from(selectedIds)[0] : null,
           })}
           disabled={!amount || isLoading}

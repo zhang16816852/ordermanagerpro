@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { SalesNoteStatusBadge } from "./SalesNoteStatusBadge";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { Json } from "@/integrations/supabase/types";
@@ -13,12 +14,20 @@ interface SalesNoteSummary {
     storeName?: string;
     storeCode?: string;
     status: string;
+    payment_status?: string;
     itemCount: number;
     access_token?: string | null;
     created_at: string;
     shipped_at?: string | null;
     received_at?: string | null;
 }
+
+const PaymentStatusBadge = ({ status }: { status?: string }) => {
+    if (status === "paid") {
+        return <Badge variant="outline"><span className="text-emerald-600">已收款</span></Badge>;
+    }
+    return <Badge variant="outline"><span className="text-amber-600">未收款</span></Badge>;
+};
 
 interface SalesNoteListTableProps {
     data: SalesNoteSummary[] | undefined;
@@ -132,6 +141,7 @@ export function SalesNoteListTable({
                                             <Clock className="h-4 w-4 text-amber-500" />
                                         )}
                                         <SalesNoteStatusBadge status={note.status} />
+                                        <PaymentStatusBadge status={note.payment_status} />
                                     </div>
                                 </TableCell>
                                 <TableCell className="text-right">{note.itemCount}</TableCell>
@@ -144,7 +154,7 @@ export function SalesNoteListTable({
                                     ) : note.shipped_at ? (
                                         <span className="text-amber-600 flex items-center gap-1">
                                             <Clock className="h-3.5 w-3.5" />
-                                            已出: {format(new Date(note.shipped_at), "MM/dd HH:mm")}
+                                            已出: {format(new Date(note.shipped_at), "yyyy/MM/dd")}
                                         </span>
                                     ) : (
                                         <span className="text-muted-foreground">待出貨</span>
@@ -197,6 +207,7 @@ export function SalesNoteListTable({
                                         <Clock className="h-4 w-4 text-amber-500" />
                                     )}
                                     <SalesNoteStatusBadge status={note.status} />
+                                    <PaymentStatusBadge status={note.payment_status} />
                                 </div>
                             </div>
                             <div className="flex gap-1">
@@ -249,7 +260,7 @@ export function SalesNoteListTable({
                                 ) : note.shipped_at ? (
                                     <span className="text-amber-600 flex items-center gap-1">
                                         <Clock className="h-3.5 w-3.5" />
-                                        已出: {format(new Date(note.shipped_at), "MM/dd HH:mm")}
+                                        已出: {format(new Date(note.shipped_at), "yyyy/MM/dd")}
                                     </span>
                                 ) : (
                                     <span className="text-muted-foreground">待出貨</span>

@@ -26,6 +26,7 @@ export interface NavItem {
 export const adminNavItems: NavItem[] = [
   { title: '總覽', href: '/admin', icon: Home },
   { title: '店鋪管理', href: '/admin/stores', icon: Store },
+  { title: '業務管理', href: '/admin/reps', icon: Users },
   { title: '產品管理', href: '/admin/products', icon: PackageSearch },
   { title: '庫存管理', href: '/admin/inventory', icon: Package },
   { title: '維修管理', href: '/admin/repair-orders', icon: Wrench },
@@ -52,6 +53,14 @@ export const baseStoreNavItems: NavItem[] = [
   { title: '寄賣/銷貨', href: '/sales-notes', icon: Package },
   { title: '會計報表', href: '/accounting', icon: FileText },
   { title: '團隊管理', href: '/team', icon: Users },
+];
+
+// 業務（rep）導航：登入後進入 /admin，選單僅限與自己相關的功能
+export const repNavItems: NavItem[] = [
+  { title: '我的儀表板', href: '/admin', icon: Home },
+  { title: '所有訂單', href: '/admin/orders', icon: ClipboardList },
+  { title: '建立新單據', href: '/admin/orders/checkout', icon: PlusCircle },
+  { title: '銷售單', href: '/admin/sales-notes', icon: FileText },
 ];
 
 export function buildStoreNavItems(totalCartItems: number): NavItem[] {

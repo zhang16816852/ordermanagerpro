@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import RepDashboard from './RepDashboard';
 import { Store, Package, ShoppingCart, FileText, TrendingUp, Users } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StatCard } from '@/components/shared/charts/StatCard';
@@ -8,6 +10,11 @@ import { PieDistributionChart } from '@/components/shared/charts/PieDistribution
 import { formatCurrency } from '@/lib/formatters';
 
 export default function AdminDashboard() {
+    const { isRep } = useAuth();
+    return isRep ? <RepDashboard /> : <AdminOverview />;
+}
+
+function AdminOverview() {
     // 獲取基礎統計
     const { data: stats, isLoading: statsLoading } = useQuery({
         queryKey: ['admin-stats'],

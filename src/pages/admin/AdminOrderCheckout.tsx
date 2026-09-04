@@ -162,7 +162,7 @@ export default function AdminOrderCheckout() {
 
         await syncPrices();
 
-        const link = `${window.location.origin}/share/sales-note/${(data as any).sales_note_code || (data as any).sales_note_id}?token=${(data as any).access_token}`;
+        const link = `${window.location.origin}/share/sale/${(data as any).sales_note_code || (data as any).sales_note_id}?token=${(data as any).access_token}`;
 
         toast.success("訂單已建立並開立銷貨單！", {
           duration: 10000,

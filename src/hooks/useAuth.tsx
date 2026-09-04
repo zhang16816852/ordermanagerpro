@@ -5,13 +5,18 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 
 // Separate types for system and store roles
-type SystemRole = 'admin' | 'customer';
+type SystemRole = 'admin' | 'customer' | 'rep';
 type StoreRoleType = 'founder' | 'manager' | 'employee';
 
 interface StoreRole {
   store_id: string;
   store_name: string;
   role: StoreRoleType;
+}
+
+interface RepStore {
+  store_id: string;
+  store_name: string;
 }
 
 interface AuthContextType {
@@ -23,6 +28,9 @@ interface AuthContextType {
   systemRoles: SystemRole[];
   storeRoles: StoreRole[];
   isAdmin: boolean;
+  isRep: boolean;
+  repAssignedStores: RepStore[];
+  commissionRate: number;
   storeId: string | null;
   storeRole: StoreRoleType | null;
   setCurrentStore: (storeId: string | null) => void;
@@ -42,9 +50,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [rolesReady, setRolesReady] = useState(false);
   const [systemRoles, setSystemRoles] = useState<SystemRole[]>([]);
   const [storeRoles, setStoreRoles] = useState<StoreRole[]>([]);
+  const [repAssignedStores, setRepAssignedStores] = useState<RepStore[]>([]);
+  const [commissionRate, setCommissionRate] = useState(0);
   const [currentStoreId, setCurrentStoreId] = useState<string | null>(null);
 
   const isAdmin = systemRoles.includes('admin');
+  const isRep = systemRoles.includes('rep');
   const storeRole = storeRoles.find(s => s.store_id === currentStoreId)?.role ?? null;
 
   const setCurrentStore = (storeId: string | null) => {
@@ -73,11 +84,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Fetch system roles
       const { data: roleData, error: roleError } = await (supabase
         .from('user_roles') as any)
-        .select('role')
+        .select('role, commission_rate')
         .eq('user_id', userId);
 
       if (roleError) throw roleError;
-      setSystemRoles((roleData || []).map(r => r.role as SystemRole));
+      const roles = (roleData || []).map(r => r.role as SystemRole);
+      setSystemRoles(roles);
+      const repRow = (roleData || []).find(r => r.role === 'rep');
+      setCommissionRate(repRow?.commission_rate ?? 0);
 
       // Fetch store roles
       const { data: storeData, error: storeError } = await (supabase
@@ -97,6 +111,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: s.role as StoreRoleType,
         }))
       );
+
+      // Fetch rep assigned stores
+      if (roles.includes('rep')) {
+        const { data: repData, error: repError } = await (supabase
+          .from('rep_store_assignments') as any)
+          .select(`
+            store_id,
+            stores (name)
+          `)
+          .eq('rep_id', userId);
+
+        if (repError) throw repError;
+        const repStores = (repData || []).map(s => ({
+          store_id: s.store_id,
+          store_name: (s.stores as any)?.name || '',
+        }));
+        setRepAssignedStores(repStores);
+        // 自動選擇第一個已分配店家（業務專用）
+        if (currentStoreId === null && repStores.length > 0) {
+          setCurrentStoreId(repStores[0].store_id);
+        }
+      } else {
+        setRepAssignedStores([]);
+      }
     } catch (error) {
       console.error('Error fetching roles:', error);
     }
@@ -126,6 +164,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setSystemRoles([]);
           setStoreRoles([]);
+          setRepAssignedStores([]);
+          setCommissionRate(0);
           setRolesReady(true);
           setLoading(false);
           setIsAuthReady(true);
@@ -200,6 +240,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setSystemRoles([]);
     setStoreRoles([]);
+    setRepAssignedStores([]);
+    setCommissionRate(0);
     toast.success('已登出');
   };
 
@@ -214,6 +256,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         systemRoles,
         storeRoles,
         isAdmin,
+        isRep,
+        repAssignedStores,
+        commissionRate,
         storeId: currentStoreId,
         storeRole,
         setCurrentStore,

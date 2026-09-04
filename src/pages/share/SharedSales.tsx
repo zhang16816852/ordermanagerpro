@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { getErrorMessage } from '@/lib/errorMessages';
 import { useState, useEffect } from "react";
+import { format } from "date-fns";
 import { formatCurrency } from "@/lib/formatters";
 import { SharedReceiptExport } from "./SharedReceiptExport";
 
@@ -20,9 +21,11 @@ interface SharedSalesData {
     id: string;
     code?: string;
     created_at: string;
+    shipped_at?: string | null;
     status: string;
     store_name: string;
     notes: string;
+    access_token?: string;
   };
   items: {
     product_name: string;
@@ -63,7 +66,7 @@ export default function SharedSales() {
   const confirmReceiveMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("請先登入");
-      if (!salesNoteId) throw new Error("無效的銷貨單 ID");
+      if (!data?.sales_note?.id) throw new Error("無效的銷貨單 ID");
 
       const { error } = await (supabase
         .from('sales_notes') as any)
@@ -72,7 +75,7 @@ export default function SharedSales() {
           received_at: new Date().toISOString(),
           received_by: user.id,
         })
-        .eq('id', salesNoteId);
+        .eq('id', data.sales_note.id);
 
       if (error) throw error;
     },
@@ -176,7 +179,7 @@ export default function SharedSales() {
           </div>
           <div className="text-xs text-muted-foreground mt-2">
             單號: {sales_note.code || sales_note.id} <br />
-            日期: {new Date(sales_note.created_at).toLocaleString()}
+            日期: {sales_note.shipped_at ? format(new Date(sales_note.shipped_at), "yyyy/MM/dd") : format(new Date(sales_note.created_at), "yyyy/MM/dd")}
           </div>
         </CardHeader>
         <CardContent className="p-0">

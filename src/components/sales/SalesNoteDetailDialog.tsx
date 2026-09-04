@@ -4,12 +4,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Package, Check, CreditCard, Calendar, Store, Info, FileText } from "lucide-react";
+import { Package, Check, CreditCard, Calendar, Store, Info, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { SalesNoteStatusBadge } from "./SalesNoteStatusBadge";
-import { exportToPDF } from "@/lib/exportUtils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { getErrorMessage } from '@/lib/errorMessages';
 import { formatCurrency } from '@/lib/formatters';
 import { Card, CardContent } from '@/components/ui/card';
-import z from "zod";
+import { SharedReceiptExport } from "@/pages/share/SharedReceiptExport";
 
 export interface SalesNoteItem {
     id: string;
@@ -34,10 +34,12 @@ export interface SalesNoteDetail {
     storeName?: string;
     storeCode?: string;
     status: string;
+    payment_status?: string;
     created_at: string;
     shipped_at?: string | null;
     received_at?: string | null;
     notes?: string | null;
+    access_token?: string | null;
     items: SalesNoteItem[];
 }
 
@@ -63,6 +65,8 @@ export function SalesNoteDetailDialog({
     const { user } = useAuth();
     const queryClient = useQueryClient();
     const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+    const [editingDate, setEditingDate] = useState(false);
+    const [newShippedDate, setNewShippedDate] = useState("");
 
     const totalAmount = note ? note.items.reduce((sum, item) => sum + (item.quantity * (item.unitPrice || 0)), 0) : 0;
 
@@ -100,10 +104,12 @@ export function SalesNoteDetailDialog({
             if (!note) return null;
             const { data, error } = await (supabase
                 .from('accounting_entries') as any)
-                .select('id, amount, transaction_date')
+                .select('id, amount, paid_amount, transaction_date')
                 .eq('reference_id', note.id)
                 .eq('reference_type', 'sales_note')
                 .eq('type', 'income')
+                .gt('paid_amount', 0)
+                .limit(1)
                 .maybeSingle();
 
             if (error) throw error;
@@ -151,10 +157,18 @@ export function SalesNoteDetailDialog({
                     .eq('id', accountId);
                 if (accError) throw accError;
             }
+
+            const { error: noteError } = await (supabase
+                .from('sales_notes') as any)
+                .update({ payment_status: 'paid' })
+                .eq('id', note.id);
+            if (noteError) throw noteError;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['accounts-for-sales-note-payment'] });
             queryClient.invalidateQueries({ queryKey: ['sales-note-payment'] });
+            queryClient.invalidateQueries({ queryKey: ['admin-sales-notes'] });
+            queryClient.invalidateQueries({ queryKey: ['store-sales-notes'] });
             setPaymentDialogOpen(false);
             toast.success('收款已記錄');
         },
@@ -162,6 +176,25 @@ export function SalesNoteDetailDialog({
             toast.error(`收款記錄失敗: ${getErrorMessage(error)}`);
         },
 
+    });
+
+    // --- 更新出貨日期 ---
+    const updateShippedDateMutation = useMutation({
+        mutationFn: async ({ noteId, date }: { noteId: string; date: string }) => {
+            const { error } = await supabase.rpc("update_sales_note_shipped_date" as any, {
+                p_sales_note_id: noteId,
+                p_date: date,
+            });
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["admin-sales-notes"] });
+            setEditingDate(false);
+            toast.success("出貨日期已更新");
+        },
+        onError: (error: any) => {
+            toast.error(`更新失敗：${getErrorMessage(error, "更新出貨日期失敗，請稍後再試")}`);
+        },
     });
 
     if (!note) return null;
@@ -204,6 +237,17 @@ export function SalesNoteDetailDialog({
                         </div>
 
                         <div className="space-y-1">
+                            <span className="text-muted-foreground flex items-center gap-1">收款狀態</span>
+                            <div>
+                                {note.payment_status === "paid" ? (
+                                    <Badge variant="outline" className="text-emerald-600 border-emerald-300 bg-emerald-50">已收款</Badge>
+                                ) : (
+                                    <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">未收款</Badge>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="space-y-1">
                             <span className="text-muted-foreground flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> 建立時間</span>
                             <div>{format(new Date(note.created_at), "yyyy/MM/dd HH:mm", { locale: zhTW })}</div>
                         </div>
@@ -213,7 +257,53 @@ export function SalesNoteDetailDialog({
                                 {note.shipped_at && (
                                     <div>
                                         <span className="text-muted-foreground block text-xs">出貨時間</span>
-                                        <span className="text-xs">{format(new Date(note.shipped_at), "MM/dd HH:mm")}</span>
+                                        {editingDate ? (
+                                            <div className="flex items-center gap-1 mt-1">
+                                                <Input
+                                                    type="date"
+                                                    className="h-7 text-xs w-36"
+                                                    value={newShippedDate}
+                                                    onChange={(e) => setNewShippedDate(e.target.value)}
+                                                />
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-7 px-2"
+                                                    onClick={() => {
+                                                        if (newShippedDate) {
+                                                            updateShippedDateMutation.mutate({ noteId: note.id, date: newShippedDate });
+                                                        }
+                                                    }}
+                                                    disabled={updateShippedDateMutation.isPending}
+                                                >
+                                                    <Check className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-7 px-2"
+                                                    onClick={() => setEditingDate(false)}
+                                                >
+                                                    ✕
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-1 group">
+                                                <span className="text-xs">{format(new Date(note.shipped_at), "yyyy/MM/dd")}</span>
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    title="編輯出貨日期"
+                                                    onClick={() => {
+                                                        setNewShippedDate(format(new Date(note.shipped_at!), "yyyy-MM-dd"));
+                                                        setEditingDate(true);
+                                                    }}
+                                                >
+                                                    <Pencil className="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                                 {note.received_at && (
@@ -311,15 +401,27 @@ export function SalesNoteDetailDialog({
                                     {existingPayment ? "已完成收款登記" : "登記收款"}
                                 </Button>
                             )}
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className="w-full sm:w-auto"
-                                onClick={() => exportToPDF("sales-note-content", `銷售單_${note.code || note.id.slice(0, 8)}`)}
-                            >
-                                <FileText className="h-4 w-4 mr-2" />
-                                匯出 PDF
-                            </Button>
+                            {note.access_token && (
+                                <SharedReceiptExport
+                                    items={note.items.map((item) => ({
+                                        name: item.productName,
+                                        variant: item.variantName,
+                                        quantity: item.quantity,
+                                        unit_price: item.unitPrice ?? null,
+                                    }))}
+                                    title="銷貨單"
+                                    docTitleLabel="店名"
+                                    storeName={note.storeName || ""}
+                                    code={note.code || note.id}
+                                    createdAt={note.created_at}
+                                    status={note.status === "received" ? "已收貨" : "已出貨"}
+                                    notes={note.notes || undefined}
+                                    qrValue={`${window.location.origin}/share/sale/${note.code || note.id}?token=${note.access_token}`}
+                                    filenamePrefix="銷貨單"
+                                    canViewPrice={totalAmount > 0}
+                                    printButtonLabel="列印 / PDF / Excel"
+                                />
+                            )}
                         </div>
 
                         {onConfirmReceive && note.status === 'shipped' && (

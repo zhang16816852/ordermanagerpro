@@ -104,7 +104,7 @@ App 掛載 → CacheService.init() 完成前顯示「載入中...」
 - **建立**：`useCreateOrder` → insert `orders` → insert `order_items`
 - **編輯**：`StoreOrderEdit.tsx`（讀取單筆 + 更新）
 - **後台下單即出貨**：`create_order_with_sales_note` RPC（DB 端一次完成 order + sales_note + inventory movement）
-- **出貨池**：`ShippingPool.tsx` 用 `ship_from_pool` RPC 依門市批次出貨
+- **出貨池**：`ShippingPool.tsx` 用 `ship_from_pool` RPC 依門市批次出貨；另用 `remove_items_from_shipping_pool` RPC（2026-09-03）批次將選取品項「回滾成訂單（移出出貨池）」——品項級 checkbox 選取（每店家表頭全選＋列 checkbox＋`Undo2` 批次按鈕，行動端亦有 footer），取代原本逐筆 `DELETE`（效能優化、一次寫入）
 - **整單寄賣模式**（v1.1）：`AdminOrderForm.tsx` 建立訂單時可切換「寄賣模式」Switch → 送 `create_order_with_sales_note(p_consignment_mode)` 或 pending insert 帶 `orders.consignment_mode=true`；出貨（pool / direct ship / 下單即出貨）時 DB 端 `create_consignment_shipment_layer` 自動建 send_to_store 寄賣單
   - `ShippingPool.tsx`：查詢帶 `order:orders(code, consignment_mode)`，寄賣品項出貨 Dialog 不顯示倉/來源選擇（固定 store_consignment）
   - 訂單列表/明細顯示「寄賣」Badge（`OrderTableView.tsx`、`OrdersCardView.tsx`、`OrderInfo.tsx`）

@@ -120,7 +120,7 @@ export default function StoreReceiving() {
                     <TableCell>{note.sales_note_items?.length || 0}</TableCell>
                     <TableCell>
                       {note.shipped_at
-                        ? format(new Date(note.shipped_at), "yyyy/MM/dd HH:mm")
+                        ? format(new Date(note.shipped_at), "yyyy/MM/dd")
                         : "-"}
                     </TableCell>
                     <TableCell>
@@ -162,7 +162,7 @@ export default function StoreReceiving() {
                   <span className="text-muted-foreground">出貨時間：</span>
                   <span>
                     {selectedNote.shipped_at
-                      ? format(new Date(selectedNote.shipped_at), "yyyy/MM/dd HH:mm")
+                      ? format(new Date(selectedNote.shipped_at), "yyyy/MM/dd")
                       : "-"}
                   </span>
                 </div>

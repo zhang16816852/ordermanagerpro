@@ -1,6 +1,6 @@
 import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminOrderList from "@/pages/admin/orders/list/OrderListPage";
-import AdminProducts from "@/pages/admin/products/index";
+import AdminProducts from "@/pages/admin/products/ProductsPage";
 import AdminProductFormPage from "@/pages/admin/products/ProductFormPage";
 import AdminStores from "@/pages/admin/Stores";
 import AdminOrderComposer from "@/pages/admin/OrderComposer";
@@ -8,18 +8,19 @@ import AdminOrderForm from "@/pages/admin/AdminOrderForm";
 import AdminSalesNotes from "@/pages/admin/SalesNotes";
 import AdminShippingPool from "@/pages/admin/ShippingPool";
 import AdminStorePricing from "@/pages/admin/BrandPricing";
-import AdminAccounting from "@/pages/admin/accounting/index";
-import AdminPurchaseOrders from "@/pages/admin/purchase-orders/index";
-import AdminConsignment from "@/pages/admin/consignment/index";
-import AdminCategories from "@/pages/admin/categories/index";
+import AdminAccounting from "@/pages/admin/accounting/AccountingPage";
+import AdminPurchaseOrders from "@/pages/admin/purchase-orders/PurchaseOrdersPage";
+import AdminConsignment from "@/pages/admin/consignment/ConsignmentPage";
+import AdminCategories from "@/pages/admin/categories/CategoriesPage";
 import CategoryEditor from "@/pages/admin/categories/CategoryEditor";
-import AdminInventory from "@/pages/admin/inventory/index";
-import AdminAuditLogs from "@/pages/admin/audit-logs/index";
-import AdminOrderGridTemplates from "@/pages/admin/order-grid-templates/index";
-import AdminRepairOrders from "@/pages/admin/repair-orders/index";
+import AdminInventory from "@/pages/admin/inventory/InventoryPage";
+import AdminAuditLogs from "@/pages/admin/audit-logs/AuditLogsPage";
+import AdminOrderGridTemplates from "@/pages/admin/order-grid-templates/OrderGridTemplatesPage";
+import AdminRepairOrders from "@/pages/admin/repair-orders/RepairOrdersPage";
 import AdminRepairOrderNew from "@/pages/admin/repair-orders/new";
 import AdminRepairOrderEdit from "@/pages/admin/repair-orders/new";
 import AdminRepairOrderDetail from "@/pages/admin/repair-orders/detail";
+import AdminReps from "@/pages/admin/Reps";
 
 export const adminRoutes = [
     { path: "/admin", element: <AdminDashboard /> },
@@ -31,6 +32,7 @@ export const adminRoutes = [
     { path: "/admin/categories/new", element: <CategoryEditor /> },
     { path: "/admin/categories/:categoryId", element: <CategoryEditor /> },
     { path: "/admin/stores", element: <AdminStores /> },
+    { path: "/admin/reps", element: <AdminReps /> },
     { path: "/admin/orders", element: <AdminOrderList /> },
     { path: "/admin/orders/new", element: <AdminOrderComposer /> },
     { path: "/admin/orders/checkout", element: <AdminOrderForm /> },

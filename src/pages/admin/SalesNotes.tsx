@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useRepCommission } from "@/hooks/useRepCommission";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import { SalesNoteListTable } from "@/components/sales/SalesNoteListTable";
 import { SalesNoteDetailDialog, SalesNoteDetail } from "@/components/sales/SalesNoteDetailDialog";
 import { toast } from "sonner";
 import { getErrorDetails, getErrorMessage } from '@/lib/errorMessages';
-import { format } from "date-fns";
+import { format, addDays } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/formatters";
@@ -30,9 +31,13 @@ export default function AdminSalesNotes() {
     const from = searchParams.get("from");
     const to = searchParams.get("to");
     if (from || to) {
+      const parseDate = (s: string) => {
+        const [y, m, d] = s.split("-").map(Number);
+        return new Date(y, m - 1, d);
+      };
       return {
-        from: from ? new Date(from) : undefined,
-        to: to ? new Date(to) : undefined,
+        from: from ? parseDate(from) : undefined,
+        to: to ? parseDate(to) : undefined,
       };
     }
     return undefined;
@@ -61,6 +66,8 @@ export default function AdminSalesNotes() {
               id,
               quantity,
               unit_price,
+              product_id,
+              variant_id,
               product:products(name, code),
               product_variant:product_variants(name)
             )
@@ -73,16 +80,20 @@ export default function AdminSalesNotes() {
       }
       if (statusFilter !== "all") {
         if (statusFilter === "unreceived") {
-          query = query.in("status", ["draft", "shipped"]);
+          query = query.eq("payment_status", "unpaid");
         } else if (statusFilter === "received") {
-          query = query.eq("status", "received");
+          query = query.eq("payment_status", "paid");
         }
       }
       if (dateRange?.from) {
-        query = query.gte("created_at", dateRange.from.toISOString());
-      }
-      if (dateRange?.to) {
-        query = query.lte("created_at", dateRange.to.toISOString());
+        const fromStr = format(dateRange.from, "yyyy-MM-dd");
+        const toStr = dateRange.to
+          ? format(addDays(dateRange.to, 1), "yyyy-MM-dd")
+          : format(addDays(dateRange.from, 1), "yyyy-MM-dd");
+        query = query
+          .not("shipped_at", "is", null)
+          .gte("shipped_at", fromStr)
+          .lt("shipped_at", toStr);
       }
 
       const { data, error } = await query;
@@ -101,13 +112,31 @@ export default function AdminSalesNotes() {
     );
   });
 
-  const unreceivedCount = salesNotes?.filter(n => n.status !== "received").length || 0;
-  const receivedCount = salesNotes?.filter(n => n.status === "received").length || 0;
+  const unreceivedCount = salesNotes?.filter(n => n.payment_status !== "paid").length || 0;
+  const receivedCount = salesNotes?.filter(n => n.payment_status === "paid").length || 0;
   const totalAmount = salesNotes?.reduce((sum, note) =>
     sum + (note.sales_note_items || []).reduce((s, item) =>
       s + (item.quantity * (item.order_item?.unit_price || 0)), 0
     ), 0
   ) || 0;
+
+  // 業務佣金彙總（僅業務身分顯示）
+  const { isRep, computeOrder: computeRepOrder } = useRepCommission();
+  const repSummary = useMemo(() => {
+    if (!isRep) return null;
+    const lines: { productId: string; variantId?: string | null; unitPrice: number; quantity: number }[] = [];
+    for (const note of filteredNotes || []) {
+      for (const item of note.sales_note_items || []) {
+        lines.push({
+          productId: item.order_item?.product_id,
+          variantId: item.order_item?.variant_id ?? null,
+          unitPrice: item.order_item?.unit_price || 0,
+          quantity: item.quantity || 0,
+        });
+      }
+    }
+    return computeRepOrder(lines);
+  }, [isRep, filteredNotes, computeRepOrder]);
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -142,6 +171,7 @@ export default function AdminSalesNotes() {
     storeName: note.store?.name,
     storeCode: note.store?.code,
     status: note.status,
+    payment_status: note.payment_status,
     access_token: note.access_token,
     itemCount: note.sales_note_items?.length || 0,
     created_at: note.created_at,
@@ -149,26 +179,31 @@ export default function AdminSalesNotes() {
     received_at: note.received_at
   }));
 
-  // Map data for the dialog component
-  const dialogData: SalesNoteDetail | null = selectedNote ? {
-    id: selectedNote.id,
-    code: selectedNote.code,
-    storeName: selectedNote.store?.name,
-    storeCode: selectedNote.store?.code,
-    status: selectedNote.status,
-    created_at: selectedNote.created_at,
-    shipped_at: selectedNote.shipped_at,
-    received_at: selectedNote.received_at,
-    notes: selectedNote.notes,
-    items: selectedNote.sales_note_items?.map((item: any) => ({
-      id: item.id,
-      quantity: item.quantity,
-      productName: item.order_item?.product?.name || "未知產品",
-      productSku: item.order_item?.product?.code || "-",
-      variantName: item.order_item?.product_variant?.name,
-      unitPrice: item.order_item?.unit_price
-    })) || []
-  } : null;
+  // Map data for the dialog component — use live query data so edits refresh immediately
+  const dialogData: SalesNoteDetail | null = selectedNote ? (() => {
+    const live = salesNotes?.find((n) => n.id === selectedNote.id) ?? selectedNote;
+    return {
+      id: live.id,
+      code: live.code,
+      storeName: live.store?.name,
+      storeCode: live.store?.code,
+      status: live.status,
+      payment_status: live.payment_status,
+      created_at: live.created_at,
+      shipped_at: live.shipped_at,
+      received_at: live.received_at,
+      notes: live.notes,
+      access_token: live.access_token,
+      items: live.sales_note_items?.map((item: any) => ({
+        id: item.id,
+        quantity: item.quantity,
+        productName: item.order_item?.product?.name || "未知產品",
+        productSku: item.order_item?.product?.code || "-",
+        variantName: item.order_item?.product_variant?.name,
+        unitPrice: item.order_item?.unit_price
+      })) || []
+    };
+  })() : null;
 
   return (
     <div className="space-y-6">
@@ -190,11 +225,19 @@ export default function AdminSalesNotes() {
             <div className="flex items-center gap-3 text-sm">
               <span>全部: <strong>{salesNotes?.length || 0}</strong></span>
               <span className="text-muted-foreground">|</span>
-              <span className="text-amber-600">未收: <strong>{unreceivedCount}</strong></span>
+              <span className="text-amber-600">未收款: <strong>{unreceivedCount}</strong></span>
               <span className="text-muted-foreground">|</span>
-              <span className="text-green-600">已收: <strong>{receivedCount}</strong></span>
+              <span className="text-green-600">已收款: <strong>{receivedCount}</strong></span>
               <span className="text-muted-foreground">|</span>
                <span>金額總計: <strong>{formatCurrency(totalAmount)}</strong></span>
+              {repSummary && (
+                <>
+                  <span className="text-muted-foreground">|</span>
+                  <span className="text-emerald-600">業務利潤: <strong>{formatCurrency(repSummary.totalProfit)}</strong></span>
+                  <span className="text-muted-foreground">|</span>
+                  <span className="text-amber-600">估佣: <strong>{formatCurrency(repSummary.totalCommission)}</strong></span>
+                </>
+              )}
             </div>
           </div>
 
@@ -269,12 +312,15 @@ export default function AdminSalesNotes() {
                   mode="range"
                   selected={dateRange}
                   onSelect={(range) => {
-                    setDateRange(range);
+                    const resolved = range?.from && !range.to
+                      ? { from: range.from, to: range.from }
+                      : range;
+                    setDateRange(resolved);
                     setSearchParams((prev) => {
                       const next = new URLSearchParams(prev);
-                      if (range?.from) next.set("from", range.from.toISOString());
+                      if (resolved?.from) next.set("from", format(resolved.from, "yyyy-MM-dd"));
                       else next.delete("from");
-                      if (range?.to) next.set("to", range.to.toISOString());
+                      if (resolved?.to) next.set("to", format(resolved.to, "yyyy-MM-dd"));
                       else next.delete("to");
                       return next;
                     }, { replace: true });
@@ -308,8 +354,8 @@ export default function AdminSalesNotes() {
           <div className="flex gap-1 mb-4">
             {[
               { value: "all", label: "全部" },
-              { value: "unreceived", label: "未收" },
-              { value: "received", label: "已收" },
+              { value: "unreceived", label: "未收款" },
+              { value: "received", label: "已收款" },
             ].map((tab) => (
               <Button
                 key={tab.value}

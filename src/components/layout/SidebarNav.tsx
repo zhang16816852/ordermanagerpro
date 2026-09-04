@@ -23,7 +23,7 @@ interface SidebarNavProps {
 }
 
 export function SidebarNav({ navItems, collapsed: navCollapsed, onNavClick }: SidebarNavProps) {
-  const { user, isAdmin, storeRoles, signOut } = useAuth();
+  const { user, isAdmin, isRep, storeRoles, signOut } = useAuth();
   const navigate = useNavigate();
 
   const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
@@ -69,7 +69,7 @@ export function SidebarNav({ navItems, collapsed: navCollapsed, onNavClick }: Si
                   <div className="flex-1 text-left min-w-0">
                     <p className="text-sm font-medium truncate">{user?.email}</p>
                     <p className="text-xs text-sidebar-foreground/60">
-                      {isAdmin ? '系統管理員' : storeRoles?.[0]?.role || 'Customer'}
+                      {isAdmin ? '系統管理員' : isRep ? '業務' : storeRoles?.[0]?.role === 'founder' ? '創辦人' : storeRoles?.[0]?.role === 'manager' ? '經理' : storeRoles?.[0]?.role === 'employee' ? '員工' : 'Customer'}
                     </p>
                   </div>
                 )}

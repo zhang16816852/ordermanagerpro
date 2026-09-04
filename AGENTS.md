@@ -39,10 +39,25 @@ npm run supabase:types  # 從 Supabase 重新產生 src/integrations/supabase/ty
 ## 系統架構摘要
 
 ### 權限與角色（雙層）
-- `user_roles`：`system_role` = `admin` | `customer`
+- `user_roles`：`system_role` = `admin` | `customer` | `rep`
 - `store_users`：`store_role` = `founder` | `manager` | `employee`，關聯 `stores`
 - 登入後 `useAuth`（`src/hooks/useAuth.tsx`）抓取兩種角色；`isAdmin` 決定跳轉 `/admin` 或 `/dashboard`
 - RLS 用 `has_role()`、`is_store_member()`、`get_store_role()` 函式
+
+### 業務（rep）身分（2026-09-04）
+- `system_role = 'rep'`（新增 enum 值），跨店、非單店成員；ADMIN 統一管理店家分配，業務「只讀」店家。
+- 業務登入後進 `/admin`（`RootRedirect` 與 `ProtectedRoute` 皆 `isAdmin || isRep`），選單用 `repNavItems`（我的儀表板/所有訂單/建立新單據/銷售單），側欄標籤顯示「業務」。
+- 業務可打單/編輯自己名下訂單（`AdminOrderForm` 綁 `sales_rep_id`、店家限名下 `rep_store_assignments`、僅銷售單、不出貨），查看名下店家訂單/銷貨單（RLS）與自己訂單（`useOrdersList` 對 rep 加 `.eq('sales_rep_id', user.id)`）。
+- **佣金機制**：`user_roles.commission_rate`（ADMIN 設定業務級固定比例）+ `rep_product_costs`（業務自己的進貨成本，ADMIN 維護）；`helpCommission = (售價 - 業務成本) × commission_rate`。前端 `useRepCommission`（`src/hooks/useRepCommission.ts`）負責換算。
+- **新表**：`rep_store_assignments`（業務↔店家）、`rep_product_costs`（rep/product/variant → cost，UNIQUE(rep_id,product_id,variant_id)）；`orders.sales_rep_id`；helper `is_rep()`/`get_rep_commission_rate()`/`is_rep_store()`；`update_order_with_items` 授權加固（允許 `sales_rep_id = auth.uid()`）。
+- **利潤/佣金顯示**：業務儀表板（`RepDashboard`，由 `Dashboard.tsx` 依 `isRep` 分流）、訂單列表（`OrderTableView`「估佣（利潤）」欄 + 行動 `OrdersCardView` 行）、訂單詳情（`OrderDetailDialog` 底部利潤/估佣）、銷貨單列表頂部彙總（`AdminSalesNotes` 依 `isRep` 顯示業務利潤/估佣）。
+- 業務管理 UI：`/admin/reps`（`src/pages/admin/Reps.tsx`，3 tabs：業務列表+佣金設定、店家分配、成本設定）；admin 側欄「業務管理」。
+- **應發分潤彙總（2026-09-04）**：業務列表中新增「應發分潤」欄，供 admin 檢視每業務待發放的分潤總額與單數（聚合業務名下非取消訂單的明細，佣金 = max(0, 售價−業務成本)×比例），即「業務列表」內即可作分潤登記之依據。
+- **店家選擇統一（2026-09-04）**：人員管理與指派對話框已統一改用 `StorePicker` 組件（`src/components/ui/StorePicker`），包含搜尋、多選/單選、店家代碼顯示。`Stores.tsx`（店鋪管理→人員 tab）的指派/邀請對話框、`Users.tsx`（人員管理）的指派/邀請對話框、`OrderFilters.tsx`（訂單列表頁首）的店鋪篩選已統一改用 `StorePicker`。`Stores.tsx` 店鋪管理 tab 的「所有店鋪」篩選下拉保留原有形式（僅篩選用）。
+- **業務身分設定入口（2026-09-04）**：`/admin/stores`（`Stores.tsx` 人員管理 tab）每列「系統角色」（`UserCog`）按鈕可設定使用者為 `rep`（業務）/`admin`/`customer`，寫入 `user_roles`（`customer`＝清除系統角色）；角色篩選下拉含「業務」。原先無處可把使用者設為 rep，此為唯一入口。
+- ⚠️ 出貨僅 admin 處理（業務不出貨）；系統穩定後可下放（RLS 已預留）。
+- **使用者自動選店修復（2026-09-04）**：`useAuth` 在設定 `repAssignedStores` 後，若 `currentStoreId` 為空，自動選擇第一個已分配店家，確保業務登入/刷新時能顯示已分配店家，不再顯示「請先選擇店鋪」。
+- ⚠️ 成本設定已改為**變體主導**：`/admin/reps` 成本 tab 使用 `useProductCache()` 取得含 variants 的產品資料，可展開每個產品設定逐變體成本（`variant_id` 非 null）；無變體產品維持產品層級（`variant_id=null`）。支援批次「全部儲存」；`rep_product_costs` unique key 為 `(rep_id,product_id,variant_id)`。
 
 ### 離線優先快取（核心架構）
 ```
@@ -68,7 +83,7 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 ### 訂單資料流（門市端範例）
 `StoreOrderList.tsx` 用 React Query 直接查 Supabase（orders + order_items + 產品資訊），非走快取。建立訂單走 `useCreateOrder` → insert orders → insert order_items；後台「下單即出貨」走 `create_order_with_sales_note` RPC。後台建立訂單可整單切換**寄賣模式**（`orders.consignment_mode`），出貨時由 `create_consignment_shipment_layer` 自動同步建立 send_to_store 寄賣單（`source_order_id` 回填）；寄賣出貨不開銷貨單，店家確認收貨並回報銷售、後台審核後才開立收款銷貨單（v1.3）。後台訂單列表（`src/pages/admin/orders/list/`）在「訂單」tab 的批次操作除「轉銷貨單」外，尚有「轉寄賣」（先標 `consignment_mode=true` 再走 `direct_ship_order` 不開銷貨單）與「轉出貨池」（將整單剩餘品項加入 shipping_pool）。「所有訂單」會顯示 send_to_store 寄賣草稿為**真實來源訂單**：寄賣單一建立即同步建 `orders`（`source_type='consignment'`、`consignment_mode=true`、`status='pending'`）並回填 `consignment_orders.source_order_id`，品項同步建 `order_items` 並回填 `consignment_order_items.order_item_id`（前端 `useConsignment.ts` 的 create/add/remove/cancel 皆同步鏡像）；故草稿在 pending tab 可勾選、批次操作、編輯、商品模式可見數量，出貨時由 `create_consignment_shipment` 重用該來源訂單標 shipped；`receive_from_supplier` 不顯示於訂單列表。
 
-- **品項排序（2026-09-02）**：`order_items` 新增 `sort_order INTEGER NOT NULL DEFAULT 0`（migration `20260902000001`，並以 `created_at,id` backfill 既有資料）。**A 階段**＝「固定持久排序」：建立/新增品項時依當時順序寫入循序 `sort_order`；讀取時 `useOrdersList` / `StoreOrderList` 的 `order_items` 子查詢加 `.order('sort_order', { foreignTable: 'order_items' })`，詳情元件（`OrderDetailItemsTable`/`OrderDetailItemsCards`）再以 `sort_order` 客戶端排序確保順序穩定。**B 階段（已完成）**＝編輯頁拖曳排序 UI：在共用元件 `OrderItemsTable.tsx` 內建 dnd-kit 拖曳（`GripVertical` 拖柄，桌機 table + 行動 cards），`AdminOrderForm`（create/edit）、`AdminOrderEdit` 皆傳入 `onReorder`，拖曳後本地 `items` 順序更新。`OrderReviewPanel` 結帳確認頁亦有 dnd-kit 拖曳（已可持久化）。⚠️ 舊資料沒有 sort_order 時 backfill 已補齊。**C 階段（名稱排序 + edit-mode 持久化）**＝點擊「名稱」欄位標題可循環 default → A→Z → Z→A（`OrderItemsTable` 維護 `nameSort` state，排序經 `onReorder` 路由，拖曳時自動重設為 default）。`AdminOrderForm`/`AdminOrderEdit` 的 edit-mode 查詢加 `.order('sort_order', { foreignTable: 'order_items' })`，儲存時**所有品項**（含既有）寫入 `sort_order: index+1`，使拖曳與名稱排序結果可持久化。
+- **品項排序（2026-09-02）**：`order_items` 新增 `sort_order INTEGER NOT NULL DEFAULT 0`（migration `20260902000001`，並以 `created_at,id` backfill 既有資料）。**A 階段**＝「固定持久排序」：建立/新增品項時依當時順序寫入循序 `sort_order`；讀取時 `useOrdersList` / `StoreOrderList` 的 `order_items` 子查詢加 `.order('sort_order', { foreignTable: 'order_items' })`，詳情元件（`OrderDetailItemsTable`/`OrderDetailItemsCards`）再以 `sort_order` 客戶端排序確保順序穩定。**B 階段（已完成）**＝編輯頁拖曳排序 UI：在共用元件 `OrderItemsTable.tsx` 內建 dnd-kit 拖曳（`GripVertical` 拖柄，桌機 table + 行動 cards），`AdminOrderForm`（create/edit）、`AdminOrderEdit` 皆傳入 `onReorder`，拖曳後本地 `items` 順序更新。`OrderReviewPanel` 結帳確認頁亦有 dnd-kit 拖曳（已可持久化）。⚠️ 舊資料沒有 sort_order 時 backfill 已補齊。**C 階段（名稱排序 + edit-mode 持久化）**＝點擊「名稱」欄位標題可循環 default → A→Z → Z→A（`OrderItemsTable` 維護 `nameSort` state，排序經 `onReorder` 路由，拖曳時自動重設為 default）。`AdminOrderForm`/`AdminOrderEdit` 的 edit-mode 查詢加 `.order('sort_order', { foreignTable: 'order_items' })`，儲存時**所有品項**（含既有）寫入 `sort_order: index+1`，使拖曳與名稱排序結果可持久化。**D 階段（批次儲存 + 軟刪除）**＝編輯訂單儲存改走單一 RPC `update_order_with_items(p_order_id, p_notes, p_items jsonb, p_deleted_item_ids uuid[])`（migration `20260903000002`，SECURITY DEFINER，單一交易內完成 update notes + upsert 品項 + delete 移除品項），取代前端逐筆 `for...of` 的 N+1 呼叫；`p_items` 每元素含 `id`（null＝新品項由伺服器 insert，非 null＝既有品項 update）+ `product_id`/`variant_id`/`quantity`/`unit_price`/`selected_model_name`/`sort_order`。移除既有品項改**軟刪除**：`AdminOrderForm` 先從列表隱藏並存進 `pendingDeletedIds`，toast 提供「還原」按鈕（8 秒內可插回原位），按「儲存變更」時才把 `pendingDeletedIds` 一次隨 RPC 提交；新品項（`isNew`）仍直接移除。`AdminOrderEdit.tsx` 已刪除（dead code），編輯路由指向 `AdminOrderForm`。
 
 ## 資料庫邏輯重點
 
@@ -86,7 +101,8 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 - `source_type` CHECK 約束綁定單據 FK（purchase_orders / sales_notes / consignment_orders）
 - `sales_note_items.inventory_source_type` 逐項記錄庫存來源（self / supplier_consignment / store_consignment）
 - **採購防重複（2026-09-01）**：`purchase_order_items.source_quantities`（jsonb `{orderId: 數量}`）記錄來源訂單貢獻量；「轉採購單」前端依此扣除已採購量（`purchasedByOrderKey`），`unlink_orders_from_purchase_order` RPC 解除連結時精確扣減未收貨數量（舊多來源 NULL 資料只解除不扣量）；採購單明細與訂單列表 batch 皆可「解除採購」
-- 關鍵 RPC：`ship_from_pool`、`direct_ship_order`、`create_order_with_sales_note`、`delete_sales_note`、`receive_purchase_items`、`adjust_inventory`、`recalculate_inventory`、`unlink_orders_from_purchase_order`
+- 關鍵 RPC：`ship_from_pool`、`direct_ship_order`、`create_order_with_sales_note`、`delete_sales_note`、`receive_purchase_items`、`adjust_inventory`、`recalculate_inventory`、`unlink_orders_from_purchase_order`、`remove_items_from_shipping_pool`
+- **出貨池批次回滾成訂單（2026-09-03）**：`remove_items_from_shipping_pool(p_pool_ids UUID[], p_created_by UUID) RETURNS JSONB`（SECURITY DEFINER）——批次把選取出貨池品項移回訂單（移出出貨池），**單一 RPC 一次寫入**取代前端逐筆 `DELETE FROM shipping_pool`；刪除 pool 列後，僅當該訂單在出貨池**已無任何剩餘品項**且狀態為 `processing` 時才回退為 `pending`（對齊「全數移出才回退」），回傳 `{deleted_count, reverted_order_ids}`。前端 `ShippingPool.tsx` 改用品項級 checkbox 批次選取（每店家表頭「全選」＋列 checkbox＋`Undo2`「回滾成訂單」批次按鈕，含行動端 footer），並**移除原逐筆 Trash2 刪除**
 
 ### 寄賣系統（統一模板 v1）
 - `consignment_orders`（direction = receive_from_supplier | send_to_store，status = draft | active | settled | cancelled，訂單轉寄賣時 `source_order_id` 回填，v1.3 起 send_to_store 非 draft/cancelled 皆強制有 source_order_id）+ `consignment_order_items` + `consignment_order_item_summary`（VIEW，統計計算不落庫）
@@ -112,12 +128,25 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 - 共用 UI：`src/components/ui/searchable-select.tsx`（`SearchableSelect`，可搜尋單選、依 group 分組、可清除），`StorePicker` 基於此模式；`SpecDialog` 的「數量複製設定」因需多選，改以 `Checkbox` 清單實作。
 
 ### 其他
-- 共享訂單/銷貨連結用 `access_token` + `get_shared_order_details`/`get_shared_sales_note_details` RPC
+- 共享連結用 `access_token`（UUID）+ `get_shared_order_details`/`get_shared_sales_note_details` RPC；路由 `/share/order/:orderId`、`/share/sale/:salesNoteId`
+- 訂單與銷貨單各自有獨立的 `access_token`：訂單建立時即產生（永久可分享），銷貨單出貨時獨立產生（不共用訂單 token）
+- `delete_sales_note` 不再將 token 保存回訂單（訂單有自己的永久 token）
 - 維修單：`repair_orders` + `repair_order_items` + `repair_order_status_history`
 
 ## ⚠️ 已知問題 / 安全注意
 
 **10 張表 RLS 未啟用**（任何人持 anon key 可直接讀寫）：`categories`、`specification_definitions`、`category_spec_links`、`category_hierarchy`、`product_category_links`、`data_change_logs`、`data_snapshots`、`storefront_items`、`table_templates`、`table_template_variants`。修復前需先補對應 policies。
+
+## 近期變更（銷貨單收款狀態 + 會計模組）
+
+- **`sales_notes.payment_status`（2026-09-04）**：新增收款狀態欄位（`text`，`unpaid`/`paid`，預設 `unpaid`），與收貨狀態 `status`（draft/shipped/received）**分離**。migration `add_sales_note_payment_status` 回填：凡 `accounting_entries` 有 `reference_type='sales_note'` 且 `type='income'` 且 `payment_status='paid'` 的銷貨單設為 `paid`。
+- **「登記收款」連動更新**（`SalesNoteDetailDialog`：`receivePaymentMutation`）：寫 `accounting_entries`＋帳戶餘額後，**同時把 `sales_notes.payment_status` 更新為 `'paid'`**，並 invalidate `['admin-sales-notes']`/`['store-sales-notes']`（原本沒有，導致列表不刷新）。
+- **前台「已收/未收」改看收款**：`AdminSalesNotes` 的 Tab（未收款/已收款）與彙總計數改以 `payment_status` 判斷（原用 `status`＝收貨）；`SalesNoteListTable` 新增 `PaymentStatusBadge`（已收款/未收款）並列顯示收貨＋收款雙狀態；`SalesNoteDetailDialog` 基本資訊區新增「收款狀態」；store 端 `SalesNotes.tsx` 同步帶 `payment_status`。
+- **dd「單據匯入」修正**（`accounting/components/EntryForm.tsx`）：銷售單匯入從抓 `orders`（含未出貨/寄賣未確認單，看似抓出貨池）**改抓 `sales_notes`**，金額用 `sales_note_items × order_item.unit_price` 加總，顯示單號 `code`＋店名，`reference_type` 改為 `'sales_note'`；採購匯入維持 `purchase_orders`。
+- **收支明細可查看來源單據**：新增 `accounting/components/ReferenceViewer.tsx`，依 entry 的 `reference_type`/`reference_id` 開啟詳情：`sales_note`→`SalesNoteDetailDialog`、`order`→`OrderDetailDialog`、`purchase_order`→內建唯讀檢視（供應商/日期/狀態/品項/已收/金額）。`EntriesTab` 在有 reference 時顯示 `Eye` 查看按鈕（桌機＋行動）。
+- **統一收款狀態 RPC + 回退/刪除連動（2026-09-04）**：新增 `public.sync_sales_note_payment_status(p_sales_note_id uuid)`（SECURITY DEFINER，revoke public/anon、grant authenticated）——計算「該銷貨單只要有任一 `accounting_entries`（`reference_type='sales_note'`、`type='income'`、`payment_status IN ('paid','partial')`）→ `sales_notes.payment_status='paid'`，否則 `'unpaid'`」；`p_sales_note_id IS NULL` 直接 return。`useAccounting`（`accounting/hooks/useAccounting.ts`）三條 mutation 皆連動：`recordPaymentMutation`（付款後呼叫 RPC）、`reversePaymentMutation`（**回退＝完全刪除該收款分錄**＋回退帳戶餘額 income→`-paid_amount`/expense→`+paid_amount`＋呼叫 RPC）、`deleteEntryMutation`（接收 `AccountingEntry`，若已收款先回退帳戶餘額再刪除，並呼叫 RPC），皆 invalidate `['accounting-entries']`/`['accounts']`/`['admin-sales-notes']`/`['store-sales-notes']`。`EntriesTab`（`onDelete` 接收完整 `AccountingEntry`，修正先前 string/id 型別不符導致 `uuid "undefined"` 刪除失敗）於 `paid_amount>0` 時顯示 `RotateCcw`「回退付款」按鈕（桌機＋行動，`onReversePayment`），`AccountingPage` 以 confirm 確認後觸發 `reversePaymentMutation.mutate(entry)`。
+- **編輯/新增收支 Dialog 獨立成組件 + 帳戶欄位（2026-09-04）**：新增 `accounting/components/EntryDialog.tsx`（包 `Dialog`＋`EntryForm`，供其他頁面重複使用），`AccountingPage` 改用之；`EntryForm` 新增 `accounts` prop 與「帳戶」下拉（`account_id`，顯示錢歸入/支出自哪個帳戶，編輯時可見）。`SalesNoteDetailDialog` 的 `existingPayment` 查詢改為 `paid_amount>0`＋`.limit(1)`（原只要存在任意 income 分錄即判定「已完成收款」、且 `maybeSingle` 遇到歷史重複列會報錯）——回退付款已刪除分錄後，`登記收款` 按鈕即可重新點選。
+- **後台頁面改名**：`src/pages/admin/` 下 9 個 `index.tsx` 改名為語意化檔名（`accounting/AccountingPage.tsx`、`audit-logs/AuditLogsPage.tsx`、`categories/CategoriesPage.tsx`、`consignment/ConsignmentPage.tsx`、`inventory/InventoryPage.tsx`、`order-grid-templates/OrderGridTemplatesPage.tsx`、`products/ProductsPage.tsx`、`purchase-orders/PurchaseOrdersPage.tsx`、`repair-orders/RepairOrdersPage.tsx`），`routes/admin.tsx` 對應 import 已更新；並補上 `AdminReps` import（`@/pages/admin/Reps`，修復未定義錯誤）。
 
 ## 近期變更（AdminOrderForm 重構）
 
@@ -180,6 +209,22 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 - **`VariantSection`（`src/components/products/form/VariantSection.tsx`）整合 Order Grid 表格範本**：用 `useTableTemplates()` 篩出「含此產品任一變體」的 templates（`relevantTemplates`）；每個相關 template 在變體清單下方各渲染一個 `OrderGridRenderer` 獨立表格，`products` 只傳**此產品**（`gridProducts`，= product.variants 過濾本產品變體）且 `template_variants` 過濾成僅此產品子集（`gridTemplateFor`），故表格只顯示該產品變體套用模板顯示規則（不混其他產品）。資料源為 `product` prop（initialData，含 option/spec/device 完整資料）才能正確依維度渲染。
 - **購物車接線**：`onDirectItemAdd`（button mode 每格「＋」）與 `onAddToCart`（toolbar「加入購物車」）皆接到既有 `store.addItem` 累加——因 `addItem` 只會 +1，數量 >1 時以 `getVariantQty` 讀現量再 `updateQuantity` 補足差額；`getCartQuantity` 接 `getVariantQty` 讓表格即時反映購物車既有數量。
 - **Order Grid 批次維度（同名選項群組逐範本解析 id）**：`OrderGridBatchDimensionDialog.tsx` 批次選取 option 群組時同步記住群組**名稱**（`onConfirm` 回傳 `optionGroupNames`）；`OrderGridTemplateList.tsx` 新增 `resolveOptionGroupId(template, name, fallbackId)`——對每張範本依其變體所屬產品的 `option_groups` 找「同名」群組的 id（找不到才回退批次選的 id），對 row/col/tab 各維度逐範本解析後再 `updateTemplate`。理由：同名「顏色」群組在不同產品有不同 `option_group_id`，統一寫一個 id 會導致部分產品找不到值、grid 空（顯示「無法產生 grid」）。
+
+## 近期變更（業務管理 + StorePicker 統一 + 成本變體主導）
+
+- **`useAuth.tsx` 自動選店修復（2026-09-04）**：`fetchRoles` 在設定 `repAssignedStores` 後，若 `currentStoreId` 為空，自動選擇第一個已分配店家（`repStores[0].store_id`），確保業務登入/刷新時顯示已分配店家，不再停在「請先選擇店鋪」。
+- **Reps.tsx 店家分配 per-rep state 修復（2026-09-04）**：將單一 `grantStoreId` 改為 per-rep 的 `grantStoreIds` state（`Record<string, string[]>`）；`grantMutation.onSuccess` 額外 invalidate `['admin-reps-stores']`，解決分配後列表無法即時同步的問題。
+- **StorePicker 統一（2026-09-04）**：`Stores.tsx`（店鋪管理→人員 tab）的指派與邀請對話框改用 `StorePicker`（搜尋、多選/單選、店家代碼顯示）；`OrderFilters.tsx`（訂單列表頁首）的店鋪篩選改用 `StorePicker`（保留「全部店鋪」選項）；`Users.tsx` 的指派/邀請對話框待改。
+- **應發分潤彙總（2026-09-04）**：業務列表新增「應發分潤」欄，查詢每業務名下非取消訂單（`orders` JOIN `order_items`），加上全體業務成本 map（`admin-rep-costs-all`），計算 `max(0, 售價−業務成本)×佣金比例`，顯示分潤總額與單數，作為 admin 分潤登記依據。
+- **成本 tab 變體主導（2026-09-04）**：`/admin/reps` 成本 tab 改用 `useProductCache()` 取得含 variants 的產品資料，產品可展開設定逐變體成本（`variant_id` 非 null）；無變體產品維持產品層級（`variant_id=null`）。支援批次「全部儲存」（`saveAll` 一次提交所有 dirty entries）；`costMutation` / `deleteCostMutation` 已擴充 `variantId` 參數。
+
+## 近期變更（訂單永久分享 + 分享路徑修正）
+
+- **訂單永久分享（2026-09-04）**：`orders.access_token` 改為建立時即產生（`crypto.randomUUID()` 客戶端 / `gen_random_uuid()` 後端 RPC），訂單從出生起即可分享。`OrderDetailDialog` 分享按鈕因 `access_token` 非空而正常顯示。
+- **銷貨單獨立 token**：`ship_from_pool`、`direct_ship_order` 出貨時**不再讀取/清除訂單的 `access_token`**，銷貨單一律獨立產生新 token。`delete_sales_note` 亦不再將 token 保存回訂單。
+- **分享路徑修正**：4 處銷貨單分享連結從錯誤的 `/share/sales-note/` 修正為 `/share/sale/`（對齊路由定義 `src/routes/shared.tsx`）。
+- **Migration**：`20260904000002_permanent_order_share_token.sql`——改寫 `create_order_with_sales_note`（orders INSERT 加 `access_token`）、`ship_from_pool` / `direct_ship_order`（移除 token reuse/clear）、`delete_sales_note`（移除 token 保存回訂單）。
+- **分享 RPC UUID 型別修正（2026-09-04）**：`get_shared_order_details` / `get_shared_sales_note_details` 的 `p_token TEXT` 與 `access_token UUID` 欄位比對時報 `operator does not exist: uuid = text`，改為 `p_token::UUID` 轉換。`get_shared_sales_note_details` 同步補回 `shipped_at` 欄位。前端 `SharedSales.tsx` 的 `confirmReceiveMutation` 改用 RPC 回傳的 `sales_note.id`（UUID）更新，不再用 URL 參數的 code。
 
 ## 專案慣例
 

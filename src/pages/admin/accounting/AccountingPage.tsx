@@ -25,10 +25,11 @@ import { StatsCards } from './components/StatsCards';
 import { EntriesTab } from './components/EntriesTab';
 import { AccountsTab } from './components/AccountsTab';
 import { CategoriesTab } from './components/CategoriesTab';
-import { EntryForm } from './components/EntryForm';
+import { EntryDialog } from './components/EntryDialog';
 import { AccountForm } from './components/AccountForm';
 import { CategoryForm } from './components/CategoryForm';
 import { PaymentDialog } from './components/PaymentDialog';
+import { ReferenceViewer } from './components/ReferenceViewer';
 import { AccountingEntry } from './types';
 
 export default function AdminAccounting() {
@@ -45,6 +46,8 @@ export default function AdminAccounting() {
   // Form selections
   const [editingEntry, setEditingEntry] = useState<AccountingEntry | null>(null);
   const [payingEntry, setPayingEntry] = useState<AccountingEntry | null>(null);
+
+  const [viewingReference, setViewingReference] = useState<{ referenceType: string; referenceId: string } | null>(null);
 
   const months = Array.from({ length: 12 }, (_, i) => {
     const date = subMonths(new Date(), i);
@@ -126,8 +129,9 @@ export default function AdminAccounting() {
             entries={entries}
             isLoading={isLoadingEntries}
             onEdit={(entry) => { setEditingEntry(entry); setEntryDialogOpen(true); }}
-            onDelete={(id) => { if (confirm('確定要刪除這筆記錄嗎？')) deleteEntryMutation.mutate(id); }}
+            onDelete={(entry) => { if (confirm('確定要刪除這筆記錄嗎？將同時回退已入帳的帳戶餘額。')) deleteEntryMutation.mutate(entry); }}
             onPay={(entry) => { setPayingEntry(entry); setPaymentDialogOpen(true); }}
+            onViewReference={(referenceType, referenceId) => setViewingReference({ referenceType, referenceId })}
           />
         </TabsContent>
 
@@ -149,38 +153,28 @@ export default function AdminAccounting() {
       </Tabs>
 
       {/* Entry Dialog */}
-      <Dialog
+      <EntryDialog
         open={entryDialogOpen}
         onOpenChange={(open) => {
           setEntryDialogOpen(open);
           if (!open) setEditingEntry(null);
         }}
-      >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editingEntry ? '編輯收支記錄' : '新增收支記錄'}</DialogTitle>
-            <DialogDescription>
-              記錄店鋪的日常收入或支出明細，包含日期、類型以及金額。
-            </DialogDescription>
-          </DialogHeader>
-          <EntryForm
-            entry={editingEntry}
-            categories={categories}
-            isLoading={createEntryMutation.isPending || updateEntryMutation.isPending}
-            onSubmit={(data) => {
-              if (editingEntry) {
-                updateEntryMutation.mutate({ id: editingEntry.id, ...data }, {
-                  onSuccess: () => setEntryDialogOpen(false)
-                });
-              } else {
-                createEntryMutation.mutate(data, {
-                  onSuccess: () => setEntryDialogOpen(false)
-                });
-              }
-            }}
-          />
-        </DialogContent>
-      </Dialog>
+        entry={editingEntry}
+        categories={categories}
+        accounts={accounts}
+        isLoading={createEntryMutation.isPending || updateEntryMutation.isPending}
+        onSubmit={(data) => {
+          if (editingEntry) {
+            updateEntryMutation.mutate({ id: editingEntry.id, ...data }, {
+              onSuccess: () => setEntryDialogOpen(false)
+            });
+          } else {
+            createEntryMutation.mutate(data, {
+              onSuccess: () => setEntryDialogOpen(false)
+            });
+          }
+        }}
+      />
 
       {/* Account Dialog */}
       <Dialog open={accountDialogOpen} onOpenChange={setAccountDialogOpen}>
@@ -238,6 +232,15 @@ export default function AdminAccounting() {
           });
         }}
       />
+
+      {viewingReference && (
+        <ReferenceViewer
+          referenceType={viewingReference.referenceType}
+          referenceId={viewingReference.referenceId}
+          open={!!viewingReference}
+          onOpenChange={(open) => { if (!open) setViewingReference(null); }}
+        />
+      )}
     </div>
   );
 }

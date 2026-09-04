@@ -23,6 +23,7 @@ interface BatchActionBarProps {
   onExportAggregateCSV: () => void;
   onExportAggregateExcel: () => void;
   isLoading: boolean;
+  isRep?: boolean;
 }
 
 export function BatchActionBar({
@@ -46,6 +47,7 @@ export function BatchActionBar({
   onExportAggregateCSV,
   onExportAggregateExcel,
   isLoading,
+  isRep = false,
 }: BatchActionBarProps) {
   if (viewMode === 'orders' && selectedOrderCount === 0) return null;
   if (viewMode === 'items' && selectedItemCount === 0) return null;
@@ -88,7 +90,7 @@ export function BatchActionBar({
               </Button>
             )}
 
-            {statusTab === 'processing' && viewMode === 'orders' && (
+            {statusTab === 'processing' && viewMode === 'orders' && !isRep && (
               <>
                 {hasNormalSelection && (
                   <>
@@ -162,7 +164,7 @@ export function BatchActionBar({
               </>
             )}
 
-            {viewMode === 'items' && (
+            {viewMode === 'items' && !isRep && (
               <>
                 <Button
                   variant="secondary"
@@ -199,7 +201,7 @@ export function BatchActionBar({
               </>
             )}
 
-            {viewMode === 'aggregate' && (
+            {viewMode === 'aggregate' && !isRep && (
               <>
                 <Button
                   variant="secondary"
@@ -260,7 +262,7 @@ export function BatchActionBar({
             </Button>
           )}
 
-          {statusTab === 'processing' && viewMode === 'orders' && (
+          {statusTab === 'processing' && viewMode === 'orders' && !isRep && (
             <>
               {hasNormalSelection && (
                 <>
@@ -345,7 +347,7 @@ export function BatchActionBar({
             </>
           )}
 
-          {viewMode === 'items' && (
+          {viewMode === 'items' && !isRep && (
             <>
               <Button
                 variant="secondary"
@@ -370,7 +372,7 @@ export function BatchActionBar({
             </>
           )}
 
-          {viewMode === 'aggregate' && (
+          {viewMode === 'aggregate' && !isRep && (
             <>
               <Button
                 variant="secondary"

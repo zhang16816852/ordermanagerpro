@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Search, Package, Truck, Send, Store, Trash2 } from "lucide-react";
+import { Search, Package, Truck, Send, Store, Undo2 } from "lucide-react";
 import { PageHeader } from '@/components/layout/PageHeader';
 import { MobileFooter } from '@/components/layout/MobileFooter';
 import { toast } from "sonner";
@@ -83,6 +83,7 @@ export default function AdminShippingPool() {
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [storeFilter, setStoreFilter] = useState<string>(searchParams.get("store") || "all");
   const [selectedStores, setSelectedStores] = useState<Set<string>>(new Set());
+  const [selectedPoolItemIds, setSelectedPoolItemIds] = useState<Set<string>>(new Set());
   const [showShipDialog, setShowShipDialog] = useState(false);
   const [notes, setNotes] = useState("");
   const [shippedAt, setShippedAt] = useState<string>(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
@@ -204,17 +205,48 @@ export default function AdminShippingPool() {
     setSelectedStores(newSelected);
   };
 
-  // 從出貨池移除單個項目
-  const removeItemMutation = useMutation({
-    mutationFn: async (itemId: string) => {
-      const { error } = await (supabase
-        .from("shipping_pool") as any)
-        .delete()
-        .eq("id", itemId);
+  // ---- 品項級選取（回滾成訂單）----
+  const togglePoolItem = (poolId: string) => {
+    setSelectedPoolItemIds(prev => {
+      const next = new Set(prev);
+      if (next.has(poolId)) next.delete(poolId);
+      else next.add(poolId);
+      return next;
+    });
+  };
+
+  const toggleAllInGroup = (group: GroupedByStore) => {
+    const allSelected = group.items.every(i => selectedPoolItemIds.has(i.id));
+    setSelectedPoolItemIds(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        group.items.forEach(i => next.delete(i.id));
+      } else {
+        group.items.forEach(i => next.add(i.id));
+      }
+      return next;
+    });
+  };
+
+  // 批次將選取出貨池品項移回訂單（移出出貨池），單一 RPC 一次寫入，避免逐筆刪除
+  const batchRemoveMutation = useMutation({
+    mutationFn: async (poolIds: string[]) => {
+      if (!user) throw new Error("未登入");
+      if (poolIds.length === 0) throw new Error("請至少選擇一個品項");
+
+      const { data, error } = await supabase.rpc("remove_items_from_shipping_pool", {
+        p_pool_ids: poolIds,
+        p_created_by: user.id,
+      });
       if (error) throw error;
+      return data as { deleted_count: number; reverted_order_ids: string[] };
     },
-    onSuccess: () => {
-      toast.success("已從出貨池移除");
+    onSuccess: (data) => {
+      const revertedCount = data?.reverted_order_ids?.length || 0;
+      toast.success(
+        `已將 ${data?.deleted_count ?? 0} 個品項移出出貨池${revertedCount > 0 ? `，${revertedCount} 個訂單回退為待確認` : ""}`
+      );
+      setSelectedPoolItemIds(new Set());
       queryClient.invalidateQueries({ queryKey: ["shipping-pool"] });
       queryClient.invalidateQueries({ queryKey: ["shipping-pool-items"] });
       queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
@@ -297,14 +329,25 @@ export default function AdminShippingPool() {
               <Package className="h-5 w-5" />
               待出貨項目
             </div>
-            <Button
-              onClick={() => setShowShipDialog(true)}
-              disabled={selectedStores.size === 0}
-              className="hidden md:flex"
-            >
-              <Truck className="h-4 w-4 mr-2" />
-              確認出貨 ({selectedStores.size} 店家)
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="destructive"
+                onClick={() => batchRemoveMutation.mutate(Array.from(selectedPoolItemIds))}
+                disabled={selectedPoolItemIds.size === 0 || batchRemoveMutation.isPending}
+                className="hidden md:flex"
+              >
+                <Undo2 className="h-4 w-4 mr-2" />
+                回滾成訂單 ({selectedPoolItemIds.size})
+              </Button>
+              <Button
+                onClick={() => setShowShipDialog(true)}
+                disabled={selectedStores.size === 0}
+                className="hidden md:flex"
+              >
+                <Truck className="h-4 w-4 mr-2" />
+                確認出貨 ({selectedStores.size} 店家)
+              </Button>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -387,18 +430,34 @@ export default function AdminShippingPool() {
                       <Table>
                         <TableHeader>
                           <TableRow>
+                            <TableHead className="w-10">
+                              <Checkbox
+                                checked={group.items.length > 0 && group.items.every(i => selectedPoolItemIds.has(i.id))}
+                                onCheckedChange={() => toggleAllInGroup(group)}
+                                aria-label="全選此店家品項"
+                              />
+                            </TableHead>
                             <TableHead>SKU</TableHead>
                             <TableHead>產品</TableHead>
                             <TableHead className="text-right">出貨數量</TableHead>
                             <TableHead className="text-right">單價</TableHead>
                             <TableHead className="text-right">小計</TableHead>
                             <TableHead>加入時間</TableHead>
-                            <TableHead className="w-12"></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {group.items.map((item) => (
-                            <TableRow key={item.id}>
+                            <TableRow
+                              key={item.id}
+                              className={selectedPoolItemIds.has(item.id) ? "bg-muted/40" : ""}
+                            >
+                              <TableCell>
+                                <Checkbox
+                                  checked={selectedPoolItemIds.has(item.id)}
+                                  onCheckedChange={() => togglePoolItem(item.id)}
+                                  aria-label="選取此品項"
+                                />
+                              </TableCell>
                               <TableCell className="font-mono text-sm">
                                 {(item.order_item?.product as any)?.code}
                               </TableCell>
@@ -425,17 +484,6 @@ export default function AdminShippingPool() {
                               </TableCell>
                               <TableCell className="text-muted-foreground">
                                 {format(new Date(item.created_at), "MM/dd HH:mm")}
-                              </TableCell>
-                              <TableCell>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="text-destructive hover:text-destructive"
-                                  aria-label="刪除項目"
-                                  onClick={() => removeItemMutation.mutate(item.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -600,6 +648,25 @@ export default function AdminShippingPool() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Mobile rollback-to-order footer */}
+      <MobileFooter visible={selectedPoolItemIds.size > 0}>
+        <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-muted-foreground">已選擇 {selectedPoolItemIds.size} 個品項</p>
+            <p className="text-xs text-muted-foreground">移出出貨池並回滾為待出貨</p>
+          </div>
+          <Button
+            variant="destructive"
+            onClick={() => batchRemoveMutation.mutate(Array.from(selectedPoolItemIds))}
+            disabled={batchRemoveMutation.isPending}
+            className="shrink-0"
+          >
+            <Undo2 className="h-4 w-4 mr-2" />
+            {batchRemoveMutation.isPending ? "處理中..." : "回滾成訂單"}
+          </Button>
+        </div>
+      </MobileFooter>
 
       {/* Mobile Ship Footer */}
       <MobileFooter visible={selectedStores.size > 0}>

@@ -21,7 +21,7 @@ const errorMessagePatterns: [RegExp, string][] = [
     [/network error|failed to fetch|fetch failed/i, '網路連線異常'],
     [/jwt|token.*expired|invalid.*token/i, '登入已過期，請重新登入'],
     [/could not find.*candidate.*function|multiple choices|PGRST300/i, '系統函式簽章衝突，請通知管理員套用 20260901000001 修正（delete_sales_note overload）'],
-    [/could not find|not found/i, '找不到資料'],
+    [/could not find|not found|找不到資料|找不到相關資料/i, '找不到資料'],
     [/invalid login credentials/i, '帳號或密碼錯誤'],
     [/user already registered/i, '此信箱已註冊'],
     [/email not confirmed/i, '請先驗證您的信箱'],
