@@ -16,6 +16,7 @@ interface SalesNoteSummary {
     status: string;
     payment_status?: string;
     itemCount: number;
+    hasReturned?: boolean;
     access_token?: string | null;
     created_at: string;
     shipped_at?: string | null;
@@ -142,6 +143,9 @@ export function SalesNoteListTable({
                                         )}
                                         <SalesNoteStatusBadge status={note.status} />
                                         <PaymentStatusBadge status={note.payment_status} />
+                                        {note.hasReturned && (
+                                            <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">已退貨</Badge>
+                                        )}
                                     </div>
                                 </TableCell>
                                 <TableCell className="text-right">{note.itemCount}</TableCell>
@@ -208,6 +212,9 @@ export function SalesNoteListTable({
                                     )}
                                     <SalesNoteStatusBadge status={note.status} />
                                     <PaymentStatusBadge status={note.payment_status} />
+                                    {note.hasReturned && (
+                                        <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">已退貨</Badge>
+                                    )}
                                 </div>
                             </div>
                             <div className="flex gap-1">

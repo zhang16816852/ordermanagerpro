@@ -11,6 +11,7 @@ interface OrderItemsPanelProps {
   onUpdateQuantity: (index: number, value: number) => void;
   onUpdatePrice: (index: number, value: number) => void;
   onRemove: (index: number) => void;
+  onSplit?: (index: number) => void;
   onReorder: (items: OrderItemRow[]) => void;
   priceSyncMap?: Record<string, boolean>;
   onTogglePriceSync?: (id: string, checked: boolean) => void;
@@ -26,6 +27,7 @@ export function OrderItemsPanel({
   onUpdateQuantity,
   onUpdatePrice,
   onRemove,
+  onSplit,
   onReorder,
   priceSyncMap,
   onTogglePriceSync,
@@ -51,6 +53,7 @@ export function OrderItemsPanel({
           onUpdateQuantity={onUpdateQuantity}
           onUpdatePrice={onUpdatePrice}
           onRemove={onRemove}
+          onSplit={onSplit}
           isEditable={true}
           onReorder={onReorder}
           priceSyncMap={orderType === 'sales' ? priceSyncMap : undefined}

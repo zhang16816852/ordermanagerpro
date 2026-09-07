@@ -55,6 +55,7 @@ export interface AccountingEntry {
   description: string | null;
   reference_type: string | null;
   reference_id: string | null;
+  counterparty_name: string | null;
   transaction_date: string;
   due_date: string | null;
   created_by: string;

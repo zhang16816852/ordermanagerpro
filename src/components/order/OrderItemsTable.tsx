@@ -18,7 +18,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Trash2, Package, Tag, Calculator, Save, LayoutList, Rows3, GripVertical, Grid3x3, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Trash2, Package, Tag, Calculator, Save, LayoutList, Rows3, GripVertical, Grid3x3, ArrowUpDown, ArrowUp, ArrowDown, CopyPlus } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import { formatCurrency } from '@/lib/formatters';
 import {
@@ -44,6 +44,11 @@ export interface OrderItemRow {
     sku?: string;
     productName?: string;
     sort_order?: number;
+    itemType?: 'product' | 'shipping' | 'packaging' | 'repair_part';
+    unitCost?: number;
+    shippingPayment?: string | null;
+    tempKey?: string;
+    parentTempKey?: string;
 }
 
 interface OrderItemsTableProps {
@@ -52,6 +57,7 @@ interface OrderItemsTableProps {
     onUpdateQuantity: (index: number, value: number) => void;
     onUpdatePrice?: (index: number, value: number) => void;
     onRemove: (index: number) => void;
+    onSplit?: (index: number) => void;
     isEditable: boolean;
     onReorder?: (items: OrderItemRow[]) => void;
     priceSyncMap?: Record<string, boolean>;
@@ -72,7 +78,10 @@ function SortableTableRow({ item, index, viewMode, keyOptions, children }: { ite
                 <TableCell className="font-medium">
                     <div className="flex flex-col">
                         <span>{item.variantName || item.productName || item.sku || item.id.slice(0, 8)}</span>
-                        {item.selectedModelName && <span className="text-xs font-mono text-muted-foreground">{item.selectedModelName}</span>}
+                        <span className="inline-flex items-center gap-1 flex-wrap">
+                            {item.selectedModelName && <span className="text-xs font-mono text-muted-foreground">{item.selectedModelName}</span>}
+                            <ServiceItemBadge item={item} />
+                        </span>
                     </div>
                 </TableCell>
             ) : (
@@ -80,6 +89,7 @@ function SortableTableRow({ item, index, viewMode, keyOptions, children }: { ite
                     <TableCell className="font-medium">
                         {item.variantName || item.productName || item.sku || item.id.slice(0, 8)}
                         {item.isNew && <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 border-green-200">新增</Badge>}
+                        <ServiceItemBadge item={item} />
                     </TableCell>
                     {/* 关键选项欄位 */}
                     {keyOptions.map((opt, idx) => (
@@ -95,12 +105,32 @@ function SortableTableRow({ item, index, viewMode, keyOptions, children }: { ite
     );
 }
 
+export function ServiceItemBadge({ item }: { item: OrderItemRow }) {
+    if (item.itemType === 'shipping') {
+        return (
+            <Badge variant="secondary" className="ml-2 bg-orange-50 text-orange-700 border-orange-200">
+                運費{item.shippingPayment === 'monthly' ? '・月結' : ''}
+            </Badge>
+        );
+    }
+    if (item.itemType === 'packaging') {
+        return (
+            <Badge variant="secondary" className="ml-2 bg-sky-50 text-sky-700 border-sky-200">包裝</Badge>
+        );
+    }
+    if (item.parentTempKey) {
+        return <Badge variant="outline" className="ml-2 text-muted-foreground">加購</Badge>;
+    }
+    return null;
+}
+
 export function OrderItemsTable({
     items,
     products,
     onUpdateQuantity,
     onUpdatePrice,
     onRemove,
+    onSplit,
     isEditable,
     onReorder,
     priceSyncMap,
@@ -144,7 +174,7 @@ export function OrderItemsTable({
     // 获取适用于当前 order items 的 templates
     const applicableTemplates = useMemo(() => {
         if (!templates || templates.length === 0) return [];
-        const variantIds = new Set(items.flatMap(item => item.variantId).filter(Boolean));
+        const variantIds = new Set(items.flatMap(item => item.variantId).filter((v): v is string => !!v));
         return templates.filter(t => {
             const tvIds = new Set(t.template_variants?.map(tv => tv.variant_id) || []);
             return Array.from(variantIds).some(vid => tvIds.has(vid));
@@ -429,13 +459,25 @@ export function OrderItemsTable({
                                                         )}
                                                         {isEditable && (
                                                             <TableCell>
-                                                                <Button
-                                                                    variant="ghost" size="icon"
-                                                                    onClick={() => onRemove(index)}
-                                                                    className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8"
-                                                                >
-                                                                    <Trash2 className="h-4 w-4" />
-                                                                </Button>
+                                                                <div className="flex items-center justify-end gap-1">
+                                                                    {onSplit && item.quantity > 1 && (
+                                                                        <Button
+                                                                            variant="ghost" size="icon"
+                                                                            onClick={() => onSplit(index)}
+                                                                            className="text-muted-foreground hover:text-foreground hover:bg-muted h-8 w-8"
+                                                                            title="拆分行"
+                                                                        >
+                                                                            <CopyPlus className="h-4 w-4" />
+                                                                        </Button>
+                                                                    )}
+                                                                    <Button
+                                                                        variant="ghost" size="icon"
+                                                                        onClick={() => onRemove(index)}
+                                                                        className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8"
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </Button>
+                                                                </div>
                                                             </TableCell>
                                                         )}
                                                     </SortableTableRow>
@@ -512,13 +554,25 @@ export function OrderItemsTable({
                                                 )}
                                                 {isEditable && (
                                                     <TableCell>
-                                                        <Button
-                                                            variant="ghost" size="icon"
-                                                            onClick={() => onRemove(index)}
-                                                            className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            {onSplit && item.quantity > 1 && (
+                                                                <Button
+                                                                    variant="ghost" size="icon"
+                                                                    onClick={() => onSplit(index)}
+                                                                    className="text-muted-foreground hover:text-foreground hover:bg-muted h-8 w-8"
+                                                                    title="拆分行"
+                                                                >
+                                                                    <CopyPlus className="h-4 w-4" />
+                                                                </Button>
+                                                            )}
+                                                            <Button
+                                                                variant="ghost" size="icon"
+                                                                onClick={() => onRemove(index)}
+                                                                className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
                                                     </TableCell>
                                                 )}
                                             </TableRow>
@@ -547,6 +601,7 @@ export function OrderItemsTable({
                                                 onUpdateQuantity={onUpdateQuantity}
                                                 onUpdatePrice={onUpdatePrice}
                                                 onRemove={onRemove}
+                                                onSplit={onSplit}
                                                 showPriceInput={showPriceInput}
                                                 showPriceSync={showPriceSync}
                                                 priceSyncMap={priceSyncMap}
@@ -591,9 +646,16 @@ export function OrderItemsTable({
                                                 )}
                                             </div>
                                             {isEditable && (
-                                                <Button variant="outline" size="icon" onClick={() => onRemove(index)} className="text-destructive border-destructive/20 h-8 w-8">
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
+                                                <div className="flex items-center gap-1.5">
+                                                    {onSplit && item.quantity > 1 && (
+                                                        <Button variant="outline" size="icon" onClick={() => onSplit(index)} className="text-muted-foreground h-8 w-8" title="拆分行">
+                                                            <CopyPlus className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
+                                                    <Button variant="outline" size="icon" onClick={() => onRemove(index)} className="text-destructive border-destructive/20 h-8 w-8">
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
                                             )}
                                         </div>
                                         <div className="grid grid-cols-2 gap-4 pt-2 border-t border-dashed">
@@ -651,6 +713,7 @@ function SortableMobileCard({
     onUpdateQuantity,
     onUpdatePrice,
     onRemove,
+    onSplit,
     showPriceInput,
     showPriceSync,
     priceSyncMap,
@@ -666,6 +729,7 @@ function SortableMobileCard({
     onUpdateQuantity: (index: number, value: number) => void;
     onUpdatePrice?: (index: number, value: number) => void;
     onRemove: (index: number) => void;
+    onSplit?: (index: number) => void;
     showPriceInput: boolean;
     showPriceSync: boolean;
     priceSyncMap: Record<string, boolean> | undefined;
@@ -705,9 +769,16 @@ function SortableMobileCard({
                     )}
                 </div>
                 {isEditable && (
-                    <Button variant="outline" size="icon" onClick={() => onRemove(index)} className="text-destructive border-destructive/20 h-8 w-8">
-                        <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1.5">
+                        {onSplit && item.quantity > 1 && (
+                            <Button variant="outline" size="icon" onClick={() => onSplit(index)} className="text-muted-foreground h-8 w-8" title="拆分行">
+                                <CopyPlus className="h-4 w-4" />
+                            </Button>
+                        )}
+                        <Button variant="outline" size="icon" onClick={() => onRemove(index)} className="text-destructive border-destructive/20 h-8 w-8">
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    </div>
                 )}
             </div>
             <div className="grid grid-cols-2 gap-4 pt-2 border-t border-dashed">

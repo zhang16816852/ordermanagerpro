@@ -25,6 +25,7 @@ interface SharedOrderData {
     variant_name?: string | null;
     quantity: number;
     unit_price: number | null;
+    sort_order?: number;
   }[];
 }
 
@@ -78,14 +79,15 @@ export default function SharedOrder() {
   }
 
   const { order, items } = data;
+  const sortedItems = [...(items ?? [])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
   const canViewPrice = user ? (isAdmin || storeRoles.some(r => r.store_id === order.store_id)) : false;
-  const showPrice = items.length > 0 && items[0].unit_price !== null && canViewPrice;
+  const showPrice = sortedItems.length > 0 && sortedItems[0].unit_price !== null && canViewPrice;
 
   // 列印模式：只顯示列印版型，方便版面調整測試
   if (isPrintingMode) {
     return (
       <SharedReceiptExport
-        items={items.map((item) => ({
+        items={sortedItems.map((item) => ({
           name: item.product_name,
           variant: item.variant_name,
           quantity: item.quantity,
@@ -126,7 +128,7 @@ export default function SharedOrder() {
                 {order.status === 'completed' ? '已完成' : '處理中'}
               </Badge>
               <SharedReceiptExport
-                items={items.map((item) => ({
+                items={sortedItems.map((item) => ({
                   name: item.product_name,
                   variant: item.variant_name,
                   quantity: item.quantity,
@@ -163,7 +165,7 @@ export default function SharedOrder() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((item: any, index: number) => (
+              {sortedItems.map((item: any, index: number) => (
                 <TableRow key={index}>
                   <TableCell className="pl-6 font-medium">
                     {item.variant_name || item.product_name}
@@ -181,7 +183,7 @@ export default function SharedOrder() {
                 <TableRow className="bg-muted/50">
                   <TableCell colSpan={3} className="text-right font-bold pr-6">總計</TableCell>
                   <TableCell className="text-right font-bold pr-6 text-lg">
-                    {formatCurrency(items.reduce((sum: number, item: any) => sum + ((item.unit_price ?? 0) * item.quantity), 0))}
+                    {formatCurrency(sortedItems.reduce((sum: number, item: any) => sum + ((item.unit_price ?? 0) * item.quantity), 0))}
                   </TableCell>
                 </TableRow>
               )}

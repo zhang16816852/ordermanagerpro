@@ -39,7 +39,8 @@ export default function StoreReceiving() {
         `)
         .eq("store_id", storeId)
         .eq("status", "shipped")
-        .order("shipped_at", { ascending: false });
+        .order("shipped_at", { ascending: false })
+        .order("sort_order", { foreignTable: "sales_note_items", ascending: true });
 
       if (error) throw error;
       return data;

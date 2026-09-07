@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { getContrastColor } from '@/utils/colorUtils';
 import { Layers, Sparkles, AlertCircle, Plus, X, GripVertical } from 'lucide-react';
-import { StandaloneDeviceModelSelectField } from '../StandaloneDeviceModelSelectField';
+import { StandaloneDeviceModelSelectField, type DeviceSelectionRef } from '../StandaloneDeviceModelSelectField';
 import { useDeviceModelStore } from '@/store/useDeviceModelStore';
 import { ColorSelectField } from './ColorSelectField';
 import { useColorStore } from '@/store/useColorStore';
@@ -207,8 +207,9 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
   const [bulkPasteTargetGroupId, setBulkPasteTargetGroupId] = useState<string | null>(null);
   const [bulkPasteText, setBulkPasteText] = useState('');
   const [barcodeList, setBarcodeList] = useState('');
-  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
-  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [selectedDeviceRefs, setSelectedDeviceRefs] = useState<DeviceSelectionRef[]>([]);
+  const selectedModelIds = selectedDeviceRefs.filter(r => r.type === 'model').map(r => r.id);
+  const selectedGroupIds = selectedDeviceRefs.filter(r => r.type === 'group').map(r => r.id);
   const [defaultWholesalePrice, setDefaultWholesalePrice] = useState('');
   const [defaultRetailPrice, setDefaultRetailPrice] = useState('');
   const [generatedVariants, setGeneratedVariants] = useState<GeneratedVariant[]>([]);
@@ -302,16 +303,22 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
       // 4. Load device model relations
       const { data: relations } = await supabase
         .from('entity_model_relations')
-        .select('variant_id, model_id, group_id')
+        .select('variant_id, model_id, group_id, sort_order')
         .in('variant_id', variantIds)
-        .eq('relation_type', 'include');
+        .eq('relation_type', 'include')
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true });
 
-      const modelIdSet = new Set<string>();
-      const groupIdSet = new Set<string>();
       const variantModelMap = new Map<string, { id: string; type: 'model' | 'group' }[]>();
+      const seenRefs = new Set<string>();
+      const orderedRefs: DeviceSelectionRef[] = [];
       relations?.forEach(r => {
         if (r.model_id) {
-          modelIdSet.add(r.model_id);
+          const key = `model:${r.model_id}`;
+          if (!seenRefs.has(key)) {
+            seenRefs.add(key);
+            orderedRefs.push({ id: r.model_id, type: 'model' });
+          }
           if (r.variant_id) {
             const list = variantModelMap.get(r.variant_id) || [];
             list.push({ id: r.model_id, type: 'model' });
@@ -319,7 +326,11 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
           }
         }
         if (r.group_id) {
-          groupIdSet.add(r.group_id);
+          const key = `group:${r.group_id}`;
+          if (!seenRefs.has(key)) {
+            seenRefs.add(key);
+            orderedRefs.push({ id: r.group_id, type: 'group' });
+          }
           if (r.variant_id) {
             const list = variantModelMap.get(r.variant_id) || [];
             list.push({ id: r.group_id, type: 'group' });
@@ -327,8 +338,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
           }
         }
       });
-      setSelectedModelIds(Array.from(modelIdSet));
-      setSelectedGroupIds(Array.from(groupIdSet));
+      setSelectedDeviceRefs(orderedRefs);
 
       const isPerVariant = relations && relations.length > 0 &&
         relations.length === variantIds.length &&
@@ -394,6 +404,18 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     }));
   };
 
+  const resolveDeviceItems = (): { name: string; id: string; type: 'model' | 'group' }[] =>
+    selectedDeviceRefs
+      .map(ref => {
+        if (ref.type === 'model') {
+          const m = deviceModels.find(m => m.id === ref.id);
+          return m ? { name: m.name, id: m.id, type: 'model' as const } : null;
+        }
+        const g = deviceGroups.find(g => g.id === ref.id);
+        return g ? { name: g.name, id: g.id, type: 'group' as const } : null;
+      })
+      .filter((x): x is { name: string; id: string; type: 'model' | 'group' } => !!x);
+
   const generateVariants = () => {
     // Collect non-empty groups (at least one value with a label)
     const activeGroups = optionGroups.filter(g =>
@@ -410,16 +432,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
       const defaultWholesale = isUnified ? Number(product?.unified_wholesale_price ?? 0) : (parseFloat(defaultWholesalePrice) || 0);
       const defaultRetail = isUnified ? Number(product?.unified_retail_price ?? 0) : (parseFloat(defaultRetailPrice) || 0);
 
-      const modelGroupNames: { name: string; id: string; type: 'model' | 'group' }[] = [
-        ...selectedModelIds.map(id => {
-          const m = deviceModels.find(m => m.id === id);
-          return m ? { name: m.name, id: m.id, type: 'model' as const } : null;
-        }).filter(Boolean) as any,
-        ...selectedGroupIds.map(id => {
-          const g = deviceGroups.find(g => g.id === id);
-          return g ? { name: g.name, id: g.id, type: 'group' as const } : null;
-        }).filter(Boolean) as any,
-      ];
+      const modelGroupNames = resolveDeviceItems();
 
       const codePrefix = product.code || 'PROD';
       const variants: GeneratedVariant[] = modelGroupNames.map((item, idx) => ({
@@ -469,16 +482,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
       g.values.filter(v => v.label.trim()),
     );
 
-    const modelGroupItems: { name: string; id: string; type: 'model' | 'group' }[] = [
-      ...selectedModelIds.map(id => {
-        const m = deviceModels.find(m => m.id === id);
-        return m ? { name: m.name, id: m.id, type: 'model' as const } : null;
-      }).filter(Boolean) as any,
-      ...selectedGroupIds.map(id => {
-        const g = deviceGroups.find(g => g.id === id);
-        return g ? { name: g.name, id: g.id, type: 'group' as const } : null;
-      }).filter(Boolean) as any,
-    ];
+    const modelGroupItems = resolveDeviceItems();
     const modelDim = modelGroupItems.length > 0 ? modelGroupItems : [null];
 
     const codePrefix = product.code || 'PROD';
@@ -728,24 +732,31 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
         .eq('relation_type', 'include');
       if (delRelErr) throw delRelErr;
 
-      if (selectedModelIds.length > 0 || selectedGroupIds.length > 0) {
+      if (selectedDeviceRefs.length > 0) {
         const relations: any[] = [];
         const hasPerVariantMapping = generatedVariants.some(v => v._modelGroupId && v._modelGroupType);
+        const deviceOrder = new Map<string, number>();
+        selectedDeviceRefs.forEach((ref, idx) => deviceOrder.set(ref.id, idx));
 
         if (hasPerVariantMapping) {
           upsertedVariants.forEach(({ id, sku }) => {
             const v = generatedVariants.find(gv => gv.sku === sku);
             if (!v?._modelGroupId || !v._modelGroupType) return;
             if (v._modelGroupType === 'model') {
-              relations.push({ variant_id: id, model_id: v._modelGroupId, relation_type: 'include' });
+              relations.push({ variant_id: id, model_id: v._modelGroupId, relation_type: 'include', sort_order: deviceOrder.get(v._modelGroupId) ?? 0 });
             } else {
-              relations.push({ variant_id: id, group_id: v._modelGroupId, relation_type: 'include' });
+              relations.push({ variant_id: id, group_id: v._modelGroupId, relation_type: 'include', sort_order: deviceOrder.get(v._modelGroupId) ?? 0 });
             }
           });
         } else {
           upsertedIds.forEach(vId => {
-            selectedModelIds.forEach(mId => relations.push({ variant_id: vId, model_id: mId, relation_type: 'include' }));
-            selectedGroupIds.forEach(gId => relations.push({ variant_id: vId, group_id: gId, relation_type: 'include' }));
+            selectedDeviceRefs.forEach(ref => {
+              if (ref.type === 'model') {
+                relations.push({ variant_id: vId, model_id: ref.id, relation_type: 'include', sort_order: deviceOrder.get(ref.id) ?? 0 });
+              } else {
+                relations.push({ variant_id: vId, group_id: ref.id, relation_type: 'include', sort_order: deviceOrder.get(ref.id) ?? 0 });
+              }
+            });
           });
         }
 
@@ -770,8 +781,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
 
   const resetForm = () => {
     setOptionGroups([]);
-    setSelectedModelIds([]);
-    setSelectedGroupIds([]);
+    setSelectedDeviceRefs([]);
     setDefaultWholesalePrice('');
     setDefaultRetailPrice('');
     setBarcodeList('');
@@ -972,12 +982,8 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
           <div className="space-y-2">
             <Label>型號 / 群組（選填）</Label>
             <StandaloneDeviceModelSelectField
-              modelIds={selectedModelIds}
-              groupIds={selectedGroupIds}
-              onChange={({ modelIds, groupIds }) => {
-                setSelectedModelIds(modelIds);
-                setSelectedGroupIds(groupIds);
-              }}
+              selectionOrder={selectedDeviceRefs}
+              onOrderChange={setSelectedDeviceRefs}
             />
           </div>
 
@@ -1096,7 +1102,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                 </div>
               )}
 
-              {(selectedModelIds.length > 0 || selectedGroupIds.length > 0) && (
+              {selectedDeviceRefs.length > 0 && (
                 <div className="flex items-center gap-2 p-2.5 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg text-sm">
                   <Layers className="h-4 w-4 text-blue-600 shrink-0" />
                   <span>
@@ -1104,10 +1110,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                       ? '變體將逐一關聯對應的型號/群組'
                       : `型號/群組將關聯至所有 ${generatedVariants.length} 個變體`}
                     ：
-                    {[
-                      ...selectedModelIds.map(id => deviceModels.find(m => m.id === id)?.name).filter(Boolean),
-                      ...selectedGroupIds.map(id => deviceGroups.find(g => g.id === id)?.name).filter(Boolean),
-                    ].join('、')}
+                    {resolveDeviceItems().map(item => item.name).join('、')}
                   </span>
                 </div>
               )}

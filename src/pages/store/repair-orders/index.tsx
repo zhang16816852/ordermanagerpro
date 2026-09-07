@@ -7,16 +7,26 @@ import { Plus, Search, Wrench } from 'lucide-react';
 import { DataTable } from '@/components/shared/DataTable';
 import { ColumnDef } from '@tanstack/react-table';
 import { formatDate, formatCurrency } from '@/lib/formatters';
-import { useRepairOrders } from '@/hooks/useRepairOrders';
-import { REPAIR_ORDER_STATUS_LABELS, REPAIR_ORDER_STATUS_COLORS, RepairOrder as RepairOrderType } from '@/types/repair';
+import { useRepairOrders, useRepairAssigneeMap } from '@/hooks/useRepairOrders';
+import { REPAIR_ORDER_STATUS_LABELS, REPAIR_ORDER_STATUS_COLORS, isRepairOrderWorking, isRepairOrderClosed, RepairOrder as RepairOrderType } from '@/types/repair';
 import { useAuth } from '@/hooks/useAuth';
+
+type RepairTab = 'all' | 'pending' | 'working' | 'closed';
+
+const TABS: { value: RepairTab; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: 'pending', label: '待接案' },
+  { value: 'working', label: '維修中' },
+  { value: 'closed', label: '已完工' },
+];
 
 export default function StoreRepairOrders() {
   const navigate = useNavigate();
   const { storeId } = useAuth();
-  const { orders, isLoading, updateStatusMutation } = useRepairOrders(storeId || undefined);
+  const { orders, isLoading, deliverMutation } = useRepairOrders(storeId || undefined);
+  const assignees = useRepairAssigneeMap();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [tab, setTab] = useState<RepairTab>('all');
 
   const filtered = useMemo(() => {
     if (!orders) return [];
@@ -25,10 +35,23 @@ export default function StoreRepairOrders() {
         || o.customer_name.toLowerCase().includes(search.toLowerCase())
         || o.customer_phone?.includes(search)
         || o.code?.toLowerCase().includes(search.toLowerCase());
-      const matchStatus = statusFilter === 'all' || o.status === statusFilter;
-      return matchSearch && matchStatus;
+      const matchTab = tab === 'all'
+        || (tab === 'pending' && o.status === 'pending')
+        || (tab === 'working' && isRepairOrderWorking(o.status))
+        || (tab === 'closed' && isRepairOrderClosed(o.status));
+      return matchSearch && matchTab;
     });
-  }, [orders, search, statusFilter]);
+  }, [orders, search, tab]);
+
+  const tabCounts = useMemo(() => {
+    const counts: Record<RepairTab, number> = { all: orders?.length || 0, pending: 0, working: 0, closed: 0 };
+    orders?.forEach((o) => {
+      if (o.status === 'pending') counts.pending += 1;
+      if (isRepairOrderWorking(o.status)) counts.working += 1;
+      if (isRepairOrderClosed(o.status)) counts.closed += 1;
+    });
+    return counts;
+  }, [orders]);
 
   const columns: ColumnDef<RepairOrderType & { device_model?: any }>[] = [
     {
@@ -62,6 +85,17 @@ export default function StoreRepairOrders() {
       ),
     },
     {
+      header: '接案人',
+      cell: ({ row }) => {
+        const tech = row.original.assigned_to ? assignees[row.original.assigned_to] : undefined;
+        return tech?.email ? (
+          <span className="text-sm">{tech.email}</span>
+        ) : (
+          <Badge variant="outline" className="text-[10px]">開放待接案</Badge>
+        );
+      },
+    },
+    {
       header: '狀態',
       cell: ({ row }) => (
         <Badge className={REPAIR_ORDER_STATUS_COLORS[row.original.status as keyof typeof REPAIR_ORDER_STATUS_COLORS]}>
@@ -83,6 +117,25 @@ export default function StoreRepairOrders() {
         <span className="text-xs text-muted-foreground">{formatDate(row.original.created_at)}</span>
       ),
     },
+    {
+      header: '操作',
+      id: 'actions',
+      cell: ({ row }) => {
+        if (row.original.status !== 'ready') return null;
+        return (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={(e) => {
+              e.stopPropagation();
+              deliverMutation.mutate(row.original.id);
+            }}
+          >
+            交還客戶
+          </Button>
+        );
+      },
+    },
   ];
 
   return (
@@ -91,13 +144,13 @@ export default function StoreRepairOrders() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Wrench className="h-6 w-6" aria-hidden="true" />
-            維修管理
+            門市維修
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">管理門市維修訂單</p>
+          <p className="text-muted-foreground text-sm mt-1">收件、發布給接案人、追蹤並交還客戶</p>
         </div>
         <Button onClick={() => navigate('/dashboard/repair-orders/new')}>
           <Plus className="mr-2 h-4 w-4" />
-          新增維修單
+          收件建單
         </Button>
       </div>
 
@@ -112,17 +165,14 @@ export default function StoreRepairOrders() {
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge variant={statusFilter === 'all' ? 'default' : 'outline'} className="cursor-pointer" onClick={() => setStatusFilter('all')}>
-            全部
-          </Badge>
-          {Object.entries(REPAIR_ORDER_STATUS_LABELS).map(([key, label]) => (
+          {TABS.map((t) => (
             <Badge
-              key={key}
-              variant={statusFilter === key ? 'default' : 'outline'}
+              key={t.value}
+              variant={tab === t.value ? 'default' : 'outline'}
               className="cursor-pointer"
-              onClick={() => setStatusFilter(key)}
+              onClick={() => setTab(t.value)}
             >
-              {label}
+              {t.label} ({tabCounts[t.value]})
             </Badge>
           ))}
         </div>

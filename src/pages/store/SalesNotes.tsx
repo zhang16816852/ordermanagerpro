@@ -32,6 +32,7 @@ interface SalesNoteWithItems {
   sales_note_items: {
     id: string;
     quantity: number;
+    returned_quantity?: number;
     order_items: {
       id: string;
       product: { name: string; code: string } | null;
@@ -108,15 +109,19 @@ export default function StoreSalesNotes() {
           sales_note_items (
             id,
             quantity,
+            returned_quantity,
+            sort_order,
             order_items (
               id,
+              sort_order,
               product:products (name, code),
               product_variant:product_variants (name)
             )
           )
         `)
         .eq('store_id', storeId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .order('sort_order', { foreignTable: 'sales_note_items', ascending: true });
       if (error) throw error;
       return data as SalesNoteWithItems[];
     },
@@ -270,13 +275,17 @@ export default function StoreSalesNotes() {
       shipped_at: note.shipped_at,
       received_at: note.received_at,
       notes: note.notes,
-      items: note.sales_note_items.map((item) => ({
-        id: item.id,
-        quantity: item.quantity,
-        productSku: item.order_items?.product?.code || '',
-        productName: item.order_items?.product?.name || '',
-        variantName: item.order_items?.product_variant?.name || null,
-      })),
+      items: [...note.sales_note_items]
+        .sort((a, b) => ((a as any).sort_order ?? 0) - ((b as any).sort_order ?? 0))
+        .map((item) => ({
+          id: item.id,
+          quantity: item.quantity,
+          returnedQuantity: (item as any).returned_quantity ?? 0,
+          productSku: item.order_items?.product?.code || '',
+          productName: item.order_items?.product?.name || '',
+          variantName: item.order_items?.product_variant?.name || null,
+          sortOrder: (item as any).sort_order ?? 0,
+        })),
     };
   }, [selectedNoteId, salesNotes]);
 

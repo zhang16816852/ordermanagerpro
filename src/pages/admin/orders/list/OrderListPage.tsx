@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,43 @@ export default function AdminOrderList() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [poFilter, setPoFilter] = useState<'all' | 'has_po' | 'no_po'>('all');
+  const [repFilter, setRepFilter] = useState<string>('all');
+
+  // 業務列表（篩選下拉用）
+  const { data: repsData = [] } = useQuery({
+    queryKey: ['admin-reps-for-filter'],
+    queryFn: async () => {
+      const { data: roles } = await (supabase
+        .from('user_roles') as any)
+        .select('user_id')
+        .eq('role', 'rep');
+      if (!roles || roles.length === 0) return [];
+      const userIds = roles.map((r: any) => r.user_id);
+      const { data: profiles } = await (supabase
+        .from('profiles') as any)
+        .select('id, full_name, email')
+        .in('id', userIds);
+      return (profiles || []).map((p: any) => ({
+        user_id: p.id,
+        full_name: p.full_name,
+        email: p.email,
+      }));
+    },
+  });
+
+  // 選取業務的名下店家 IDs
+  const { data: repAssignedStoreIds = [] } = useQuery({
+    queryKey: ['admin-rep-stores-for-filter', repFilter],
+    queryFn: async () => {
+      if (repFilter === 'all') return [];
+      const { data } = await (supabase
+        .from('rep_store_assignments') as any)
+        .select('store_id')
+        .eq('rep_id', repFilter);
+      return (data || []).map((a: any) => a.store_id as string);
+    },
+    enabled: repFilter !== 'all',
+  });
 
   // 當 URL 參數變動時同步搜尋框
   useEffect(() => {
@@ -103,7 +140,7 @@ export default function AdminOrderList() {
     confirmOrdersMutation,
     addToShippingPoolMutation,
     cancelItemsMutation,
-  } = useOrdersList(storeFilter, statusTab);
+  } = useOrdersList(storeFilter, statusTab, repFilter !== 'all' ? repAssignedStoreIds : undefined);
 
   // 業務佣金換算
   const { isRep, computeOrder: computeRepOrder } = useRepCommission();
@@ -188,6 +225,51 @@ export default function AdminOrderList() {
     },
     onError: (error: Error) => toast.error(getErrorMessage(error)),
   });
+
+  const deleteOrderMutation = useMutation({
+    mutationFn: async (orderIds: string[]) => {
+      if (!user) throw new Error('未登入');
+      const okIds: string[] = [];
+      const reasons: string[] = [];
+      for (const orderId of orderIds) {
+        const { data, error } = await supabase.rpc('delete_order_if_unadopted', { p_order_id: orderId });
+        if (error) {
+          reasons.push(getErrorMessage(error));
+          continue;
+        }
+        const r = data as any;
+        if (r?.ok) okIds.push(orderId);
+        else {
+          let reason = r?.reason || '無法刪除';
+          const blocks = r?.adopted_by as Array<{ label?: string }> | undefined;
+          if (Array.isArray(blocks) && blocks.length > 0) {
+            reason = `${reason}（${blocks.map((b: { label?: string }) => b?.label).filter(Boolean).join('、')}）`;
+          }
+          reasons.push(reason);
+        }
+      }
+      return { okIds, reasons };
+    },
+    onSuccess: ({ okIds, reasons }) => {
+      if (okIds.length > 0) toast.success(`已刪除 ${okIds.length} 個訂單`);
+      if (reasons.length > 0) {
+        const unique = Array.from(new Set(reasons));
+        toast.error(unique.slice(0, 3).join('；') + (unique.length > 3 ? ` 等 ${unique.length} 筆無法刪除` : ''));
+      }
+      setSelectedOrderIds(new Set());
+      setViewingOrder(null);
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+    },
+    onError: (error: Error) => toast.error(getErrorMessage(error)),
+  });
+
+  const handleDeleteOrders = (orderIds: string[]) => {
+    if (orderIds.length === 0) return;
+    const label = orderIds.length === 1 ? '此訂單' : `這 ${orderIds.length} 個訂單`;
+    if (confirm(`確定要完整刪除 ${label} 嗎？\n已被銷貨單／寄賣單／採購單／會計分錄採用的訂單將無法刪除。`)) {
+      deleteOrderMutation.mutate(orderIds);
+    }
+  };
 
   const convertToConsignmentMutation = useMutation({
     mutationFn: async (orderIds: string[]) => {
@@ -743,8 +825,40 @@ export default function AdminOrderList() {
   // 決定傳給 AggregateToPODialog 的品項來源
   const poItemsSource = useMemo(() => {
     if (viewMode === 'orders') return poItemsFromOrders;
-    return Array.from(selectedAggregateItems.values());
-  }, [viewMode, poItemsFromOrders, selectedAggregateItems]);
+    if (viewMode === 'aggregate') return Array.from(selectedAggregateItems.values());
+    // 商品（items）tab：從選取的單筆品項彙整成採購明細，扣除已採購量避免重複採購
+    const grouped = new Map<string, { productId: string; variantId: string | null; quantity: number; maxQuantity: number; productName: string; variantName?: string | null; sku: string; sourceOrderIds: string[]; sourceQuantities: Record<string, number> }>();
+    for (const sel of selectedItems.values()) {
+      const order = orders.find(o => o.id === sel.orderId);
+      const item = order?.order_items.find(i => i.id === sel.itemId);
+      if (!item) continue;
+      const purchasedKey = `${sel.orderId}|${item.product_id}|${item.variant_id || 'null'}`;
+      const alreadyPurchased = purchasedByOrderKey.get(purchasedKey) || 0;
+      const remaining = Math.max(0, sel.quantity - alreadyPurchased);
+      if (remaining <= 0) continue;
+      const key = `${item.product_id}_${item.variant_id || 'null'}`;
+      if (grouped.has(key)) {
+        const g = grouped.get(key)!;
+        g.quantity += remaining;
+        g.maxQuantity += remaining;
+        if (!g.sourceOrderIds.includes(sel.orderId)) g.sourceOrderIds.push(sel.orderId);
+        g.sourceQuantities[sel.orderId] = (g.sourceQuantities[sel.orderId] || 0) + remaining;
+      } else {
+        grouped.set(key, {
+          productId: item.product_id,
+          variantId: item.variant_id || null,
+          quantity: remaining,
+          maxQuantity: remaining,
+          productName: getDisplayProductName(item.product?.name, item.product_variant?.name),
+          variantName: item.product_variant?.name || null,
+          sku: item.product?.code || '',
+          sourceOrderIds: [sel.orderId],
+          sourceQuantities: { [sel.orderId]: remaining },
+        });
+      }
+    }
+    return Array.from(grouped.values());
+  }, [viewMode, poItemsFromOrders, selectedAggregateItems, selectedItems, orders, purchasedByOrderKey]);
 
   return (
     <div className="flex flex-col min-h-[calc(100vh-4rem)] space-y-4 p-4 md:p-6 bg-muted/10">
@@ -856,6 +970,9 @@ export default function AdminOrderList() {
         onDateToChange={setDateTo}
         poFilter={poFilter}
         onPoFilterChange={setPoFilter}
+        repFilter={repFilter}
+        onRepFilterChange={setRepFilter}
+        reps={repsData}
       />
 
       <div className="flex-1 min-h-0 flex flex-col pt-2">
@@ -1035,6 +1152,7 @@ export default function AdminOrderList() {
         }}
         onExportAggregateCSV={handleExportAggregateCSV}
         onExportAggregateExcel={handleExportAggregateExcel}
+        onDeleteOrders={() => handleDeleteOrders(Array.from(selectedOrderIds))}
         isRep={isRep}
       />
 
@@ -1225,6 +1343,7 @@ export default function AdminOrderList() {
         order={viewingOrder}
         open={!!viewingOrder}
         onOpenChange={(open) => !open && setViewingOrder(null)}
+        onDeleteOrder={(id) => handleDeleteOrders([id])}
       />
 
       {/* Convert to PO Dialog */}

@@ -43,6 +43,7 @@ export default function StoreCatalog() {
     queryFn: async () => {
       const { data, error } = await (supabase.from('categories') as any)
         .select('*')
+        .eq('is_hidden', false)
         .order('sort_order', { ascending: true });
       if (error) return [];
       return data as Category[];

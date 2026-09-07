@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useProductCache } from '@/hooks/useProductCache';
+import { useVariantWholesale } from '@/hooks/useVariantWholesale';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +16,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { StorePicker } from '@/components/ui/StorePicker';
 import { Search, UserCog, Store as StoreIcon, Percent, Check, X, Pencil, Save, Loader2, ChevronRight, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
@@ -36,8 +38,10 @@ type ProfileRecord = {
 export default function AdminReps() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'reps');
   const [repSearch, setRepSearch] = useState('');
+  const [assignSearch, setAssignSearch] = useState('');
 
   // --- 業務列表 / 佣金編輯 ---
   const [editingRep, setEditingRep] = useState<{ userId: string; commission: string } | null>(null);
@@ -118,6 +122,9 @@ export default function AdminReps() {
   // 產品清單（成本設定用，含變體）
   const { products: allProducts, isLoading: productsLoading } = useProductCache();
 
+  // 進貨成本（變體批發價）fallback
+  const { wholesaleMap } = useVariantWholesale();
+
   const filteredCostProducts = useMemo(() => {
     const q = costSearch.toLowerCase();
     return allProducts.filter(p =>
@@ -155,30 +162,58 @@ export default function AdminReps() {
     enabled: repIds.length > 0,
   });
 
-  // 業務名下訂單（應發分潤彙總用）
-  const { data: repOrders = [] } = useQuery<{
-    sales_rep_id: string;
+  // 業務名下銷貨單（依店家分配自動歸屬）
+  const allAssignedStoreIds = useMemo(() => {
+    return [...new Set(repAssignments.map(a => a.store_id))];
+  }, [repAssignments]);
+
+  // store_id → rep_ids[] 對應表
+  const storeToReps = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const a of repAssignments) {
+      const list = map.get(a.store_id) || [];
+      list.push(a.rep_id);
+      map.set(a.store_id, list);
+    }
+    return map;
+  }, [repAssignments]);
+
+  const { data: repSalesNotes = [] } = useQuery<{
+    id: string;
+    code: string | null;
+    store_id: string;
     status: string;
-    order_items: { product_id: string; variant_id: string | null; unit_price: number; quantity: number }[];
+    payment_status: string;
+    shipped_at: string | null;
+    sales_note_items: {
+      quantity: number;
+      order_item: { product_id: string; variant_id: string | null; unit_price: number } | null;
+    }[];
   }[]>({
-    queryKey: ['admin-rep-orders', repIds.join(',')],
+    queryKey: ['admin-rep-sales-notes', allAssignedStoreIds.join(',')],
     queryFn: async () => {
-      if (repIds.length === 0) return [];
+      if (allAssignedStoreIds.length === 0) return [];
       const { data, error } = await (supabase
-        .from('orders') as any)
-        .select('sales_rep_id, status, order_items(product_id, variant_id, unit_price, quantity)')
-        .in('sales_rep_id', repIds)
-        .not('status', 'eq', 'cancelled');
+        .from('sales_notes') as any)
+        .select(`
+          id, code, store_id, status, payment_status, shipped_at,
+          sales_note_items(
+            quantity,
+            order_item:order_items(product_id, variant_id, unit_price)
+          )
+        `)
+        .in('store_id', allAssignedStoreIds)
+        .in('status', ['shipped', 'received'])
+        .order('sort_order', { foreignTable: 'sales_note_items', ascending: true });
       if (error) throw error;
       return data || [];
     },
-    enabled: repIds.length > 0,
+    enabled: allAssignedStoreIds.length > 0,
   });
 
-  // 應發分潤彙總（每業務：已出貨/已收款訂單的佣金加總）
+  // 應發分潤彙總（每業務：依店家分配歸屬的銷貨單佣金加總）
   const repCommissionSummary = useMemo(() => {
-    const map: Record<string, { totalCommission: number; orderCount: number }> = {};
-    // 每次價值建立 cost lookup
+    const map: Record<string, { totalCommission: number; totalProfit: number; noteCount: number; totalSales: number }> = {};
     const costLookup = new Map<string, number>();
     for (const row of allRepCosts) {
       costLookup.set(`${row.rep_id}|${row.product_id}|${row.variant_id ?? 'null'}`, Number(row.cost) || 0);
@@ -186,23 +221,37 @@ export default function AdminReps() {
     const getCost = (repId: string, productId: string, variantId: string | null) => {
       const exact = costLookup.get(`${repId}|${productId}|${variantId ?? 'null'}`);
       if (exact !== undefined) return exact;
-      return costLookup.get(`${repId}|${productId}|null`) ?? 0;
+      const productLevel = costLookup.get(`${repId}|${productId}|null`);
+      if (productLevel !== undefined) return productLevel;
+      return wholesaleMap.get(`${productId}|${variantId ?? ''}`) ?? 0;
     };
-    for (const o of repOrders) {
-      const rate = (Number(reps.find(r => r.user_id === o.sales_rep_id)?.commission_rate) || 0) / 100;
-      const entry = map[o.sales_rep_id] || (map[o.sales_rep_id] = { totalCommission: 0, orderCount: 0 });
-      let orderCommission = 0;
-      for (const item of o.order_items || []) {
-        const cost = getCost(o.sales_rep_id, item.product_id, item.variant_id ?? null);
-        const unitProfit = (Number(item.unit_price) || 0) - cost;
-        const line = unitProfit * (Number(item.quantity) || 0);
-        orderCommission += Math.max(0, line) * rate;
+    for (const sn of repSalesNotes) {
+      const assignedReps = storeToReps.get(sn.store_id) || [];
+      for (const repId of assignedReps) {
+        const rate = (Number(reps.find(r => r.user_id === repId)?.commission_rate) || 0) / 100;
+        if (rate === 0) continue;
+        const entry = map[repId] || (map[repId] = { totalCommission: 0, totalProfit: 0, noteCount: 0, totalSales: 0 });
+        let noteCommission = 0;
+        let noteProfit = 0;
+        let noteSales = 0;
+        for (const item of sn.sales_note_items || []) {
+          const oi = item.order_item;
+          if (!oi) continue;
+          const cost = getCost(repId, oi.product_id, oi.variant_id ?? null);
+          const unitProfit = (Number(oi.unit_price) || 0) - cost;
+          const line = unitProfit * (Number(item.quantity) || 0);
+          noteProfit += line;
+          noteSales += (Number(oi.unit_price) || 0) * (Number(item.quantity) || 0);
+          noteCommission += Math.max(0, line) * rate;
+        }
+        entry.totalCommission += noteCommission;
+        entry.totalProfit += noteProfit;
+        entry.totalSales += noteSales;
+        entry.noteCount += 1;
       }
-      entry.totalCommission += orderCommission;
-      entry.orderCount += 1;
     }
     return map;
-  }, [repOrders, allRepCosts, reps]);
+  }, [repSalesNotes, allRepCosts, reps, storeToReps, wholesaleMap]);
 
   // ==================== MUTATIONS ====================
 
@@ -229,12 +278,13 @@ export default function AdminReps() {
     mutationFn: async ({ repId, storeId }: { repId: string; storeId: string }) => {
       const { error } = await (supabase
         .from('rep_store_assignments') as any)
-        .insert({ rep_id: repId, store_id: storeId });
+        .upsert(
+          { rep_id: repId, store_id: storeId },
+          { onConflict: 'rep_id,store_id', ignoreDuplicates: true }
+        );
       if (error) throw error;
     },
-    onSuccess: (_, variables) => {
-      toast.success('已分配店家給業務');
-      setGrantStoreIds(prev => ({ ...prev, [variables.repId]: [...(prev[variables.repId] || []), variables.storeId] }));
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-rep-assignments'] });
       queryClient.invalidateQueries({ queryKey: ['admin-reps-stores'] });
     },
@@ -258,37 +308,19 @@ export default function AdminReps() {
     onError: (error: Error) => toast.error(getErrorMessage(error)),
   });
 
-  // 更新成本（支援產品層級或變體層級）
-  const costMutation = useMutation({
-    mutationFn: async ({ repId, productId, cost, variantId }: { repId: string; productId: string; cost: number; variantId?: string | null }) => {
-      const { error } = await (supabase
-        .from('rep_product_costs') as any)
-        .upsert(
-          { rep_id: repId, product_id: productId, variant_id: variantId ?? null, cost },
-          { onConflict: 'rep_id,product_id,variant_id' }
-        );
+  // 批次更新成本（一次送出全部 upsert + delete，單一 RPC）
+  const batchCostMutation = useMutation({
+    mutationFn: async ({ repId, items }: { repId: string; items: { product_id: string; variant_id: string | null; cost: number | null }[] }) => {
+      const { data, error } = await (supabase as any).rpc('upsert_rep_product_costs', {
+        p_rep_id: repId,
+        p_items: items,
+      });
       if (error) throw error;
+      return data as { upserted: number; deleted: number };
     },
-    onSuccess: () => {
-      toast.success('成本已儲存');
-      queryClient.invalidateQueries({ queryKey: ['admin-rep-costs'] });
-      queryClient.invalidateQueries({ queryKey: ['admin-rep-costs-all'] });
-    },
-    onError: (error: Error) => toast.error(getErrorMessage(error)),
-  });
-
-  const deleteCostMutation = useMutation({
-    mutationFn: async ({ repId, productId, variantId }: { repId: string; productId: string; variantId?: string | null }) => {
-      const { error: delErr } = await (supabase
-        .from('rep_product_costs') as any)
-        .delete()
-        .eq('rep_id', repId)
-        .eq('product_id', productId)
-        .eq('variant_id', variantId ?? null);
-      if (delErr) throw delErr;
-    },
-    onSuccess: () => {
-      toast.success('成本已移除');
+    onSuccess: (data) => {
+      toast.success(`已儲存 ${data.upserted} 筆、移除 ${data.deleted} 筆成本`);
+      setCostDrafts({});
       queryClient.invalidateQueries({ queryKey: ['admin-rep-costs'] });
       queryClient.invalidateQueries({ queryKey: ['admin-rep-costs-all'] });
     },
@@ -312,6 +344,14 @@ export default function AdminReps() {
     return (p?.email || '').toLowerCase().includes(q)
       || (p?.full_name || '').toLowerCase().includes(q)
       || (p?.email || '').toLowerCase().includes(q);
+  });
+
+  const filteredAssignReps = reps.filter(r => {
+    const p = profileOf(r.user_id);
+    const q = assignSearch.toLowerCase();
+    if (!q) return true;
+    return (p?.email || '').toLowerCase().includes(q)
+      || (p?.full_name || '').toLowerCase().includes(q);
   });
 
   const openCommission = (r: RepRecord) => {
@@ -384,10 +424,13 @@ export default function AdminReps() {
                           <TableCell>{assignmentStores(r.user_id).length} 家</TableCell>
                           <TableCell className="text-right">
                             {summary ? (
-                              <div>
+                              <button
+                                className="text-left hover:underline cursor-pointer"
+                                onClick={() => navigate(`/admin/reps/${r.user_id}/commission`)}
+                              >
                                 <div className="font-medium">{formatCurrency(summary.totalCommission)}</div>
-                                <div className="text-xs text-muted-foreground">{summary.orderCount} 單</div>
-                              </div>
+                                <div className="text-xs text-muted-foreground">{summary.noteCount} 單</div>
+                              </button>
                             ) : (
                               <span className="text-muted-foreground">—</span>
                             )}
@@ -412,10 +455,23 @@ export default function AdminReps() {
 
         {/* Tab 2: 店家分配 */}
         <TabsContent value="assign" className="mt-4">
+          <div className="flex justify-end mb-4">
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="搜尋業務姓名 / Email"
+                className="pl-10"
+                value={assignSearch}
+                onChange={(e) => setAssignSearch(e.target.value)}
+              />
+            </div>
+          </div>
           <div className="grid gap-4 lg:grid-cols-2">
-            {reps.map((r) => {
+            {filteredAssignReps.map((r) => {
               const p = profileOf(r.user_id);
               const assigned = assignmentStores(r.user_id);
+              const assignedIds = new Set(assigned.map(s => s.id));
+              const assignableStores = stores.filter(s => !assignedIds.has(s.id));
               return (
                 <Card key={r.user_id}>
                   <CardHeader>
@@ -444,36 +500,43 @@ export default function AdminReps() {
                     )}
                     <div className="flex items-end gap-2 pt-2 border-t border-border">
                       <div className="flex-1 space-y-1.5">
-                        <Label className="text-xs">新增店家</Label>
-                        <Select
-                          value={grantStoreIds[r.user_id]?.[0] || ''}
-                          onValueChange={(v) => {
-                            setGrantStoreIds(prev => ({ ...prev, [r.user_id]: [...(prev[r.user_id] || []), v] }));
-                            grantMutation.mutate({ repId: r.user_id, storeId: v });
+                        <Label className="text-xs">新增店家（可多選）</Label>
+                        <StorePicker
+                          stores={assignableStores.map(s => ({ id: s.id, name: s.name, code: s.code }))}
+                          value={grantStoreIds[r.user_id] || []}
+                          onChange={(values) => {
+                            const arr = Array.isArray(values) ? values : values ? [values] : [];
+                            setGrantStoreIds(prev => ({ ...prev, [r.user_id]: arr }));
                           }}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="選擇店家" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {stores.map((s) => (
-                              <SelectItem key={s.id} value={s.id}>{s.name}{s.code ? ` (${s.code})` : ''}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          multiple
+                          placeholder="選擇店家（可多選）"
+                          searchPlaceholder="搜尋店家名稱 / 代碼"
+                          notFoundText="找不到相符的店家"
+                        />
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9"
-                        disabled={!(grantStoreIds[r.user_id]?.length) || grantMutation.isPending}
-                        onClick={() => {
-                          const storeId = grantStoreIds[r.user_id]?.[0];
-                          if (storeId) grantMutation.mutate({ repId: r.user_id, storeId });
-                        }}
-                      >
-                        <Check className="mr-1 h-4 w-4" />分配
-                      </Button>
+                      {(() => {
+                        const assignableIds = new Set(assignableStores.map(s => s.id));
+                        const pendingStoreIds = (grantStoreIds[r.user_id] || []).filter(sid => assignableIds.has(sid));
+                        return (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-9"
+                            disabled={pendingStoreIds.length === 0 || grantMutation.isPending}
+                            onClick={async () => {
+                              if (pendingStoreIds.length === 0) return;
+                              try {
+                                await Promise.all(pendingStoreIds.map(sid => grantMutation.mutateAsync({ repId: r.user_id, storeId: sid })));
+                                setGrantStoreIds(prev => ({ ...prev, [r.user_id]: [] }));
+                                toast.success(`已分配 ${pendingStoreIds.length} 家店家`);
+                              } catch { /* 單筆失敗由 mutation onError toast */ }
+                            }}
+                          >
+                            <Check className="mr-1 h-4 w-4" />分配
+                            {pendingStoreIds.length > 0 ? `（${pendingStoreIds.length}）` : ''}
+                          </Button>
+                        );
+                      })()}
                     </div>
                   </CardContent>
                 </Card>
@@ -482,6 +545,9 @@ export default function AdminReps() {
           </div>
           {reps.length === 0 && (
             <p className="text-muted-foreground text-center py-8">尚無業務帳號</p>
+          )}
+          {reps.length > 0 && filteredAssignReps.length === 0 && (
+            <p className="text-muted-foreground text-center py-8">找不到相符的業務</p>
           )}
         </TabsContent>
 
@@ -526,8 +592,8 @@ export default function AdminReps() {
                     </p>
                     <Button
                       size="sm"
-                      disabled={costMutation.isPending}
-                      onClick={async () => {
+                      disabled={batchCostMutation.isPending}
+                      onClick={() => {
                         const dirtyEntries = Object.entries(costDrafts).filter(([k, v]) => {
                           const costRow = repCosts.find(c => {
                             if (k.includes(':')) {
@@ -540,21 +606,20 @@ export default function AdminReps() {
                           return v !== saved;
                         });
                         if (dirtyEntries.length === 0) { toast.info('無變更'); return; }
-                        for (const [key, val] of dirtyEntries) {
-                          const num = Number(val);
-                          if (val === '' || Number.isNaN(num) || num < 0) continue;
-                          if (key.includes(':')) {
-                            const [pid, vid] = key.split(':');
-                            await costMutation.mutateAsync({ repId: costRepId, productId: pid, cost: num, variantId: vid });
-                          } else {
-                            await costMutation.mutateAsync({ repId: costRepId, productId: key, cost: num });
-                          }
-                        }
-                        toast.success(`已儲存 ${dirtyEntries.length} 筆成本`);
-                        setCostDrafts({});
+                        const items = dirtyEntries
+                          .map(([key, val]): { product_id: string; variant_id: string | null; cost: number | null } | null => {
+                            const [pid, vid] = key.includes(':') ? key.split(':') : [key, null];
+                            if (val === '') return { product_id: pid, variant_id: vid, cost: null };
+                            const num = Number(val);
+                            if (Number.isNaN(num) || num < 0) return null;
+                            return { product_id: pid, variant_id: vid, cost: num };
+                          })
+                          .filter((x): x is { product_id: string; variant_id: string | null; cost: number | null } => x !== null);
+                        if (items.length === 0) { toast.info('沒有有效的變更'); return; }
+                        batchCostMutation.mutate({ repId: costRepId, items });
                       }}
                     >
-                      <Save className="mr-1 h-4 w-4" />
+                      {batchCostMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
                       全部儲存
                     </Button>
                   </div>
@@ -565,12 +630,11 @@ export default function AdminReps() {
                           <TableHead className="w-8" />
                           <TableHead>產品 / 變體</TableHead>
                           <TableHead className="w-48">業務成本</TableHead>
-                          <TableHead className="w-24 text-right">操作</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {filteredCostProducts.length === 0 ? (
-                          <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">無產品</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">無產品</TableCell></TableRow>
                         ) : (
                           filteredCostProducts.map((p) => {
                             const variants = p.variants || [];
@@ -579,7 +643,6 @@ export default function AdminReps() {
                             const costKey = p.id;
                             const costRow = repCosts.find(c => c.product_id === p.id && c.variant_id === null);
                             const draft = costDrafts[costKey] ?? (costRow ? String(costRow.cost) : '');
-                            const dirty = draft !== (costRow ? String(costRow.cost) : '');
                             const totalVariantCost = variants.reduce((sum, v) => {
                               const vr = repCosts.find(c => c.product_id === p.id && c.variant_id === v.id);
                               return sum + (vr ? Number(vr.cost) || 0 : 0);
@@ -638,32 +701,12 @@ export default function AdminReps() {
                                       />
                                     )}
                                   </TableCell>
-                                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-8"
-                                      disabled={!dirty || costMutation.isPending}
-                                      onClick={async () => {
-                                        const num = Number(draft);
-                                        if (draft === '') {
-                                          await deleteCostMutation.mutateAsync({ repId: costRepId, productId: p.id });
-                                          setCostDrafts(prev => ({ ...prev, [costKey]: '' }));
-                                        } else if (!Number.isNaN(num) && num >= 0) {
-                                          await costMutation.mutateAsync({ repId: costRepId, productId: p.id, cost: num });
-                                        }
-                                      }}
-                                    >
-                                      {costMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
-                                      儲存
-                                    </Button>
-                                  </TableCell>
                                 </TableRow>
                                 {hasVariants && isExpanded && variants.map((v) => {
                                   const vKey = `${p.id}:${v.id}`;
                                   const vCostRow = repCosts.find(c => c.product_id === p.id && c.variant_id === v.id);
                                   const vDraft = costDrafts[vKey] ?? (vCostRow ? String(vCostRow.cost) : '');
-                                  const vDirty = vDraft !== (vCostRow ? String(vCostRow.cost) : '');
+                                  const vWholesale = Number(v.wholesale_price) || 0;
                                   return (
                                     <TableRow key={`variant-${v.id}`} className="bg-muted/20">
                                       <TableCell />
@@ -677,31 +720,11 @@ export default function AdminReps() {
                                         <Input
                                           type="number"
                                           min={0}
-                                          placeholder="未設定"
+                                          placeholder={vWholesale > 0 ? `預設 $${vWholesale.toLocaleString()}（進貨成本）` : '未設定'}
                                           value={vDraft}
                                           onChange={(e) => setCostDrafts(prev => ({ ...prev, [vKey]: e.target.value }))}
                                           className="h-8"
                                         />
-                                      </TableCell>
-                                      <TableCell className="text-right">
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="h-8"
-                                          disabled={!vDirty || costMutation.isPending}
-                                          onClick={async () => {
-                                            const num = Number(vDraft);
-                                            if (vDraft === '') {
-                                              await deleteCostMutation.mutateAsync({ repId: costRepId, productId: p.id, variantId: v.id });
-                                              setCostDrafts(prev => ({ ...prev, [vKey]: '' }));
-                                            } else if (!Number.isNaN(num) && num >= 0) {
-                                              await costMutation.mutateAsync({ repId: costRepId, productId: p.id, cost: num, variantId: v.id });
-                                            }
-                                          }}
-                                        >
-                                          {costMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
-                                          儲存
-                                        </Button>
                                       </TableCell>
                                     </TableRow>
                                   );

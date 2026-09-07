@@ -50,7 +50,7 @@
 | `device_model_groups` | 型號群組 | name、description、is_active、deleted_at |
 | `device_model_group_items` | 群組↔型號 | group_id、model_id、position |
 | `device_model_group_history` | 群組變更紀錄 | group_id、action、old_data、new_data |
-| `entity_model_relations` | 產品/變體↔型號/群組 | product_id、variant_id、model_id、group_id、relation_type、reason |
+| `entity_model_relations` | 產品/變體↔型號/群組 | product_id、variant_id、model_id、group_id、relation_type、reason、sort_order(INT，保留「批次建立變體」時的型號/群組選取順序) |
 | `entity_bindings` | 產品綁定（主/附屬） | product_id、variant_id、bound_product_id、bound_variant_id、binding_type |
 | `storefront_items` | 店面展示清單 | product_id、variant_id、model_id、display_name、slug、status |
 
@@ -68,7 +68,7 @@
 |---|---|---|
 | `suppliers` | 供應商 | name、contact_name、phone、email、is_active |
 | `purchase_orders` | 採購單 | supplier_id、status(`purchase_order_status`)、order_date、expected_date、received_date、total_amount |
-| `purchase_order_items` | 採購明細 | purchase_order_id、product_id、variant_id、quantity、received_quantity、unit_cost、source_order_ids、source_quantities(JSONB `{orderId: 數量}`，記錄每個來源訂單貢獻量，供精確扣量與防止重複採購) |
+| `purchase_order_items` | 採購明細 | purchase_order_id、product_id、variant_id、quantity、received_quantity、unit_cost、sort_order(INT，品項顯示順序，新/匯入品項取現有 MAX+1)、source_order_ids、source_quantities(JSONB `{orderId: 數量}`，記錄每個來源訂單貢獻量，供精確扣量與防止重複採購) |
 | `supplier_import_configs` | 供應商 Excel 匯入設定 | supplier_id、header_row、mapping_config(JSONB) |
 | `supplier_product_mappings` | 供應商商品對應 | supplier_id、vendor_product_id、internal_product_id、vendor_unit_cost |
 
@@ -95,17 +95,18 @@
 |---|---|---|
 | `accounts` | 帳戶 | name、type、balance、is_active |
 | `accounting_categories` | 會計分類 | name、type、description、is_active |
-| `accounting_entries` | 會計分錄 | account_id、category_id、type、amount、paid_amount、payment_status(`payment_status`)、transaction_date、due_date、reference_id/type |
+| `accounting_entries` | 會計分錄 | account_id、category_id、type、amount、paid_amount、payment_status(`payment_status`)、transaction_date、due_date、reference_id/type、**counterparty_name**（2026-09-09：對象名稱＝店家/供應商/客戶） |
 
-- **收款狀態連動**：`sales_notes.payment_status`（`unpaid`/`paid`）與收貨狀態 `status` 分離；`public.sync_sales_note_payment_status(p_sales_note_id uuid)`（SECURITY DEFINER，revoke public/anon、grant authenticated）統一計算「該銷貨單只要有任一 `accounting_entries`（`reference_type='sales_note'`、`type='income'`、`payment_status IN ('paid','partial')`）→ `paid`，否則 `unpaid`」，供付款/回退/刪除三流程連動（`useAccounting` 的 `recordPaymentMutation`/`reversePaymentMutation`/`deleteEntryMutation`）。
+- **收款狀態連動**：`sales_notes.payment_status`（`unpaid`/`paid`）與收貨狀態 `status` 分離；`public.sync_sales_note_payment_status(p_sales_note_id uuid)`（SECURITY DEFINER，revoke public/anon、grant authenticated）統一計算「該銷貨單只要有任一 `accounting_entries`（`type='income'`、`payment_status IN ('paid','partial')`，且 **entry row `reference_type='sales_note'` 直接綁定** 或 **`accounting_entry_references` 子表有該單據**（OR 兩路徑，2026-09-09 修復））→ `paid`，否則 `unpaid`」，供付款/回退/刪除/建立四流程連動（`useAccounting` 的 `recordPaymentMutation`/`reversePaymentMutation`/`deleteEntryMutation`/`createEntryMutation`、`SalesNoteDetailDialog.receivePaymentMutation`）。**counterparty_name**：建立銷貨單/採購/維修收支分錄時由 `EntryForm.buildSubmitData` 從 `docItems[0].name` 寫入（店名/供應商名）；既有資料 migration 回填（銷貨→店家、採購→供應商、維修→客戶，含 description 推斷）。
 
 ### 維修單
 | 表 | 說明 | 關鍵欄位 |
 |---|---|---|
 | `repair_orders` | 維修單主表 | code(`RO-YYYYMMDD-XXXXX`)、store_id、status(`repair_order_status`)、客戶/裝置/帳務/人員/時間欄位 |
-| `repair_order_items` | 維修品項（服務+零件） | repair_order_id、item_type(`repair_item_type`)、service_name、part_name、quantity、unit_cost、unit_price |
+| `repair_order_items` | 維修品項（服務+零件） | repair_order_id、item_type(`repair_item_type`)、service_name、part_name、quantity、unit_cost、unit_price、**purchase_order_item_id（所用進貨批次，FK→purchase_order_items）、is_stock_deducted** |
 | `repair_order_status_history` | 狀態變更歷史 | repair_order_id、from_status、to_status、changed_by、note |
-| `repair_order_summary`（VIEW） | 彙總含利潤/毛利率/人員 | — |
+| `repair_order_summary`（VIEW） | 彙總含利潤/毛利率/人員 | ⚠️ 含 `auth.users` email，前端未使用，已 REVOKE anon/authenticated 全數存取 |
+| `purchase_order_items`（附加） | 進貨批次 FIFO 記帳 | `consumed_quantity`（已被維修單耗用累計，剩餘＝received_quantity−consumed_quantity） |
 
 ### 系統 / 資料版本控制 / 其他
 | 表 | 說明 | 關鍵欄位 |
@@ -122,7 +123,7 @@
 
 ## 2. Enums
 
-- `system_role`: admin | customer | rep
+- `system_role`: admin | customer | rep | fixengineer
 - `store_role`: founder | manager | employee
 - `order_status`: pending | processing | shipped
 - `order_source_type`: frontend | admin_proxy | consignment
@@ -157,6 +158,7 @@
 - **新表**：
   - `rep_store_assignments(id, rep_id→auth.users, store_id→stores, assigned_at, UNIQUE(rep_id,store_id))`：業務↔店家分配；RLS：admin 全權（`has_role(admin)`）、業務只讀自己（`auth.uid()=rep_id`）。
   - `rep_product_costs(id, rep_id→auth.users, product_id→products, variant_id→product_variants, cost NUMERIC DEFAULT 0, UNIQUE(rep_id,product_id,variant_id))`：業務自有進貨成本；RLS：admin 全權、業務只讀自己。
+  - `rep_commission_payouts(id, rep_id→auth.users, sales_note_id→sales_notes, amount NUMERIC, paid_date DATE DEFAULT CURRENT_DATE, note TEXT, created_by→auth.users, created_at, UNIQUE(rep_id,sales_note_id))`：業務分潤發放登記（一筆銷貨單對一業務一次發放）；RLS：admin 全權（`has_role(admin)`）、業務只讀自己（`auth.uid()=rep_id`）。
 - **欄位**：`user_roles.commission_rate`（NUMERIC(5,2)，業務級固定比例，ADMIN 設定）；`orders.sales_rep_id→auth.users`（業務建立/負責的訂單，`idx_orders_sales_rep`）。
 - **Helper**：`is_rep(user_id)`、`get_rep_commission_rate(user_id)`（回傳 commission_rate，無則 0）、`is_rep_store(user_id, store_id)`（業務是否分配到店家）。皆 SECURITY DEFINER STABLE。
 - **RLS 更新**：
@@ -165,7 +167,13 @@
   - `sales_notes` / `sales_note_items` SELECT：admin / store member / `is_rep_store(store_id)`。
   - `order_items` SELECT/INSERT：以 `orders` 權限為準（含 `o.sales_rep_id=auth.uid()`）。
 - **`update_order_with_items` 授權加固**：允許 admin / store member / `v_order.sales_rep_id=auth.uid()`。
-- **佣金公式**（前端 `useRepCommission` 換算）：佣金 = (售價 − 業務成本) × commission_rate / 100，成本取自 `rep_product_costs`（無則視為 0）。
+- **佣金公式**（前端 `useRepCommission` 換算；後端發放 RPC 亦重算同公式）：佣金 = Σ max(0, (售價 − 業務成本) × 數量) × commission_rate / 100，成本優先序 = `order_items.unit_cost` 快照（>0）→ `rep_product_costs`（逐變體→產品層級 `variant_id IS NULL`）→ **進貨成本（`product_variants.wholesale_price`，未設定時預設值）** → 0（2026-09-07）。佣金明細頁另行查 `accounting_entries`（`reference_type='sales_note'`、`type='income'`、`paid_amount>0`）顯示登記收款時間。
+- **分潤發放 RPC（2026-09-05，併入會計模組）**：
+  - `upsert_rep_product_costs(p_rep_id uuid, p_items jsonb)`（SECURITY DEFINER，僅 admin）：批次寫入業務成本（2026-09-05 起取代逐筆 upsert/delete）。`p_items` = `[{product_id, variant_id, cost}]`；`cost` 為 json null＝刪除該列；負值 raise；產品層級（variant null）先刪後插避免 UNIQUE 對 NULL 不生效之重複列；回傳 `{upserted, deleted}`。變體輸入框未設定時以「預設 $X（進貨成本）」提示（fallback 見 8.x 佣金公式）。
+  - `register_rep_commission_payout(p_rep_id uuid, p_sales_note_id uuid, p_paid_date date, p_note text, p_account_id uuid, p_category_id uuid, p_description text, p_created_by uuid) RETURNS jsonb`（SECURITY DEFINER，`set search_path=public,extensions`，僅 admin）：單一交易內 **內部重算佣金**（不接受外部傳入金額）＋ INSERT `rep_commission_payouts`（UNIQUE(rep_id,sales_note_id) 擋重複）＋ INSERT `accounting_entries`（`type='expense'`、`reference_type='rep_payout'`、`reference_id=payout_id`、`paid_amount=amount`、`payment_status='paid'`）＋ `accounts.balance -= amount`；回傳 `{payout_id, amount}`。
+  - `revoke_rep_commission_payout(p_payout_id uuid)`（SECURITY DEFINER，僅 admin）：依 `reference_type='rep_payout'` 找支出分錄→回衝 `accounts.balance += amount`→刪分錄→刪 payout。
+  - 兩者皆 `revoke ... from public, anon; grant ... to authenticated`（內部再以 `has_role(auth.uid(),'admin')` 把關）。
+  - seed：`accounting_categories` 新增「業務分潤」expense 分類。
 - ⚠️ 出貨僅 admin 處理（業務不出貨）；RLS 已預留，系統穩定後可下放。
 
 ## 4. 版本控制系統（快取校驗的骨幹）- `data_versions.table_name` 與實際表名**不完全一致**：
@@ -198,7 +206,9 @@
   - `consignment_in_receipt` / `consignment_in_return` / `consignment_out_shipment` / `consignment_out_sale` / `consignment_out_return` / `consignment_sale_reversal` / `consignment_shipment_reversal` → 需 `consignment_order_id`（FK 綁 `consignment_order_id`，`purchase_order_id` 必空）
   - `scrap` / `transfer` / `manual_adjustment` / `system_recalculation` → 兩者皆空
   - `sales_shipment` 與 `sales_note_deletion` 各有 partial unique index（防重複扣/加）
+  - **`inventory_movements.order_item_id`（2026-09-05）**：sales_shipment / sales_note_deletion 記錄來源 `order_item_id`（FK→order_items，ON DELETE SET NULL）；兩條 unique index 改為 `(sales_note_id, order_item_id) WHERE ... AND order_item_id IS NOT NULL`——仍防「同一 order_item 在同一張銷貨單重複扣」，但**允許同變體不同 order_item 分行**（拆單補寄/瑕疵換貨）。歷史 180 筆 `sales_note_id IS NULL` 之舊資料無法回填（維持 NULL、不在索引涵蓋內）
 - `sales_note_items.inventory_source_type`（`self`/`supplier_consignment`/`store_consignment`）：**每行**記錄來源，一張銷貨單可混合多來源
+- **退貨標記（2026-09-06，migration `20260906000004`）**：`sales_note_items.returned_quantity`／`purchase_order_items.returned_quantity`（INTEGER NOT NULL DEFAULT 0，退貨累計）。退貨以 `inventory_movements` 記錄（`customer_return` 需 `sales_note_id`；`purchase_return` 需 `purchase_order_id`，來源單據 FK 相對應），自動經 trigger 同步 `product_inventory`（銷貨退貨回勾 source_type 之倉、採購退貨自該倉扣除）。新表：`sales_note_returns`（sales_note/warehouse/reason/status/total_refund/entry_id/reference_code/created_by）＋`sales_note_return_items`（sales_note_item_id/product/variant/quantity/unit_price/refund_amount）、`purchase_order_returns`＋`purchase_order_return_items`（units 同採購）。RLS：銷貨類 admin 全權＋門市 SELECT 自家（`is_store_member`）；採購類僅 admin。會計：退款 expense 分類「客戶退貨退款」、沖帳 income 分類「供應商退貨沖帳」（種子），`accounting_entries.reference_type` 分別為 `sales_note`/`purchase_order`，並回寫退貨表 `entry_id`
 
 ### 6.2 Trigger（核心不變式）
 - `trg_sync_inventory_on_movement`：BEFORE INSERT，INSERT INTO product_inventory ON CONFLICT DO UPDATE quantity += quantity_change，並回寫 `balance_after`
@@ -207,16 +217,21 @@
 ### 6.3 關鍵 RPC（皆 SECURITY DEFINER，search_path=public,extensions）
 | RPC | 功能 |
 |---|---|
-| `ship_from_pool(p_store_ids, p_created_by, p_notes, p_shipped_at, p_warehouse_id, p_warehouse_map, p_source_map, p_consignment_override_map)` | 從出貨池批次出貨：依門市建 sales_note(status=shipped) → 產生 sales_note_items → 更新 order_items.shipped_quantity/status → 扣庫存 → 清空該門市 pool → 更新 order.status；`p_source_map` 逐項指定庫存來源（self 扣 own 倉 / supplier_consignment 走 allocate_inventory）。**寄賣判定**：`p_consignment_override_map`（order_item_id→boolean）有該 item 時以 override 為準，否則回歸 `orders.consignment_mode`；寄賣品項只寫 sales_note_items(inventory_source_type='store_consignment')、不扣自有庫存。⚠️ **v1.2 起改單一 canonical 簽名（舊 overloads 已全數移除）**，v1.3 起寄賣品項不進 sales_note_items（純寄賣店家 sales_note_id=NULL），單店送完後呼叫 `create_consignment_shipment_layer` 自動建寄賣單 |
+| `ship_from_pool(p_store_ids, p_created_by, p_notes, p_shipped_at, p_warehouse_id, p_warehouse_map, p_source_map, p_consignment_override_map)` | 從出貨池批次出貨：依門市建 sales_note(status=shipped) → 產生 sales_note_items → 更新 order_items.shipped_quantity/status → 扣庫存 → 清空該門市 pool → 更新 order.status；`p_source_map` 逐項指定庫存來源（self 扣 own 倉 / supplier_consignment 走 allocate_inventory）。**寄賣判定**：`p_consignment_override_map`（order_item_id→boolean）有該 item 時以 override 為準，否則回歸 `orders.consignment_mode`；寄賣品項只寫 sales_note_items(inventory_source_type='store_consignment')、不扣自有庫存。⚠️ **v1.2 起改單一 canonical 簽名（舊 overloads 已全數移除）**，v1.3 起寄賣品項不進 sales_note_items（純寄賣店家 sales_note_id=NULL），單店送完後呼叫 `create_consignment_shipment_layer` 自動建寄賣單。**2026-09-05**：sales_shipment movement 寫入 `order_item_id`（來自 pool 的 order_item），支持同單同變體多列 |
 | `remove_items_from_shipping_pool(p_pool_ids uuid[], p_created_by uuid)` | **批次回滾成訂單（移出出貨池，2026-09-03）**：單一 RPC 一次寫入取代前端逐筆 `DELETE FROM shipping_pool`；守門 `p_pool_ids` 非空。收集受影響 order_id 集合 → `DELETE FROM shipping_pool WHERE id = ANY(p_pool_ids)` → 對每個受影響訂單，僅當**出貨池已無該訂單任何剩餘品項**且 `status='processing'` 才回退 `pending`（對齊「全數移出才回退」）。回傳 `{deleted_count, reverted_order_ids}` |
-| `direct_ship_order(p_order_id, p_created_by, p_notes, p_shipped_at, p_warehouse_id, p_warehouse_map, p_source_map)` | 訂單直接轉銷貨：**v1.3 起單一 canonical 7-arg 簽名（舊 overloads 已全數移除）**。非寄賣：建 sales_note → 為剩餘數量建 items → 更新 order_items → 扣庫存 → order 標 shipped；寄賣（orders.consignment_mode=true）：**不建 sales_note**（回傳 sales_note_id=NULL）、依剩餘數量建寄賣層 + movement，order 標 shipped；**v1.5.1**：寄賣與一般分支出貨時皆逐項 `DELETE FROM shipping_pool` |
-| `create_order_with_sales_note(p_store_id, p_created_by, p_notes, p_items JSONB, p_shipped_at, p_warehouse_id, p_consignment_mode)` | 下單即出貨：**v1.3 起單一 canonical 7-arg 簽名（舊 overloads 已全數移除）**。一般：建 order(source_type=admin_proxy, status=shipped) + sales_note + items + 扣庫存；`p_items[]` 逐項可帶 `inventory_source_type`。`p_consignment_mode=true` 時訂單標寄賣、items 一律 store_consignment、**不開銷貨單**、跳過 own 扣庫存、結尾呼叫 layer |
+| `direct_ship_order(p_order_id, p_created_by, p_notes, p_shipped_at, p_warehouse_id, p_warehouse_map, p_source_map)` | 訂單直接轉銷貨：**v1.3 起單一 canonical 7-arg 簽名（舊 overloads 已全數移除）**。非寄賣：建 sales_note → 為剩餘數量建 items → 更新 order_items → 扣庫存 → order 標 shipped；寄賣（orders.consignment_mode=true）：**不建 sales_note**（回傳 sales_note_id=NULL）、依剩餘數量建寄賣層 + movement，order 標 shipped；**v1.5.1**：寄賣與一般分支出貨時皆逐項 `DELETE FROM shipping_pool`。**2026-09-05**：movement 寫入 `order_item_id` |
+| `create_order_with_sales_note(p_store_id, p_created_by, p_notes, p_items JSONB, p_shipped_at, p_warehouse_id, p_consignment_mode)` | 下單即出貨：**v1.3 起單一 canonical 7-arg 簽名（舊 overloads 已全數移除）**。一般：建 order(source_type=admin_proxy, status=shipped) + sales_note + items + 扣庫存；`p_items[]` 逐項可帶 `inventory_source_type`。`p_consignment_mode=true` 時訂單標寄賣、items 一律 store_consignment、**不開銷貨單**、跳過 own 扣庫存、結尾呼叫 layer。**2026-09-05**：movement 寫入 `order_item_id` |
 | `create_consignment_shipment_layer(p_order_items JSONB, p_warehouse_id, p_created_by)` | 訂單轉寄賣中間層（v1.1 新增，v1.2 改判據，v1.3 改簽名）：**v1.3 起改收 `p_order_items`（JSONB 陣列，order_items 全欄位），舊 `(p_sales_note_id, p_warehouse_id, p_created_by)` 簽名已移除**；find-or-create `consignment_order`(send_to_store, source_order_id, draft/active) + `consignment_order_items`（既有 order_item 回填） + `consignment_out_shipment` movement（owner=store_consignment，sign 為負）；**v1.4 改寫**：依 `consignment_order_items.order_item_id` 比對重用既有寄賣品項（草稿鏡像路徑不再重複建列）、既有草稿單轉 active；被 ship_from_pool / direct_ship_order / create_order_with_sales_note / create_consignment_shipment 呼叫；**v1.5.1**：出貨時逐項 `DELETE FROM shipping_pool`（對應 order_item_id） |
-| `delete_sales_note(p_sales_note_id)` | 刪銷貨單：**consignment 來源不得直刪** → reverse `consignment_sales.reversed=true` + 反向 movement（`consignment_sale_reversal`/`consignment_shipment_reversal`）；非寄賣回退 order_items + sales_note_deletion 補庫存 + 回復 shipping_pool；`received` 狀態禁止刪除。⚠️（2026-09-01）舊 overload `(p_sales_note_id, p_warehouse_id)` 已移除，避免 PostgREST HTTP 300 |
+| `delete_sales_note(p_sales_note_id)` | 刪銷貨單：**consignment 來源不得直刪** → reverse `consignment_sales.reversed=true` + 反向 movement（`consignment_sale_reversal`/`consignment_shipment_reversal`）；非寄賣回退 order_items + sales_note_deletion 補庫存 + 回復 shipping_pool；`received` 狀態禁止刪除。**2026-09-05**：sales_note_deletion movement 寫入 `order_item_id`。**2026-09-09（migration `20260909000003`＋`_with_reference_code`）**：`RETURNS void`→`RETURNS JSONB`（DROP 後重建），並加守門——`received` 已收貨／已有會計分錄（`accounting_entries`＋`accounting_entry_references` two-path，如收款）／已有業務佣金發放（`rep_commission_payouts.sales_note_id`）／寄賣確認銷售未 reversed 時**擋下**回 `{ok:false, reason, adopted_by}`；通過才執行上述回退邏輯，成功回 `{ok:true}`。**庫存異動稽核（同批修補）**：FK `sales_note_id` 為 `ON DELETE SET NULL`（刪除銷貨單時歷史 movement 的 FK 會被清空），回補的 `sales_note_deletion` / `consignment_*_reversal` movement 現帶入 `reference_code`（= 刪除前的銷貨單 `code`），確保 FK 被 SET NULL 後仍可依 `reference_code` 追溯原始單號（歷史 `sales_shipment` movement 本來就有 `reference_code`）。⚠️（2026-09-01）舊 overload `(p_sales_note_id, p_warehouse_id)` 已移除，避免 PostgREST HTTP 300 |
+| `delete_purchase_order_if_empty(p_purchase_order_id)` | **採購單刪除守門（2026-09-09, migration `20260909000004`）**：僅 admin（`has_role`）；替代前端原生 `DELETE FROM purchase_orders`（後者遇已收貨會撞 CHECK 拋模糊錯誤、無法回滾庫存/會計）。擋下條件：任一 item `received_quantity>0`（回「已收貨，請改用採購退貨」）、`inventory_movements.purchase_order_id` 存在（收貨/退貨/寄賣入庫殘留異動）、已有會計分錄（`accounting_entries`＋`accounting_entry_references` two-path：採購付款/運費月結/跨單結帳）——任一命中回 `{ok:false, reason, adopted_by}`；全數乾淨才 `DELETE FROM purchase_orders`（items FK CASCADE）。RETURNS `{ok:true}`；`REVOKE FROM PUBLIC, anon`，GRANT authenticated |
 | `receive_purchase_items(p_items JSONB)` | 採購入庫：依 items 逐筆 insert purchase_receipt movement（own 倉） |
+| `reorder_purchase_order_items(p_items JSONB)` | **採購品項排序（2026-09-08，migration `20260908000000`）**：僅 admin（`has_role`）；p_items＝`[{id, sort_order}]` 遞增序批次寫入（前端拖曳/名稱表頭排序後以 index+1 持久化）。既有資料 backfill 預設＝每張採購單依 `COALESCE(變體名稱, 產品名稱) DESC NULLS LAST`（tiebreak created_at）；新/匯入品項由前端取現有 `MAX(sort_order)+1` 排在末尾 |
 | `adjust_inventory(p_id, p_new_quantity, p_created_by, p_note)` | 手動調整：算 diff → insert manual_adjustment movement |
 | `recalculate_inventory(p_created_by)` | 系統重算：以 received - shipped 重算 own 倉餘額，差異 insert system_recalculation movement |
 | `unlink_orders_from_purchase_order(p_purchase_order_id, p_order_ids UUID[])` | 解除訂單↔採購單連結（2026-09-01 新）：逐品項移除被解除訂單的來源連結並**精確扣除未收貨數量**（依 `source_quantities`；多來源舊資料為 NULL→只解除不扣量）；剩餘來源空＋無收貨→刪列；已收貨的保留；重算 total_amount 與狀態。RETURNS JSONB `{removed_item_count, updated_item_count,...}`，供前端批次「解除採購」與採購單明細解除用 |
+| `process_sales_note_return(p_sales_note_id, p_items JSONB, p_warehouse_id, p_reason, p_refund_account_id, p_created_by)` | **銷貨退貨（2026-09-06, migration `20260906000004`）**：僅 admin（`has_role`）；銷貨單 status 須 `shipped`/`received`；逐項 FOR UPDATE 檢查 `returned_quantity ≤ quantity - returned_quantity`；回勾庫存以 `customer_return` movement（帶 sales_note_id＋order_item_id）、items 表寫入 `sales_note_return_items`；退款金額預設 qty×unit_price（`refund_amount` 可覆寫）、總額>0 時自動開「客戶退貨退款」expense 分錄（`reference_type='sales_note'`）並 `accounts.balance -= total`（未指定帳戶 RAISE）；回填 header `entry_id`；RETURNS JSONB `{ok, return_id, total_refund, items}` |
+| `process_purchase_return(p_purchase_order_id, p_items JSONB, p_warehouse_id, p_reason, p_credit_account_id, p_created_by)` | **廠商退貨（2026-09-06）**：僅 admin；逐項可退上限 `received_quantity - returned_quantity`；`purchase_return` movement（帶 purchase_order_id）自指定倉（預設 own）扣庫存、寫入 `purchase_order_return_items`；沖帳金額預設 qty×unit_cost、總額>0 時自動開「供應商退貨沖帳」income 分錄並 `accounts.balance += total`（未指定帳戶 RAISE）；回填 header `entry_id`；RETURNS JSONB `{ok, return_id, total_credit, items}`。兩支皆 `REVOKE FROM PUBLIC, anon`（僅 authenticated 可 CALL） |
+| `delete_order_if_unadopted(p_order_id)` | **完整刪除未被採用的訂單（2026-09-09, migration `20260909000001`＋`20260909000003`＋`fix_delete_order_use_shipped_quantity`）**：僅 admin（`has_role`）；依序檢查「被採用」引用並回傳**採用明細** `adopted_by`（array of `{kind, code?, label}`，銷貨單/寄賣單/採購單附 `code` 單號）——`sales_note_items`（FK NO ACTION）、`shipping_pool`(FK CASCADE，存在即擋避免靜默丟池列)、`consignment_orders.source_order_id`、`consignment_order_items`/`consignment_sales.order_item_id`、**`order_items.shipped_quantity > 0`**（已出貨但未回補的庫存異動；**不再檢查 `inventory_movements` 存在性**——庫存已歸零的歷史異動紀錄不擋刪除）、`sales_note_return_items.order_item_id`、`purchase_order_items.source_quantities ? p_order_id::text`（JSONB 無 FK）、`accounting_entries`＋`accounting_entry_references`(reference_type='order')——任一命中回 `{ok:false, reason, adopted_by}`，全數乾淨才 `DELETE FROM orders`（order_items/parent 子行 FK CASCADE）；`source_type='consignment'` 鏡像單一律拒絕。RETURNS `{ok:true}` |
 
 ### 6.3b 寄賣 RPC（v1，皆 SECURITY DEFINER）
 | RPC | 功能 |
@@ -269,6 +284,7 @@
 - **訂單表格範本**：`table_templates` 儲存 col/row/tab 設定（JSONB），`table_template_variants` 綁定變體
 - **市場**：`market_listings` + `expire_market_listings()` 過期任務
 - **稽核**：`audit_logs` 記錄關鍵動作（含 old/new value JSONB）
+- **跨 schema email 解析（2026-09-07，migration `20260907000005_repair_assignee_emails_rpc.sql`）**：⚠️ `auth.users` 在 auth schema，PostgREST 預設 `db-schemas` 不含 auth，**不能對其做 embed**（`repair_orders?select=assigned_tech:assigned_to(email)` 報 400 PGRST200，schema reload 無效）。改用 SECURITY DEFINER RPC `repair_assignee_emails()` 回傳 `{user_id, email, full_name}`（統整 `repair_orders.assigned_to/created_by` 與 `repair_order_status_history.changed_by` 的使用者），僅 grant execute to authenticated；前端 `useRepairOrders.useRepairAssigneeMap()` 產生 id→email map 供列表/詳情解析。任何新 embed 對 `auth.users` 一律不可用。
 
 ## �Τ@����]unified_pricing�^
 
@@ -276,3 +292,39 @@
 - 	rg_enforce_unified_variant_price�G���� INSERT/UPDATE �ɭY���ݲ��~ unified_pricing=true�A�j�� wholesale_price/retail_price = ���~�Τ@���]����~�|�ҵL�k���������}���^
 - 	rg_sync_unified_price_to_variants�G���~����/�ק�Τ@���ɡAUPDATE �Ҧ� product_variants ���Τ@��
 - �s��Ȥ����]store_products�^��Τ@���ӫ~�H���~�h�� (ariant_id = null) �x�s�A��Ҧ�����]�t���ӷs�W�^�Τ@�ͮġFuseStoreProductCache ��Τ@���ӫ~�����v���� store_products �C�A������~�h�ŦC
+
+## 9. 服務型商品 + A+B 加購 + 運費月結（2026-09-06，migration 20260906000001~0003）
+
+### 9.1 products / categories 前端顯示與商品類型
+- `products.item_type` TEXT 預設 'product'：`product`（一般，進訂單目錄）／`shipping`（運費，不進目錄、**不扣庫存**、可月結）／`packaging`（包裝＝庫存商品＋可作為 A+B 加購品）／`repair_part`（維修零件）。**取代昔 `is_repair_part`**（migration 已將 `is_repair_part=true` 遷移為 `item_type='repair_part'` 並 DROP 該欄）。
+- `products.is_hidden` BOOLEAN 預設 false：前端（門市目錄／大眾前台）顯示開關，後台仍可管理。`categories.is_hidden` 同義為分類層。
+- `sync_storefront_items(p_product_id)` 已改：`is_hidden=true` 或 `item_type NOT IN ('product','packaging')` 的產品直接清除 `storefront_items`（不進大眾前台）。
+
+### 9.2 庫存排除（shipping）
+- `trgfn_skip_shipping_inventory()`：`inventory_movements` 的 **BEFORE INSERT** trigger（`trg_a_skip_shipping_inventory`）。因 BEFORE ROW trigger 依 name 字母序觸發（`trg_a_` 先於 `trg_sync_inventory_on_movement`），對 shipping 型商品 `RETURN NULL` 使整列跳過（含 `product_inventory` 同步）。出貨 RPC 無需針對 shipping 特別分支。
+
+### 9.3 A+B 加購綁定
+- 表 `product_addon_bindings`：`parent_product_id`/`parent_variant_id`（可 NULL＝產品層級）、`addon_product_id`/`addon_variant_id`、`quantity`、`sort_order`、`trigger_condition JSONB`（預留）。UNIQUE(parent_product_id, parent_variant_id, addon_product_id, addon_variant_id)；RLS：authenticated 可讀、admin 管理；變動 trigger bump `products` 資料版本。
+- 前端：`AddonBindingManager`（產品表單→「綁定」tab 下方，只有編輯模式；父產品層級綁定，選候選商品＋可選變體＋數量）。加入訂單時 `useOrderDraftStore` 的 `useStoreDraft().addItem` 包裝會先產生 `temp_key`（`T{timestamp36}{rand}`）寫入父行，再以 module-level 5 分鐘快取查綁定、自動帶出加購子行（`item_type='packaging'`，`customItemId='addon:{bindingId}'` 累加、`temp_key`/`parent_temp_key` 串接父行）。子行經 `create_order_with_sales_note` 的兩輪 temp_key/parent_temp_key 對應鏈結為父子行（見 9.5）。
+
+### 9.4 order_items 新欄位
+- `parent_order_item_id`（FK→order_items, ON DELETE CASCADE）：A+B 父子行實體鏈結（shipped 流程由 temp_key 對應後回填）。索引 `idx_order_items_parent_order_item(order_id, parent_order_item_id)`。
+- `unit_cost` NUMERIC 預設 0：**成本快照**，佣金計算優先（其次 `rep_product_costs`，再其次產品層級，最後**進貨成本 `product_variants.wholesale_price`**，2026-09-07）。佣金 RPC 重算公式 = `COALESCE(NULLIF(oi.unit_cost, 0), rep_cost(變體), rep_cost(產品層級), pv.wholesale_price, 0)`。
+- `shipping_payment` TEXT：`monthly`＝月結（可納入運費結帳），NULL/其他＝隨單收費。
+
+### 9.5 出貨 RPC 父子行對應（create_order_with_sales_note / update_order_with_items）
+- payload 新欄位 `temp_key`/`parent_temp_key`（前端 queue 產生，`T...` 格式），insert 時寫入 `order_items.temp_key/parent_temp_key`；之後第二輪 pass 依 `parent_temp_key` → `temp_key` 把父子行對應到 `parent_order_item_id`（UPDATE order_items SET parent_order_item_id）。
+- `unit_cost`/`shipping_payment` 一併隨 RPC payload 寫入。
+
+### 9.6 運費月結帳本 + 會計連動（2026-09-07 依物流公司＝採購商彙總）
+- `products.supplier_id`（UUID NULL，FK→suppliers ON DELETE SET NULL，索引僅非空）：運費型商品的所屬物流公司（採購商）。商品表單於 `item_type='shipping'` 顯示必填下拉（採購商 active 清單）。
+- 表 `shipping_settlement_periods`：`supplier_id`（→suppliers）、`period_start/period_end`（range CHECK）、`total_amount`、`is_settled`、`settled_at`、`entry_id`(→accounting_entries, ON DELETE SET NULL)、`note`、`created_by`。**唯一鍵＝`(supplier_id, period_start, period_end)`**（`WHERE supplier_id IS NOT NULL` 部分唯一）；`carrier_product_id` 保留為 nullable 相容欄位（新結算一律 NULL，改用 supplier_id）。RLS：authenticated 讀、admin 管理。
+- RPC（SECURITY DEFINER）：
+  - `register_shipping_settlement(p_supplier_id, p_order_item_ids UUID[], p_period_start DATE, p_period_end DATE, p_paid_date DATE, p_account_id UUID, p_category_id UUID, p_description TEXT, p_note TEXT, p_created_by UUID)`：取 `order_items.shipping_payment='monthly'` 且其所屬產品 `products.supplier_id=p_supplier_id` 的品項（join orders＋products 驗證每家、依訂單彙總 quantity×unit_price），**排除已被該物流公司任何 settled 期別結過帳的訂單**（`accounting_entry_references r JOIN shipping_settlement_periods sp ON sp.entry_id=r.entry_id AND r.reference_type='order' AND r.reference_id=item.order_id AND sp.supplier_id=p_supplier_id` EXISTS）；同訂單多品項彙總一筆 `accounting_entry_references`；寫一筆母支出分錄（type='expense'、amount=彙總、連同 references）＋ period 列（is_settled=true、settled_at、entry_id）；扣帳戶餘額。RETURNS `{period_id, entry_id, total_amount, order_count}`。重複：以 (supplier_id, period) 部分唯一避免同區間重複。
+  - `revoke_shipping_settlement(p_period_id)`：刪除對應 `accounting_entries` 分錄（其 references 與 period 因 ON DELETE CASCADE / entry_id 鏈結一併清除），並依 entry 回衝帳戶餘額（expense 分錄 +amount）。僅 admin。
+- 前端：`useShippingSettlement`（`ShippingSettlementSubmission={supplierId, orderItemIds, periodStart, periodEnd, paidDate, accountId, categoryId?, description?, note?}`，`settleMutation`/`revokeMutation`）；EntryForm「運費結帳」Tab＝物流公司（採購商）下拉（join 含運費型商品）＋期間起訖＋月結品項複選（附「運費品項」欄，金額系統計算），`onShippingSettleSubmit` 接線到 AccountingPage 與 `ShippingSettlementsPage`（`/admin/shipping-settlements`，結算紀錄表顯示物流公司名）。
+
+### 9.7 佣金批次發放改走 EntryDialog + 成本快照顯示
+- `register_batch_rep_commission_payout(p_rep_id, p_sales_note_ids UUID[], p_paid_date DATE, p_account_id UUID, p_category_id UUID, p_description TEXT, p_created_by UUID)`：以**關聯單據（母子單）**方式一次寫一筆母支出分錄（`accounting_entry_references` 逐筆 sales_note）＋多筆 `rep_commission_payouts`；金額一律後端重算（見 9.4），不可覆蓋。RETURNS `{entry_id, total_amount, count}`。
+- 前端：`useCommissionPayout` 新增 `bulkRegisterPayout`（`BatchRegisterPayoutPayload = {repId, salesNoteIds[], paidDate, accountId, categoryId?, description?}`）。EntryForm「佣金發放」改**複選**（全選 / 已選 N 筆＋合計，單筆→`onPayoutSubmit`、多筆→`onBatchPayoutSubmit`）。`EntryDialog` proxy 新 props。`RepCommissionPage` 批次按鈕改開 EntryDialog（`prefill.payout = {repId, salesNoteIds}`）。佣金明細頁（RepCommissionPage / useRepCommission）成本顯示優先取 `order_items.unit_cost` 快照（>0 時），其次 rep_product_costs、再其次進貨成本。
+- `entry_id` FK 關係：`rep_commission_payouts.entry_id` / `shipping_settlement_periods.entry_id`（後者 ON DELETE SET NULL）→ `accounting_entries`。

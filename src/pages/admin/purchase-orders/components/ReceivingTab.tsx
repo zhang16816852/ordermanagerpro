@@ -19,6 +19,7 @@ interface ReceivingItem {
   quantity: number;
   received_quantity: number;
   unit_cost: number;
+  sort_order?: number;
   product?: { name: string; sku: string };
   variant?: { name: string; sku: string };
 }
@@ -53,13 +54,14 @@ export function ReceivingTab() {
           id, supplier_id, status, order_date, total_amount, supplier_order_number,
           supplier:suppliers(name),
           items:purchase_order_items(
-            id, product_id, variant_id, quantity, received_quantity, unit_cost,
+            id, product_id, variant_id, quantity, received_quantity, unit_cost, sort_order,
             product:products(name, code),
             variant:product_variants(name, sku)
           )
         `)
         .in('status', ['ordered', 'partial_received'])
-        .order('order_date', { ascending: false });
+        .order('order_date', { ascending: false })
+        .order('sort_order', { foreignTable: 'items', ascending: true });
       if (poError) throw poError;
       return (pos || []) as ReceivingOrder[];
     },

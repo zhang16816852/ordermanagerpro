@@ -64,13 +64,11 @@ export function useAccounting(selectedMonth?: string) {
       const entriesWithRefs = await Promise.all(
         (data || []).map(async (entry: any) => {
           let references: AccountingEntryReference[] = [];
-          if (entry.type === 'settlement') {
-            const { data: refs } = await (supabase as any)
-              .from('accounting_entry_references')
-              .select('*')
-              .eq('entry_id', entry.id);
-            references = refs || [];
-          }
+          const { data: refs } = await (supabase as any)
+            .from('accounting_entry_references')
+            .select('*')
+            .eq('entry_id', entry.id);
+          references = refs || [];
           return {
             ...entry,
             category: categories.find(c => c.id === entry.category_id),
@@ -110,6 +108,21 @@ export function useAccounting(selectedMonth?: string) {
         if (refError) throw refError;
       }
 
+      // For income/expense: adjust account balance by signed amount
+      if (data.type === 'income' || data.type === 'expense') {
+        if (data.account_id) {
+          const account = accounts.find(a => a.id === data.account_id);
+          if (account) {
+            const signedAmount = data.type === 'income' ? (data.amount || 0) : -(data.amount || 0);
+            const { error: e } = await (supabase as any)
+              .from('accounts')
+              .update({ balance: account.balance + signedAmount })
+              .eq('id', data.account_id);
+            if (e) throw e;
+          }
+        }
+      }
+
       // For transfers: adjust both account balances
       if (data.type === 'transfer' || data.type === 'currency_exchange' || data.type === 'topup') {
         if (data.account_id) {
@@ -136,10 +149,26 @@ export function useAccounting(selectedMonth?: string) {
           }
         }
       }
+
+      // 同步銷貨單收款狀態（entry row 有 reference 或 references 子表有記錄時）
+      if (data.reference_type === 'sales_note' && data.reference_id) {
+        await (supabase as any).rpc('sync_sales_note_payment_status', { p_sales_note_id: data.reference_id });
+      }
+      // 也檢查 references 子表（無 entry row 綁定但有 docItems 的歷史路徑）
+      if (references && references.length > 0) {
+        for (const ref of references) {
+          if (ref.reference_type === 'sales_note' && ref.reference_id) {
+            await (supabase as any).rpc('sync_sales_note_payment_status', { p_sales_note_id: ref.reference_id });
+          }
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounting-entries'] });
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-sales-notes'] });
+      queryClient.invalidateQueries({ queryKey: ['store-sales-notes'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-note-payment'] });
       toast.success('記錄已新增');
     },
     onError: () => toast.error('新增失敗'),
@@ -182,16 +211,28 @@ export function useAccounting(selectedMonth?: string) {
               .eq('id', entry.transfer_to_account_id);
           }
         }
-      } else if (entry.paid_amount > 0 && entry.account_id) {
-        // Regular income/expense: reverse paid amount
-        const account = accounts.find(a => a.id === entry.account_id);
-        if (account) {
-          const balanceChange = entry.type === 'income' ? -entry.paid_amount : entry.paid_amount;
-          const { error: accountError } = await (supabase as any)
-            .from('accounts')
-            .update({ balance: account.balance + balanceChange })
-            .eq('id', entry.account_id);
-          if (accountError) throw accountError;
+      } else if (entry.type === 'income' || entry.type === 'expense') {
+        // Reverse the signed balance change
+        if (entry.account_id) {
+          const account = accounts.find(a => a.id === entry.account_id);
+          if (account) {
+            const signedAmount = entry.type === 'income' ? entry.amount : -entry.amount;
+            const { error: accountError } = await (supabase as any)
+              .from('accounts')
+              .update({ balance: account.balance - signedAmount })
+              .eq('id', entry.account_id);
+            if (accountError) throw accountError;
+          }
+        }
+      }
+
+      // 收集 references 中的銷貨單 IDs（刪除前先取）
+      const salesNoteIdsFromRefs: string[] = [];
+      if (entry.references && entry.references.length > 0) {
+        for (const ref of entry.references) {
+          if (ref.reference_type === 'sales_note' && ref.reference_id) {
+            salesNoteIdsFromRefs.push(ref.reference_id);
+          }
         }
       }
 
@@ -201,9 +242,17 @@ export function useAccounting(selectedMonth?: string) {
       const { error } = await (supabase as any).from('accounting_entries').delete().eq('id', entry.id);
       if (error) throw error;
 
+      // 同步銷貨單收款狀態（entry row 或 references 子表中的銷貨單）
+      const salesNoteIds = new Set<string>();
       if (entry.reference_type === 'sales_note' && entry.reference_id) {
+        salesNoteIds.add(entry.reference_id);
+      }
+      for (const id of salesNoteIdsFromRefs) {
+        salesNoteIds.add(id);
+      }
+      for (const noteId of salesNoteIds) {
         const { error: noteError } = await (supabase as any)
-          .rpc('sync_sales_note_payment_status', { p_sales_note_id: entry.reference_id });
+          .rpc('sync_sales_note_payment_status', { p_sales_note_id: noteId });
         if (noteError) throw noteError;
       }
     },
@@ -241,9 +290,21 @@ export function useAccounting(selectedMonth?: string) {
         if (accountError) throw accountError;
       }
 
+      // 同步銷貨單收款狀態
+      const salesNoteIds = new Set<string>();
       if (entry.reference_type === 'sales_note' && entry.reference_id) {
+        salesNoteIds.add(entry.reference_id);
+      }
+      if (entry.references) {
+        for (const ref of entry.references) {
+          if (ref.reference_type === 'sales_note' && ref.reference_id) {
+            salesNoteIds.add(ref.reference_id);
+          }
+        }
+      }
+      for (const noteId of salesNoteIds) {
         const { error: noteError } = await (supabase as any)
-          .rpc('sync_sales_note_payment_status', { p_sales_note_id: entry.reference_id });
+          .rpc('sync_sales_note_payment_status', { p_sales_note_id: noteId });
         if (noteError) throw noteError;
       }
     },

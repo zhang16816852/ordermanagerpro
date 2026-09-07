@@ -11,7 +11,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { useSupplierMappings, SupplierProductMapping } from '../../hooks/useSupplierMappings';
+import { useSupplierMappings, SupplierProductMapping, BatchMappingItem } from '../../hooks/useSupplierMappings';
 
 interface ProductVariant {
   id: string;
@@ -47,6 +47,7 @@ interface MappingImportDialogProps {
 }
 
 interface ParsedMappingRow {
+  row_index: number;
   vendor_product_id: string;
   vendor_product_name: string;
   internal_sku: string;
@@ -73,7 +74,7 @@ export function MappingImportDialog({
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { mappings: existingMappings, saveMappingMutation } = useSupplierMappings(supplierId);
+  const { mappings: existingMappings, batchSaveMappingsMutation } = useSupplierMappings(supplierId);
 
   const { data: allProducts = [] } = useQuery({
     queryKey: ['all-products-for-mapping'],
@@ -212,8 +213,9 @@ export function MappingImportDialog({
       }
 
       const parsed: ParsedMappingRow[] = rows
-        .filter((row) => row[vendorIdIdx] && String(row[vendorIdIdx]).trim() !== '')
-        .map((row) => {
+        .map((row, idx) => ({ row, rowIndex: idx + 2 }))
+        .filter(({ row }) => row[vendorIdIdx] && String(row[vendorIdIdx]).trim() !== '')
+        .map(({ row, rowIndex }) => {
           const variantSku = skuIdx !== -1 ? String(row[skuIdx] || '').trim() : '';
           const productSku = productSkuIdx !== -1 ? String(row[productSkuIdx] || '').trim() : '';
           const productName = productNameIdx !== -1 ? String(row[productNameIdx] || '').trim() : '';
@@ -226,6 +228,7 @@ export function MappingImportDialog({
           else if (matched_product) matchStatus = 'matched';
 
           return {
+            row_index: rowIndex,
             vendor_product_id: vendorProductId,
             vendor_product_name: vendorNameIdx !== -1 ? String(row[vendorNameIdx] || '').trim() : '',
             internal_sku: variantSku || productSku,
@@ -259,23 +262,25 @@ export function MappingImportDialog({
     if (validItems.length === 0) return;
 
     setIsImporting(true);
+    setError(null);
     try {
-      for (const item of validItems) {
-        await saveMappingMutation.mutateAsync({
-          supplier_id: supplierId,
-          vendor_product_id: item.vendor_product_id,
-          vendor_product_name: item.vendor_product_name || null,
-          internal_product_id: item.matched_product!.id,
-          internal_variant_id: item.matched_variant?.id || null,
-          vendor_unit_cost: item.unit_cost ?? null,
-        });
-      }
+      const payload: BatchMappingItem[] = validItems.map(item => ({
+        supplier_id: supplierId,
+        vendor_product_id: item.vendor_product_id,
+        vendor_product_name: item.vendor_product_name || null,
+        internal_product_id: item.matched_product!.id,
+        internal_variant_id: item.matched_variant?.id || null,
+        vendor_unit_cost: item.unit_cost ?? null,
+        row_index: item.row_index,
+      }));
+
+      await batchSaveMappingsMutation.mutateAsync(payload);
 
       onImportComplete();
       handleClose(false);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '未知錯誤';
-      setError(`匯入失敗: ${message}`);
+      setError(message);
     } finally {
       setIsImporting(false);
     }
@@ -368,6 +373,7 @@ export function MappingImportDialog({
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-14 text-center">列號</TableHead>
                       <TableHead>廠商代號</TableHead>
                       <TableHead>廠商品名</TableHead>
                       <TableHead>SKU</TableHead>
@@ -378,6 +384,9 @@ export function MappingImportDialog({
                   <TableBody>
                     {parsedData.map((row, idx) => (
                       <TableRow key={idx}>
+                        <TableCell className="text-center font-mono text-xs text-muted-foreground">
+                          {row.row_index}
+                        </TableCell>
                         <TableCell className="font-medium font-mono text-xs">
                           {row.vendor_product_id}
                         </TableCell>
@@ -426,9 +435,11 @@ export function MappingImportDialog({
           )}
 
           {error && (
-            <div className="flex items-center gap-2 text-destructive bg-destructive/5 p-3 rounded-md text-sm">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              {error}
+            <div className="flex items-start gap-2.5 text-destructive bg-destructive/10 border border-destructive/20 p-3.5 rounded-md text-sm">
+              <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+              <div className="flex-1 whitespace-pre-line font-medium leading-relaxed">
+                {error}
+              </div>
             </div>
           )}
         </div>

@@ -14,7 +14,7 @@ import type { ProductWithPricing, VariantWithPricing } from '@/types/product';
 interface OrderGridRendererProps {
   template: OrderGridTemplateWithProducts;
   products: ProductWithPricing[];
-  onAddToCart: (
+  onAddToCart?: (
     items: { variant: VariantWithPricing; product: ProductWithPricing; quantity: number }[]
   ) => void;
   onDirectItemAdd?: (variant: VariantWithPricing, product: ProductWithPricing, delta: number) => void;
@@ -100,7 +100,7 @@ export function OrderGridRenderer({
     });
 
     if (items.length > 0) {
-      onAddToCart(items);
+      onAddToCart?.(items);
       setQuantities({});
     }
   }, [grid.cells, quantities, onAddToCart]);
@@ -187,7 +187,7 @@ export function OrderGridRenderer({
             quantities={quantities}
             onAddToCart={handleAddToCart}
             onClear={handleClear}
-            showAddToCart={!(mode === 'button' && onDirectItemAdd)}
+            showAddToCart={!!onAddToCart && !(mode === 'button' && onDirectItemAdd)}
           />
           <div className="flex items-center justify-center py-12 text-sm text-muted-foreground border rounded-lg">
             無法產生 grid：維度值為空
@@ -205,7 +205,7 @@ export function OrderGridRenderer({
           quantities={quantities}
           onAddToCart={handleAddToCart}
           onClear={handleClear}
-          showAddToCart={!(mode === 'button' && onDirectItemAdd)}
+          showAddToCart={!!onAddToCart && !(mode === 'button' && onDirectItemAdd)}
         />
         {nonEmpty}
       </div>
@@ -221,7 +221,7 @@ export function OrderGridRenderer({
         quantities={quantities}
         onAddToCart={handleAddToCart}
         onClear={handleClear}
-        showAddToCart={!(mode === 'button' && onDirectItemAdd)}
+        showAddToCart={!!onAddToCart && !(mode === 'button' && onDirectItemAdd)}
       />
       <Tabs defaultValue={grid.tabValues[0]}>
         <TabsList>

@@ -110,8 +110,8 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
     const devModelsMap = await fetchReferencedModels(supabase, allRelations, PAGE_SIZE);
     const devGroupsMap = new Map<string, any>();
     allGroupsWithItems?.forEach(g => devGroupsMap.set(g.id, g));
-    const { linksMap, groupsMap, exclusionsMap } = buildModelMaps(allRelations, devModelsMap, devGroupsMap);
-    const modelMaps = { linksMap, groupsMap, exclusionsMap };
+    const { linksMap, groupsMap, exclusionsMap, orderedMap } = buildModelMaps(allRelations, devModelsMap, devGroupsMap);
+    const modelMaps = { linksMap, groupsMap, exclusionsMap, orderedMap };
 
     const specsMap = new Map<string, Record<string, any>>();
     allSpecs?.forEach((sv: any) => {
@@ -270,7 +270,8 @@ export const useProductCache = (storeId?: string | null) => {
 /**
  * [V7.5] 提供門市使用的產品快取，整合定價資訊
  */
-export const useStoreProductCache = (storeId?: string | null, brand?: string | null) => {
+export const useStoreProductCache = (storeId?: string | null, brand?: string | null, options?: { includeShipping?: boolean }) => {
+  const includeShipping = options?.includeShipping ?? false;
   const { products: rawProducts, templates, isLoading: isCacheLoading, version, refresh } = useProductCache();
 
   const { data: storeProducts = [], isLoading: isStoreLoading } = useQuery({
@@ -289,13 +290,19 @@ export const useStoreProductCache = (storeId?: string | null, brand?: string | n
   const productsWithPricing = useMemo<ProductWithPricing[]>(() => {
     if (!rawProducts) return [];
 
-    // 過濾：隱藏停售/售完的變體
+    // 過濾：隱藏商品／維修零件不進訂單目錄（item_type 為唯一來源）；
+    // 運費型商品預設排除，僅訂單建立流程（includeShipping）才保留（含無變體運費，供運費結帳）
     const visibleProducts = rawProducts
+      .filter(p => {
+        const itemType = (p as any).item_type;
+        return itemType !== 'repair_part' && !(p as any).is_hidden && (includeShipping || itemType !== 'shipping');
+      })
       .map(p => {
         const sellableVariants = (p.variants || []).filter((v: any) => v.status === 'active' || v.status === 'preorder');
         return { ...p, variants: sellableVariants };
       })
-      .filter(p => (p.variants?.length ?? 0) > 0);
+      // 運費型商品可無變體（如「新竹物流」僅單一費率）；一般商品仍需至少一個可售變體
+      .filter(p => (p.variants?.length ?? 0) > 0 || (includeShipping && (p as any).item_type === 'shipping'));;
 
     return visibleProducts.map(p => {
       const storeSettings = storeProducts.filter((sp: any) => sp.product_id === p.id);

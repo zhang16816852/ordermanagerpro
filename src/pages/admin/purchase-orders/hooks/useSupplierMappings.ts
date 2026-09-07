@@ -22,6 +22,16 @@ export interface SupplierProductMapping {
   internal_variant?: any;
 }
 
+export interface BatchMappingItem {
+  supplier_id: string;
+  vendor_product_id: string;
+  vendor_product_name: string | null;
+  internal_product_id: string;
+  internal_variant_id: string | null;
+  vendor_unit_cost: number | null;
+  row_index?: number;
+}
+
 export function useSupplierMappings(supplierId?: string) {
   const queryClient = useQueryClient();
 
@@ -98,6 +108,81 @@ export function useSupplierMappings(supplierId?: string) {
     },
   });
 
+  const batchSaveMappingsMutation = useMutation({
+    mutationFn: async (items: BatchMappingItem[]) => {
+      if (!items || items.length === 0) return [];
+
+      // 1. 前置檢查：檔案內是否有重複的廠商代號
+      const seen = new Map<string, number | undefined>();
+      for (const item of items) {
+        const key = item.vendor_product_id.trim();
+        if (seen.has(key)) {
+          const prevRow = seen.get(key);
+          const rowInfo = prevRow && item.row_index
+            ? `（第 ${prevRow} 列 與 第 ${item.row_index} 列）`
+            : '';
+          throw new Error(`匯入資料中包含重複的廠商代號「${key}」${rowInfo}，請先排除重複資料後再匯入`);
+        }
+        seen.set(key, item.row_index);
+      }
+
+      // 2. 分批執行批次 Upsert（CHUNK_SIZE = 200）
+      const CHUNK_SIZE = 200;
+      for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+        const chunk = items.slice(i, i + CHUNK_SIZE);
+        const rowsToUpsert = chunk.map((item) => ({
+          supplier_id: item.supplier_id,
+          vendor_product_id: item.vendor_product_id,
+          vendor_product_name: item.vendor_product_name,
+          internal_product_id: item.internal_product_id,
+          internal_variant_id: item.internal_variant_id,
+          vendor_unit_cost: item.vendor_unit_cost,
+          updated_at: new Date().toISOString(),
+        }));
+
+        const { error } = await (supabase.from('supplier_product_mappings') as any)
+          .upsert(rowsToUpsert, { onConflict: 'supplier_id, vendor_product_id' });
+
+        if (error) {
+          // 批次失敗時：對該批次進行單筆測試，精確抓出是哪一筆導致錯誤
+          for (const singleItem of chunk) {
+            const singleRow = {
+              supplier_id: singleItem.supplier_id,
+              vendor_product_id: singleItem.vendor_product_id,
+              vendor_product_name: singleItem.vendor_product_name,
+              internal_product_id: singleItem.internal_product_id,
+              internal_variant_id: singleItem.internal_variant_id,
+              vendor_unit_cost: singleItem.vendor_unit_cost,
+              updated_at: new Date().toISOString(),
+            };
+
+            const { error: singleError } = await (supabase.from('supplier_product_mappings') as any)
+              .upsert(singleRow, { onConflict: 'supplier_id, vendor_product_id' });
+
+            if (singleError) {
+              const rowDesc = singleItem.row_index ? `第 ${singleItem.row_index} 列` : '';
+              const nameDesc = singleItem.vendor_product_name ? `「${singleItem.vendor_product_name}」` : '';
+              throw new Error(
+                `${rowDesc}${nameDesc}（廠商代號：${singleItem.vendor_product_id}）寫入失敗：${getErrorMessage(singleError)}`
+              );
+            }
+          }
+          throw new Error(`批次寫入失敗：${getErrorMessage(error)}`);
+        }
+      }
+
+      return items;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['supplier-mappings', supplierId] });
+      toast.success(`成功批次匯入 ${variables.length} 筆對照關係`);
+    },
+    onError: (err: any) => {
+      console.error(err);
+      toast.error(err.message || '批次儲存對照關係失敗');
+    },
+  });
+
   const deleteMappingMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await (supabase
@@ -152,6 +237,7 @@ export function useSupplierMappings(supplierId?: string) {
     isLoadingMappings,
     isLoadingConfig,
     saveMappingMutation,
+    batchSaveMappingsMutation,
     deleteMappingMutation,
     saveConfigMutation,
   };

@@ -8,6 +8,9 @@ import { Command, CommandGroup, CommandItem, CommandList } from '@/components/ui
 export interface SearchableSelectOption {
     id: string;
     name: string;
+    subLabel?: string;
+    badge?: string;
+    searchKeywords?: string[];
     group?: string;
     disabled?: boolean;
 }
@@ -44,8 +47,14 @@ export function SearchableSelect({
 
     const filtered = useMemo(() => {
         if (!search) return options;
-        const q = search.toLowerCase();
-        return options.filter(o => o.name.toLowerCase().includes(q));
+        const q = search.trim().toLowerCase();
+        return options.filter(o => {
+            if (o.name.toLowerCase().includes(q)) return true;
+            if (o.group && o.group.toLowerCase().includes(q)) return true;
+            if (o.subLabel && o.subLabel.toLowerCase().includes(q)) return true;
+            if (o.searchKeywords && o.searchKeywords.some(k => k.toLowerCase().includes(q))) return true;
+            return false;
+        });
     }, [options, search]);
 
     const grouped = useMemo(() => {
@@ -77,25 +86,32 @@ export function SearchableSelect({
                     role="combobox"
                     aria-expanded={open}
                     disabled={disabled}
-                    className={cn('w-full justify-between', !value && 'text-muted-foreground', className)}
+                    title={selected ? selected.name : undefined}
+                    className={cn('w-full justify-between min-w-0', !value && 'text-muted-foreground', className)}
                 >
-                    <span className="truncate">{selected ? selected.name : placeholder}</span>
-                    <div className="ml-2 flex items-center gap-1">
+                    <span className="truncate text-left flex-1 min-w-0">
+                        {selected ? selected.name : placeholder}
+                    </span>
+                    <div className="ml-2 flex items-center gap-1 shrink-0">
                         {value && (
                             <span
                                 role="button"
                                 tabIndex={0}
-                                className="rounded-sm p-0.5 hover:bg-muted-foreground/20"
+                                className="rounded-sm p-0.5 hover:bg-muted-foreground/20 text-muted-foreground hover:text-foreground transition-colors"
                                 onClick={(e) => { e.stopPropagation(); onChange(null); }}
+                                title="清除"
                             >
-                                <X className="h-3 w-3" />
+                                <X className="h-3.5 w-3.5" />
                             </span>
                         )}
                         <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
                     </div>
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+            <PopoverContent 
+                className="w-[var(--radix-popover-trigger-width)] min-w-[340px] max-w-[min(560px,95vw)] p-0" 
+                align="start"
+            >
                 <Command shouldFilter={false}>
                     <div className="flex items-center border-b px-3">
                         <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
@@ -106,12 +122,12 @@ export function SearchableSelect({
                             onChange={(e) => setSearch(e.target.value)}
                         />
                     </div>
-                    <CommandList>
+                    <CommandList className="max-h-[300px]">
                         {clearable && (
                             <CommandItem
                                 value="__clear__"
                                 onSelect={() => handleSelect(null)}
-                                className="text-muted-foreground"
+                                className="text-muted-foreground cursor-pointer"
                             >
                                 {clearLabel}
                             </CommandItem>
@@ -129,9 +145,26 @@ export function SearchableSelect({
                                             value={o.id}
                                             disabled={o.disabled}
                                             onSelect={() => handleSelect(o.id)}
+                                            className="flex items-center justify-between gap-2 py-2 px-3 cursor-pointer"
                                         >
-                                            <Check className={cn('h-4 w-4', isSelected ? 'opacity-100' : 'opacity-0')} />
-                                            <span className="truncate">{o.name}</span>
+                                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                <Check className={cn('h-4 w-4 shrink-0', isSelected ? 'opacity-100' : 'opacity-0')} />
+                                                <div className="flex flex-col min-w-0 flex-1">
+                                                    <span className="text-sm font-medium leading-tight text-foreground truncate" title={o.name}>
+                                                        {o.name}
+                                                    </span>
+                                                    {o.subLabel && (
+                                                        <span className="text-xs text-muted-foreground truncate mt-0.5">
+                                                            {o.subLabel}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {o.badge && (
+                                                <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0 font-normal">
+                                                    {o.badge}
+                                                </span>
+                                            )}
                                         </CommandItem>
                                     );
                                 })}

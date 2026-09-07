@@ -182,6 +182,7 @@ export function useProductImportUploader(
                         if (has('retail_price') || has('variant_retail_price')) data.retail_price = row.variant_retail_price;
                         if (has('status')) data.status = row.variant_status || 'active';
                         if (has('barcode')) data.barcode = row.barcode || null;
+                        if (has('variant_sort_order') && row.variant_sort_order !== undefined) data.sort_order = Math.floor(Number(row.variant_sort_order)) || 0;
                         return data;
                     });
 
@@ -207,8 +208,8 @@ export function useProductImportUploader(
                 }
 
                 const parseModelString = (modelStr: string | undefined) => {
-                    const result: { modelIds: string[]; groupIds: string[]; exclusions: { model_id: string }[] } = {
-                        modelIds: [], groupIds: [], exclusions: []
+                    const result: { modelIds: string[]; groupIds: string[]; exclusions: { model_id: string }[]; ordered: { id: string; type: 'model' | 'group' | 'exclude' }[] } = {
+                        modelIds: [], groupIds: [], exclusions: [], ordered: []
                     };
                     if (!modelStr || modelStr.trim() === '') return result;
                     const parts = modelStr.split(',').map(s => s.trim()).filter(Boolean);
@@ -222,19 +223,19 @@ export function useProductImportUploader(
 
                         if (type === 'group') {
                             const group = allDeviceGroups.find(g => g.name.toLowerCase() === name.toLowerCase());
-                            if (group) result.groupIds.push(group.id);
+                            if (group) { result.groupIds.push(group.id); result.ordered.push({ id: group.id, type: 'group' }); }
                         } else if (type === 'exclude') {
                             const model = allDeviceModels.find(m =>
                                 m.name.toLowerCase() === name.toLowerCase() ||
                                 (m.aliases || []).some((a: string) => a.toLowerCase() === name.toLowerCase())
                             );
-                            if (model) result.exclusions.push({ model_id: model.id });
+                            if (model) { result.exclusions.push({ model_id: model.id }); result.ordered.push({ id: model.id, type: 'exclude' }); }
                         } else {
                             const model = allDeviceModels.find(m =>
                                 m.name.toLowerCase() === name.toLowerCase() ||
                                 (m.aliases || []).some((a: string) => a.toLowerCase() === name.toLowerCase())
                             );
-                            if (model) result.modelIds.push(model.id);
+                            if (model) { result.modelIds.push(model.id); result.ordered.push({ id: model.id, type: 'model' }); }
                         }
                     });
                     return result;
@@ -244,7 +245,7 @@ export function useProductImportUploader(
                     const pId = productIdMap.get(sku);
                     if (!pId || row.device_models === undefined) continue;
                     const relations = parseModelString(String(row.device_models));
-                    relationPromises.push(entityRelationService.updateRelations('product', String(pId), relations));
+                    relationPromises.push(entityRelationService.updateRelations('product', String(pId), relations, relations.ordered));
                 }
 
                 const { data: insertedVariants } = await (supabase.from('product_variants') as any).select('id, sku').in('sku', variantsToInsert.map(v => (v as any).sku));
@@ -258,7 +259,7 @@ export function useProductImportUploader(
 
                     if (row.variant_device_models !== undefined) {
                         const relations = parseModelString(String(row.variant_device_models));
-                        relationPromises.push(entityRelationService.updateRelations('variant', String(vId), relations));
+                        relationPromises.push(entityRelationService.updateRelations('variant', String(vId), relations, relations.ordered));
                     }
 
                     const catId = row.category_ids?.[0] || row.category_id;

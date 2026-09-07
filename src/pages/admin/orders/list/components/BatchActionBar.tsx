@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Truck, CheckSquare, XCircle, Package, Send, Store, ClipboardList, FileText, FileSpreadsheet, Unlink } from 'lucide-react';
+import { Truck, CheckSquare, XCircle, Package, Send, Store, ClipboardList, FileText, FileSpreadsheet, Unlink, Trash2 } from 'lucide-react';
 import { MobileFooter } from '@/components/layout/MobileFooter';
 
 interface BatchActionBarProps {
@@ -22,6 +22,7 @@ interface BatchActionBarProps {
   onUnlinkOrders: () => void;
   onExportAggregateCSV: () => void;
   onExportAggregateExcel: () => void;
+  onDeleteOrders: () => void;
   isLoading: boolean;
   isRep?: boolean;
 }
@@ -46,6 +47,7 @@ export function BatchActionBar({
   onUnlinkOrders,
   onExportAggregateCSV,
   onExportAggregateExcel,
+  onDeleteOrders,
   isLoading,
   isRep = false,
 }: BatchActionBarProps) {
@@ -87,6 +89,19 @@ export function BatchActionBar({
               >
                 <CheckSquare className="h-4 w-4 mr-2" />
                 確認轉處理中
+              </Button>
+            )}
+
+            {statusTab === 'pending' && viewMode === 'orders' && !isRep && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={onDeleteOrders}
+                disabled={isLoading}
+                className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                刪除
               </Button>
             )}
 
@@ -161,6 +176,17 @@ export function BatchActionBar({
                     解除採購
                   </Button>
                 )}
+                <span className="w-px h-6 bg-primary-foreground/30" />
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={onDeleteOrders}
+                  disabled={isLoading}
+                  className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  刪除
+                </Button>
               </>
             )}
 
@@ -262,6 +288,19 @@ export function BatchActionBar({
             </Button>
           )}
 
+          {statusTab === 'pending' && viewMode === 'orders' && !isRep && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={onDeleteOrders}
+              disabled={isLoading}
+              className="snap-start shrink-0"
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" />
+              刪除
+            </Button>
+          )}
+
           {statusTab === 'processing' && viewMode === 'orders' && !isRep && (
             <>
               {hasNormalSelection && (
@@ -344,6 +383,16 @@ export function BatchActionBar({
                   解除採購
                 </Button>
               )}
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={onDeleteOrders}
+                disabled={isLoading}
+                className="snap-start shrink-0"
+              >
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                刪除
+              </Button>
             </>
           )}
 
@@ -358,6 +407,16 @@ export function BatchActionBar({
               >
                 <Truck className="h-4 w-4 mr-1.5" />
                 加入出貨池
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onConvertToPO}
+                disabled={isLoading}
+                className="snap-start shrink-0"
+              >
+                <ClipboardList className="h-4 w-4 mr-1.5" />
+                轉採購單
               </Button>
               <Button
                 variant="destructive"

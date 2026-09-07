@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, PackageCheck, CreditCard, Download, FileSpreadsheet, X } from 'lucide-react';
+import { Plus, PackageCheck, CreditCard, Download, FileSpreadsheet, X, GripVertical, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 import { PurchaseOrder, PurchaseOrderItem, ProductWithPrice } from '../types';
 import { ItemForm } from './ItemForm';
@@ -26,7 +26,27 @@ import { ReceiveForm } from './ReceiveForm';
 import { PaymentForm } from './PaymentForm';
 import { ExcelImportDialog } from './ExcelImportDialog';
 import { exportToCSV } from '@/lib/exportUtils';
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
+
+function SortableRow({ item, children }: { item: PurchaseOrderItem; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.45 : 1 };
+  return (
+    <TableRow ref={setNodeRef} style={style} {...attributes}>
+      <TableCell {...listeners} className="cursor-grab active:cursor-grabbing w-8 text-center text-muted-foreground hover:text-foreground">
+        <GripVertical className="h-4 w-4 mx-auto" />
+      </TableCell>
+      {children}
+    </TableRow>
+  );
+}
 
 interface OrderDetailDialogProps {
   order: PurchaseOrder;
@@ -40,6 +60,7 @@ interface OrderDetailDialogProps {
   onReceiveItems: (data: any) => void;
   onMakePayment: (data: any) => void;
   onUnlinkOrder: (orderId: string) => void;
+  onReorder?: (items: PurchaseOrderItem[]) => void;
   isLoading: boolean;
 }
 
@@ -55,6 +76,7 @@ export function OrderDetailDialog({
   onReceiveItems,
   onMakePayment,
   onUnlinkOrder,
+  onReorder,
   isLoading
 }: OrderDetailDialogProps) {
   const [addItemOpen, setAddItemOpen] = useState(false);
@@ -63,10 +85,111 @@ export function OrderDetailDialog({
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
 
+  const [localItems, setLocalItems] = useState<PurchaseOrderItem[]>(orderItems);
+  const [nameSort, setNameSort] = useState<'default' | 'asc' | 'desc'>('default');
+  const manualOrderRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    setLocalItems(orderItems);
+  }, [orderItems]);
+
+  const canReorder = !!onReorder && order.status !== 'cancelled';
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
   const getMappingKey = (item: PurchaseOrderItem) => `${item.product_id}_${item.variant_id || 'null'}`;
 
+  const getItemName = (item: PurchaseOrderItem) => item.variant?.name || item.product?.name || '';
+
+  const compareByName = (a: PurchaseOrderItem, b: PurchaseOrderItem) => {
+    return getItemName(a).localeCompare(getItemName(b), 'zh-Hant-TW', { sensitivity: 'base' });
+  };
+
+  const applyOrder = (next: PurchaseOrderItem[]) => {
+    setLocalItems(next);
+    onReorder?.(next);
+  };
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = localItems.findIndex(i => i.id === active.id);
+    const newIndex = localItems.findIndex(i => i.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    applyOrder(arrayMove(localItems, oldIndex, newIndex));
+    setNameSort('default');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localItems, onReorder]);
+
+  const handleNameHeaderClick = () => {
+    if (!canReorder) return;
+    if (nameSort === 'default') {
+      manualOrderRef.current = localItems.map(i => i.id);
+      applyOrder([...localItems].sort(compareByName));
+      setNameSort('asc');
+    } else if (nameSort === 'asc') {
+      applyOrder([...localItems].sort((a, b) => compareByName(b, a)));
+      setNameSort('desc');
+    } else {
+      const manualIds = manualOrderRef.current;
+      const manualItems = manualIds
+        .map(id => localItems.find(i => i.id === id))
+        .filter((i): i is PurchaseOrderItem => !!i);
+      const rest = localItems.filter(i => !manualIds.includes(i.id));
+      applyOrder([...manualItems, ...rest]);
+      setNameSort('default');
+    }
+  };
+
+  const renderItemCells = (item: PurchaseOrderItem) => {
+    const mapping = supplierMappingMap[getMappingKey(item)];
+    return (
+      <>
+        <TableCell className="font-mono text-xs">{item.variant?.sku || item.product?.code}</TableCell>
+        <TableCell>
+          <p className="text-sm font-medium">{item.product?.name}</p>
+          {item.variant?.name && <p className="text-xs text-muted-foreground">{item.variant.name}</p>}
+        </TableCell>
+        <TableCell className="font-mono text-xs">{mapping?.vendor_product_id || '-'}</TableCell>
+        <TableCell className="text-sm">{mapping?.vendor_product_name || '-'}</TableCell>
+        <TableCell>
+          {(item.source_order_ids || []).length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {item.source_order_ids!.map(id => (
+                <span key={id} className="inline-flex items-center gap-1">
+                  <Badge variant="outline" className="text-xs">
+                    {sourceOrderMap[id] || id.slice(0, 8)}
+                  </Badge>
+                  <button
+                    type="button"
+                    title="解除與此訂單的採購關聯"
+                    onClick={() => onUnlinkOrder(id)}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-muted-foreground text-xs">-</span>
+          )}
+        </TableCell>
+        <TableCell className="text-right font-medium">{item.quantity}</TableCell>
+        <TableCell className="text-right">
+          <span className={item.received_quantity >= item.quantity ? 'text-green-600 font-bold' : 'text-orange-600'}>
+            {item.received_quantity}
+          </span>
+        </TableCell>
+        <TableCell className="text-right">{formatCurrency(item.unit_cost)}</TableCell>
+        <TableCell className="text-right font-bold">{formatCurrency(item.quantity * item.unit_cost)}</TableCell>
+      </>
+    );
+  };
+
   const handleExportCSV = async () => {
-    const data = orderItems.map(item => {
+    const data = localItems.map(item => {
       const mapping = supplierMappingMap[getMappingKey(item)];
       return {
         'SKU': item.variant?.sku || item.product?.code || '',
@@ -85,7 +208,7 @@ export function OrderDetailDialog({
   };
 
   const handleExportExcel = async () => {
-    const data = orderItems.map(item => {
+    const data = localItems.map(item => {
       const mapping = supplierMappingMap[getMappingKey(item)];
       return {
         'SKU': item.variant?.sku || item.product?.code || '',
@@ -100,7 +223,7 @@ export function OrderDetailDialog({
         '來源訂單': (item.source_order_ids || []).map(id => sourceOrderMap[id] || id.slice(0, 8)).join(', '),
       };
     });
-      const xlsx = await import('xlsx');
+    const xlsx = await import('xlsx');
     const ws = xlsx.utils.json_to_sheet(data);
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, '採購單');
@@ -205,8 +328,28 @@ export function OrderDetailDialog({
         <Table>
           <TableHeader>
             <TableRow>
+              {canReorder && <TableHead className="w-8"></TableHead>}
               <TableHead>SKU</TableHead>
-              <TableHead>產品名稱</TableHead>
+              {canReorder ? (
+                <TableHead>
+                  <button
+                    type="button"
+                    onClick={handleNameHeaderClick}
+                    className="inline-flex items-center gap-1 font-medium text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    產品名稱
+                    {nameSort === 'asc' ? (
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    ) : nameSort === 'desc' ? (
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    ) : (
+                      <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
+                    )}
+                  </button>
+                </TableHead>
+              ) : (
+                <TableHead>產品名稱</TableHead>
+              )}
               <TableHead>廠商代碼</TableHead>
               <TableHead>廠商名稱</TableHead>
               <TableHead>來源訂單</TableHead>
@@ -216,58 +359,37 @@ export function OrderDetailDialog({
               <TableHead className="text-right">總額</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
-            {orderItems.map((item) => {
-              const mapping = supplierMappingMap[getMappingKey(item)];
-              return (
+          {canReorder ? (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={localItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
+                <TableBody>
+                  {localItems.map((item) => (
+                    <SortableRow key={item.id} item={item}>
+                      {renderItemCells(item)}
+                    </SortableRow>
+                  ))}
+                  {localItems.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center py-8 text-muted-foreground italic">目前無任何品項</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </SortableContext>
+            </DndContext>
+          ) : (
+            <TableBody>
+              {localItems.map((item) => (
                 <TableRow key={item.id}>
-                  <TableCell className="font-mono text-xs">{item.variant?.sku || item.product?.code}</TableCell>
-                  <TableCell>
-                    <p className="text-sm font-medium">{item.product?.name}</p>
-                    {item.variant?.name && <p className="text-xs text-muted-foreground">{item.variant.name}</p>}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">{mapping?.vendor_product_id || '-'}</TableCell>
-                  <TableCell className="text-sm">{mapping?.vendor_product_name || '-'}</TableCell>
-                  <TableCell>
-                    {(item.source_order_ids || []).length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {item.source_order_ids!.map(id => (
-                          <span key={id} className="inline-flex items-center gap-1">
-                            <Badge variant="outline" className="text-xs">
-                              {sourceOrderMap[id] || id.slice(0, 8)}
-                            </Badge>
-                            <button
-                              type="button"
-                              title="解除與此訂單的採購關聯"
-                              onClick={() => onUnlinkOrder(id)}
-                              className="text-muted-foreground hover:text-destructive"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right font-medium">{item.quantity}</TableCell>
-                  <TableCell className="text-right">
-                    <span className={item.received_quantity >= item.quantity ? 'text-green-600 font-bold' : 'text-orange-600'}>
-                      {item.received_quantity}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">{formatCurrency(item.unit_cost)}</TableCell>
-                  <TableCell className="text-right font-bold">{formatCurrency(item.quantity * item.unit_cost)}</TableCell>
+                  {renderItemCells(item)}
                 </TableRow>
-              );
-            })}
-            {orderItems.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground italic">目前無任何品項</TableCell>
-              </TableRow>
-            )}
-          </TableBody>
+              ))}
+              {localItems.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground italic">目前無任何品項</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          )}
         </Table>
       </div>
 
@@ -286,7 +408,7 @@ export function OrderDetailDialog({
                   請核對收到的實物數量，錄入系統以增加庫存。支援部分收貨。
                 </DialogDescription>
               </DialogHeader>
-              <ReceiveForm items={orderItems} isLoading={isLoading} onSubmit={(data) => { onReceiveItems({ items: data }); setReceiveOpen(false); }} />
+              <ReceiveForm items={localItems} isLoading={isLoading} onSubmit={(data) => { onReceiveItems({ items: data }); setReceiveOpen(false); }} />
             </DialogContent>
           </Dialog>
 

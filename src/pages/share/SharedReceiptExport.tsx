@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { PrintDialog, PrintOptions } from "@/components/PrintDialog";
 import { QRCodeSVG } from "qrcode.react";
@@ -38,7 +39,7 @@ export const ITEMS_PER_PAGE: Record<"a4" | "middle-cut", number> = {
 
 /* 每頁筆數採「兩層」：前面無底部框頁用 maxCapacity，最後一頁（含總計+備註框）用 lastCapacity */
 export const CHUNK_CAPACITY: Record<"a4" | "middle-cut", { max: number; last: number }> = {
-  a4: { max: 17, last: 16 },
+  a4: { max: 20, last: 16 },
   "middle-cut": { max: 8, last: 6 },
 };
 
@@ -120,6 +121,7 @@ function ReceiptPage({
   createdAt,
   status,
   widthClass,
+  children,
 }: {
   items: ReceiptItem[];
   startIndex: number;
@@ -137,6 +139,7 @@ function ReceiptPage({
   status: string;
   notes?: string;
   widthClass: "a4" | "middle-cut";
+  children?: ReactNode;
 }) {
   return (
     <div className="doc-page">
@@ -194,6 +197,7 @@ function ReceiptPage({
           )}
         </tbody>
       </table>
+      {children}
     </div>
   );
 }
@@ -366,6 +370,7 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
             const pages: JSX.Element[] = [];
             let running = 0;
             pageChunks.forEach((chunk, pageIndex) => {
+              const isLast = pageIndex === pageChunks.length - 1;
               pages.push(
                 <ReceiptPage
                   key={pageIndex}
@@ -385,18 +390,21 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
                   status={statusText}
                   notes={notes}
                   widthClass={widthClass}
-                />
+                >
+                  {isLast && (
+                    <LastPageSummary
+                      items={items}
+                      showPrice={showPrice}
+                      notes={notes}
+                      canShowPrice={baseShowPrice}
+                    />
+                  )}
+                </ReceiptPage>
               );
               running += chunk.length;
             });
             return pages;
           })()}
-          <LastPageSummary
-            items={items}
-            showPrice={showPrice}
-            notes={notes}
-            canShowPrice={baseShowPrice}
-          />
         </div>,
         document.body
       )}

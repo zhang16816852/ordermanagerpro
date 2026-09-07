@@ -7,11 +7,12 @@ import { Loader2 } from "lucide-react";
 import { adminRoutes } from "./admin";
 import { storeRoutes } from "./store";
 import { sharedRoutes } from "./shared";
+import { workshopRoutes } from "./workshop";
 import MarketPage from "@/pages/market/index";
 import MarketDetailPage from "@/pages/market/detail";
 
 function RootRedirect() {
-    const { user, isAdmin, isRep, loading } = useAuth();
+    const { user, isAdmin, isRep, isFixEngineer, loading } = useAuth();
 
     if (loading) {
         return (
@@ -23,6 +24,10 @@ function RootRedirect() {
 
     if (!user) {
         return <Navigate to="/auth" replace />;
+    }
+
+    if (isFixEngineer) {
+        return <Navigate to="/workshop" replace />;
     }
 
     return (isAdmin || isRep) ?
@@ -66,6 +71,19 @@ export function AppRoutes() {
                     path={route.path}
                     element={
                         <ProtectedRoute requireAdmin>
+                            <AppLayout>{route.element}</AppLayout>
+                        </ProtectedRoute>
+                    }
+                />
+            ))}
+
+            {/* FixEngineer 維修工作台路由 (需 fixengineer 身分 + Layout) */}
+            {workshopRoutes.map((route) => (
+                <Route
+                    key={route.path}
+                    path={route.path}
+                    element={
+                        <ProtectedRoute requireFixEngineer>
                             <AppLayout>{route.element}</AppLayout>
                         </ProtectedRoute>
                     }

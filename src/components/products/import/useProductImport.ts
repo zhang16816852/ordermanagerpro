@@ -32,6 +32,7 @@ export interface ImportRow {
     variant_status?: 'active' | 'discontinued' | 'preorder' | 'sold_out';
     variant_spec_values?: any;
     barcode?: string;
+    variant_sort_order?: number;
     device_models?: string;
     variant_device_models?: string;
     is_variant: boolean;

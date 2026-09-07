@@ -123,6 +123,8 @@ export function useProductImportParser(
                     ? (parseFloat(row.variant_retail_price || row.retail_price) || undefined) : undefined,
                 variant_status: has('status') ? parseStatus(row.variant_status || row.status) : undefined as any,
                 barcode: has('barcode') ? normalizeBarcode(row.barcode) : '',
+                variant_sort_order: (has('variant_sort_order') || row['變體排序'] !== undefined || row.variant_sort_order !== undefined)
+                    ? (parseInt(String(row['變體排序'] ?? row.variant_sort_order)) || 0) : undefined,
 
                 device_models: !is_variant && (has('device_models') || has('適用型號'))
                     ? String(row['適用型號'] || row.device_models || '').replace(/\s+/g, ' ').trim()

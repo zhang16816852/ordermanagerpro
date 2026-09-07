@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { useRepCommission } from "@/hooks/useRepCommission";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ export default function AdminSalesNotes() {
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [storeFilter, setStoreFilter] = useState<string>(searchParams.get("store") || "all");
   const [statusFilter, setStatusFilter] = useState<string>(searchParams.get("status") || "all");
+  const [repFilter, setRepFilter] = useState<string>(searchParams.get("rep") || "all");
   const [selectedNote, setSelectedNote] = useState<typeof salesNotes[number] | null>(null);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const from = searchParams.get("from");
@@ -51,8 +53,42 @@ export default function AdminSalesNotes() {
     },
   });
 
+  const { data: repsData = [] } = useQuery({
+    queryKey: ["admin-reps-for-sales-filter"],
+    queryFn: async () => {
+      const { data: roles } = await (supabase
+        .from('user_roles') as any)
+        .select('user_id')
+        .eq('role', 'rep');
+      if (!roles || roles.length === 0) return [];
+      const userIds = roles.map((r: any) => r.user_id);
+      const { data: profiles } = await (supabase
+        .from('profiles') as any)
+        .select('id, full_name, email')
+        .in('id', userIds);
+      return (profiles || []).map((p: any) => ({
+        user_id: p.id,
+        full_name: p.full_name,
+        email: p.email,
+      }));
+    },
+  });
+
+  const { data: repAssignedStoreIds = [] } = useQuery({
+    queryKey: ['admin-rep-stores-for-sales-filter', repFilter],
+    queryFn: async () => {
+      if (repFilter === 'all') return [];
+      const { data } = await (supabase
+        .from('rep_store_assignments') as any)
+        .select('store_id')
+        .eq('rep_id', repFilter);
+      return (data || []).map((a: any) => a.store_id as string);
+    },
+    enabled: repFilter !== 'all',
+  });
+
   const { data: salesNotes, isLoading } = useQuery({
-    queryKey: ["admin-sales-notes", storeFilter, statusFilter, dateRange?.from, dateRange?.to],
+    queryKey: ["admin-sales-notes", storeFilter, statusFilter, repFilter, repAssignedStoreIds.join(','), dateRange?.from, dateRange?.to],
     queryFn: async () => {
       let query = (supabase
         .from("sales_notes") as any)
@@ -62,10 +98,13 @@ export default function AdminSalesNotes() {
           sales_note_items(
             id,
             quantity,
+            returned_quantity,
+            sort_order,
             order_item:order_items(
               id,
               quantity,
               unit_price,
+              sort_order,
               product_id,
               variant_id,
               product:products(name, code),
@@ -73,9 +112,12 @@ export default function AdminSalesNotes() {
             )
           )
         `)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .order("sort_order", { foreignTable: "sales_note_items", ascending: true });
 
-      if (storeFilter !== "all") {
+      if (repAssignedStoreIds.length > 0) {
+        query = query.in("store_id", repAssignedStoreIds);
+      } else if (storeFilter !== "all") {
         query = query.eq("store_id", storeFilter);
       }
       if (statusFilter !== "all") {
@@ -140,10 +182,16 @@ export default function AdminSalesNotes() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.rpc("delete_sales_note", {
+      const { data, error } = await supabase.rpc("delete_sales_note", {
         p_sales_note_id: id,
       });
       if (error) throw error;
+      const res = (data ?? null) as unknown as { ok?: boolean; reason?: string } | null;
+      if (res && res.ok !== false) return;
+      const reason = res?.reason || "刪除失敗";
+      const err = new Error(reason) as Error & { hint?: string };
+      err.hint = "請先處理會計/佣金/寄賣紀錄後再刪除";
+      throw err;
     },
     onSuccess: () => {
       toast.success("銷貨單已刪除並回滾至出貨池");
@@ -174,6 +222,7 @@ export default function AdminSalesNotes() {
     payment_status: note.payment_status,
     access_token: note.access_token,
     itemCount: note.sales_note_items?.length || 0,
+    hasReturned: (note.sales_note_items || []).some((i: any) => (i.returned_quantity || 0) > 0),
     created_at: note.created_at,
     shipped_at: note.shipped_at,
     received_at: note.received_at
@@ -194,14 +243,18 @@ export default function AdminSalesNotes() {
       received_at: live.received_at,
       notes: live.notes,
       access_token: live.access_token,
-      items: live.sales_note_items?.map((item: any) => ({
-        id: item.id,
-        quantity: item.quantity,
-        productName: item.order_item?.product?.name || "未知產品",
-        productSku: item.order_item?.product?.code || "-",
-        variantName: item.order_item?.product_variant?.name,
-        unitPrice: item.order_item?.unit_price
-      })) || []
+      items: [...(live.sales_note_items || [])]
+        .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+        .map((item: any) => ({
+          id: item.id,
+          quantity: item.quantity,
+          returnedQuantity: item.returned_quantity ?? 0,
+          productName: item.order_item?.product?.name || "未知產品",
+          productSku: item.order_item?.product?.code || "-",
+          variantName: item.order_item?.product_variant?.name,
+          unitPrice: item.order_item?.unit_price,
+          sortOrder: item.sort_order ?? 0
+        }))
     };
   })() : null;
 
@@ -278,6 +331,28 @@ export default function AdminSalesNotes() {
                 {stores?.map((store) => (
                   <SelectItem key={store.id} value={store.id}>
                     {store.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={repFilter} onValueChange={(v) => {
+              setRepFilter(v);
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                if (v && v !== "all") next.set("rep", v);
+                else next.delete("rep");
+                return next;
+              }, { replace: true });
+            }}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="全部業務" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部業務</SelectItem>
+                {repsData.map((r) => (
+                  <SelectItem key={r.user_id} value={r.user_id}>
+                    {r.full_name || r.email}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -403,6 +478,7 @@ export default function AdminSalesNotes() {
         onOpenChange={(open) => !open && setSelectedNote(null)}
         note={dialogData}
         enablePayment={true}
+        enableReturn={!isRep}
       />
     </div>
   );

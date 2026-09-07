@@ -4,6 +4,34 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { RepairOrder, RepairOrderInsert, RepairOrderUpdate, RepairOrderItem, RepairOrderItemInsert, RepairOrderSummary } from '@/types/repair';
 
+export function useRepairTechnicians() {
+  const { data: technicians, isLoading } = useQuery({
+    queryKey: ['repair_technicians'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc('list_repair_contractors');
+      if (error) throw error;
+      return (data || []) as { id: string; email: string; full_name: string | null }[];
+    },
+  });
+  return { technicians, isLoading };
+}
+
+export function useRepairAssigneeMap() {
+  const { data } = useQuery({
+    queryKey: ['repair_assignee_emails'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc('repair_assignee_emails');
+      if (error) throw error;
+      const map: Record<string, { email: string | null; full_name: string | null }> = {};
+      ((data || []) as { user_id: string; email: string; full_name: string | null }[]).forEach((r) => {
+        map[r.user_id] = { email: r.email, full_name: r.full_name };
+      });
+      return map;
+    },
+  });
+  return data || {};
+}
+
 export function useRepairOrders(storeId?: string | null) {
   const queryClient = useQueryClient();
 
@@ -16,7 +44,7 @@ export function useRepairOrders(storeId?: string | null) {
         .select(`
           *,
           device_model:device_model_id(name, specifications, device_type, screen_size),
-          assigned_tech:assigned_to(email),
+          store:store_id(name),
           items:repair_order_items(*)
         `)
         .order('created_at', { ascending: false });
@@ -29,7 +57,7 @@ export function useRepairOrders(storeId?: string | null) {
       if (error) throw error;
       return data as (RepairOrder & {
         device_model?: { name: string; specifications: any; device_type: string; screen_size: string } | null;
-        assigned_tech?: { email: string } | null;
+        store?: { name: string } | null;
         items?: RepairOrderItem[];
       })[];
     },
@@ -63,8 +91,11 @@ export function useRepairOrders(storeId?: string | null) {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey });
+      if (data?.id) {
+        queryClient.invalidateQueries({ queryKey: ['repair_order', data.id] });
+      }
       toast.success('維修單已更新');
     },
     onError: (err: any) => {
@@ -98,10 +129,57 @@ export function useRepairOrders(storeId?: string | null) {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey });
+      if (data?.id) {
+        queryClient.invalidateQueries({ queryKey: ['repair_order', data.id] });
+      }
       toast.success(`狀態已更新為 ${data.status}`);
     },
     onError: (err: any) => {
       toast.error('狀態更新失敗：' + getErrorMessage(err));
+    },
+  });
+
+  const acceptAndStartMutation = useMutation({
+    mutationFn: async ({ id, userId }: { id: string; userId: string }) => {
+      const { data, error } = await (supabase as any).from('repair_orders')
+        .update({ assigned_to: userId, status: 'diagnosing' })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey });
+      if (data?.id) {
+        queryClient.invalidateQueries({ queryKey: ['repair_order', data.id] });
+      }
+      toast.success(`已接單：${data.code}`);
+    },
+    onError: (err: any) => {
+      toast.error('接單失敗：' + getErrorMessage(err));
+    },
+  });
+
+  const deliverMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await (supabase as any).from('repair_orders')
+        .update({ status: 'delivered', delivered_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey });
+      if (data?.id) {
+        queryClient.invalidateQueries({ queryKey: ['repair_order', data.id] });
+      }
+      toast.success(`已交還客戶：${data.code}`);
+    },
+    onError: (err: any) => {
+      toast.error('交還客戶失敗：' + getErrorMessage(err));
     },
   });
 
@@ -113,6 +191,8 @@ export function useRepairOrders(storeId?: string | null) {
     updateMutation,
     deleteMutation,
     updateStatusMutation,
+    acceptAndStartMutation,
+    deliverMutation,
   };
 }
 
@@ -125,11 +205,12 @@ export function useRepairOrderDetail(orderId: string) {
       const { data, error } = await (supabase as any).from('repair_orders')
         .select(`
           *,
-          device_model:device_model_id(id, name, specifications, device_type, screen_size, device_series),
+          device_model:device_model_id(id, name, specifications, device_type, screen_size, device_series, brand:brand_id(id, name)),
           device_brand:device_model_id(brand_id(name)),
-          assigned_tech:assigned_to(id, email),
+          store:store_id(name),
           items:repair_order_items(*, product:product_id(name, code), variant:variant_id(name, sku)),
-          status_history:repair_order_status_history(*, changed_by_user:changed_by(email))
+          status_history:repair_order_status_history(*),
+          checklists:repair_device_checklists(*)
         `)
         .eq('id', orderId)
         .single();
@@ -166,6 +247,7 @@ export function useRepairOrderItems(orderId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
+      queryClient.invalidateQueries({ queryKey: ['repair_order', orderId] });
     },
   });
 
@@ -177,6 +259,7 @@ export function useRepairOrderItems(orderId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
+      queryClient.invalidateQueries({ queryKey: ['repair_order', orderId] });
     },
   });
 
@@ -187,6 +270,7 @@ export function useRepairOrderItems(orderId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
+      queryClient.invalidateQueries({ queryKey: ['repair_order', orderId] });
     },
   });
 

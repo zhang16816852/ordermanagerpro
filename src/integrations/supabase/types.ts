@@ -46,16 +46,21 @@ export type Database = {
           account_id: string | null
           amount: number
           category_id: string | null
+          counterparty_name: string | null
           created_at: string
           created_by: string
           description: string | null
           due_date: string | null
+          exchange_rate: number | null
           id: string
+          original_amount: number | null
+          original_currency: string | null
           paid_amount: number
           payment_status: Database["public"]["Enums"]["payment_status"]
           reference_id: string | null
           reference_type: string | null
           transaction_date: string
+          transfer_to_account_id: string | null
           type: string
           updated_at: string
         }
@@ -63,16 +68,21 @@ export type Database = {
           account_id?: string | null
           amount: number
           category_id?: string | null
+          counterparty_name?: string | null
           created_at?: string
           created_by: string
           description?: string | null
           due_date?: string | null
+          exchange_rate?: number | null
           id?: string
+          original_amount?: number | null
+          original_currency?: string | null
           paid_amount?: number
           payment_status?: Database["public"]["Enums"]["payment_status"]
           reference_id?: string | null
           reference_type?: string | null
           transaction_date?: string
+          transfer_to_account_id?: string | null
           type: string
           updated_at?: string
         }
@@ -80,16 +90,21 @@ export type Database = {
           account_id?: string | null
           amount?: number
           category_id?: string | null
+          counterparty_name?: string | null
           created_at?: string
           created_by?: string
           description?: string | null
           due_date?: string | null
+          exchange_rate?: number | null
           id?: string
+          original_amount?: number | null
+          original_currency?: string | null
           paid_amount?: number
           payment_status?: Database["public"]["Enums"]["payment_status"]
           reference_id?: string | null
           reference_type?: string | null
           transaction_date?: string
+          transfer_to_account_id?: string | null
           type?: string
           updated_at?: string
         }
@@ -108,12 +123,58 @@ export type Database = {
             referencedRelation: "accounting_categories"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "accounting_entries_transfer_to_account_id_fkey"
+            columns: ["transfer_to_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      accounting_entry_references: {
+        Row: {
+          amount_applied: number
+          created_at: string
+          entry_id: string
+          id: string
+          item_name: string | null
+          reference_id: string
+          reference_type: string
+        }
+        Insert: {
+          amount_applied?: number
+          created_at?: string
+          entry_id: string
+          id?: string
+          item_name?: string | null
+          reference_id: string
+          reference_type: string
+        }
+        Update: {
+          amount_applied?: number
+          created_at?: string
+          entry_id?: string
+          id?: string
+          item_name?: string | null
+          reference_id?: string
+          reference_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accounting_entry_references_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "accounting_entries"
+            referencedColumns: ["id"]
+          },
         ]
       }
       accounts: {
         Row: {
           balance: number
           created_at: string
+          currency: string
           description: string | null
           id: string
           is_active: boolean
@@ -124,6 +185,7 @@ export type Database = {
         Insert: {
           balance?: number
           created_at?: string
+          currency?: string
           description?: string | null
           id?: string
           is_active?: boolean
@@ -134,6 +196,7 @@ export type Database = {
         Update: {
           balance?: number
           created_at?: string
+          currency?: string
           description?: string | null
           id?: string
           is_active?: boolean
@@ -286,6 +349,7 @@ export type Database = {
         Row: {
           created_at: string | null
           id: string
+          is_hidden: boolean
           name: string
           slug: string | null
           sort_order: number | null
@@ -293,6 +357,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           id?: string
+          is_hidden?: boolean
           name: string
           slug?: string | null
           sort_order?: number | null
@@ -300,6 +365,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           id?: string
+          is_hidden?: boolean
           name?: string
           slug?: string | null
           sort_order?: number | null
@@ -1062,6 +1128,97 @@ export type Database = {
         }
         Relationships: []
       }
+      device_model_spec_options: {
+        Row: {
+          aspect: string
+          created_at: string
+          id: string
+          is_active: boolean
+          model_id: string
+          sort_order: number
+          value: string
+        }
+        Insert: {
+          aspect: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          model_id: string
+          sort_order?: number
+          value: string
+        }
+        Update: {
+          aspect?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          model_id?: string
+          sort_order?: number
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_model_spec_options_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "device_models"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      device_model_versions: {
+        Row: {
+          color: string | null
+          cpu: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          is_default: boolean
+          model_id: string
+          ram: string | null
+          sort_order: number
+          storage: string | null
+          updated_at: string
+          version_name: string
+        }
+        Insert: {
+          color?: string | null
+          cpu?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          model_id: string
+          ram?: string | null
+          sort_order?: number
+          storage?: string | null
+          updated_at?: string
+          version_name: string
+        }
+        Update: {
+          color?: string | null
+          cpu?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          model_id?: string
+          ram?: string | null
+          sort_order?: number
+          storage?: string | null
+          updated_at?: string
+          version_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_model_versions_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "device_models"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       device_models: {
         Row: {
           aliases: string[] | null
@@ -1076,6 +1233,7 @@ export type Database = {
           release_date: string | null
           screen_size: string | null
           sort_order: number | null
+          specifications: Json | null
           updated_at: string | null
         }
         Insert: {
@@ -1091,6 +1249,7 @@ export type Database = {
           release_date?: string | null
           screen_size?: string | null
           sort_order?: number | null
+          specifications?: Json | null
           updated_at?: string | null
         }
         Update: {
@@ -1106,6 +1265,7 @@ export type Database = {
           release_date?: string | null
           screen_size?: string | null
           sort_order?: number | null
+          specifications?: Json | null
           updated_at?: string | null
         }
         Relationships: [
@@ -1186,6 +1346,7 @@ export type Database = {
           product_id: string | null
           reason: string | null
           relation_type: string
+          sort_order: number
           variant_id: string | null
         }
         Insert: {
@@ -1196,6 +1357,7 @@ export type Database = {
           product_id?: string | null
           reason?: string | null
           relation_type: string
+          sort_order?: number
           variant_id?: string | null
         }
         Update: {
@@ -1206,6 +1368,7 @@ export type Database = {
           product_id?: string | null
           reason?: string | null
           relation_type?: string
+          sort_order?: number
           variant_id?: string | null
         }
         Relationships: [
@@ -1401,10 +1564,12 @@ export type Database = {
           id: string
           inventory_owner: string
           note: string | null
+          order_item_id: string | null
           product_id: string
           purchase_order_id: string | null
           quantity_change: number
           reference_code: string | null
+          repair_order_id: string | null
           sales_note_id: string | null
           source_type: string
           variant_id: string | null
@@ -1419,10 +1584,12 @@ export type Database = {
           id?: string
           inventory_owner?: string
           note?: string | null
+          order_item_id?: string | null
           product_id: string
           purchase_order_id?: string | null
           quantity_change: number
           reference_code?: string | null
+          repair_order_id?: string | null
           sales_note_id?: string | null
           source_type: string
           variant_id?: string | null
@@ -1437,10 +1604,12 @@ export type Database = {
           id?: string
           inventory_owner?: string
           note?: string | null
+          order_item_id?: string | null
           product_id?: string
           purchase_order_id?: string | null
           quantity_change?: number
           reference_code?: string | null
+          repair_order_id?: string | null
           sales_note_id?: string | null
           source_type?: string
           variant_id?: string | null
@@ -1476,6 +1645,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "inventory_movements_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "inventory_movements_product_id_fkey1"
             columns: ["product_id"]
             isOneToOne: false
@@ -1487,6 +1663,20 @@ export type Database = {
             columns: ["purchase_order_id"]
             isOneToOne: false
             referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_repair_order_id_fkey"
+            columns: ["repair_order_id"]
+            isOneToOne: false
+            referencedRelation: "repair_order_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_repair_order_id_fkey"
+            columns: ["repair_order_id"]
+            isOneToOne: false
+            referencedRelation: "repair_orders"
             referencedColumns: ["id"]
           },
           {
@@ -1673,13 +1863,16 @@ export type Database = {
           created_at: string
           id: string
           order_id: string
+          parent_order_item_id: string | null
           product_id: string
           quantity: number
           selected_model_name: string | null
           shipped_quantity: number
+          shipping_payment: string | null
           sort_order: number
           status: Database["public"]["Enums"]["order_item_status"]
           store_id: string
+          unit_cost: number
           unit_price: number
           updated_at: string
           variant_id: string | null
@@ -1688,13 +1881,16 @@ export type Database = {
           created_at?: string
           id?: string
           order_id: string
+          parent_order_item_id?: string | null
           product_id: string
           quantity?: number
           selected_model_name?: string | null
           shipped_quantity?: number
+          shipping_payment?: string | null
           sort_order?: number
           status?: Database["public"]["Enums"]["order_item_status"]
           store_id: string
+          unit_cost?: number
           unit_price: number
           updated_at?: string
           variant_id?: string | null
@@ -1703,13 +1899,16 @@ export type Database = {
           created_at?: string
           id?: string
           order_id?: string
+          parent_order_item_id?: string | null
           product_id?: string
           quantity?: number
           selected_model_name?: string | null
           shipped_quantity?: number
+          shipping_payment?: string | null
           sort_order?: number
           status?: Database["public"]["Enums"]["order_item_status"]
           store_id?: string
+          unit_cost?: number
           unit_price?: number
           updated_at?: string
           variant_id?: string | null
@@ -1727,6 +1926,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_parent_order_item_id_fkey"
+            columns: ["parent_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
             referencedColumns: ["id"]
           },
           {
@@ -1794,6 +2000,74 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_addon_bindings: {
+        Row: {
+          addon_product_id: string
+          addon_variant_id: string | null
+          created_at: string
+          id: string
+          parent_product_id: string
+          parent_variant_id: string | null
+          quantity: number
+          sort_order: number
+          trigger_condition: Json | null
+          updated_at: string
+        }
+        Insert: {
+          addon_product_id: string
+          addon_variant_id?: string | null
+          created_at?: string
+          id?: string
+          parent_product_id: string
+          parent_variant_id?: string | null
+          quantity?: number
+          sort_order?: number
+          trigger_condition?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          addon_product_id?: string
+          addon_variant_id?: string | null
+          created_at?: string
+          id?: string
+          parent_product_id?: string
+          parent_variant_id?: string | null
+          quantity?: number
+          sort_order?: number
+          trigger_condition?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_addon_bindings_addon_product_id_fkey"
+            columns: ["addon_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_addon_bindings_addon_variant_id_fkey"
+            columns: ["addon_variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_addon_bindings_parent_product_id_fkey"
+            columns: ["parent_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_addon_bindings_parent_variant_id_fkey"
+            columns: ["parent_variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
             referencedColumns: ["id"]
           },
         ]
@@ -2191,7 +2465,10 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          is_hidden: boolean
+          item_type: string
           name: string
+          supplier_id: string | null
           unified_pricing: boolean
           unified_retail_price: number | null
           unified_wholesale_price: number | null
@@ -2202,7 +2479,10 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_hidden?: boolean
+          item_type?: string
           name: string
+          supplier_id?: string | null
           unified_pricing?: boolean
           unified_retail_price?: number | null
           unified_wholesale_price?: number | null
@@ -2213,13 +2493,24 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_hidden?: boolean
+          item_type?: string
           name?: string
+          supplier_id?: string | null
           unified_pricing?: boolean
           unified_retail_price?: number | null
           unified_wholesale_price?: number | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "products_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -2256,36 +2547,45 @@ export type Database = {
       }
       purchase_order_items: {
         Row: {
+          consumed_quantity: number
           created_at: string
           id: string
           product_id: string | null
           purchase_order_id: string
           quantity: number
           received_quantity: number
+          returned_quantity: number
+          sort_order: number
           source_order_ids: string[] | null
           source_quantities: Json | null
           unit_cost: number
           variant_id: string | null
         }
         Insert: {
+          consumed_quantity?: number
           created_at?: string
           id?: string
           product_id?: string | null
           purchase_order_id: string
           quantity?: number
           received_quantity?: number
+          returned_quantity?: number
+          sort_order?: number
           source_order_ids?: string[] | null
           source_quantities?: Json | null
           unit_cost?: number
           variant_id?: string | null
         }
         Update: {
+          consumed_quantity?: number
           created_at?: string
           id?: string
           product_id?: string | null
           purchase_order_id?: string
           quantity?: number
           received_quantity?: number
+          returned_quantity?: number
+          sort_order?: number
           source_order_ids?: string[] | null
           source_quantities?: Json | null
           unit_cost?: number
@@ -2311,6 +2611,136 @@ export type Database = {
             columns: ["variant_id"]
             isOneToOne: false
             referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_order_return_items: {
+        Row: {
+          credit_amount: number
+          id: string
+          product_id: string
+          purchase_order_item_id: string
+          quantity: number
+          return_id: string
+          unit_cost: number
+          variant_id: string | null
+        }
+        Insert: {
+          credit_amount?: number
+          id?: string
+          product_id: string
+          purchase_order_item_id: string
+          quantity: number
+          return_id: string
+          unit_cost?: number
+          variant_id?: string | null
+        }
+        Update: {
+          credit_amount?: number
+          id?: string
+          product_id?: string
+          purchase_order_item_id?: string
+          quantity?: number
+          return_id?: string
+          unit_cost?: number
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_order_return_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_order_return_items_purchase_order_item_id_fkey"
+            columns: ["purchase_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_order_return_items_return_id_fkey"
+            columns: ["return_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_order_returns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_order_return_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_order_returns: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          entry_id: string | null
+          id: string
+          purchase_order_id: string
+          reason: string | null
+          reference_code: string | null
+          status: string
+          total_credit: number
+          warehouse_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          entry_id?: string | null
+          id?: string
+          purchase_order_id: string
+          reason?: string | null
+          reference_code?: string | null
+          status?: string
+          total_credit?: number
+          warehouse_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          entry_id?: string | null
+          id?: string
+          purchase_order_id?: string
+          reason?: string | null
+          reference_code?: string | null
+          status?: string
+          total_credit?: number
+          warehouse_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_order_returns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_order_returns_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "accounting_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_order_returns_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_order_returns_warehouse_id_fkey"
+            columns: ["warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
             referencedColumns: ["id"]
           },
         ]
@@ -2364,6 +2794,57 @@ export type Database = {
             columns: ["supplier_id"]
             isOneToOne: false
             referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rep_commission_payouts: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          entry_id: string | null
+          id: string
+          note: string | null
+          paid_date: string
+          rep_id: string
+          sales_note_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          entry_id?: string | null
+          id?: string
+          note?: string | null
+          paid_date?: string
+          rep_id: string
+          sales_note_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          entry_id?: string | null
+          id?: string
+          note?: string | null
+          paid_date?: string
+          rep_id?: string
+          sales_note_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rep_commission_payouts_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "accounting_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rep_commission_payouts_sales_note_id_fkey"
+            columns: ["sales_note_id"]
+            isOneToOne: false
+            referencedRelation: "sales_notes"
             referencedColumns: ["id"]
           },
         ]
@@ -2436,6 +2917,354 @@ export type Database = {
           },
         ]
       }
+      repair_checklist_library: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          item_name: string
+          sort_order: number
+          usage_count: number
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          item_name: string
+          sort_order?: number
+          usage_count?: number
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          item_name?: string
+          sort_order?: number
+          usage_count?: number
+        }
+        Relationships: []
+      }
+      repair_device_checklists: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          is_checked: boolean
+          item_name: string
+          note: string | null
+          repair_order_id: string
+          sort_order: number
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          is_checked?: boolean
+          item_name: string
+          note?: string | null
+          repair_order_id: string
+          sort_order?: number
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          is_checked?: boolean
+          item_name?: string
+          note?: string | null
+          repair_order_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repair_device_checklists_repair_order_id_fkey"
+            columns: ["repair_order_id"]
+            isOneToOne: false
+            referencedRelation: "repair_order_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_device_checklists_repair_order_id_fkey"
+            columns: ["repair_order_id"]
+            isOneToOne: false
+            referencedRelation: "repair_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      repair_order_items: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_stock_deducted: boolean
+          item_type: Database["public"]["Enums"]["repair_item_type"]
+          part_name: string | null
+          product_id: string | null
+          purchase_order_item_id: string | null
+          quantity: number
+          repair_order_id: string
+          service_category: string | null
+          service_name: string | null
+          sort_order: number
+          unit_cost: number
+          unit_price: number
+          variant_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_stock_deducted?: boolean
+          item_type?: Database["public"]["Enums"]["repair_item_type"]
+          part_name?: string | null
+          product_id?: string | null
+          purchase_order_item_id?: string | null
+          quantity?: number
+          repair_order_id: string
+          service_category?: string | null
+          service_name?: string | null
+          sort_order?: number
+          unit_cost?: number
+          unit_price?: number
+          variant_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_stock_deducted?: boolean
+          item_type?: Database["public"]["Enums"]["repair_item_type"]
+          part_name?: string | null
+          product_id?: string | null
+          purchase_order_item_id?: string | null
+          quantity?: number
+          repair_order_id?: string
+          service_category?: string | null
+          service_name?: string | null
+          sort_order?: number
+          unit_cost?: number
+          unit_price?: number
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repair_order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_order_items_purchase_order_item_id_fkey"
+            columns: ["purchase_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_order_items_repair_order_id_fkey"
+            columns: ["repair_order_id"]
+            isOneToOne: false
+            referencedRelation: "repair_order_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_order_items_repair_order_id_fkey"
+            columns: ["repair_order_id"]
+            isOneToOne: false
+            referencedRelation: "repair_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_order_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      repair_order_status_history: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          from_status: string | null
+          id: string
+          note: string | null
+          repair_order_id: string
+          to_status: string
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          note?: string | null
+          repair_order_id: string
+          to_status: string
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          note?: string | null
+          repair_order_id?: string
+          to_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repair_order_status_history_repair_order_id_fkey"
+            columns: ["repair_order_id"]
+            isOneToOne: false
+            referencedRelation: "repair_order_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_order_status_history_repair_order_id_fkey"
+            columns: ["repair_order_id"]
+            isOneToOne: false
+            referencedRelation: "repair_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      repair_orders: {
+        Row: {
+          assigned_to: string | null
+          code: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          customer_email: string | null
+          customer_name: string | null
+          customer_notes: string | null
+          customer_phone: string | null
+          delivered_at: string | null
+          deposit: number
+          device_color: string | null
+          device_condition: string | null
+          device_imei: string | null
+          device_lock_type: string
+          device_model_id: string | null
+          device_passcode: string | null
+          device_passcode_pattern: string | null
+          device_ram: string | null
+          device_sn: string | null
+          device_specs: Json | null
+          device_storage: string | null
+          diagnosed_at: string | null
+          diagnostic_result: string | null
+          discount: number
+          id: string
+          internal_notes: string | null
+          labor_fee: number
+          parts_cost: number
+          payment_method: string | null
+          reported_issue: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["repair_order_status"]
+          store_id: string | null
+          total_cost: number
+          total_price: number
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          code?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_notes?: string | null
+          customer_phone?: string | null
+          delivered_at?: string | null
+          deposit?: number
+          device_color?: string | null
+          device_condition?: string | null
+          device_imei?: string | null
+          device_lock_type?: string
+          device_model_id?: string | null
+          device_passcode?: string | null
+          device_passcode_pattern?: string | null
+          device_ram?: string | null
+          device_sn?: string | null
+          device_specs?: Json | null
+          device_storage?: string | null
+          diagnosed_at?: string | null
+          diagnostic_result?: string | null
+          discount?: number
+          id?: string
+          internal_notes?: string | null
+          labor_fee?: number
+          parts_cost?: number
+          payment_method?: string | null
+          reported_issue?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["repair_order_status"]
+          store_id?: string | null
+          total_cost?: number
+          total_price?: number
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          code?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_notes?: string | null
+          customer_phone?: string | null
+          delivered_at?: string | null
+          deposit?: number
+          device_color?: string | null
+          device_condition?: string | null
+          device_imei?: string | null
+          device_lock_type?: string
+          device_model_id?: string | null
+          device_passcode?: string | null
+          device_passcode_pattern?: string | null
+          device_ram?: string | null
+          device_sn?: string | null
+          device_specs?: Json | null
+          device_storage?: string | null
+          diagnosed_at?: string | null
+          diagnostic_result?: string | null
+          discount?: number
+          id?: string
+          internal_notes?: string | null
+          labor_fee?: number
+          parts_cost?: number
+          payment_method?: string | null
+          reported_issue?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["repair_order_status"]
+          store_id?: string | null
+          total_cost?: number
+          total_price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repair_orders_device_model_id_fkey"
+            columns: ["device_model_id"]
+            isOneToOne: false
+            referencedRelation: "device_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_orders_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sales_note_items: {
         Row: {
           created_at: string
@@ -2443,7 +3272,9 @@ export type Database = {
           inventory_source_type: string
           order_item_id: string
           quantity: number
+          returned_quantity: number
           sales_note_id: string
+          sort_order: number
         }
         Insert: {
           created_at?: string
@@ -2451,7 +3282,9 @@ export type Database = {
           inventory_source_type?: string
           order_item_id: string
           quantity: number
+          returned_quantity?: number
           sales_note_id: string
+          sort_order?: number
         }
         Update: {
           created_at?: string
@@ -2459,7 +3292,9 @@ export type Database = {
           inventory_source_type?: string
           order_item_id?: string
           quantity?: number
+          returned_quantity?: number
           sales_note_id?: string
+          sort_order?: number
         }
         Relationships: [
           {
@@ -2474,6 +3309,156 @@ export type Database = {
             columns: ["sales_note_id"]
             isOneToOne: false
             referencedRelation: "sales_notes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_note_return_items: {
+        Row: {
+          id: string
+          order_item_id: string
+          product_id: string
+          quantity: number
+          refund_amount: number
+          return_id: string
+          sales_note_item_id: string
+          unit_price: number
+          variant_id: string | null
+        }
+        Insert: {
+          id?: string
+          order_item_id: string
+          product_id: string
+          quantity: number
+          refund_amount?: number
+          return_id: string
+          sales_note_item_id: string
+          unit_price?: number
+          variant_id?: string | null
+        }
+        Update: {
+          id?: string
+          order_item_id?: string
+          product_id?: string
+          quantity?: number
+          refund_amount?: number
+          return_id?: string
+          sales_note_item_id?: string
+          unit_price?: number
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_note_return_items_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_note_return_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_note_return_items_return_id_fkey"
+            columns: ["return_id"]
+            isOneToOne: false
+            referencedRelation: "sales_note_returns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_note_return_items_sales_note_item_id_fkey"
+            columns: ["sales_note_item_id"]
+            isOneToOne: false
+            referencedRelation: "sales_note_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_note_return_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_note_returns: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          entry_id: string | null
+          id: string
+          reason: string | null
+          reference_code: string | null
+          sales_note_id: string
+          status: string
+          store_id: string
+          total_refund: number
+          warehouse_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          entry_id?: string | null
+          id?: string
+          reason?: string | null
+          reference_code?: string | null
+          sales_note_id: string
+          status?: string
+          store_id: string
+          total_refund?: number
+          warehouse_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          entry_id?: string | null
+          id?: string
+          reason?: string | null
+          reference_code?: string | null
+          sales_note_id?: string
+          status?: string
+          store_id?: string
+          total_refund?: number
+          warehouse_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_note_returns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_note_returns_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "accounting_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_note_returns_sales_note_id_fkey"
+            columns: ["sales_note_id"]
+            isOneToOne: false
+            referencedRelation: "sales_notes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_note_returns_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_note_returns_warehouse_id_fkey"
+            columns: ["warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
             referencedColumns: ["id"]
           },
         ]
@@ -2551,6 +3536,7 @@ export type Database = {
           id: string
           order_item_id: string
           quantity: number
+          sort_order: number
           store_id: string
           warehouse_id: string | null
         }
@@ -2560,6 +3546,7 @@ export type Database = {
           id?: string
           order_item_id: string
           quantity: number
+          sort_order?: number
           store_id: string
           warehouse_id?: string | null
         }
@@ -2569,6 +3556,7 @@ export type Database = {
           id?: string
           order_item_id?: string
           quantity?: number
+          sort_order?: number
           store_id?: string
           warehouse_id?: string | null
         }
@@ -2592,6 +3580,76 @@ export type Database = {
             columns: ["warehouse_id"]
             isOneToOne: false
             referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shipping_settlement_periods: {
+        Row: {
+          carrier_product_id: string | null
+          created_at: string
+          created_by: string | null
+          entry_id: string | null
+          id: string
+          is_settled: boolean
+          note: string | null
+          period_end: string
+          period_start: string
+          settled_at: string | null
+          supplier_id: string | null
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          carrier_product_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          entry_id?: string | null
+          id?: string
+          is_settled?: boolean
+          note?: string | null
+          period_end: string
+          period_start: string
+          settled_at?: string | null
+          supplier_id?: string | null
+          total_amount?: number
+          updated_at?: string
+        }
+        Update: {
+          carrier_product_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          entry_id?: string | null
+          id?: string
+          is_settled?: boolean
+          note?: string | null
+          period_end?: string
+          period_start?: string
+          settled_at?: string | null
+          supplier_id?: string | null
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shipping_settlement_periods_carrier_product_id_fkey"
+            columns: ["carrier_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shipping_settlement_periods_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "accounting_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shipping_settlement_periods_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
@@ -3185,6 +4243,179 @@ export type Database = {
           },
         ]
       }
+      device_model_exclusions: {
+        Row: {
+          created_at: string | null
+          entity_id: string | null
+          entity_type: string | null
+          id: string | null
+          model_id: string | null
+          reason: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          entity_id?: never
+          entity_type?: never
+          id?: string | null
+          model_id?: string | null
+          reason?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          entity_id?: never
+          entity_type?: never
+          id?: string | null
+          model_id?: string | null
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entity_model_relations_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "device_models"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      device_model_group_links: {
+        Row: {
+          created_at: string | null
+          entity_id: string | null
+          entity_type: string | null
+          group_id: string | null
+          id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          entity_id?: never
+          entity_type?: never
+          group_id?: string | null
+          id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          entity_id?: never
+          entity_type?: never
+          group_id?: string | null
+          id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entity_model_relations_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "device_model_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      device_model_links: {
+        Row: {
+          created_at: string | null
+          entity_id: string | null
+          entity_type: string | null
+          id: string | null
+          model_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          entity_id?: never
+          entity_type?: never
+          id?: string | null
+          model_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          entity_id?: never
+          entity_type?: never
+          id?: string | null
+          model_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entity_model_relations_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "device_models"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_effective_models_base: {
+        Row: {
+          group_id: string | null
+          model_id: string | null
+          product_id: string | null
+          source: string | null
+        }
+        Relationships: []
+      }
+      repair_order_summary: {
+        Row: {
+          assigned_to: string | null
+          assigned_to_email: string | null
+          code: string | null
+          completed_at: string | null
+          created_at: string | null
+          created_by: string | null
+          created_by_email: string | null
+          customer_email: string | null
+          customer_name: string | null
+          customer_notes: string | null
+          customer_phone: string | null
+          delivered_at: string | null
+          deposit: number | null
+          device_brand_name: string | null
+          device_color: string | null
+          device_condition: string | null
+          device_imei: string | null
+          device_model_id: string | null
+          device_model_name: string | null
+          device_passcode: string | null
+          device_ram: string | null
+          device_screen_size: string | null
+          device_sn: string | null
+          device_specifications: Json | null
+          device_specs: Json | null
+          device_storage: string | null
+          device_type: string | null
+          diagnosed_at: string | null
+          diagnostic_result: string | null
+          discount: number | null
+          final_price: number | null
+          id: string | null
+          internal_notes: string | null
+          labor_fee: number | null
+          parts_cost: number | null
+          payment_method: string | null
+          profit: number | null
+          profit_margin_percent: number | null
+          reported_issue: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["repair_order_status"] | null
+          store_id: string | null
+          total_cost: number | null
+          total_price: number | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repair_orders_device_model_id_fkey"
+            columns: ["device_model_id"]
+            isOneToOne: false
+            referencedRelation: "device_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_orders_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       accept_invitation: {
@@ -3230,6 +4461,10 @@ export type Database = {
             Args: { p_source_table?: string; p_table_name: string }
             Returns: undefined
           }
+      can_access_repair_order: {
+        Args: { p_order: Database["public"]["Tables"]["repair_orders"]["Row"] }
+        Returns: boolean
+      }
       cleanup_category_spec_values: {
         Args: { p_active_spec_ids: string[]; p_category_id: string }
         Returns: undefined
@@ -3291,10 +4526,24 @@ export type Database = {
         }
         Returns: Json
       }
-      delete_sales_note: {
-        Args: { p_sales_note_id: string }
-        Returns: undefined
+      deduct_repair_part_stock: {
+        Args: {
+          p_created_by: string
+          p_item_id: string
+          p_product_id: string
+          p_purchase_order_item_id?: string
+          p_quantity: number
+          p_repair_order_id: string
+          p_variant_id: string
+        }
+        Returns: Json
       }
+      delete_order_if_unadopted: { Args: { p_order_id: string }; Returns: Json }
+      delete_purchase_order_if_empty: {
+        Args: { p_purchase_order_id: string }
+        Returns: Json
+      }
+      delete_sales_note: { Args: { p_sales_note_id: string }; Returns: Json }
       direct_ship_order: {
         Args: {
           p_created_by: string
@@ -3380,7 +4629,57 @@ export type Database = {
         Args: { _store_id: string; _user_id: string }
         Returns: boolean
       }
+      list_repair_contractors: {
+        Args: never
+        Returns: {
+          email: string
+          full_name: string
+          id: string
+        }[]
+      }
+      list_repair_part_batches: {
+        Args: { p_product_id: string; p_variant_id: string }
+        Returns: {
+          id: string
+          purchase_order_id: string
+          received_at: string
+          received_date: string
+          remaining: number
+          unit_cost: number
+        }[]
+      }
+      list_repair_source_stores: {
+        Args: never
+        Returns: {
+          brand: string
+          code: string
+          id: string
+          name: string
+        }[]
+      }
       migrate_historical_specs_to_v6: { Args: never; Returns: Json }
+      process_purchase_return: {
+        Args: {
+          p_created_by?: string
+          p_credit_account_id?: string
+          p_items: Json
+          p_purchase_order_id: string
+          p_reason?: string
+          p_warehouse_id?: string
+        }
+        Returns: Json
+      }
+      process_sales_note_return: {
+        Args: {
+          p_created_by?: string
+          p_items: Json
+          p_reason?: string
+          p_refund_account_id?: string
+          p_sales_note_id: string
+          p_warehouse_id?: string
+        }
+        Returns: Json
+      }
       recalculate_inventory: {
         Args: { p_created_by?: string }
         Returns: {
@@ -3406,9 +4705,65 @@ export type Database = {
             Args: { p_items: Json; p_warehouse_id?: string }
             Returns: undefined
           }
+      register_batch_rep_commission_payout: {
+        Args: {
+          p_account_id: string
+          p_category_id: string
+          p_created_by: string
+          p_description: string
+          p_paid_date: string
+          p_rep_id: string
+          p_sales_note_ids: string[]
+        }
+        Returns: Json
+      }
+      register_rep_commission_payout: {
+        Args: {
+          p_account_id: string
+          p_category_id: string
+          p_created_by: string
+          p_description: string
+          p_note: string
+          p_paid_date: string
+          p_rep_id: string
+          p_sales_note_id: string
+        }
+        Returns: Json
+      }
+      register_shipping_settlement: {
+        Args: {
+          p_account_id: string
+          p_category_id: string
+          p_created_by: string
+          p_description: string
+          p_note: string
+          p_order_item_ids: string[]
+          p_paid_date: string
+          p_period_end: string
+          p_period_start: string
+          p_supplier_id: string
+        }
+        Returns: Json
+      }
       remove_items_from_shipping_pool: {
         Args: { p_created_by: string; p_pool_ids: string[] }
         Returns: Json
+      }
+      reorder_purchase_order_items: {
+        Args: { p_items: Json }
+        Returns: undefined
+      }
+      reorder_shipping_pool_items: {
+        Args: { p_items: Json }
+        Returns: undefined
+      }
+      repair_assignee_emails: {
+        Args: never
+        Returns: {
+          email: string
+          full_name: string
+          user_id: string
+        }[]
       }
       report_consignment_sale: {
         Args: {
@@ -3449,6 +4804,14 @@ export type Database = {
         }
         Returns: Json
       }
+      revoke_rep_commission_payout: {
+        Args: { p_payout_id: string }
+        Returns: undefined
+      }
+      revoke_shipping_settlement: {
+        Args: { p_period_id: string }
+        Returns: undefined
+      }
       settle_consignment: {
         Args: {
           p_account_id?: string
@@ -3482,6 +4845,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      sync_sales_note_payment_status: {
+        Args: { p_sales_note_id: string }
+        Returns: undefined
+      }
       sync_storefront_items: {
         Args: { p_product_id: string }
         Returns: undefined
@@ -3505,6 +4872,14 @@ export type Database = {
       }
       upsert_brand_product_prices: {
         Args: { p_brand: string; p_products: Json }
+        Returns: undefined
+      }
+      upsert_rep_product_costs: {
+        Args: { p_items: Json; p_rep_id: string }
+        Returns: Json
+      }
+      upsert_repair_checklist_library: {
+        Args: { p_category: string; p_item_name: string }
         Returns: undefined
       }
       upsert_store_products_batch: {
@@ -3534,12 +4909,23 @@ export type Database = {
         | "partial_received"
         | "received"
         | "cancelled"
+      repair_item_type: "service" | "part"
+      repair_order_status:
+        | "pending"
+        | "diagnosing"
+        | "quoting"
+        | "awaiting_approval"
+        | "awaiting_parts"
+        | "repairing"
+        | "ready"
+        | "delivered"
+        | "cancelled"
       sales_note_status: "draft" | "shipped" | "received"
       spec_entity_type: "product" | "variant"
       spec_instance_state: "active" | "orphaned" | "migrated" | "deleted"
       spec_value_type: "string" | "number" | "boolean" | "array" | "object"
       store_role: "founder" | "manager" | "employee"
-      system_role: "admin" | "customer" | "rep"
+      system_role: "admin" | "customer" | "rep" | "fixengineer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3690,12 +5076,24 @@ export const Constants = {
         "received",
         "cancelled",
       ],
+      repair_item_type: ["service", "part"],
+      repair_order_status: [
+        "pending",
+        "diagnosing",
+        "quoting",
+        "awaiting_approval",
+        "awaiting_parts",
+        "repairing",
+        "ready",
+        "delivered",
+        "cancelled",
+      ],
       sales_note_status: ["draft", "shipped", "received"],
       spec_entity_type: ["product", "variant"],
       spec_instance_state: ["active", "orphaned", "migrated", "deleted"],
       spec_value_type: ["string", "number", "boolean", "array", "object"],
       store_role: ["founder", "manager", "employee"],
-      system_role: ["admin", "customer", "rep"],
+      system_role: ["admin", "customer", "rep", "fixengineer"],
     },
   },
 } as const

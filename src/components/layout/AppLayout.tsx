@@ -9,6 +9,7 @@ import {
   buildStoreNavItems,
   visitorNavItems,
   repNavItems,
+  fixengineerNavItems,
 } from '@/config/navigation';
 import { DesktopSidebar } from './DesktopSidebar';
 import { DesktopHeader } from './DesktopHeader';
@@ -29,7 +30,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
 function AppLayoutContent({ children }: AppLayoutProps) {
   const { pageHeader } = usePageHeader();
-  const { user, isAdmin, isRep, storeId: currentStoreId, storeRoles, isAuthReady } = useAuth();
+  const { user, isAdmin, isRep, isFixEngineer, storeId: currentStoreId, storeRoles, isAuthReady } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
@@ -76,10 +77,11 @@ function AppLayoutContent({ children }: AppLayoutProps) {
 
   const navItems = useMemo(() => {
     if (!user) return visitorNavItems;
+    if (isFixEngineer) return fixengineerNavItems;
     if (isAdmin) return adminNavItems;
     if (isRep) return repNavItems;
     return buildStoreNavItems(totalCartItems);
-  }, [user, isAdmin, isRep, totalCartItems]);
+  }, [user, isAdmin, isRep, isFixEngineer, totalCartItems]);
 
   return (
     <div className="min-h-screen bg-background">

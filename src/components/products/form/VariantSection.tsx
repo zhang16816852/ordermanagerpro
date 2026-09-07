@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Layers, Pencil, Trash2, ShoppingCart, CheckSquare, Edit3, ReplaceAll, Search } from 'lucide-react';
+import { Plus, Layers, Pencil, Trash2, CheckSquare, Edit3, ReplaceAll, Search } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -25,7 +25,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { Badge } from '@/components/ui/badge';
-import { useOrderDraftStore } from '@/store/useOrderDraftStore';
 import { useTableTemplates } from '@/hooks/useTableTemplates';
 import { OrderGridRenderer } from '@/components/order-grid/OrderGridRenderer';
 import type { ProductWithPricing, VariantWithPricing } from '@/types/product';
@@ -50,19 +49,8 @@ export function VariantSection({ product }: { product: any }) {
   const [replaceWith, setReplaceWith] = useState('');
   const [replaceFields, setReplaceFields] = useState<Set<string>>(new Set(['name', 'sku']));
   const queryClient = useQueryClient();
-  const store = useOrderDraftStore();
   const isUnified = !!product?.unified_pricing;
   const { templates } = useTableTemplates();
-
-  const getVariantQty = (productId: string, variantId?: string) => {
-    let total = 0;
-    for (const sid of Object.keys(store.drafts)) {
-      total += store.getItemQuantity(sid, productId, variantId);
-    }
-    return total;
-  };
-
-  const firstStoreId = Object.keys(store.drafts)[0];
 
   // 取得變體資料與選項資訊
   const { data: variants, isLoading } = useQuery({
@@ -71,7 +59,7 @@ export function VariantSection({ product }: { product: any }) {
       const { data, error } = await (supabase.from('product_variants') as any)
         .select('*')
         .eq('product_id', product.id)
-        .order('sku');
+        .order('name');
       if (error) throw error;
 
       if (!data || data.length === 0) return [];
@@ -160,54 +148,6 @@ export function VariantSection({ product }: { product: any }) {
     }] as ProductWithPricing[];
   }, [product, productVariantIds]);
 
-  // grid 表格加購物車（沿用現有 store.addItem）
-  const handleGridAddToCart = (
-    items: { variant: VariantWithPricing; product: ProductWithPricing; quantity: number }[]
-  ) => {
-    if (!firstStoreId) {
-      toast.error('沒有可用的購物車');
-      return;
-    }
-    let total = 0;
-    for (const it of items) {
-      if (!it.variant?.id && !it.product?.id) continue;
-      const productForCart = { ...it.product } as ProductWithPricing;
-      const variantForCart = { ...it.variant } as VariantWithPricing;
-      store.addItem(firstStoreId, productForCart, variantForCart);
-      if (it.quantity > 1) {
-        const itemId = `${it.product.id}-${it.variant.id}`;
-        const current = getVariantQty(it.product.id, it.variant.id);
-        store.updateQuantity(firstStoreId, itemId, current + (it.quantity - 1));
-      }
-      total += it.quantity;
-    }
-    toast.success(`已加入 ${total} 件至購物車`, { id: 'cart-add', duration: 2000 });
-  };
-
-  // grid 表格每個儲存格的直接「＋」累加
-  const handleGridDirectItemAdd = (variant: VariantWithPricing, prod: ProductWithPricing, delta: number) => {
-    if (!firstStoreId || delta <= 0) return;
-    const productForCart = { ...prod } as ProductWithPricing;
-    const variantForCart = { ...variant } as VariantWithPricing;
-    store.addItem(firstStoreId, productForCart, variantForCart);
-    if (delta > 1) {
-      const itemId = `${prod.id}-${variant.id}`;
-      const current = getVariantQty(prod.id, variant.id);
-      store.updateQuantity(firstStoreId, itemId, current + (delta - 1));
-    }
-  };
-
-  const handleAddToCart = (variant: any) => {
-    const productForCart = { ...product, wholesale_price: product.wholesale_price ?? 0, retail_price: product.retail_price ?? 0, has_store_price: false } as ProductWithPricing;
-    const variantForCart = { ...variant, effective_wholesale_price: variant.wholesale_price, effective_retail_price: variant.retail_price, has_brand_price: false } as VariantWithPricing;
-    if (!firstStoreId) {
-      toast.error('沒有可用的購物車');
-      return;
-    }
-    store.addItem(firstStoreId, productForCart, variantForCart);
-    toast.success(`${product.name} / ${variant.name} 已加入購物車`, { id: 'cart-add', duration: 2000 });
-  };
-
   // 處理刪除 (範例)
   const handleDelete = async (id: string) => {
     if (!confirm('確定要刪除此規格變體嗎？')) return;
@@ -282,7 +222,10 @@ export function VariantSection({ product }: { product: any }) {
           changed = true;
         }
       }
-      if (changed) changedVariants.push(newV);
+      if (changed) {
+        const { optionDisplays, ...dbVariant } = newV;
+        changedVariants.push(dbVariant);
+      }
     }
 
     if (changedVariants.length === 0) {
@@ -410,7 +353,6 @@ export function VariantSection({ product }: { product: any }) {
               <TableHead>狀態</TableHead>
               <TableHead className="text-right">批發價</TableHead>
               <TableHead className="text-right">零售價</TableHead>
-              <TableHead className="w-[100px] text-center">購物車</TableHead>
               <TableHead className="w-[100px] text-center">操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -426,12 +368,11 @@ export function VariantSection({ product }: { product: any }) {
                   <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
                   <TableCell><Skeleton className="h-8 w-16 mx-auto" /></TableCell>
-                  <TableCell><Skeleton className="h-8 w-16 mx-auto" /></TableCell>
                 </TableRow>
               ))
             ) : variants?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Layers className="h-8 w-8 opacity-20" />
                     <p>尚未建立任何變體，請點擊「批次產生」快速建立。</p>
@@ -479,26 +420,6 @@ export function VariantSection({ product }: { product: any }) {
                   <TableCell className="text-right font-mono">${v.wholesale_price}</TableCell>
                   <TableCell className="text-right font-mono">${v.retail_price}</TableCell>
                   <TableCell className="text-center">
-                    {(() => {
-                      const cartQty = getVariantQty(product.id, v.id);
-                      return cartQty > 0 ? (
-                        <Badge variant="default" className="text-[10px] h-5 px-1.5 whitespace-nowrap">
-                          已加入 x{cartQty}
-                        </Badge>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-[10px] px-1.5 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => handleAddToCart(v)}
-                        >
-                          <ShoppingCart className="h-3 w-3 mr-0.5" />
-                          加入
-                        </Button>
-                      );
-                    })()}
-                  </TableCell>
-                  <TableCell className="text-center">
                     <div className="flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button
                         variant="ghost"
@@ -541,9 +462,6 @@ export function VariantSection({ product }: { product: any }) {
                 <OrderGridRenderer
                   template={gridTemplateFor(t)}
                   products={gridProducts}
-                  onAddToCart={handleGridAddToCart}
-                  onDirectItemAdd={handleGridDirectItemAdd}
-                  getCartQuantity={getVariantQty}
                 />
               </div>
             </div>

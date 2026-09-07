@@ -1,15 +1,14 @@
-import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { useState, useMemo } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Package, Check, CreditCard, Calendar, Store, Info, Pencil } from "lucide-react";
+import { Package, Check, CreditCard, Calendar, Store, Info, Pencil, RotateCcw } from "lucide-react";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { SalesNoteStatusBadge } from "./SalesNoteStatusBadge";
+import { SalesReturnDialog } from "./SalesReturnDialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,6 +17,8 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import { formatCurrency } from '@/lib/formatters';
 import { Card, CardContent } from '@/components/ui/card';
 import { SharedReceiptExport } from "@/pages/share/SharedReceiptExport";
+import { EntryDialog } from "@/pages/admin/accounting/components/EntryDialog";
+import { AccountingEntry, AccountingEntryReference, Account, AccountingCategory } from "@/pages/admin/accounting/types";
 
 export interface SalesNoteItem {
     id: string;
@@ -26,6 +27,8 @@ export interface SalesNoteItem {
     productSku: string;
     variantName?: string | null;
     unitPrice?: number;
+    sortOrder?: number;
+    returnedQuantity?: number;
 }
 
 export interface SalesNoteDetail {
@@ -51,6 +54,7 @@ interface SalesNoteDetailDialogProps {
     isConfirming?: boolean;
     enablePayment?: boolean;
     showSku?: boolean;
+    enableReturn?: boolean;
 }
 
 export function SalesNoteDetailDialog({
@@ -60,29 +64,41 @@ export function SalesNoteDetailDialog({
     onConfirmReceive,
     isConfirming,
     enablePayment = false,
-    showSku = true
+    showSku = true,
+    enableReturn = false
 }: SalesNoteDetailDialogProps) {
     const { user } = useAuth();
     const queryClient = useQueryClient();
-    const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+    const [entryDialogOpen, setEntryDialogOpen] = useState(false);
+    const [returnDialogOpen, setReturnDialogOpen] = useState(false);
     const [editingDate, setEditingDate] = useState(false);
     const [newShippedDate, setNewShippedDate] = useState("");
 
+    const sortedItems = useMemo(() => {
+        if (!note?.items) return [];
+        return [...note.items].sort((a, b) => {
+            if (a.sortOrder !== undefined && b.sortOrder !== undefined) {
+                return a.sortOrder - b.sortOrder;
+            }
+            return 0;
+        });
+    }, [note?.items]);
+
     const totalAmount = note ? note.items.reduce((sum, item) => sum + (item.quantity * (item.unitPrice || 0)), 0) : 0;
 
-    // --- Queries ---
+    // --- Queries for EntryDialog ---
     const { data: accounts = [] } = useQuery({
-        queryKey: ['accounts-for-sales-note-payment'],
+        queryKey: ['accounts'],
         queryFn: async () => {
             const { data, error } = await (supabase
                 .from('accounts') as any)
-                .select('id, name, balance')
+                .select('id, name, type, currency, balance, description, is_active')
                 .eq('is_active', true)
                 .order('name');
             if (error) throw error;
-            return data;
+            return (data || []) as Account[];
         },
-        enabled: open && enablePayment,
+        enabled: open && (enablePayment || enableReturn),
     });
 
     const { data: categories = [] } = useQuery({
@@ -90,10 +106,10 @@ export function SalesNoteDetailDialog({
         queryFn: async () => {
             const { data, error } = await (supabase
                 .from('accounting_categories') as any)
-                .select('id, name, type')
+                .select('id, name, type, description, is_active')
                 .eq('is_active', true);
             if (error) throw error;
-            return data;
+            return (data || []) as AccountingCategory[];
         },
         enabled: open && enablePayment
     });
@@ -102,7 +118,10 @@ export function SalesNoteDetailDialog({
         queryKey: ['sales-note-payment', note?.id],
         queryFn: async () => {
             if (!note) return null;
-            const { data, error } = await (supabase
+            // 先確認該銷貨單是否已收款（由 sync_sales_note_payment_status RPC 維護）
+            if (note.payment_status !== 'paid') return null;
+            // 查找對應的會計分錄（先查 entry row，再查 references 子表）
+            const { data: entryByRef, error: e1 } = await (supabase
                 .from('accounting_entries') as any)
                 .select('id, amount, paid_amount, transaction_date')
                 .eq('reference_id', note.id)
@@ -111,71 +130,81 @@ export function SalesNoteDetailDialog({
                 .gt('paid_amount', 0)
                 .limit(1)
                 .maybeSingle();
-
-            if (error) throw error;
-            return data;
+            if (e1) throw e1;
+            if (entryByRef) return entryByRef;
+            // 向下相容：查 references 子表
+            const { data: refs } = await (supabase as any)
+                .from('accounting_entry_references')
+                .select('entry_id')
+                .eq('reference_type', 'sales_note')
+                .eq('reference_id', note.id)
+                .limit(1);
+            if (!refs || refs.length === 0) return null;
+            const { data: entry, error: e2 } = await (supabase
+                .from('accounting_entries') as any)
+                .select('id, amount, paid_amount, transaction_date')
+                .eq('id', refs[0].entry_id)
+                .maybeSingle();
+            if (e2) throw e2;
+            return entry;
         },
         enabled: open && enablePayment && !!note
     });
 
-    // --- Mutation ---
+    // --- Mutation: create paid entry via EntryDialog ---
     const receivePaymentMutation = useMutation({
-        mutationFn: async ({ accountId, amount, date }: { accountId: string; amount: number; date: string }) => {
+        mutationFn: async ({ data, references }: { data: Partial<AccountingEntry>; references?: AccountingEntryReference[] }) => {
             if (!note) throw new Error("No sales note selected");
 
-            let categoryId = null;
-            if (categories.length > 0) {
-                const salesCategory = categories.find((c: any) =>
-                    c.type === 'income' && (c.name.includes('銷貨') || c.name.includes('銷售'))
-                );
-                categoryId = salesCategory?.id || categories.find((c: any) => c.type === 'income')?.id;
-            }
-
-            const { error: entryError } = await (supabase
+            const { data: newEntry, error: entryError } = await (supabase
                 .from('accounting_entries') as any)
-                .insert({
-                    type: 'income',
-                    amount,
-                    paid_amount: amount,
-                    payment_status: 'paid',
-                    transaction_date: date,
-                    description: `銷貨單收款: ${note.code || note.id.slice(0, 8)}`,
-                    reference_type: 'sales_note',
-                    reference_id: note.id,
-                    account_id: accountId,
-                    category_id: categoryId,
-                    created_by: user?.id,
-                });
-
+                .insert({ ...data, created_by: user?.id })
+                .select('id')
+                .single();
             if (entryError) throw entryError;
 
-            const account = accounts.find((a: any) => a.id === accountId);
-            if (account) {
-                const { error: accError } = await (supabase
-                    .from('accounts') as any)
-                    .update({ balance: account.balance + amount })
-                    .eq('id', accountId);
-                if (accError) throw accError;
+            if (references && references.length > 0 && newEntry) {
+                const refsToInsert = references.map(ref => ({
+                    entry_id: newEntry.id,
+                    reference_type: ref.reference_type,
+                    reference_id: ref.reference_id,
+                    item_name: ref.item_name,
+                    amount_applied: ref.amount_applied,
+                }));
+                const { error: refError } = await (supabase as any)
+                    .from('accounting_entry_references')
+                    .insert(refsToInsert);
+                if (refError) throw refError;
             }
 
-            const { error: noteError } = await (supabase
-                .from('sales_notes') as any)
-                .update({ payment_status: 'paid' })
-                .eq('id', note.id);
+            if (data.account_id && data.amount) {
+                const account = accounts.find((a: Account) => a.id === data.account_id);
+                if (account) {
+                    const { error: accError } = await (supabase
+                        .from('accounts') as any)
+                        .update({ balance: account.balance + (data.amount || 0) })
+                        .eq('id', data.account_id);
+                    if (accError) throw accError;
+                }
+            }
+
+            // 用 RPC 統一同步收款狀態（同時檢查 entry row 和 references 子表）
+            const { error: noteError } = await (supabase as any)
+                .rpc('sync_sales_note_payment_status', { p_sales_note_id: note.id });
             if (noteError) throw noteError;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['accounts-for-sales-note-payment'] });
+            queryClient.invalidateQueries({ queryKey: ['accounts'] });
+            queryClient.invalidateQueries({ queryKey: ['accounting-entries'] });
             queryClient.invalidateQueries({ queryKey: ['sales-note-payment'] });
             queryClient.invalidateQueries({ queryKey: ['admin-sales-notes'] });
             queryClient.invalidateQueries({ queryKey: ['store-sales-notes'] });
-            setPaymentDialogOpen(false);
+            setEntryDialogOpen(false);
             toast.success('收款已記錄');
         },
         onError: (error: any) => {
             toast.error(`收款記錄失敗: ${getErrorMessage(error)}`);
         },
-
     });
 
     // --- 更新出貨日期 ---
@@ -326,7 +355,7 @@ export function SalesNoteDetailDialog({
                     {/* 銷售項目列表 */}
                     <div className="space-y-3">
                         <h3 className="text-sm font-semibold flex items-center gap-2">
-                            <Package className="h-4 w-4" /> 銷售項目 ({note.items.length})
+                            <Package className="h-4 w-4" /> 銷售項目 ({sortedItems.length})
                         </h3>
 
                         {/* 電腦版表格 */}
@@ -336,19 +365,24 @@ export function SalesNoteDetailDialog({
                                     <TableRow>
                                         <TableHead>產品名稱</TableHead>
                                         <TableHead className="text-right">數量</TableHead>
-                                        {note.items[0]?.unitPrice !== undefined && (
+                                        {sortedItems[0]?.unitPrice !== undefined && (
                                             <TableHead className="text-right">單價</TableHead>
                                         )}
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {note.items.map((item) => (
+                                    {sortedItems.map((item) => (
                                         <TableRow key={item.id}>
                                             <TableCell>
                                                 <div className="font-medium product-name-cell">
                                                     {item.variantName ? item.variantName : item.productName}
                                                 </div>
                                                 {showSku && <div className="text-xs text-muted-foreground font-mono mt-0.5">{item.productSku}</div>}
+                                                {!!item.returnedQuantity && (
+                                                    <Badge variant="outline" className="mt-1 text-orange-600 border-orange-300 bg-orange-50">
+                                                        已退 {item.returnedQuantity}
+                                                    </Badge>
+                                                )}
                                             </TableCell>
                                             <TableCell className="text-right font-medium">{item.quantity}</TableCell>
                                             {item.unitPrice !== undefined && (
@@ -362,13 +396,20 @@ export function SalesNoteDetailDialog({
 
                         {/* 手機版卡片 */}
                         <div className="md:hidden space-y-3">
-                            {note.items.map((item) => (
+                            {sortedItems.map((item) => (
                                 <Card key={item.id} className="rounded-xl shadow-none border-muted/60">
                                     <CardContent className="p-3 space-y-2 text-sm">
                                         <div className="font-medium flex flex-wrap gap-1 items-center product-name-cell">
                                             {item.variantName ? item.variantName : item.productName}
                                         </div>
                                         {showSku && <div className="text-xs text-muted-foreground font-mono">{item.productSku}</div>}
+                                        {!!item.returnedQuantity && (
+                                            <div>
+                                                <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">
+                                                    已退 {item.returnedQuantity}
+                                                </Badge>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between items-center pt-1">
                                             <div><span className="text-muted-foreground">數量：</span>{item.quantity}</div>
                                             {item.unitPrice !== undefined && <div className="font-semibold">${item.unitPrice}</div>}
@@ -394,16 +435,27 @@ export function SalesNoteDetailDialog({
                                     variant={existingPayment ? "secondary" : "outline"}
                                     size="sm"
                                     className="w-full sm:w-auto"
-                                    onClick={() => setPaymentDialogOpen(true)}
+                                    onClick={() => setEntryDialogOpen(true)}
                                     disabled={!!existingPayment}
                                 >
                                     <CreditCard className="h-4 w-4 mr-2" />
                                     {existingPayment ? "已完成收款登記" : "登記收款"}
                                 </Button>
                             )}
+                            {enableReturn && (note.status === 'shipped' || note.status === 'received') && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-full sm:w-auto text-orange-600 border-orange-300 hover:bg-orange-50"
+                                    onClick={() => setReturnDialogOpen(true)}
+                                >
+                                    <RotateCcw className="h-4 w-4 mr-2" />
+                                    退貨登記
+                                </Button>
+                            )}
                             {note.access_token && (
                                 <SharedReceiptExport
-                                    items={note.items.map((item) => ({
+                                    items={sortedItems.map((item) => ({
                                         name: item.productName,
                                         variant: item.variantName,
                                         quantity: item.quantity,
@@ -438,72 +490,49 @@ export function SalesNoteDetailDialog({
                 </div>
             </DialogContent>
 
-            {/* 收款對話框 */}
-            <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-                <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle>記錄收款金額</DialogTitle>
-                        <DialogDescription>
-                            請選擇入帳帳戶並確認實收金額，提交後將自動更新帳戶餘額。
-                        </DialogDescription>
-                    </DialogHeader>
-                    <PaymentForm
-                        accounts={accounts}
-                        amount={totalAmount}
-                        onSubmit={(data) => receivePaymentMutation.mutate(data)}
-                        isLoading={receivePaymentMutation.isPending}
-                    />
-                </DialogContent>
-            </Dialog>
+            {/* 收款對話框 — 統一使用 EntryDialog */}
+            <EntryDialog
+                open={entryDialogOpen}
+                onOpenChange={setEntryDialogOpen}
+                categories={categories}
+                accounts={accounts}
+                isLoading={receivePaymentMutation.isPending}
+                prefill={{
+                    amount: totalAmount,
+                    categoryId: (() => {
+                        if (categories.length === 0) return undefined;
+                        const salesCategory = categories.find((c: AccountingCategory) =>
+                            c.type === 'income' && (c.name.includes('銷貨') || c.name.includes('銷售'))
+                        );
+                        return salesCategory?.id || categories.find((c: AccountingCategory) => c.type === 'income')?.id;
+                    })(),
+                    description: `銷貨單收款: ${note.code || note.id.slice(0, 8)}`,
+                    referenceType: 'sales_note',
+                    referenceId: note.id,
+                    transactionDate: format(new Date(), 'yyyy-MM-dd'),
+                    markAsPaid: true,
+                    docItems: [{
+                        docType: 'sales_note',
+                        docId: note.id,
+                        code: note.code || note.id.slice(0, 8),
+                        name: note.storeName || '未知店家',
+                        date: note.created_at,
+                        originalAmount: totalAmount,
+                        amountApplied: totalAmount,
+                    }],
+                }}
+                onSubmit={(data, references) => receivePaymentMutation.mutate({ data, references })}
+            />
+
+            {/* 退貨對話框 */}
+            <SalesReturnDialog
+                open={returnDialogOpen}
+                onOpenChange={setReturnDialogOpen}
+                note={note}
+                accounts={accounts}
+            />
         </Dialog>
     );
 }
 
-// --- 分離出的付款表單組件 ---
-function PaymentForm({ accounts, amount: initialAmount, onSubmit, isLoading }: {
-    accounts: any[];
-    amount: number;
-    onSubmit: (data: { accountId: string; amount: number; date: string }) => void;
-    isLoading: boolean;
-}) {
-    const [accountId, setAccountId] = useState('');
-    const [amount, setAmount] = useState(initialAmount.toString());
-    const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-
-    return (
-        <div className="space-y-4 py-2">
-            <div className="space-y-2">
-                <Label htmlFor="account">收款帳戶</Label>
-                <Select value={accountId} onValueChange={setAccountId}>
-                    <SelectTrigger id="account">
-                        <SelectValue placeholder="選擇入帳帳戶" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {accounts.map((acc) => (
-                            <SelectItem key={acc.id} value={acc.id}>
-                                {acc.name} (餘額: {formatCurrency(acc.balance)})
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="amount">實收金額</Label>
-                <Input id="amount" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="date">交易日期</Label>
-                <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </div>
-            <DialogFooter className="mt-6">
-                <Button
-                    className="w-full"
-                    onClick={() => onSubmit({ accountId, amount: parseFloat(amount), date })}
-                    disabled={!accountId || !amount || isLoading}
-                >
-                    {isLoading ? '處理中...' : '確認入帳'}
-                </Button>
-            </DialogFooter>
-        </div>
-    );
-}
+// PaymentForm removed — unified into EntryDialog

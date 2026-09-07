@@ -13,6 +13,7 @@ import {
   Users,
   History as HistoryIcon,
   PlusCircle,
+  Wallet,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -39,6 +40,7 @@ export const adminNavItems: NavItem[] = [
   { title: '採購管理', href: '/admin/purchase-orders', icon: Truck },
   { title: '寄賣管理', href: '/admin/consignment', icon: Package },
   { title: '會計管理', href: '/admin/accounting', icon: FileText },
+  { title: '運費月結', href: '/admin/shipping-settlements', icon: Truck },
   { title: '媒合市場', href: '/market', icon: ShoppingBag },
   { title: 'Table 式下單', href: '/admin/order-grid-templates', icon: Layers },
   { title: '操作日誌', href: '/admin/audit-logs', icon: HistoryIcon },
@@ -61,6 +63,14 @@ export const repNavItems: NavItem[] = [
   { title: '所有訂單', href: '/admin/orders', icon: ClipboardList },
   { title: '建立新單據', href: '/admin/orders/checkout', icon: PlusCircle },
   { title: '銷售單', href: '/admin/sales-notes', icon: FileText },
+  { title: '我的分潤', href: '/admin/my-commission', icon: Wallet },
+];
+
+// FixEngineer（維修人員）獨立工作台導航：不進 /admin 後台
+export const fixengineerNavItems: NavItem[] = [
+  { title: '維修工作檯', href: '/workshop', icon: Wrench, end: true },
+  { title: '新增維修單', href: '/workshop/new', icon: PlusCircle },
+  { title: '媒合市場', href: '/market', icon: ShoppingBag },
 ];
 
 export function buildStoreNavItems(totalCartItems: number): NavItem[] {

@@ -15,10 +15,18 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 
+export interface DeviceSelectionRef {
+    id: string;
+    type: 'model' | 'group';
+}
+
 interface StandaloneDeviceModelSelectFieldProps {
     modelIds?: string[];
     groupIds?: string[];
     exclusionIds?: string[];
+    /** 精確的選取順序（型號與群組交錯），作為顯示與 toggle 排序的唯一依據 */
+    selectionOrder?: DeviceSelectionRef[];
+    onOrderChange?: (order: DeviceSelectionRef[]) => void;
     onChange?: (data: { modelIds: string[]; groupIds: string[]; exclusionIds: string[] }) => void;
 }
 
@@ -26,6 +34,8 @@ export function StandaloneDeviceModelSelectField({
     modelIds = [], 
     groupIds = [], 
     exclusionIds = [], 
+    selectionOrder,
+    onOrderChange,
     onChange 
 }: StandaloneDeviceModelSelectFieldProps) {
     const [search, setSearch] = useState('');
@@ -99,62 +109,77 @@ export function StandaloneDeviceModelSelectField({
         );
     }, [models, search]);
 
-    const selectedModels = useMemo(() =>
-        models.filter(m => modelIds.includes(m.id)),
-        [models, modelIds]
-    );
-
-    const selectedGroups = useMemo(() =>
-        groups.filter(g => groupIds.includes(g.id)),
-        [groups, groupIds]
-    );
+    const selectedRefs = useMemo<DeviceSelectionRef[]>(() => {
+        if (selectionOrder) return selectionOrder;
+        const refs: DeviceSelectionRef[] = [];
+        for (const id of modelIds) refs.push({ id, type: 'model' });
+        for (const id of groupIds) refs.push({ id, type: 'group' });
+        return refs;
+    }, [selectionOrder, modelIds, groupIds]);
 
     const update = (newModelIds: string[], newGroupIds: string[], newExclusionIds: string[]) => {
         onChange?.({ modelIds: newModelIds, groupIds: newGroupIds, exclusionIds: newExclusionIds });
     };
 
+    const toggle = (id: string, type: 'model' | 'group') => {
+        const exists = selectedRefs.some(r => r.id === id && r.type === type);
+        const next = exists
+            ? selectedRefs.filter(r => !(r.id === id && r.type === type))
+            : [...selectedRefs, { id, type }];
+        onOrderChange?.(next);
+        update(
+            next.filter(r => r.type === 'model').map(r => r.id),
+            next.filter(r => r.type === 'group').map(r => r.id),
+            exclusionIds,
+        );
+    };
+
     const toggleModel = (id: string) => {
-        const next = modelIds.includes(id) ? modelIds.filter(i => i !== id) : [...modelIds, id];
-        update(next, groupIds, exclusionIds);
+        toggle(id, 'model');
     };
 
     const toggleGroup = (id: string) => {
-        const next = groupIds.includes(id) ? groupIds.filter(i => i !== id) : [...groupIds, id];
-        update(modelIds, next, exclusionIds);
+        toggle(id, 'group');
     };
 
     return (
         <div className="space-y-2">
             
             <div className="flex flex-wrap gap-2 mb-2 p-3 min-h-[50px] border rounded-lg bg-muted/5 shadow-inner">
-                {modelIds.length === 0 && groupIds.length === 0 ? (
+                {selectedRefs.length === 0 ? (
                     <span className="text-sm text-muted-foreground italic flex items-center gap-2">
                         <Info className="h-4 w-4 opacity-30" /> 尚未選擇型號或群組
                     </span>
                 ) : (
-                    <>
-                        {selectedGroups.map((group) => (
-                            <Badge
-                                key={group.id}
-                                variant="default"
-                                className="flex items-center gap-1 pr-1 bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-200"
-                            >
-                                <Layers className="h-3 w-3 mr-1" />
-                                {group.name}
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-4 w-4 rounded-full hover:bg-blue-300 p-0"
-                                    onClick={() => toggleGroup(group.id)}
+                    selectedRefs.map((ref) => {
+                        if (ref.type === 'group') {
+                            const group = groups.find(g => g.id === ref.id);
+                            if (!group) return null;
+                            return (
+                                <Badge
+                                    key={`group-${group.id}`}
+                                    variant="default"
+                                    className="flex items-center gap-1 pr-1 bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-200"
                                 >
-                                    <X className="h-3 w-3" />
-                                </Button>
-                            </Badge>
-                        ))}
-                        {selectedModels.map((model: any) => (
+                                    <Layers className="h-3 w-3 mr-1" />
+                                    {group.name}
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-4 w-4 rounded-full hover:bg-blue-300 p-0"
+                                        onClick={() => toggleGroup(group.id)}
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </Button>
+                                </Badge>
+                            );
+                        }
+                        const model = models.find(m => m.id === ref.id);
+                        if (!model) return null;
+                        return (
                             <Badge
-                                key={model.id}
+                                key={`model-${model.id}`}
                                 variant="secondary"
                                 className="flex items-center gap-1 pr-1 bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-200"
                             >
@@ -169,8 +194,8 @@ export function StandaloneDeviceModelSelectField({
                                     <X className="h-3 w-3" />
                                 </Button>
                             </Badge>
-                        ))}
-                    </>
+                        );
+                    })
                 )}
             </div>
 
@@ -209,7 +234,7 @@ export function StandaloneDeviceModelSelectField({
                                 <ScrollArea className="h-[260px] w-full">
                                     <div className="p-2 space-y-1">
                                     {filteredModels.map((model) => {
-                                        const isSelected = modelIds.includes(model.id);
+                                        const isSelected = selectedRefs.some(r => r.id === model.id && r.type === 'model');
                                         return (
                                             <div
                                                 key={model.id}
@@ -265,7 +290,7 @@ export function StandaloneDeviceModelSelectField({
                                 <ScrollArea className="h-[260px] w-full">
                                     <div className="p-2 space-y-1">
                                     {groups.filter(g => g.name.toLowerCase().includes(search.toLowerCase())).map((group) => {
-                                        const isSelected = groupIds.includes(group.id);
+                                        const isSelected = selectedRefs.some(r => r.id === group.id && r.type === 'group');
                                         return (
                                             <div
                                                 key={group.id}

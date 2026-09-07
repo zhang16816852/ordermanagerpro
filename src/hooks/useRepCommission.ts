@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useVariantWholesale } from '@/hooks/useVariantWholesale';
 
 type RepCostMap = Record<string, number>;
 
@@ -35,25 +36,31 @@ export function useRepCommission() {
     return map;
   }, [costRows]);
 
+  const { wholesaleMap } = useVariantWholesale();
+
   const rate = isRep ? (Number(commissionRate) || 0) / 100 : 0;
 
-  /** 取得單品成本 */
+  /** 取得單品成本：業務成本 → 產品層級 → 進貨成本（變體批發價） */
   function getItemCost(productId: string, variantId?: string | null): number {
     if (!isRep) return 0;
     const exact = costMap[`${productId}|${variantId ?? 'null'}`];
     if (exact !== undefined) return exact;
     const productLevel = costMap[`${productId}|null`];
-    return productLevel !== undefined ? productLevel : 0;
+    if (productLevel !== undefined) return productLevel;
+    const wholesale = wholesaleMap.get(`${productId}|${variantId ?? ''}`);
+    return wholesale !== undefined ? wholesale : 0;
   }
 
-  /** 計算單一明細的利潤與佣金 */
+  /** 計算單一明細的利潤與佣金（unitCost 為訂單上的成本快照，優先於 rep_product_costs） */
   function computeLine(item: {
     productId: string;
     variantId?: string | null;
     unitPrice: number;
     quantity: number;
+    unitCost?: number;
   }) {
-    const unitCost = getItemCost(item.productId, item.variantId);
+    const snapshotCost = Number(item.unitCost) || 0;
+    const unitCost = snapshotCost > 0 ? snapshotCost : getItemCost(item.productId, item.variantId);
     const unitProfit = (Number(item.unitPrice) || 0) - unitCost;
     const qty = Number(item.quantity) || 0;
     return {
@@ -70,6 +77,7 @@ export function useRepCommission() {
     variantId?: string | null;
     unitPrice: number;
     quantity: number;
+    unitCost?: number;
   }[]) {
     if (!isRep) return { totalProfit: 0, totalCommission: 0, lines: [] };
     const lines = items.map(computeLine);

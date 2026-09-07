@@ -4,9 +4,12 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Plus, X } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Plus, X, Package } from 'lucide-react';
 import { FullDeviceModel as DeviceModel } from '@/types/device-models';
 import { UseMutationResult } from '@tanstack/react-query';
+import { cn } from '@/lib/utils';
 
 interface DeviceModelDialogProps {
   isOpen: boolean;
@@ -17,6 +20,127 @@ interface DeviceModelDialogProps {
   createBrandMutation: UseMutationResult<any, Error, string, unknown>;
   handleSave: () => void;
   uniqueSeriesByBrand?: string[];
+}
+
+type SpecAspectKey = 'colors' | 'storage_options' | 'ram_options' | 'cpu_options';
+
+interface VersionRow {
+  version_name: string;
+  color: string;
+  storage: string;
+  ram: string;
+  cpu: string;
+  is_default: boolean;
+}
+
+const ASPECT_FIELDS: { key: SpecAspectKey; label: string; example: string }[] = [
+  { key: 'colors', label: '顏色', example: '太空黑' },
+  { key: 'storage_options', label: '儲存空間', example: '256GB' },
+  { key: 'ram_options', label: 'RAM', example: '8GB' },
+  { key: 'cpu_options', label: 'CPU', example: 'A17 Pro' },
+];
+
+function useSpecs(editingData: Partial<DeviceModel> | null, setEditingData: DeviceModelDialogProps['setEditingData']) {
+  const specs = editingData?.specifications || {};
+  const get = (key: SpecAspectKey): string[] => (Array.isArray(specs[key]) ? specs[key] as string[] : []);
+  const set = (key: SpecAspectKey, values: string[]) => {
+    setEditingData(prev => ({
+      ...prev!,
+      specifications: { ...(prev?.specifications || {}), [key]: values },
+    }));
+  };
+  const versions: VersionRow[] = Array.isArray(specs.versions) ? specs.versions as VersionRow[] : [];
+  const setVersions = (rows: VersionRow[]) => {
+    setEditingData(prev => ({
+      ...prev!,
+      specifications: { ...(prev?.specifications || {}), versions: rows },
+    }));
+  };
+  return { get, set, versions, setVersions, specs };
+}
+
+function TagEditor({ values, onChange, placeholder }: { values: string[]; onChange: (v: string[]) => void; placeholder: string }) {
+  const addTag = (val: string) => {
+    const t = val.trim();
+    if (t && !values.includes(t)) onChange([...values, t]);
+  };
+  return (
+    <div className="flex flex-wrap gap-2 p-2 border rounded-md bg-muted/5 min-h-[42px]">
+      {values.map((v, index) => (
+        <div key={index} className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded text-sm border border-primary/20">
+          {v}
+          <X
+            className="h-3 w-3 cursor-pointer hover:text-destructive"
+            onClick={() => onChange(values.filter((_, i) => i !== index))}
+          />
+        </div>
+      ))}
+      <input
+        className="flex-1 bg-transparent border-none outline-none text-sm min-w-[120px]"
+        placeholder={placeholder}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            addTag((e.target as HTMLInputElement).value);
+            (e.target as HTMLInputElement).value = '';
+          }
+        }}
+        onBlur={(e) => {
+          if (e.target.value.trim()) {
+            addTag(e.target.value);
+            e.target.value = '';
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+function VersionEditor({ versions, onChange }: { versions: VersionRow[]; onChange: (rows: VersionRow[]) => void }) {
+  const setRow = (index: number, patch: Partial<VersionRow>) => {
+    onChange(versions.map((r, i) => i === index ? { ...r, ...patch } : r));
+  };
+  const addRow = () => {
+    onChange([...versions, { version_name: '', color: '', storage: '', ram: '', cpu: '', is_default: versions.length === 0 }]);
+  };
+  return (
+    <div className="space-y-2">
+      {versions.map((v, index) => (
+        <div key={index} className={cn('p-2 border rounded-md space-y-2', v.is_default && 'border-primary bg-primary/5')}>
+          <div className="flex items-center gap-2">
+            <Input
+              value={v.version_name}
+              onChange={(e) => setRow(index, { version_name: e.target.value })}
+              placeholder="版本名稱（例：港版 128G）"
+              className="flex-1 h-8 text-sm"
+            />
+            <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer">
+              <Checkbox
+                checked={v.is_default}
+                onCheckedChange={(checked) => {
+                  onChange(versions.map((r, i) => ({ ...r, is_default: i === index ? checked === true : false })));
+                }}
+              />
+              預設
+            </label>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => onChange(versions.filter((_, i) => i !== index))} aria-label="刪除版本">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <Input value={v.color} onChange={(e) => setRow(index, { color: e.target.value })} placeholder="顏色" className="h-8 text-sm" />
+            <Input value={v.storage} onChange={(e) => setRow(index, { storage: e.target.value })} placeholder="容量" className="h-8 text-sm" />
+            <Input value={v.ram} onChange={(e) => setRow(index, { ram: e.target.value })} placeholder="RAM" className="h-8 text-sm" />
+            <Input value={v.cpu} onChange={(e) => setRow(index, { cpu: e.target.value })} placeholder="CPU" className="h-8 text-sm" />
+          </div>
+        </div>
+      ))}
+      <Button variant="outline" size="sm" onClick={addRow}>
+        <Plus className="h-4 w-4 mr-1" />
+        新增版本組合
+      </Button>
+    </div>
+  );
 }
 
 export function DeviceModelDialog({
@@ -31,15 +155,16 @@ export function DeviceModelDialog({
 }: DeviceModelDialogProps) {
   const [newBrandOpen, setNewBrandOpen] = useState(false);
   const [newBrandName, setNewBrandName] = useState('');
+  const { get, set, versions, setVersions } = useSpecs(editingData, setEditingData);
 
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onOpenChange}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingData?.id ? '編輯型號標籤' : '新增型號標籤'}</DialogTitle>
             <DialogDescription>
-              請定義設備型號的詳細資訊，包含廠牌、系列以及發布日期。型號標籤可用於變體快速選取。
+              請定義設備型號的詳細資訊，包含廠牌、系列、規格選項與版本組合。型號標籤可用於維修單型號選擇與變體快速選取。
             </DialogDescription>
           </DialogHeader>
 
@@ -179,6 +304,40 @@ export function DeviceModelDialog({
                   value={editingData?.sort_order || 0}
                   onChange={(e) => setEditingData(prev => ({ ...prev!, sort_order: Number(e.target.value) }))}
                 />
+              </div>
+            </div>
+
+            <div className="rounded-lg border p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Package className="h-4 w-4 text-primary" />
+                規格選項與版本組合
+              </div>
+              <p className="text-xs text-muted-foreground">
+                定義可選的顏色／容量／RAM／CPU 清單（用於維修單快速選擇），並可建立預先定義好的版本組合。
+              </p>
+
+              <Tabs defaultValue="colors">
+                <TabsList className="grid w-full grid-cols-4">
+                  <TabsTrigger value="colors">顏色</TabsTrigger>
+                  <TabsTrigger value="storage">容量</TabsTrigger>
+                  <TabsTrigger value="ram">RAM</TabsTrigger>
+                  <TabsTrigger value="cpu">CPU</TabsTrigger>
+                </TabsList>
+                {ASPECT_FIELDS.map(({ key, label, example }) => (
+                  <TabsContent key={key} value={key.replace('_options', '').replace('colors', 'colors')} className="mt-2">
+                    <TagEditor
+                      values={get(key as SpecAspectKey)}
+                      onChange={(values) => set(key as SpecAspectKey, values)}
+                      placeholder={`輸入${label}後按 Enter...`}
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">例如: {example}（輸入後按 Enter 即可）</p>
+                  </TabsContent>
+                ))}
+              </Tabs>
+
+              <div className="space-y-2 pt-2">
+                <Label>版本組合（同硬體不同配色／規格）</Label>
+                <VersionEditor versions={versions} onChange={setVersions} />
               </div>
             </div>
           </div>

@@ -22,6 +22,7 @@ import { VariantModelMatrix } from './sections/VariantModelMatrix';
 import { DynamicSpecsFields } from './sections/DynamicSpecsFields';
 import { ProductImageManager } from '@/components/products/images/ProductImageManager';
 import { EntityBindingManager } from './sections/EntityBindingManager';
+import { AddonBindingManager } from './sections/AddonBindingManager';
 
 // 統一定義 Schema
 const productSchema = z.object({
@@ -34,6 +35,13 @@ const productSchema = z.object({
   brand_ids: z.array(z.string().uuid()).default([]),
   brand_series_ids: z.array(z.string().uuid()).default([]),
   spec_values: z.any().nullable().optional(),
+  item_type: z.enum(['product', 'shipping', 'packaging', 'repair_part']).default('product'),
+  is_hidden: z.boolean().default(false),
+  supplier_id: z.string().uuid().nullable().default(null),
+}).superRefine((val, ctx) => {
+  if (val.item_type === 'shipping' && !val.supplier_id) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['supplier_id'], message: '運費型商品需選所屬物流公司（採購商）' });
+  }
 });
 
 type Product = Tables<'products'>;
@@ -73,6 +81,9 @@ export function ProductFormBody({ active, initialData, onSubmit, isLoading, onCl
     defaultValues: {
             name: '', code: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_ids: [], brand_series_ids: [],
       spec_values: {},
+      item_type: 'product',
+      is_hidden: false,
+      supplier_id: null,
     },
   });
 
@@ -169,12 +180,15 @@ export function ProductFormBody({ active, initialData, onSubmit, isLoading, onCl
             ...initialData,
             code: (initialData as any).code || '',
             category_ids: (initialData as any).category_ids || [],
-            device_model_ids: [],
-            device_model_group_ids: [],
+            device_model_ids: (initialData as any).device_model_ids || [],
+            device_model_group_ids: (initialData as any).device_model_group_ids || [],
             device_model_exclusion_ids: [],
             brand_ids: (initialData as any).brand_ids || [],
             brand_series_ids: (initialData as any).brand_series_ids || [],
             spec_values: deserializeSpecs(currentSpecValues.length > 0 ? currentSpecValues : (initialData as any).spec_values),
+            item_type: (((initialData as any).item_type || 'product') as 'product' | 'shipping' | 'packaging' | 'repair_part'),
+            is_hidden: !!(initialData as any).is_hidden,
+            supplier_id: (initialData as any).supplier_id || null,
           });
           console.log(form)
 
@@ -204,6 +218,9 @@ export function ProductFormBody({ active, initialData, onSubmit, isLoading, onCl
           form.reset({
       name: '', code: '', category_ids: [], device_model_ids: [], device_model_group_ids: [], device_model_exclusion_ids: [], brand_ids: [], brand_series_ids: [],
             spec_values: {},
+            item_type: 'product',
+            is_hidden: false,
+            supplier_id: null,
           });
           setUnifiedPricing(false);
           setUnifiedWholesale('0');
@@ -393,7 +410,10 @@ export function ProductFormBody({ active, initialData, onSubmit, isLoading, onCl
           </TabsContent>
           <TabsContent value="bindings" className="m-0 focus-visible:ring-0">
             {initialData && (
-              <EntityBindingManager productId={initialData.id} />
+              <div className="space-y-8">
+                <EntityBindingManager productId={initialData.id} />
+                <AddonBindingManager productId={initialData.id} />
+              </div>
             )}
           </TabsContent>
         </div>
@@ -480,7 +500,7 @@ export function ProductFormDialog({ open, onOpenChange, onSubmit, initialData, i
         aria-describedby={undefined}
       >
         <DialogHeader className="p-6 pb-0">
-          <DialogTitle>{initialData ? `編輯產品: ${initialData.name}` : '新增產品'}</DialogTitle>
+          <DialogTitle>{initialData && (initialData as any).id ? `編輯產品: ${initialData.name}` : '新增產品'}</DialogTitle>
           <DialogDescription>
             請在此填寫產品的基本資訊、型號與規格。完成後點擊「儲存所有變更」按鈕以同步資料。
           </DialogDescription>

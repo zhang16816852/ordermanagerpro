@@ -64,7 +64,8 @@ export default function StoreAccounting() {
         .eq('status', 'received')
         .gte('received_at', startDate.toISOString())
         .lte('received_at', endDate.toISOString())
-        .order('received_at', { ascending: false });
+        .order('received_at', { ascending: false })
+        .order('sort_order', { foreignTable: 'sales_note_items', ascending: true });
 
       if (error) throw error;
       return data;

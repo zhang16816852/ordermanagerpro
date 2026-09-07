@@ -46,7 +46,7 @@ export default function AdminOrderComposer() {
     },
   });
 
-  const { products: storefrontItems, isLoading: productsLoading } = useStoreProductCache(selectedStoreId || null);
+  const { products: storefrontItems, isLoading: productsLoading } = useStoreProductCache(selectedStoreId || null, null, { includeShipping: true });
   const { totalItems } = useStoreDraft(selectedStoreId || "");
   const { fetchData: fetchDeviceData } = useDeviceModelStore();
 

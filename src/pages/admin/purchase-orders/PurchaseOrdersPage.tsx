@@ -44,6 +44,8 @@ export default function AdminPurchaseOrders() {
     deleteOrderMutation,
     createSupplierMutation,
     addItemMutation,
+    reorderItemsMutation,
+    importItemsMutation,
     receiveItemsMutation,
     makePaymentMutation,
     unlinkOrdersFromPurchaseMutation,
@@ -177,17 +179,16 @@ export default function AdminPurchaseOrders() {
           </DialogHeader>
           {viewingOrder && (
             <OrderDetailDialog
+              key={viewingOrder.id}
               order={viewingOrder}
               orderItems={orderItems}
               products={products}
               accounts={accounts}
               sourceOrderMap={sourceOrderMap}
               supplierMappingMap={supplierMappingMap}
-              isLoading={itemsLoading || addItemMutation.isPending || receiveItemsMutation.isPending || makePaymentMutation.isPending}
+              isLoading={itemsLoading || addItemMutation.isPending || importItemsMutation.isPending || receiveItemsMutation.isPending || makePaymentMutation.isPending}
               onAddItem={(data) => addItemMutation.mutate({ purchase_order_id: viewingOrder.id, ...data })}
-              onImportItems={(items) => {
-                items.forEach(item => addItemMutation.mutate({ purchase_order_id: viewingOrder.id, ...item }));
-              }}
+              onImportItems={(items) => importItemsMutation.mutate({ purchaseOrderId: viewingOrder.id, items })}
               onReceiveItems={(items) => receiveItemsMutation.mutate(items)}
               onMakePayment={(data) => makePaymentMutation.mutate({ orderId: viewingOrder.id, ...data })}
               onUnlinkOrder={(orderId) => {
@@ -195,6 +196,7 @@ export default function AdminPurchaseOrders() {
                   unlinkOrdersFromPurchaseMutation.mutate({ purchaseOrderId: viewingOrder.id, orderIds: [orderId] });
                 }
               }}
+              onReorder={(items) => reorderItemsMutation.mutate(items)}
             />
           )}
         </DialogContent>

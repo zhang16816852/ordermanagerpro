@@ -2,6 +2,100 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { ProductWithPricing, VariantWithPricing } from "@/types/product";
+import { supabase } from "@/integrations/supabase/client";
+
+interface AddonBindingEntry {
+  id: string;
+  parent_product_id: string;
+  parent_variant_id: string | null;
+  addon_product_id: string;
+  addon_variant_id: string | null;
+  quantity: number;
+  sort_order: number;
+  addon_product?: {
+    id: string;
+    name: string;
+    code: string | null;
+    wholesale_price: number | null;
+    retail_price: number | null;
+  } | null;
+  addon_variant?: {
+    id: string;
+    name: string | null;
+    sku: string | null;
+    wholesale_price: number | null;
+  } | null;
+}
+
+let addonBindingsCache: AddonBindingEntry[] | null = null;
+let addonBindingsPromise: Promise<AddonBindingEntry[]> | null = null;
+
+function ensureAddonBindings(): Promise<AddonBindingEntry[]> {
+  if (addonBindingsCache) return Promise.resolve(addonBindingsCache);
+  if (addonBindingsPromise) return addonBindingsPromise;
+  addonBindingsPromise = (async () => {
+    const { data, error } = await (supabase as any)
+      .from('product_addon_bindings')
+      .select(`
+        id, parent_product_id, parent_variant_id, addon_product_id, addon_variant_id, quantity, sort_order,
+        addon_product:products(id, name, code, wholesale_price, retail_price),
+        addon_variant:product_variants(id, name, sku, wholesale_price)
+      `)
+      .order('sort_order');
+    if (error) throw error;
+    addonBindingsCache = (data || []) as AddonBindingEntry[];
+    setTimeout(() => { addonBindingsCache = null; addonBindingsPromise = null; }, 5 * 60 * 1000);
+    return addonBindingsCache;
+  })();
+  return addonBindingsPromise;
+}
+
+// A+B 加購：加入父品後自動帶出綁定的加購子行（temp_key / parent_temp_key 串接，供出貨 RPC 兩輪對應）
+function enqueueAddons(storeId: string, product: ProductWithPricing, variant?: VariantWithPricing, parentTempKey?: string) {
+  ensureAddonBindings().then((bindings) => {
+    const relevant = bindings.filter(b =>
+      b.parent_product_id === product.id &&
+      (!b.parent_variant_id || (variant && b.parent_variant_id === variant.id))
+    );
+    if (relevant.length === 0) return;
+    for (const b of relevant) {
+      const childKey = `T${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+      const child: any = {
+        id: b.addon_product_id,
+        name: b.addon_product?.name || '',
+        code: b.addon_product?.code,
+        item_type: 'packaging',
+        temp_key: childKey,
+        parent_temp_key: parentTempKey,
+      };
+      const childVariant: any = b.addon_variant_id && b.addon_variant
+        ? {
+            id: b.addon_variant_id,
+            name: b.addon_variant.name || '',
+            sku: b.addon_variant.sku || '',
+            wholesale_price: b.addon_variant.wholesale_price ?? b.addon_product?.wholesale_price ?? 0,
+            option_values: [],
+          }
+        : b.addon_product
+          ? {
+              id: b.addon_product_id,
+              name: b.addon_product.name,
+              sku: b.addon_product.code || '',
+              wholesale_price: b.addon_product.wholesale_price ?? b.addon_product.retail_price ?? 0,
+            }
+          : undefined;
+      for (let i = 0; i < Math.max(1, b.quantity || 1); i++) {
+        useOrderDraftStore.getState().addItem(
+          storeId,
+          child as unknown as ProductWithPricing,
+          childVariant as unknown as VariantWithPricing | undefined,
+          undefined,
+          `addon:${b.id}`,
+        );
+      }
+    }
+  }).catch(() => { /* 綁定查詢失敗時僅加入父品 */ });
+}
 
 export interface OrderDraftItem {
   id: string; // unique key: `${productId}-${variantId || 'base'}` or customItemId
@@ -15,6 +109,11 @@ export interface OrderDraftItem {
   variantName?: string;
   options?: string[];
   selectedModelName?: string;
+  itemType?: 'product' | 'shipping' | 'packaging' | 'repair_part';
+  unitCost?: number;
+  shippingPayment?: string | null;
+  tempKey?: string;
+  parentTempKey?: string;
 }
 
 export interface OrderDraft {
@@ -126,10 +225,15 @@ export const useOrderDraftStore = create<OrderDraftState>()(
               name: product.name,
               variantName: variant?.name ?? undefined,
               sku: variant?.sku || product.code || '',
-              price: variant?.effective_wholesale_price ?? variant?.wholesale_price ?? 0,
+              price: variant?.effective_wholesale_price ?? variant?.wholesale_price ?? (product as any).wholesale_price ?? 0,
               quantity: 1,
               options: variant?.option_values?.map((ov: any) => ov.label || ov.value).filter(Boolean) || undefined,
               selectedModelName: realModelName,
+              itemType: (product as any).item_type || 'product',
+              unitCost: variant?.wholesale_price ?? (product as any).wholesale_price ?? 0,
+              shippingPayment: (product as any).shipping_payment ?? null,
+              tempKey: (product as any).temp_key,
+              parentTempKey: (product as any).parent_temp_key,
             };
             newItems = [...draft.items, newItem];
           }
@@ -338,8 +442,17 @@ export function useStoreDraft(storeId: string | undefined) {
     priceSyncMap: draft.priceSyncMap,
     totalItems: store.getTotalItems(storeId),
     totalAmount: store.getTotalAmount(storeId),
-    addItem: (product: ProductWithPricing, variant?: VariantWithPricing, selectedModelName?: string, customItemId?: string) =>
-      store.addItem(storeId, product, variant, selectedModelName, customItemId),
+    addItem: (product: ProductWithPricing, variant?: VariantWithPricing, selectedModelName?: string, customItemId?: string) => {
+      const parentTempKey = `T${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+      const enriched = {
+        ...product,
+        temp_key: (product as any).temp_key || parentTempKey,
+      } as ProductWithPricing;
+      store.addItem(storeId, enriched, variant, selectedModelName, customItemId);
+      if (!(product as any).temp_key) {
+        enqueueAddons(storeId, product, variant, parentTempKey);
+      }
+    },
     updateQuantity: (itemId: string, quantity: number) =>
       store.updateQuantity(storeId, itemId, quantity),
     updateItemPrice: (itemId: string, price: number) =>

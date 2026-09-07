@@ -13,7 +13,7 @@ import { OrderInfo } from './OrderInfo';
 import { OrderDetailItemsTable } from './OrderDetailItemsTable';
 import { OrderDetailItemsCards } from './OrderDetailItemsCards';
 import { Order } from '@/types/order';
-import { Check, Share2 } from 'lucide-react';
+import { Check, Share2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/formatters';
 import { useRepCommission } from '@/hooks/useRepCommission';
@@ -22,9 +22,10 @@ interface OrderDetailDialogProps {
     order: Order | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onDeleteOrder?: (orderId: string) => void;
 }
 
-export function OrderDetailDialog({ order, open, onOpenChange }: OrderDetailDialogProps) {
+export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder }: OrderDetailDialogProps) {
     const [isCopied, setIsCopied] = useState(false);
     const { isRep, computeOrder } = useRepCommission();
 
@@ -86,6 +87,12 @@ export function OrderDetailDialog({ order, open, onOpenChange }: OrderDetailDial
                             <Button variant="outline" size="sm" onClick={copyShareLink}>
                                 {isCopied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4 mr-1" />}
                                 {isCopied ? '已複製' : '分享'}
+                            </Button>
+                        )}
+                        {onDeleteOrder && (
+                            <Button variant="destructive" size="sm" onClick={() => onDeleteOrder(order.id)}>
+                                <Trash2 className="h-4 w-4 mr-1" />
+                                刪除訂單
                             </Button>
                         )}
                     </div>

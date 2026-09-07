@@ -4,6 +4,7 @@ import { generateProductExcel } from '@/utils/excelUtils';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { ProductWithPricing } from '@/types/product';
+import { useBrandSeriesCache } from '@/hooks/useBrandSeriesCache';
 
 export async function handleBatchExport(
     products: ProductWithPricing[] | null,
@@ -14,6 +15,8 @@ export async function handleBatchExport(
 ) {
     const { data: categoriesData } = await supabase.from('categories').select('*');
     const { data: specLinks } = await supabase.from('category_spec_links').select('*');
+    const { data: seriesData } = await supabase.from('brand_series').select('id, name');
+    const seriesMap = Object.fromEntries((seriesData || []).map(s => [s.id, s.name]));
 
     const { specDefinitions: storeSpecDefs, fetchSpecs } = useSpecStore.getState();
     let defs = storeSpecDefs;
@@ -33,7 +36,7 @@ export async function handleBatchExport(
     }
 
     try {
-        const workbook = await generateProductExcel(selected, categoriesData || [], defs, specLinks || [], brandMap);
+        const workbook = await generateProductExcel(selected, categoriesData || [], defs, specLinks || [], brandMap, seriesMap);
         const XLSX = await import('xlsx');
         const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });

@@ -80,7 +80,46 @@ export function DeviceModelManager() {
     return filteredModels.slice(start, start + PAGE_SIZE);
   }, [filteredModels, page]);
 
-  const handleSave = () => {
+  const syncModelSpecs = async (modelId: string, specifications: Record<string, any> | null | undefined) => {
+    const specs = specifications || {};
+    const aspects: { aspect: string; key: string }[] = [
+      { aspect: 'color', key: 'colors' },
+      { aspect: 'storage', key: 'storage_options' },
+      { aspect: 'ram', key: 'ram_options' },
+      { aspect: 'cpu', key: 'cpu_options' },
+    ];
+    const optionRows: any[] = [];
+    aspects.forEach(({ aspect, key }) => {
+      const values = Array.isArray(specs[key]) ? specs[key] as string[] : [];
+      values.forEach((value, i) => optionRows.push({ model_id: modelId, aspect, value, sort_order: i }));
+    });
+    const versionRows = (Array.isArray(specs.versions) ? specs.versions as any[] : []).map((v, i) => ({
+      model_id: modelId,
+      version_name: v.version_name || '預設版本',
+      color: v.color || null,
+      storage: v.storage || null,
+      ram: v.ram || null,
+      cpu: v.cpu || null,
+      is_default: !!v.is_default,
+      sort_order: i,
+    }));
+
+    const db = supabase as any;
+    const { error: delOptError } = await db.from('device_model_spec_options').delete().eq('model_id', modelId);
+    if (delOptError) throw delOptError;
+    if (optionRows.length > 0) {
+      const { error: optError } = await db.from('device_model_spec_options').insert(optionRows);
+      if (optError) throw optError;
+    }
+    const { error: delVerError } = await db.from('device_model_versions').delete().eq('model_id', modelId);
+    if (delVerError) throw delVerError;
+    if (versionRows.length > 0) {
+      const { error: verError } = await db.from('device_model_versions').insert(versionRows);
+      if (verError) throw verError;
+    }
+  };
+
+  const handleSave = async () => {
     if (!editingData?.name?.trim()) return;
 
     const payload = {
@@ -92,15 +131,25 @@ export function DeviceModelManager() {
       device_series: editingData.device_series || null,
       device_remarks: editingData.device_remarks || null,
       release_date: editingData.release_date || null,
-      aliases: editingData.aliases || null
+      aliases: editingData.aliases || null,
+      specifications: editingData.specifications || {}
+    };
+    const finish = async (modelId: string) => {
+      try {
+        await syncModelSpecs(modelId, editingData?.specifications);
+      } catch (err: any) {
+        console.error('同步規格失敗:', err);
+        toast.error('型號已儲存，但同步規格失敗：' + err.message);
+      }
+      setIsDialogOpen(false);
     };
     if (editingData.id) {
       updateMutation.mutate({ id: editingData.id, values: payload }, {
-        onSuccess: () => setIsDialogOpen(false)
+        onSuccess: (data) => finish(data?.id || editingData.id!)
       });
     } else {
       createMutation.mutate({ ...payload, is_active: true }, {
-        onSuccess: () => setIsDialogOpen(false)
+        onSuccess: (data) => finish(data?.id)
       });
     }
   };

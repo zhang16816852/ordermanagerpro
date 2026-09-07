@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 
 // Separate types for system and store roles
-type SystemRole = 'admin' | 'customer' | 'rep';
+type SystemRole = 'admin' | 'customer' | 'rep' | 'fixengineer';
 type StoreRoleType = 'founder' | 'manager' | 'employee';
 
 interface StoreRole {
@@ -29,6 +29,7 @@ interface AuthContextType {
   storeRoles: StoreRole[];
   isAdmin: boolean;
   isRep: boolean;
+  isFixEngineer: boolean;
   repAssignedStores: RepStore[];
   commissionRate: number;
   storeId: string | null;
@@ -56,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAdmin = systemRoles.includes('admin');
   const isRep = systemRoles.includes('rep');
+  const isFixEngineer = systemRoles.includes('fixengineer');
   const storeRole = storeRoles.find(s => s.store_id === currentStoreId)?.role ?? null;
 
   const setCurrentStore = (storeId: string | null) => {
@@ -257,6 +259,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         storeRoles,
         isAdmin,
         isRep,
+        isFixEngineer,
         repAssignedStores,
         commissionRate,
         storeId: currentStoreId,

@@ -273,7 +273,7 @@ export default function AdminStores() {
     onError: (err: Error) => toast.error(getErrorMessage(err)),
   });
 
-  // 設定系統角色（業務 / 管理員 / 用戶）
+  // 設定系統角色（業務 / 管理員 / 維修人員 / 用戶）
   const systemRoleMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
       if (role === 'customer') {
@@ -305,7 +305,7 @@ export default function AdminStores() {
   });
 
   const openRoleDialog = (userId: string, roles: string[]) => {
-    const current = roles.find((r) => r === 'rep') || roles.find((r) => r === 'admin') || roles[0] || 'customer';
+    const current = roles.find((r) => r === 'rep') || roles.find((r) => r === 'admin') || roles.find((r) => r === 'fixengineer') || roles[0] || 'customer';
     setRoleUserId(userId);
     setRoleValue(current);
     setShowRoleDialog(true);
@@ -327,6 +327,7 @@ export default function AdminStores() {
       case 'admin': return <Badge className="bg-red-500">管理員</Badge>;
       case 'customer': return <Badge variant="secondary">用戶</Badge>;
       case 'rep': return <Badge className="bg-emerald-600">業務</Badge>;
+      case 'fixengineer': return <Badge className="bg-amber-600">維修人員</Badge>;
       default: return <Badge variant="outline">{role}</Badge>;
     }
   };
@@ -690,6 +691,7 @@ export default function AdminStores() {
                   <SelectItem value="all">所有角色</SelectItem>
                   <SelectItem value="admin">管理員</SelectItem>
                   <SelectItem value="rep">業務</SelectItem>
+                  <SelectItem value="fixengineer">維修人員</SelectItem>
                   <SelectItem value="customer">用戶</SelectItem>
                 </SelectContent>
               </Select>
@@ -1022,6 +1024,7 @@ export default function AdminStores() {
                 <SelectContent>
                   <SelectItem value="rep">業務</SelectItem>
                   <SelectItem value="admin">管理員</SelectItem>
+                  <SelectItem value="fixengineer">維修人員</SelectItem>
                   <SelectItem value="customer">用戶</SelectItem>
                 </SelectContent>
               </Select>

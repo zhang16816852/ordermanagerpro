@@ -45,7 +45,37 @@ export const REPAIR_ORDER_STATUS_STEPS: RepairOrderStatus[] = [
   'delivered',
 ];
 
+export const REPAIR_ORDER_WORKING_STATUSES: RepairOrderStatus[] = [
+  'diagnosing',
+  'quoting',
+  'awaiting_approval',
+  'awaiting_parts',
+  'repairing',
+  'ready',
+];
+
+export const REPAIR_ORDER_CLOSED_STATUSES: RepairOrderStatus[] = ['delivered', 'cancelled'];
+
+export function isRepairOrderAcceptable(status: string): boolean {
+  return status === 'pending';
+}
+
+export function isRepairOrderWorking(status: string): boolean {
+  return REPAIR_ORDER_WORKING_STATUSES.includes(status as RepairOrderStatus);
+}
+
+export function isRepairOrderClosed(status: string): boolean {
+  return REPAIR_ORDER_CLOSED_STATUSES.includes(status as RepairOrderStatus);
+}
+
+export const REPAIR_ASSIGNMENT_LABELS = {
+  open: '開放待接案',
+  assigned: '已指派',
+} as const;
+
 export const REPAIR_ITEM_TYPE_LABELS: Record<RepairItemType, string> = {
   service: '維修服務',
   part: '零件材料',
 };
+
+export type { DeviceBlock, RepairBlockItem } from '@/components/repair/DeviceBlockSection';

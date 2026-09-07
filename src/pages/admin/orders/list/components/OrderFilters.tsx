@@ -21,6 +21,9 @@ interface OrderFiltersProps {
   onDateToChange: (v: string) => void;
   poFilter: 'all' | 'has_po' | 'no_po';
   onPoFilterChange: (v: 'all' | 'has_po' | 'no_po') => void;
+  repFilter: string;
+  onRepFilterChange: (v: string) => void;
+  reps: { user_id: string; full_name: string | null; email: string }[];
 }
 
 export function OrderFilters({
@@ -39,6 +42,9 @@ export function OrderFilters({
   onDateToChange,
   poFilter,
   onPoFilterChange,
+  repFilter,
+  onRepFilterChange,
+  reps,
 }: OrderFiltersProps) {
   return (
     <div className="space-y-4 flex-none">
@@ -122,16 +128,29 @@ export function OrderFilters({
           />
         </div>
         {viewMode === 'orders' && (
-          <Select value={poFilter} onValueChange={(v) => onPoFilterChange(v as any)}>
-            <SelectTrigger className="w-36 h-10 border-muted">
-              <SelectValue placeholder="採購狀態" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部</SelectItem>
-              <SelectItem value="has_po">已轉採購</SelectItem>
-              <SelectItem value="no_po">未轉採購</SelectItem>
-            </SelectContent>
-          </Select>
+          <>
+            <Select value={repFilter} onValueChange={(v) => onRepFilterChange(v)}>
+              <SelectTrigger className="w-36 h-10 border-muted">
+                <SelectValue placeholder="全部業務" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部業務</SelectItem>
+                {reps.map(r => (
+                  <SelectItem key={r.user_id} value={r.user_id}>{r.full_name || r.email}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={poFilter} onValueChange={(v) => onPoFilterChange(v as any)}>
+              <SelectTrigger className="w-36 h-10 border-muted">
+                <SelectValue placeholder="採購狀態" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部</SelectItem>
+                <SelectItem value="has_po">已轉採購</SelectItem>
+                <SelectItem value="no_po">未轉採購</SelectItem>
+              </SelectContent>
+            </Select>
+          </>
         )}
       </div>
     </div>

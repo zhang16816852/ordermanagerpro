@@ -59,7 +59,9 @@ export function usePurchaseOrders(viewingOrderId?: string) {
       const { data, error } = await (supabase as any)
         .from('purchase_order_items')
         .select('*')
-        .eq('purchase_order_id', viewingOrderId);
+        .eq('purchase_order_id', viewingOrderId)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true });
       if (error) throw error;
 
       // Get product info
@@ -167,15 +169,26 @@ export function usePurchaseOrders(viewingOrderId?: string) {
 
   const deleteOrderMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await (supabase as any).from('purchase_orders').delete().eq('id', id);
+      const { data, error } = await (supabase as any).rpc('delete_purchase_order_if_empty', {
+        p_purchase_order_id: id,
+      });
       if (error) throw error;
+      const res = data as { ok?: boolean; reason?: string; adopted_by?: unknown };
+      if (!res?.ok) {
+        let reason = res?.reason || '刪除失敗';
+        const blocks = res?.adopted_by as Array<{ label?: string }> | undefined;
+        if (Array.isArray(blocks) && blocks.length > 0) {
+          reason = `${reason}（${blocks.map((b) => b?.label).filter(Boolean).join('、')}）`;
+        }
+        throw new Error(reason);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
       queryClient.invalidateQueries({ queryKey: ['purchase-order-links'] });
       toast.success('採購訂單已刪除');
     },
-    onError: () => toast.error('刪除失敗'),
+    onError: (e) => toast.error(e instanceof Error ? e.message : '刪除失敗'),
   });
 
   const createSupplierMutation = useMutation({
@@ -192,7 +205,18 @@ export function usePurchaseOrders(viewingOrderId?: string) {
 
   const addItemMutation = useMutation({
     mutationFn: async (data: Partial<PurchaseOrderItem>) => {
-      const { error } = await (supabase as any).from('purchase_order_items').insert(data);
+      // Assign next sort_order so new items append at the end
+      const { data: last } = await (supabase as any)
+        .from('purchase_order_items')
+        .select('sort_order')
+        .eq('purchase_order_id', viewingOrderId)
+        .order('sort_order', { ascending: false })
+        .limit(1);
+      const nextSort = ((last?.[0]?.sort_order ?? 0) as number) + 1;
+
+      const { error } = await (supabase as any)
+        .from('purchase_order_items')
+        .insert({ ...data, sort_order: nextSort });
       if (error) throw error;
 
       if (viewingOrderId) {
@@ -277,6 +301,68 @@ export function usePurchaseOrders(viewingOrderId?: string) {
     onError: () => toast.error('刪除失敗'),
   });
 
+  const reorderItemsMutation = useMutation({
+    mutationFn: async (items: PurchaseOrderItem[]) => {
+      const p_items = items.map((item, index) => ({
+        id: item.id,
+        sort_order: index + 1,
+      }));
+      const { error } = await (supabase as any)
+        .rpc('reorder_purchase_order_items', { p_items });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-items', viewingOrderId] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      toast.success('品項順序已更新');
+    },
+    onError: () => toast.error('更新順序失敗'),
+  });
+
+  const importItemsMutation = useMutation({
+    mutationFn: async ({ purchaseOrderId, items }: { purchaseOrderId: string; items: Partial<PurchaseOrderItem>[] }) => {
+      if (!items || items.length === 0) return;
+      const { data: last } = await (supabase as any)
+        .from('purchase_order_items')
+        .select('sort_order')
+        .eq('purchase_order_id', purchaseOrderId)
+        .order('sort_order', { ascending: false })
+        .limit(1);
+      const base = ((last?.[0]?.sort_order ?? 0) as number);
+
+      const rows = items.map((item, index) => ({
+        purchase_order_id: purchaseOrderId,
+        product_id: item.product_id,
+        variant_id: item.variant_id || null,
+        quantity: item.quantity || 0,
+        unit_cost: item.unit_cost || 0,
+        sort_order: base + index + 1,
+      }));
+
+      const { error } = await (supabase as any)
+        .from('purchase_order_items')
+        .insert(rows);
+      if (error) throw error;
+
+      const totalDelta = rows.reduce((sum, row) => sum + (row.quantity || 0) * (row.unit_cost || 0), 0);
+      const { data: order } = await (supabase as any)
+        .from('purchase_orders')
+        .select('total_amount')
+        .eq('id', purchaseOrderId)
+        .single();
+      await (supabase as any)
+        .from('purchase_orders')
+        .update({ total_amount: (order?.total_amount || 0) + totalDelta })
+        .eq('id', purchaseOrderId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-items', viewingOrderId] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      toast.success(`採購品項已匯入`);
+    },
+    onError: () => toast.error('匯入失敗'),
+  });
+
   const receiveItemsMutation = useMutation({
     mutationFn: async (params: { items: { id: string; received_quantity: number; warehouse_id?: string }[] }) => {
       const { items } = params;
@@ -311,6 +397,41 @@ export function usePurchaseOrders(viewingOrderId?: string) {
       toast.success('收貨已記錄');
     },
     onError: () => toast.error('記錄失敗'),
+  });
+
+  const returnItemsMutation = useMutation({
+    mutationFn: async (params: {
+      items: { id: string; quantity: number }[];
+      warehouseId?: string;
+      creditAccountId?: string;
+      reason?: string;
+    }) => {
+      const { items, warehouseId, creditAccountId, reason } = params;
+
+      const rpcItems = items.map((item) => ({
+        purchase_order_item_id: item.id,
+        quantity: item.quantity,
+      }));
+
+      const { error } = await (supabase as any).rpc('process_purchase_return', {
+        p_purchase_order_id: viewingOrderId,
+        p_items: rpcItems,
+        p_warehouse_id: warehouseId || null,
+        p_credit_account_id: creditAccountId || null,
+        p_reason: reason || '',
+        p_created_by: user?.id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-items', viewingOrderId] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['accounting-entries'] });
+      toast.success('廠商退貨已完成');
+    },
+    onError: () => toast.error('退貨失敗'),
   });
 
   const { data: accounts = [] } = useQuery({
@@ -361,7 +482,10 @@ export function usePurchaseOrders(viewingOrderId?: string) {
     addItemMutation,
     updateItemMutation,
     deleteItemMutation,
+    reorderItemsMutation,
+    importItemsMutation,
     receiveItemsMutation,
+    returnItemsMutation,
     unlinkOrdersFromPurchaseMutation,
     // Provide a way to record payment
     makePaymentMutation: useMutation({

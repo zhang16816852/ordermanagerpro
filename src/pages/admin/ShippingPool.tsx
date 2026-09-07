@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,7 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Search, Package, Truck, Send, Store, Undo2 } from "lucide-react";
+import { GripVertical, Search, Package, Truck, Send, Store, Undo2, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { PageHeader } from '@/components/layout/PageHeader';
 import { MobileFooter } from '@/components/layout/MobileFooter';
 import { toast } from "sonner";
@@ -75,6 +78,23 @@ interface GroupedByStore {
   totalQuantity: number;
 }
 
+function SortablePoolRow({ item, isRemoving, children }: { item: ShippingPoolItem; isRemoving?: boolean; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.45 : 1,
+  };
+  return (
+    <TableRow ref={setNodeRef} style={style} {...attributes}>
+      <TableCell {...listeners} className="cursor-grab active:cursor-grabbing w-10 text-center text-muted-foreground hover:text-foreground">
+        <GripVertical className="h-3.5 w-3.5 mx-auto" />
+      </TableCell>
+      {children}
+    </TableRow>
+  );
+}
+
 export default function AdminShippingPool() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -90,6 +110,11 @@ export default function AdminShippingPool() {
   const [warehouseMap, setWarehouseMap] = useState<Record<string, string>>({});
   const [sourceMap, setSourceMap] = useState<Record<string, string>>({});
   const [consignmentOverrideMap, setConsignmentOverrideMap] = useState<Record<string, boolean>>({});
+  const [localOrder, setLocalOrder] = useState<Record<string, string[]>>({});
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
 
   const getItemWarehouse = (orderItemId: string) => warehouseMap[orderItemId] || defaultWarehouse?.id || '';
   const getItemSource = (orderItemId: string) => sourceMap[orderItemId] || 'self';
@@ -136,6 +161,7 @@ export default function AdminShippingPool() {
           quantity,
           store_id,
           created_at,
+          sort_order,
             order_item:order_items(
               id,
               order_id,
@@ -149,6 +175,7 @@ export default function AdminShippingPool() {
               product_variant:product_variants(name)
             )
         `)
+        .order("sort_order", { ascending: true })
         .order("created_at", { ascending: true });
 
       if (storeFilter !== "all") {
@@ -181,8 +208,87 @@ export default function AdminShippingPool() {
     return acc;
   }, [] as GroupedByStore[]) || [];
 
+  // 抬頭欄位排序
+  const [sortField, setSortField] = useState<'product' | 'quantity' | 'unit_price' | 'subtotal' | 'created_at'>('created_at');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: typeof sortField) => {
+    // 排序列（欄位或方向）變動時清掉手動拖曳順序，讓表頭排序立即生效
+    setLocalOrder({});
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const getSortValue = (item: ShippingPoolItem, field: typeof sortField): string | number => {
+    switch (field) {
+      case 'product':
+        return (item.order_item?.product_variant?.name || item.order_item?.product?.name || '').toLowerCase();
+      case 'quantity':
+        return item.quantity;
+      case 'unit_price':
+        return item.order_item?.unit_price || 0;
+      case 'subtotal':
+        return item.quantity * (item.order_item?.unit_price || 0);
+      case 'created_at':
+        return new Date(item.created_at).getTime();
+      default:
+        return 0;
+    }
+  };
+
+  const handleDragEnd = (storeId: string, event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const group = groupedByStore.find(g => g.storeId === storeId);
+    if (!group) return;
+
+    const oldIndex = group.items.findIndex(i => i.id === active.id);
+    const newIndex = group.items.findIndex(i => i.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(group.items, oldIndex, newIndex);
+
+    setLocalOrder(prev => ({
+      ...prev,
+      [storeId]: reordered.map(i => i.id),
+    }));
+
+    // 持久化到資料庫
+    const payload = reordered.map((item, idx) => ({
+      id: item.id,
+      sort_order: idx + 1,
+    }));
+    supabase.rpc('reorder_shipping_pool_items', { p_items: payload }).then(({ error }) => {
+      if (error) console.error('reorder_shipping_pool_items failed:', error);
+    });
+  };
+
+  const sortedGroups = useMemo(() => {
+    return groupedByStore.map(group => {
+      const sorted = [...group.items].sort((a, b) => {
+        const aVal = getSortValue(a, sortField);
+        const bVal = getSortValue(b, sortField);
+        if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+      const order = localOrder[group.storeId];
+      if (order && order.length === sorted.length) {
+        const itemMap = new Map(sorted.map(i => [i.id, i]));
+        const reordered = order.map(id => itemMap.get(id)).filter(Boolean) as ShippingPoolItem[];
+        if (reordered.length === sorted.length) return { ...group, items: reordered };
+      }
+      return { ...group, items: sorted };
+    });
+  }, [groupedByStore, sortField, sortDir, localOrder]);
+
   // 過濾搜索結果
-  const filteredGroups = groupedByStore.filter(group => {
+  const filteredGroups = sortedGroups.filter(group => {
     if (!search) return true;
     const searchLower = search.toLowerCase();
     return (
@@ -261,6 +367,19 @@ export default function AdminShippingPool() {
       if (!user) throw new Error("未登入");
       if (selectedStores.size === 0) throw new Error("請選擇至少一個店家");
 
+      // 出貨前先把「目前畫面順序」（表頭排序＋拖曳）回寫 DB，
+      // 確保 ship_from_pool 依顯示順序建立銷貨單品項
+      for (const group of sortedGroups) {
+        if (!selectedStores.has(group.storeId)) continue;
+        const payload = group.items.map((item, idx) => ({
+          id: item.id,
+          sort_order: idx + 1,
+        }));
+        if (payload.length === 0) continue;
+        const { error: reorderError } = await supabase.rpc("reorder_shipping_pool_items", { p_items: payload });
+        if (reorderError) throw reorderError;
+      }
+
       const { data, error } = await supabase.rpc("ship_from_pool", {
         p_store_ids: Array.from(selectedStores),
         p_created_by: user.id,
@@ -313,6 +432,31 @@ export default function AdminShippingPool() {
   const ownWarehouses = warehouses.filter(w => w.include_in_available && w.is_active !== false);
   const selectedPoolItems = shippingPoolItems?.filter(i => selectedStores.has(i.store_id)) || [];
   const { data: poolStock } = usePoolStock(selectedPoolItems);
+
+  const SortableHead = ({ field, children, className }: { field: typeof sortField; children: React.ReactNode; className?: string }) => (
+    <TableHead className={className}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-8 px-1 -ml-1 font-medium text-muted-foreground hover:text-foreground"
+        onClick={() => handleSort(field)}
+      >
+        {children}
+        {sortField === field ? (
+          sortDir === 'asc' ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />
+        ) : (
+          <ArrowUpDown className="ml-1 h-3 w-3 opacity-30" />
+        )}
+      </Button>
+    </TableHead>
+  );
+
+  const getDisplayName = (item: ShippingPoolItem) => {
+    const variant = item.order_item?.product_variant?.name;
+    const product = item.order_item?.product?.name;
+    if (variant) return variant;
+    return product || '';
+  };
 
   return (
     <div className="space-y-6 pb-24 md:pb-0">
@@ -427,7 +571,8 @@ export default function AdminShippingPool() {
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-4 pb-4">
-                      <Table>
+                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleDragEnd(group.storeId, e)}>
+                        <Table>
                         <TableHeader>
                           <TableRow>
                             <TableHead className="w-10">
@@ -437,58 +582,51 @@ export default function AdminShippingPool() {
                                 aria-label="全選此店家品項"
                               />
                             </TableHead>
-                            <TableHead>SKU</TableHead>
-                            <TableHead>產品</TableHead>
-                            <TableHead className="text-right">出貨數量</TableHead>
-                            <TableHead className="text-right">單價</TableHead>
-                            <TableHead className="text-right">小計</TableHead>
-                            <TableHead>加入時間</TableHead>
+                            <SortableHead field="product">商品</SortableHead>
+                            <SortableHead field="quantity" className="text-right">出貨數量</SortableHead>
+                            <SortableHead field="unit_price" className="text-right">單價</SortableHead>
+                            <SortableHead field="subtotal" className="text-right">小計</SortableHead>
+                            <SortableHead field="created_at">加入時間</SortableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {group.items.map((item) => (
-                            <TableRow
-                              key={item.id}
-                              className={selectedPoolItemIds.has(item.id) ? "bg-muted/40" : ""}
-                            >
-                              <TableCell>
-                                <Checkbox
-                                  checked={selectedPoolItemIds.has(item.id)}
-                                  onCheckedChange={() => togglePoolItem(item.id)}
-                                  aria-label="選取此品項"
-                                />
-                              </TableCell>
-                              <TableCell className="font-mono text-sm">
-                                {(item.order_item?.product as any)?.code}
-                              </TableCell>
-                              <TableCell>
-                                {item.order_item?.product?.name}
-                                {item.order_item?.product_variant && (
-                                  <span className="text-muted-foreground ml-1">
-                                    - {item.order_item.product_variant.name}
-                                  </span>
-                                )}
-                                <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
-                                  來源單號: {item.order_item?.order?.code || item.order_item?.order_id.slice(0, 8)}
-                                  {item.order_item?.order?.consignment_mode && (
-                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-right">{item.quantity}</TableCell>
-                              <TableCell className="text-right">
-                                {formatCurrency(item.order_item?.unit_price)}
-                              </TableCell>
-                              <TableCell className="text-right font-medium">
-                                {formatCurrency(item.quantity * (item.order_item?.unit_price || 0))}
-                              </TableCell>
-                              <TableCell className="text-muted-foreground">
-                                {format(new Date(item.created_at), "MM/dd HH:mm")}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          <SortableContext items={group.items.map(i => i.id)} strategy={verticalListSortingStrategy}>
+                              {group.items.map((item) => (
+                                <SortablePoolRow key={item.id} item={item}>
+                                  <TableCell className="flex items-center gap-2">
+                                    <Checkbox
+                                      checked={selectedPoolItemIds.has(item.id)}
+                                      onCheckedChange={() => togglePoolItem(item.id)}
+                                      aria-label="選取此品項"
+                                    />
+                                  </TableCell>
+                                  <TableCell className="text-sm">
+                                    <span className="font-medium">
+                                      {getDisplayName(item)}
+                                    </span>
+                                    <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+                                      來源單號: {item.order_item?.order?.code || item.order_item?.order_id.slice(0, 8)}
+                                      {item.order_item?.order?.consignment_mode && (
+                                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-right">{item.quantity}</TableCell>
+                                  <TableCell className="text-right">
+                                    {formatCurrency(item.order_item?.unit_price)}
+                                  </TableCell>
+                                  <TableCell className="text-right font-medium">
+                                    {formatCurrency(item.quantity * (item.order_item?.unit_price || 0))}
+                                  </TableCell>
+                                  <TableCell className="text-muted-foreground">
+                                    {format(new Date(item.created_at), "MM/dd HH:mm")}
+                                  </TableCell>
+                                </SortablePoolRow>
+                              ))}
+                            </SortableContext>
+                          </TableBody>
+                        </Table>
+                      </DndContext>
                     </AccordionContent>
                   </AccordionItem>
                 );
@@ -532,7 +670,7 @@ export default function AdminShippingPool() {
                 </div>
               </div>
             </div>
-            {groupedByStore.filter(g => selectedStores.has(g.storeId)).map(group => {
+            {filteredGroups.filter(g => selectedStores.has(g.storeId)).map(group => {
               const groupTotal = group.items.reduce((sum, item) => sum + item.quantity * (item.order_item?.unit_price || 0), 0);
               return (
                 <div key={group.storeId} className="space-y-2 border rounded p-3">
@@ -543,8 +681,7 @@ export default function AdminShippingPool() {
                   <Table>
                     <TableHeader className="bg-muted/30">
                       <TableRow>
-                        <TableHead>SKU</TableHead>
-                        <TableHead>產品</TableHead>
+                        <TableHead>商品</TableHead>
                         <TableHead className="text-right">數量</TableHead>
                         <TableHead className="text-right">單價</TableHead>
                         <TableHead className="text-right">小計</TableHead>
@@ -561,9 +698,8 @@ export default function AdminShippingPool() {
                         const stockByWh = poolStock?.[stockKey] || {};
                         return (
                           <TableRow key={item.id}>
-                            <TableCell className="font-mono text-xs">{(item.order_item?.product as any)?.code}</TableCell>
                             <TableCell className="text-sm">
-                              {item.order_item?.product?.name}
+                              {getDisplayName(item)}
                               {isConsignment && <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>}
                             </TableCell>
                             <TableCell className="text-right">{item.quantity}</TableCell>

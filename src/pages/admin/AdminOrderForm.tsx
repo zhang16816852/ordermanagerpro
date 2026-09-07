@@ -113,6 +113,7 @@ export default function AdminOrderForm() {
   const { products: storeProducts, isLoading: productsLoading, templates } = useStoreProductCache(
     orderType !== 'purchase' ? (storeId || null) : null,
     displayBrand || null,
+    { includeShipping: true },
   );
   const draft = useStoreDraft(draftKey);
 
@@ -393,6 +394,11 @@ export default function AdminOrderForm() {
         variantId: item.variantId,
         quantity: item.quantity,
         unitPrice: mapping?.vendor_unit_cost ?? item.price,
+        unitCost: item.unitCost,
+        itemType: item.itemType,
+        shippingPayment: item.shippingPayment,
+        tempKey: item.tempKey,
+        parentTempKey: item.parentTempKey,
         isNew: true,
         selectedModelName: item.selectedModelName,
         sku: item.sku,
@@ -477,6 +483,32 @@ export default function AdminOrderForm() {
     setItems(newItems);
   }, []);
 
+  // 拆分行：原行減 1、插入數量 1 的新行（同變體多列，如單價 0 補寄/換貨）
+  const handleSplitItem = useCallback((index: number) => {
+    const item = itemsRef.current[index];
+    if (!item || item.quantity <= 1) return;
+
+    setItems((prev) => {
+      const next = [...prev];
+      const base = next[index];
+      if (!base || base.quantity <= 1) return prev;
+      next[index] = { ...base, quantity: base.quantity - 1 };
+      const splitRow: OrderItemRow = {
+        ...base,
+        id: `${base.id}__split-${Date.now()}`,
+        quantity: 1,
+        isNew: true,
+        sort_order: undefined,
+      };
+      next.splice(index + 1, 0, splitRow);
+      return next;
+    });
+
+    // 同步草稿總量（合成 id 來自商品目錄才有對應草稿；編輯中 DB 列則為 no-op，無副作用）
+    if (!item.id.startsWith(`${item.productId}-`)) return;
+    draft.updateQuantity(item.id, Math.max(1, item.quantity - 1));
+  }, [draft]);
+
   const handleTogglePriceSync = useCallback((id: string, checked: boolean) => {
     setPriceSyncMap((prev) => ({ ...prev, [id]: checked }));
   }, []);
@@ -514,6 +546,21 @@ export default function AdminOrderForm() {
     }
   }, [items, priceSyncMap, order, storeId, storeInfo, isEditMode]);
 
+  const buildItemsPayload = (currentItems: OrderItemRow[]) =>
+    currentItems.map((item, index) => ({
+      id: item.isNew ? null : item.id,
+      product_id: item.productId,
+      variant_id: item.variantId || null,
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+      unit_cost: item.unitCost ?? undefined,
+      selected_model_name: item.selectedModelName || undefined,
+      shipping_payment: item.shippingPayment ?? undefined,
+      temp_key: item.isNew ? (item.tempKey ?? `temp-${Date.now().toString(36)}-${index}`) : undefined,
+      parent_temp_key: item.parentTempKey ?? undefined,
+      sort_order: index + 1,
+    }));
+
   // Edit mode: update existing order
   const updateOrderMutation = useMutation({
     mutationFn: async () => {
@@ -522,19 +569,11 @@ export default function AdminOrderForm() {
       const currentDeletedIds = pendingDeletedIdsRef.current;
       if (!orderId) throw new Error('訂單不存在');
 
-      const payload = currentItems.map((item, index) => ({
-        id: item.isNew ? null : item.id,
-        product_id: item.productId,
-        variant_id: item.variantId || null,
-        quantity: item.quantity,
-        unit_price: item.unitPrice,
-        selected_model_name: item.selectedModelName || null,
-        sort_order: index + 1,
-      }));
+      const payload = buildItemsPayload(currentItems);
 
       const { error } = await supabase.rpc('update_order_with_items', {
         p_order_id: orderId,
-        p_notes: currentNotes || null,
+        p_notes: currentNotes || undefined,
         p_items: payload,
         p_deleted_item_ids: currentDeletedIds.length > 0 ? currentDeletedIds : undefined,
       });
@@ -579,7 +618,9 @@ export default function AdminOrderForm() {
         store_id: storeId,
         quantity: item.quantity,
         unit_price: item.unitPrice,
+        unit_cost: item.unitCost ?? 0,
         selected_model_name: item.selectedModelName || null,
+        shipping_payment: item.shippingPayment ?? null,
         sort_order: index + 1,
       }));
 
@@ -606,9 +647,13 @@ export default function AdminOrderForm() {
         variant_id: i.variantId || null,
         quantity: i.quantity,
         unit_price: i.unitPrice,
+        unit_cost: i.unitCost ?? undefined,
         selected_model_name: i.selectedModelName || null,
         warehouse_id: getItemWarehouse(i.id) || null,
         inventory_source_type: itemSources[i.id] || "self",
+        shipping_payment: i.shippingPayment ?? undefined,
+        temp_key: i.tempKey ?? `temp-${Date.now().toString(36)}-${index}`,
+        parent_temp_key: i.parentTempKey ?? undefined,
         sort_order: index + 1,
       }));
 
@@ -667,12 +712,26 @@ export default function AdminOrderForm() {
   const directShipMutation = useMutation({
     mutationFn: async () => {
       if (!user || !orderId) throw new Error('訂單不存在');
-      const warehouseMap = items.reduce((acc, i) => {
+      const currentItems = itemsRef.current;
+      const currentNotes = notesRef.current;
+      const currentDeletedIds = pendingDeletedIdsRef.current;
+
+      // 先持久化本地的拆分/編輯結果（direct_ship_order 只讀 DB order_items）
+      const prePayload = buildItemsPayload(currentItems);
+      const { error: preSaveError } = await supabase.rpc('update_order_with_items', {
+        p_order_id: orderId,
+        p_notes: currentNotes || undefined,
+        p_items: prePayload,
+        p_deleted_item_ids: currentDeletedIds.length > 0 ? currentDeletedIds : undefined,
+      });
+      if (preSaveError) throw preSaveError;
+
+      const warehouseMap = currentItems.reduce((acc, i) => {
         const wh = getItemWarehouse(i.id);
         if (wh) acc[i.id] = wh;
         return acc;
       }, {} as Record<string, string>);
-      const sourceMap = items.reduce((acc, i) => {
+      const sourceMap = currentItems.reduce((acc, i) => {
         const src = itemSources[i.id];
         if (src) acc[i.id] = src;
         return acc;
@@ -960,6 +1019,7 @@ export default function AdminOrderForm() {
       onUpdateQuantity={handleQuantityChange}
       onUpdatePrice={handlePriceChange}
       onRemove={handleRemoveItem}
+      onSplit={handleSplitItem}
       onReorder={handleReorder}
       priceSyncMap={priceSyncMap}
       onTogglePriceSync={handleTogglePriceSync}

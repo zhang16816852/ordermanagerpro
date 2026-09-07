@@ -17,6 +17,7 @@ export const BASE_COLUMNS = {
     '狀態': 'status',
     '條碼': 'barcode',
     '分類': 'category',
+    '變體排序': 'variant_sort_order',
 } as const;
 
 export type BaseColumnKey = keyof typeof BASE_COLUMNS;
@@ -213,9 +214,14 @@ async function createWorkbook(
         groupProducts.forEach(p => {
             rows.push(buildRowV3(p, false, row4Ids, brandMap, specMap, undefined, seriesMap));
             if (p.variants && p.variants.length > 0) {
-                p.variants.forEach((v: any) => {
-                    rows.push(buildRowV3(v, true, row4Ids, brandMap, specMap, p, seriesMap));
-                });
+                [...p.variants]
+                    .sort((a: any, b: any) =>
+                        (a.sort_order ?? 0) - (b.sort_order ?? 0) ||
+                        String(a.created_at || '').localeCompare(String(b.created_at || ''))
+                    )
+                    .forEach((v: any) => {
+                        rows.push(buildRowV3(v, true, row4Ids, brandMap, specMap, p, seriesMap));
+                    });
             }
         });
 
@@ -273,6 +279,7 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
         barcode: isVariant ? (item.barcode || '') : '',
         category: categoryName,
         device_models: '',
+        variant_sort_order: isVariant ? (item.sort_order ?? 0) : '',
     };
 
     let deviceModelValue = '';

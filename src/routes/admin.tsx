@@ -21,6 +21,9 @@ import AdminRepairOrderNew from "@/pages/admin/repair-orders/new";
 import AdminRepairOrderEdit from "@/pages/admin/repair-orders/new";
 import AdminRepairOrderDetail from "@/pages/admin/repair-orders/detail";
 import AdminReps from "@/pages/admin/Reps";
+import RepCommissionPage from "@/pages/admin/RepCommissionPage";
+import MyCommissionPage from "@/pages/admin/MyCommissionPage";
+import AdminShippingSettlements from "@/pages/admin/shipping-settlements/ShippingSettlementsPage";
 
 export const adminRoutes = [
     { path: "/admin", element: <AdminDashboard /> },
@@ -33,6 +36,8 @@ export const adminRoutes = [
     { path: "/admin/categories/:categoryId", element: <CategoryEditor /> },
     { path: "/admin/stores", element: <AdminStores /> },
     { path: "/admin/reps", element: <AdminReps /> },
+    { path: "/admin/reps/:userId/commission", element: <RepCommissionPage /> },
+    { path: "/admin/my-commission", element: <MyCommissionPage /> },
     { path: "/admin/orders", element: <AdminOrderList /> },
     { path: "/admin/orders/new", element: <AdminOrderComposer /> },
     { path: "/admin/orders/checkout", element: <AdminOrderForm /> },
@@ -41,6 +46,7 @@ export const adminRoutes = [
     { path: "/admin/shipping-pool", element: <AdminShippingPool /> },
     { path: "/admin/brand-pricing", element: <AdminStorePricing /> },
     { path: "/admin/accounting", element: <AdminAccounting /> },
+    { path: "/admin/shipping-settlements", element: <AdminShippingSettlements /> },
     { path: "/admin/purchase-orders", element: <AdminPurchaseOrders /> },
     { path: "/admin/consignment", element: <AdminConsignment /> },
     { path: "/admin/audit-logs", element: <AdminAuditLogs /> },

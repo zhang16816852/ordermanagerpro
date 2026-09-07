@@ -50,9 +50,8 @@ function getStatusBadge(status: PaymentStatus) {
   }
 }
 
-function EntryDescription({ entry }: { entry: AccountingEntry }) {
+function EntryDescription({ entry, onViewReference }: { entry: AccountingEntry; onViewReference?: (type: string, id: string) => void }) {
   const isTransfer = entry.type === 'transfer' || entry.type === 'currency_exchange' || entry.type === 'topup';
-  const isSettlement = entry.type === 'settlement';
 
   if (isTransfer && entry.transferToAccount) {
     return (
@@ -69,21 +68,32 @@ function EntryDescription({ entry }: { entry: AccountingEntry }) {
     );
   }
 
-  if (isSettlement && entry.references && entry.references.length > 0) {
+  if (entry.references && entry.references.length > 0) {
     return (
       <div className="space-y-1">
         <div className="flex items-center gap-1 text-sm">
           <FileText className="h-3 w-3 text-muted-foreground" />
           <span>關聯 {entry.references.length} 筆單據</span>
         </div>
-        <div className="text-xs text-muted-foreground">
-          {entry.references.slice(0, 3).map((ref, i) => (
-            <span key={i}>
-              {ref.item_name}{ref.item_name ? ` $${ref.amount_applied}` : ` $${ref.amount_applied}`}
-              {i < Math.min(entry.references!.length, 3) - 1 ? '、' : ''}
-            </span>
+        <div className="text-xs text-muted-foreground space-y-0.5">
+          {entry.references.slice(0, 5).map((ref, i) => (
+            <div key={i} className="flex items-center gap-1">
+              <span>{ref.item_name}</span>
+              <span style={{ color: ref.amount_applied >= 0 ? '#16a34a' : 'hsl(var(--destructive))' }}>
+                {ref.amount_applied >= 0 ? '+' : ''}{formatCurrency(ref.amount_applied)}
+              </span>
+              {onViewReference && ref.reference_id && (
+                <button
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={(e) => { e.stopPropagation(); onViewReference(ref.reference_type, ref.reference_id); }}
+                  title="查看單據"
+                >
+                  <Eye className="h-3 w-3" />
+                </button>
+              )}
+            </div>
           ))}
-          {entry.references.length > 3 && <span>...等 {entry.references.length} 筆</span>}
+          {entry.references.length > 5 && <span>...等 {entry.references.length} 筆</span>}
         </div>
       </div>
     );
@@ -144,6 +154,7 @@ export function EntriesTab({
               <TableHead>日期</TableHead>
               <TableHead>類型</TableHead>
               <TableHead>分類</TableHead>
+              <TableHead>對象</TableHead>
               <TableHead>說明</TableHead>
               <TableHead className="text-right">金額</TableHead>
               <TableHead className="text-right">已付/已收</TableHead>
@@ -157,7 +168,8 @@ export function EntriesTab({
                 <TableCell className="font-medium">{format(new Date(entry.transaction_date), 'MM/dd')}</TableCell>
                 <TableCell>{getEntryTypeBadge(entry.type)}</TableCell>
                 <TableCell className="text-sm">{entry.category?.name || '-'}</TableCell>
-                <TableCell><EntryDescription entry={entry} /></TableCell>
+                <TableCell className="text-sm text-muted-foreground max-w-[120px] truncate" title={entry.counterparty_name || ''}>{entry.counterparty_name || '-'}</TableCell>
+                <TableCell><EntryDescription entry={entry} onViewReference={onViewReference} /></TableCell>
                 <TableCell className="text-right">{getAmountDisplay(entry)}</TableCell>
                 <TableCell className="text-right text-sm">
                   {formatCurrency(entry.paid_amount)}
@@ -228,8 +240,11 @@ export function EntriesTab({
             </div>
             <div className="text-sm">
               <span className="text-muted-foreground">{entry.category?.name || '-'}</span>
+              {entry.counterparty_name && (
+                <span className="text-muted-foreground ml-2">· {entry.counterparty_name}</span>
+              )}
             </div>
-            <EntryDescription entry={entry} />
+            <EntryDescription entry={entry} onViewReference={onViewReference} />
             <div className="flex items-center gap-1 pt-1 border-t">
               {entry.reference_type && entry.reference_id && onViewReference && (
                 <Button

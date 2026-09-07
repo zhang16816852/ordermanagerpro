@@ -7,6 +7,7 @@ export interface ModelMaps {
   linksMap: Map<string, any[]>;
   groupsMap: Map<string, any[]>;
   exclusionsMap: Map<string, any[]>;
+  orderedMap: Map<string, Array<{ type: 'model' | 'group' | 'exclude'; id: string; name: string }>>;
 }
 
 export interface EntityModelResult {
@@ -61,7 +62,7 @@ export function buildModelMaps(
     }
   });
 
-  return { linksMap, groupsMap, exclusionsMap };
+  return { linksMap, groupsMap, exclusionsMap, orderedMap: new Map() };
 }
 
 /**
@@ -71,54 +72,119 @@ export function processEntityModels(
   entityId: string,
   maps: ModelMaps,
 ): EntityModelResult {
-  const { linksMap, groupsMap, exclusionsMap } = maps;
+  const { linksMap, groupsMap, exclusionsMap, orderedMap } = maps;
   const rules: string[] = [];
   const directLinks = linksMap.get(entityId) || [];
   const exclusionLinks = exclusionsMap.get(entityId) || [];
   const groupLinks = groupsMap.get(entityId) || [];
 
-  const exclusions = new Set<string>();
+  // 依 orderedMap 產生 device_model_rules（若有的話，否則保持原有行為）
+  if (orderedMap && orderedMap.has(entityId)) {
+    const ordered = orderedMap.get(entityId)!;
+    const exclusionSet = new Set<string>();
+    const modelNameMap = new Map<string, string>();
+
+    // 建立 model name 對照
+    directLinks.forEach(l => {
+      if (l.device_models) modelNameMap.set(l.device_models.id, l.device_models.name);
+    });
+    groupLinks.forEach(l => {
+      if (l.device_model_groups) modelNameMap.set(l.group_id, l.device_model_groups.name || '');
+    });
+
+    // 依 ordered 序列產生 rules
+    ordered.forEach(entry => {
+      if (entry.type === 'model') {
+        const name = modelNameMap.get(entry.id) || '';
+        if (name && !exclusionSet.has(entry.id)) {
+          exclusionSet.add(entry.id);
+          rules.push(`exclude:${name}`);
+        } else if (name) {
+          rules.push(`model:${name}`);
+        }
+      } else if (entry.type === 'group') {
+        const name = modelNameMap.get(entry.id) || '';
+        if (name) rules.push(`group:${name}`);
+      } else if (entry.type === 'exclude') {
+        const name = modelNameMap.get(entry.id) || '';
+        if (name) rules.push(`exclude:${name}`);
+      }
+    });
+  } else {
+    // 備用：原有行為（excludes → models → groups）
+    const exclusions = new Set<string>();
+    exclusionLinks.forEach(l => {
+      if (l.device_models) {
+        exclusions.add(l.device_models.id);
+        rules.push(`exclude:${l.device_models.name}`);
+      }
+    });
+
+    const directModels = directLinks
+      .filter(l => l.device_models && !exclusions.has(l.device_models.id))
+      .map(l => {
+        rules.push(`model:${l.device_models.name}`);
+        return l.device_models;
+      });
+
+    const groups: any[] = [];
+    const expandedFromGroups: any[] = [];
+    groupLinks.forEach(link => {
+      const group = link.device_model_groups;
+      if (group) {
+        const groupItems = (group.device_model_group_items || [])
+          .map((item: any) => {
+            if (item.device_models && !exclusions.has(item.device_models.id)) {
+              expandedFromGroups.push(item.device_models);
+              return { id: item.device_models.id, name: item.device_models.name };
+            }
+            return null;
+          })
+          .filter(Boolean);
+
+        groups.push({ id: group.id, name: group.name, items: groupItems });
+        rules.push(`group:${group.name}`);
+      }
+    });
+
+    return {
+      device_models: directModels,
+      device_model_groups: groups,
+      device_model_rules: rules,
+      _expanded_models: Array.from(new Set([...directModels, ...expandedFromGroups].map(m => m.name))),
+      _expanded_model_aliases: Array.from(new Set([...directModels, ...expandedFromGroups].flatMap(m => m.aliases || []))),
+      device_model_exclusions: Array.from(exclusions),
+    };
+  }
+
+  // 若使用 orderedMap 產生 rules，仍需要傳回 device_models / device_model_groups / exclusions
+  // 從 links/exclusions 取得基礎資料（保持 UI 相容）
+  const exclusionSet = new Set<string>();
   exclusionLinks.forEach(l => {
     if (l.device_models) {
-      exclusions.add(l.device_models.id);
-      rules.push(`exclude:${l.device_models.name}`);
+      exclusionSet.add(l.device_models.id);
     }
   });
 
-  const directModels = directLinks
-    .filter(l => l.device_models && !exclusions.has(l.device_models.id))
-    .map(l => {
-      rules.push(`model:${l.device_models.name}`);
-      return l.device_models;
-    });
+  const deviceModels = directLinks
+    .filter(l => l.device_models && !exclusionSet.has(l.device_models.id))
+    .map(l => l.device_models);
 
-  const groups: any[] = [];
-  const expandedFromGroups: any[] = [];
+  const deviceModelGroups: any[] = [];
   groupLinks.forEach(link => {
     const group = link.device_model_groups;
     if (group) {
-      const groupItems = (group.device_model_group_items || [])
-        .map((item: any) => {
-          if (item.device_models && !exclusions.has(item.device_models.id)) {
-            expandedFromGroups.push(item.device_models);
-            return { id: item.device_models.id, name: item.device_models.name };
-          }
-          return null;
-        })
-        .filter(Boolean);
-
-      groups.push({ id: group.id, name: group.name, items: groupItems });
-      rules.push(`group:${group.name}`);
+      deviceModelGroups.push({ id: group.id, name: group.name || '', items: [] });
     }
   });
 
   return {
-    device_models: directModels,
-    device_model_groups: groups,
+    device_models: deviceModels,
+    device_model_groups: deviceModelGroups,
     device_model_rules: rules,
-    _expanded_models: Array.from(new Set([...directModels, ...expandedFromGroups].map(m => m.name))),
-    _expanded_model_aliases: Array.from(new Set([...directModels, ...expandedFromGroups].flatMap(m => m.aliases || []))),
-    device_model_exclusions: Array.from(exclusions),
+    _expanded_models: Array.from(new Set(deviceModels.map(m => m.name))),
+    _expanded_model_aliases: Array.from(new Set([])),
+    device_model_exclusions: Array.from(exclusionSet),
   };
 }
 

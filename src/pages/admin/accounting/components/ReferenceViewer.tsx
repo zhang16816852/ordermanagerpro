@@ -72,16 +72,19 @@ export function ReferenceViewer({ referenceType, referenceId, open, onOpenChange
           sales_note_items(
             id,
             quantity,
+            sort_order,
             order_item:order_items(
               id,
               quantity,
               unit_price,
+              sort_order,
               product:products(name, code),
               product_variant:product_variants(name)
             )
           )
         `)
         .eq('id', referenceId)
+        .order('sort_order', { foreignTable: 'sales_note_items', ascending: true })
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
@@ -97,14 +100,17 @@ export function ReferenceViewer({ referenceType, referenceId, open, onOpenChange
         received_at: data.received_at,
         notes: data.notes,
         access_token: data.access_token,
-        items: (data.sales_note_items || []).map((item: any) => ({
-          id: item.id,
-          quantity: item.quantity,
-          productName: item.order_item?.product?.name || '未知產品',
-          productSku: item.order_item?.product?.code || '-',
-          variantName: item.order_item?.product_variant?.name,
-          unitPrice: item.order_item?.unit_price,
-        })),
+        items: [...(data.sales_note_items || [])]
+          .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+          .map((item: any) => ({
+            id: item.id,
+            quantity: item.quantity,
+            productName: item.order_item?.product?.name || '未知產品',
+            productSku: item.order_item?.product?.code || '-',
+            variantName: item.order_item?.product_variant?.name,
+            unitPrice: item.order_item?.unit_price,
+            sortOrder: item.sort_order ?? 0,
+          })),
       };
     },
     enabled: open && referenceType === 'sales_note' && !!referenceId,

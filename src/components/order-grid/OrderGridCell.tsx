@@ -100,6 +100,13 @@ function ButtonModeCell({
   product: ProductWithPricing;
 }) {
   if (quantity === 0) {
+    if (!onItemAdd) {
+      return (
+        <div className="flex items-center justify-center py-0.5">
+          <span className="text-xs text-muted-foreground/40 leading-none">—</span>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center py-0.5">
         <Tooltip>

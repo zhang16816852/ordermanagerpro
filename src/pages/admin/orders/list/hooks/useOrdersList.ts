@@ -5,7 +5,7 @@ import { Order, OrderItem, ShippingPoolItem } from '@/types/order';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 
-export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'processing' | 'shipped') {
+export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'processing' | 'shipped', repAssignedStoreIds?: string[]) {
   const { user, isRep } = useAuth();
   const queryClient = useQueryClient();
 
@@ -92,7 +92,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
 
   // 3. Main Orders Query
   const { data: orders = [], isLoading } = useQuery({
-    queryKey: ['admin-orders', storeFilter, statusTab, isRep ? user?.id : null],
+    queryKey: ['admin-orders', storeFilter, statusTab, isRep ? user?.id : null, repAssignedStoreIds?.join(',') ?? ''],
     queryFn: async () => {
       let query = (supabase
         .from('orders') as any)
@@ -126,11 +126,12 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
         .order('sort_order', { ascending: true, foreignTable: 'order_items' });
 
       if (isRep && user) {
-        // 業務只看自己建立（sales_rep_id = 自己）的訂單
         query = query.eq('sales_rep_id', user.id);
       }
 
-      if (storeFilter && storeFilter !== 'all') {
+      if (repAssignedStoreIds && repAssignedStoreIds.length > 0) {
+        query = query.in('store_id', repAssignedStoreIds);
+      } else if (storeFilter && storeFilter !== 'all') {
         query = query.eq('store_id', storeFilter);
       }
 

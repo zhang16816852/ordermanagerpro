@@ -21,6 +21,8 @@ import { format, subMonths } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 
 import { useAccounting } from './hooks/useAccounting';
+import { useCommissionPayout } from '@/hooks/useCommissionPayout';
+import { useShippingSettlement } from '@/hooks/useShippingSettlement';
 import { StatsCards } from './components/StatsCards';
 import { EntriesTab } from './components/EntriesTab';
 import { AccountsTab } from './components/AccountsTab';
@@ -28,7 +30,6 @@ import { CategoriesTab } from './components/CategoriesTab';
 import { EntryDialog } from './components/EntryDialog';
 import { AccountForm } from './components/AccountForm';
 import { CategoryForm } from './components/CategoryForm';
-import { PaymentDialog } from './components/PaymentDialog';
 import { ReferenceViewer } from './components/ReferenceViewer';
 import { AccountingEntry } from './types';
 
@@ -41,7 +42,6 @@ export default function AdminAccounting() {
   const [entryDialogOpen, setEntryDialogOpen] = useState(false);
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
-  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
 
   // Form selections
   const [editingEntry, setEditingEntry] = useState<AccountingEntry | null>(null);
@@ -70,6 +70,9 @@ export default function AdminAccounting() {
     createAccountMutation,
     createCategoryMutation,
   } = useAccounting(selectedMonth);
+
+  const { registerPayout, bulkRegisterPayout } = useCommissionPayout();
+  const { settleMutation } = useShippingSettlement();
 
   return (
     <div className="space-y-6">
@@ -121,16 +124,16 @@ export default function AdminAccounting() {
 
         <TabsContent value="entries" className="space-y-4">
           <div className="flex justify-end">
-            <Button onClick={() => { setEditingEntry(null); setEntryDialogOpen(true); }} size="sm">
+            <Button onClick={() => { setEditingEntry(null); setPayingEntry(null); setEntryDialogOpen(true); }} size="sm">
               <Plus className="h-4 w-4 mr-2" /> 新增記錄
             </Button>
           </div>
           <EntriesTab
             entries={entries}
             isLoading={isLoadingEntries}
-            onEdit={(entry) => { setEditingEntry(entry); setEntryDialogOpen(true); }}
+            onEdit={(entry) => { setEditingEntry(entry); setPayingEntry(null); setEntryDialogOpen(true); }}
             onDelete={(entry) => { if (confirm('確定要刪除這筆記錄嗎？將同時回退已入帳的帳戶餘額。')) deleteEntryMutation.mutate(entry); }}
-            onPay={(entry) => { setPayingEntry(entry); setPaymentDialogOpen(true); }}
+            onPay={(entry) => { setPayingEntry(entry); setEditingEntry(null); setEntryDialogOpen(true); }}
             onViewReference={(referenceType, referenceId) => setViewingReference({ referenceType, referenceId })}
           />
         </TabsContent>
@@ -152,17 +155,18 @@ export default function AdminAccounting() {
         </TabsContent>
       </Tabs>
 
-      {/* Entry Dialog */}
+      {/* Entry Dialog — unified for create / edit / payment */}
       <EntryDialog
         open={entryDialogOpen}
         onOpenChange={(open) => {
           setEntryDialogOpen(open);
-          if (!open) setEditingEntry(null);
+          if (!open) { setEditingEntry(null); setPayingEntry(null); }
         }}
         entry={editingEntry}
+        paymentEntry={payingEntry}
         categories={categories}
         accounts={accounts}
-        isLoading={createEntryMutation.isPending || updateEntryMutation.isPending}
+        isLoading={createEntryMutation.isPending || updateEntryMutation.isPending || recordPaymentMutation.isPending || registerPayout.isPending || settleMutation.isPending}
         onSubmit={(data, references) => {
           if (editingEntry) {
             updateEntryMutation.mutate({ id: editingEntry.id, ...data }, {
@@ -173,6 +177,41 @@ export default function AdminAccounting() {
               onSuccess: () => setEntryDialogOpen(false)
             });
           }
+        }}
+        onRecordPayment={(paymentData) => {
+          recordPaymentMutation.mutate(paymentData, {
+            onSuccess: () => {
+              setEntryDialogOpen(false);
+              setPayingEntry(null);
+            }
+          });
+        }}
+        onPayoutSubmit={(payout) => {
+          registerPayout.mutate(payout, {
+            onSuccess: () => {
+              setEntryDialogOpen(false);
+              setPayingEntry(null);
+              setEditingEntry(null);
+            }
+          });
+        }}
+        onBatchPayoutSubmit={(payload) => {
+          bulkRegisterPayout.mutate(payload, {
+            onSuccess: () => {
+              setEntryDialogOpen(false);
+              setPayingEntry(null);
+              setEditingEntry(null);
+            }
+          });
+        }}
+        onShippingSettleSubmit={(payload) => {
+          settleMutation.mutate(payload, {
+            onSuccess: () => {
+              setEntryDialogOpen(false);
+              setPayingEntry(null);
+              setEditingEntry(null);
+            }
+          });
         }}
       />
 
@@ -215,23 +254,6 @@ export default function AdminAccounting() {
           />
         </DialogContent>
       </Dialog>
-
-      {/* Payment Dialog */}
-      <PaymentDialog
-        open={paymentDialogOpen}
-        onOpenChange={setPaymentDialogOpen}
-        entry={payingEntry}
-        accounts={accounts}
-        isLoading={recordPaymentMutation.isPending}
-        onSubmit={(data) => {
-          recordPaymentMutation.mutate(data, {
-            onSuccess: () => {
-              setPaymentDialogOpen(false);
-              setPayingEntry(null);
-            }
-          });
-        }}
-      />
 
       {viewingReference && (
         <ReferenceViewer

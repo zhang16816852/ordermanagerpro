@@ -351,6 +351,12 @@
   }
 }
 
+/* html2pdf 擷取時也需要明確分頁點（@media print 不會生效） */
+.is-printing-mode .doc-page {
+  page-break-after: always;
+  break-after: page;
+}
+
 .doc-page {
   padding: 16px 20px;
   box-sizing: border-box;
@@ -361,6 +367,8 @@
 .doc-head-wrap {
   position: relative;
   margin-bottom: 10px;
+  page-break-inside: avoid;
+  break-inside: avoid;
 }
 
 .doc-title {
@@ -493,6 +501,7 @@
   gap: 20px;
   padding: 10px 20px 24px;
   page-break-inside: avoid;
+  break-inside: avoid;
 }
 
 .doc-summary-notes {
