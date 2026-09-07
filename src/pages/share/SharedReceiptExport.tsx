@@ -39,7 +39,7 @@ export const ITEMS_PER_PAGE: Record<"a4" | "middle-cut", number> = {
 
 /* 每頁筆數採「兩層」：前面無底部框頁用 maxCapacity，最後一頁（含總計+備註框）用 lastCapacity */
 export const CHUNK_CAPACITY: Record<"a4" | "middle-cut", { max: number; last: number }> = {
-  a4: { max: 20, last: 16 },
+  a4: { max: 17, last: 16 },
   "middle-cut": { max: 8, last: 6 },
 };
 
