@@ -236,6 +236,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
   const loadExistingData = async () => {
     try {
       setDiffSummary(null);
+
       loadExistingDataDbValueToColorId.current = new Map();
       // 1. Load existing option groups with values
       const { data: groups, error: gErr } = await supabase
@@ -248,18 +249,35 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
 
       if (groups && groups.length > 0) {
         const dbValueToColorId = new Map<string, string>();
+
         const loaded: OptionGroupInput[] = groups.map(g => {
           const isColorGroup = isColorGroupName(g.name);
+
           return {
             id: g.id,
             name: g.name,
             values: (g.product_option_values || [])
-              .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
+              .sort((a: any, b: any) =>
+                (a.sort_order || 0) - (b.sort_order || 0)
+              )
               .map((v: any) => {
-                const libColor = isColorGroup ? findLibraryColor(libraryColors, { label: v.label, value: v.value } as OptionValueInput) : undefined;
+                const libColor = isColorGroup
+                  ? findLibraryColor(
+                    libraryColors,
+                    {
+                      label: v.label,
+                      value: v.value,
+                    } as OptionValueInput
+                  )
+                  : undefined;
+
                 if (isColorGroup && libColor) {
-                  dbValueToColorId.set(v.id, `color-${libColor.id}`);
+                  dbValueToColorId.set(
+                    v.id,
+                    `color-${libColor.id}`
+                  );
                 }
+
                 return {
                   id: dbValueToColorId.get(v.id) ?? v.id,
                   label: v.label,
@@ -271,8 +289,13 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
               }),
           };
         });
+
         setOptionGroups(loaded);
         loadExistingDataDbValueToColorId.current = dbValueToColorId;
+      } else {
+        // DB 沒有任何 option group 時，明確清空
+        setOptionGroups([]);
+        loadExistingDataDbValueToColorId.current = new Map();
       }
 
       // 2. Load existing variants
@@ -600,173 +623,123 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     mutationFn: async () => {
       if (generatedVariants.length === 0) throw new Error('請先生成變體');
 
-      // 1. Delete old product_variant_options for this product's variants
-      const { data: oldVariants } = await supabase
-        .from('product_variants')
-        .select('id')
-        .eq('product_id', product.id);
+      // 單一交易：所有 option groups / values / variant_options / variants /
+      // entity_model_relations 的刪除與重建，交由 RPC 在一個 database
+      // transaction 內完成，失敗自動 ROLLBACK，避免先刪後建造成的資料遺失。
 
-      const oldVariantIds = oldVariants?.map(v => v.id) || [];
-      if (oldVariantIds.length > 0) {
-        await (supabase.from('product_variant_options') as any).delete().in('variant_id', oldVariantIds);
-      }
-
-      // 2. Delete old option values and groups for this product
-      const { data: existingGroups } = await supabase
-        .from('product_option_groups')
-        .select('id')
-        .eq('product_id', product.id);
-
-      if (existingGroups && existingGroups.length > 0) {
-        const groupIds = existingGroups.map(g => g.id);
-        await (supabase.from('product_option_values') as any).delete().in('group_id', groupIds);
-        await (supabase.from('product_option_groups') as any).delete().in('id', groupIds);
-      }
-
-      // 3. Insert new option groups & values, building client-ID → real-ID maps
-      const groupIdMap = new Map<string, string>();
-      const valueIdMap = new Map<string, string>();
-
-      for (let gi = 0; gi < optionGroups.length; gi++) {
-        const g = optionGroups[gi];
-        if (!g.name.trim()) continue;
-
-        const { data: newGroup, error: gErr } = await supabase
-          .from('product_option_groups')
-          .insert({ product_id: product.id, name: g.name.trim(), sort_order: gi })
-          .select('id')
-          .single();
-
-        if (gErr) throw gErr;
-        groupIdMap.set(g.id, newGroup.id);
-
-        const validValues = g.values.filter(v => v.label.trim());
-        for (let vi = 0; vi < validValues.length; vi++) {
-          const v = validValues[vi];
-          const { data: newVal, error: valErr } = await supabase
-            .from('product_option_values')
-            .insert({
-              group_id: newGroup.id,
+      // 1. 群組與值（以客戶端臨時 id 為 ref，供建立時解析實際 UUID）
+      const groupsPayload = optionGroups
+        .filter(g => g.name.trim())
+        .map(g => ({
+          ref: g.id,
+          name: g.name.trim(),
+          values: g.values
+            .filter(v => v.label.trim())
+            .map(v => ({
+              ref: v.id,
               label: v.label.trim(),
               value: v.value.trim() || v.label.trim(),
               hex_code: v.hexCode || null,
-              sort_order: vi,
-            })
-            .select('id')
-            .single();
+            })),
+        }));
 
-          if (valErr) throw valErr;
-          valueIdMap.set(v.id, newVal.id);
-        }
-      }
-
-      // 4. Upsert variants
+      // 2. 變體（依 SKU 去重）
       const variantsToInsert = generatedVariants.map(v => ({
-        product_id: product.id,
         sku: v.sku,
         name: v.name,
         barcode: v.barcode || undefined,
         wholesale_price: v.wholesale_price,
         retail_price: v.retail_price,
         sort_order: v.sort_order,
-        status: 'active' as const,
       }));
-
       const dedupedVariants = [...new Map(variantsToInsert.map(v => [v.sku, v])).values()];
 
-      const { data: upsertedVariants, error: upsertErr } = await supabase
-        .from('product_variants')
-        .upsert(dedupedVariants, { onConflict: 'sku' })
-        .select('id, sku');
-
-      if (upsertErr) throw upsertErr;
-      if (!upsertedVariants || upsertedVariants.length === 0) return;
-
-      const skuToId = new Map(upsertedVariants.map(v => [v.sku, v.id]));
-      const upsertedIds = upsertedVariants.map(v => v.id);
-
-      // 5. Insert product_variant_options
-      const variantOptions: { variant_id: string; option_group_id: string; option_value_id: string }[] = [];
-
-      for (const v of upsertedVariants) {
-        const genVariant = generatedVariants.find(gv => gv.sku === v.sku);
-        if (!genVariant) continue;
-
+      // 3. 變體-選項連結（依 SKU + client ref 串接）
+      const variantOptionsPayload: { sku: string; group_ref: string; value_ref: string }[] = [];
+      for (const genVariant of generatedVariants) {
         for (const clientValueId of genVariant.optionValueIds) {
-          const realValueId = valueIdMap.get(clientValueId);
-          if (!realValueId) continue;
-
-          // Find which group this value belongs to
-          let foundGroupId = '';
-          for (const g of optionGroups) {
-            if (g.values.some(val => val.id === clientValueId)) {
-              const realGroupId = groupIdMap.get(g.id);
-              if (realGroupId) {
-                foundGroupId = realGroupId;
-              }
-              break;
-            }
-          }
-          if (!foundGroupId) continue;
-
-          variantOptions.push({
-            variant_id: v.id,
-            option_group_id: foundGroupId,
-            option_value_id: realValueId,
+          const group = optionGroups.find(g => g.values.some(val => val.id === clientValueId));
+          if (!group) continue;
+          variantOptionsPayload.push({
+            sku: genVariant.sku,
+            group_ref: group.id,
+            value_ref: clientValueId,
           });
         }
       }
 
-      if (variantOptions.length > 0) {
-        const { error: voErr } = await supabase
-          .from('product_variant_options')
-          .insert(variantOptions);
-        if (voErr) throw voErr;
-      }
-
-      // 6. Delete old device model relations and re-insert
-      const { error: delRelErr } = await supabase
-        .from('entity_model_relations')
-        .delete()
-        .in('variant_id', upsertedIds)
-        .eq('relation_type', 'include');
-      if (delRelErr) throw delRelErr;
-
+      // 4. 型號關聯（依 SKU 串接，維持原租 per-variant / 全變體 兩種模式）
+      const modelRelationsPayload: any[] = [];
       if (selectedDeviceRefs.length > 0) {
-        const relations: any[] = [];
-        const hasPerVariantMapping = generatedVariants.some(v => v._modelGroupId && v._modelGroupType);
         const deviceOrder = new Map<string, number>();
         selectedDeviceRefs.forEach((ref, idx) => deviceOrder.set(ref.id, idx));
 
+        const hasPerVariantMapping = generatedVariants.some(v => v._modelGroupId && v._modelGroupType);
+
         if (hasPerVariantMapping) {
-          upsertedVariants.forEach(({ id, sku }) => {
-            const v = generatedVariants.find(gv => gv.sku === sku);
-            if (!v?._modelGroupId || !v._modelGroupType) return;
-            if (v._modelGroupType === 'model') {
-              relations.push({ variant_id: id, model_id: v._modelGroupId, relation_type: 'include', sort_order: deviceOrder.get(v._modelGroupId) ?? 0 });
-            } else {
-              relations.push({ variant_id: id, group_id: v._modelGroupId, relation_type: 'include', sort_order: deviceOrder.get(v._modelGroupId) ?? 0 });
-            }
-          });
-        } else {
-          upsertedIds.forEach(vId => {
-            selectedDeviceRefs.forEach(ref => {
-              if (ref.type === 'model') {
-                relations.push({ variant_id: vId, model_id: ref.id, relation_type: 'include', sort_order: deviceOrder.get(ref.id) ?? 0 });
-              } else {
-                relations.push({ variant_id: vId, group_id: ref.id, relation_type: 'include', sort_order: deviceOrder.get(ref.id) ?? 0 });
-              }
+          for (const genVariant of generatedVariants) {
+            if (!genVariant._modelGroupId || !genVariant._modelGroupType) continue;
+            modelRelationsPayload.push({
+              sku: genVariant.sku,
+              ...(genVariant._modelGroupType === 'model'
+                ? { model_id: genVariant._modelGroupId }
+                : { group_id: genVariant._modelGroupId }),
+              sort_order: deviceOrder.get(genVariant._modelGroupId) ?? 0,
             });
-          });
+          }
+        } else {
+          for (const genVariant of generatedVariants) {
+            for (const ref of selectedDeviceRefs) {
+              modelRelationsPayload.push({
+                sku: genVariant.sku,
+                ...(ref.type === 'model' ? { model_id: ref.id } : { group_id: ref.id }),
+                sort_order: deviceOrder.get(ref.id) ?? 0,
+              });
+            }
+          }
         }
-
-        const { error: relErr } = await (supabase.from('entity_model_relations') as any).insert(relations);
-        if (relErr) throw relErr;
       }
+      console.log(
+        'OPTION GROUP DETAIL JSON:',
+        JSON.stringify(
+          optionGroups.map(g => ({
+            id: g.id,
+            name: g.name,
+            values: g.values.map(v => ({
+              id: v.id,
+              label: v.label,
+              value: v.value,
+              hexCode: v.hexCode,
+            })),
+          })),
+          null,
+          2
+        )
+      );
 
-      // 7. Sync storefront
-      const { error: syncErr } = await supabase.rpc('sync_storefront_items', { p_product_id: product.id });
-      if (syncErr) throw syncErr;
+      console.log(
+        'GROUP PAYLOAD JSON:',
+        JSON.stringify(groupsPayload, null, 2)
+      );
+
+      console.log(
+        'VARIANT OPTION JSON:',
+        JSON.stringify(variantOptionsPayload[0], null, 2)
+      );
+      const { data, error } = await supabase.rpc('batch_upsert_product_options', {
+        p_product_id: product.id,
+        p_groups: groupsPayload,
+        p_variants: dedupedVariants,
+        p_variant_options: variantOptionsPayload,
+        p_model_relations: modelRelationsPayload,
+      });
+
+      if (error) throw error;
+
+      const result = data as unknown as { ok?: boolean; reason?: string } | null;
+      if (result && result.ok === false) {
+        throw new Error(result.reason || '批次更新失敗');
+      }
     },
     onSuccess: () => {
       toast.success(`成功建立 ${generatedVariants.length} 個變體`);
@@ -915,65 +888,65 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
               const extraValues = group.values.filter(v => !findLibraryColor(libraryColors, v));
 
               return (
-              <div key={group.id} className="border rounded-lg p-4 space-y-3 bg-card">
-                <div className="flex items-center gap-2">
-                  <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <Input
-                    value={group.name}
-                    onChange={e => updateGroupName(group.id, e.target.value)}
-                    className="h-8 max-w-[200px] font-medium"
-                    placeholder="群組名稱（如：顏色、尺寸）"
-                  />
-                  {isColorGroup && (
-                    <Badge variant="outline" className="text-xs text-muted-foreground">顏色群組</Badge>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0 text-destructive ml-auto"
-                    onClick={() => removeGroup(group.id)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                <ColorSelectField
-                  selectedColorIds={selectedColorIds}
-                  onChange={(ids) => syncGroupColors(group.id, ids)}
-                />
-
-                {isColorGroup && extraValues.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {extraValues.map(v => (
-                      <Badge
-                        key={v.id}
-                        variant="outline"
-                        className="flex items-center gap-1 pr-1 pl-2 h-6"
-                        style={{
-                          backgroundColor: v.hexCode || 'transparent',
-                          color: v.hexCode ? getContrastColor(v.hexCode) : 'inherit',
-                        }}
-                      >
-                        {v.label || v.value}
-                        <X
-                          className="h-3 w-3 cursor-pointer hover:bg-black/10 rounded-full"
-                          onClick={() => removeValue(group.id, v.id)}
-                        />
-                      </Badge>
-                    ))}
+                <div key={group.id} className="border rounded-lg p-4 space-y-3 bg-card">
+                  <div className="flex items-center gap-2">
+                    <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <Input
+                      value={group.name}
+                      onChange={e => updateGroupName(group.id, e.target.value)}
+                      className="h-8 max-w-[200px] font-medium"
+                      placeholder="群組名稱（如：顏色、尺寸）"
+                    />
+                    {isColorGroup && (
+                      <Badge variant="outline" className="text-xs text-muted-foreground">顏色群組</Badge>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-destructive ml-auto"
+                      onClick={() => removeGroup(group.id)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
                   </div>
-                )}
 
-                {!isColorGroup && (
-                  <OptionValueTable
-                    values={group.values}
-                    onUpdate={(id, field, value) => updateValue(group.id, id, field, value)}
-                    onRemove={(id) => removeValue(group.id, id)}
-                    onAdd={() => addValue(group.id)}
-                    onBulkPaste={() => { setBulkPasteText(''); setBulkPasteTargetGroupId(group.id); }}
+                  <ColorSelectField
+                    selectedColorIds={selectedColorIds}
+                    onChange={(ids) => syncGroupColors(group.id, ids)}
                   />
-                )}
-              </div>
+
+                  {isColorGroup && extraValues.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {extraValues.map(v => (
+                        <Badge
+                          key={v.id}
+                          variant="outline"
+                          className="flex items-center gap-1 pr-1 pl-2 h-6"
+                          style={{
+                            backgroundColor: v.hexCode || 'transparent',
+                            color: v.hexCode ? getContrastColor(v.hexCode) : 'inherit',
+                          }}
+                        >
+                          {v.label || v.value}
+                          <X
+                            className="h-3 w-3 cursor-pointer hover:bg-black/10 rounded-full"
+                            onClick={() => removeValue(group.id, v.id)}
+                          />
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+
+                  {!isColorGroup && (
+                    <OptionValueTable
+                      values={group.values}
+                      onUpdate={(id, field, value) => updateValue(group.id, id, field, value)}
+                      onRemove={(id) => removeValue(group.id, id)}
+                      onAdd={() => addValue(group.id)}
+                      onBulkPaste={() => { setBulkPasteText(''); setBulkPasteTargetGroupId(group.id); }}
+                    />
+                  )}
+                </div>
               );
             })}
           </div>

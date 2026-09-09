@@ -31,6 +31,7 @@ interface OrderTableViewProps {
   sortDirection: 'asc' | 'desc';
   onSort: (field: string) => void;
   poLinkMap: Map<string, { poCount: number; poIds: string[] }>;
+  consignmentBySourceOrder: Map<string, any>;
   commissionByOrder?: Map<string, { totalProfit: number; totalCommission: number }>;
 }
 
@@ -48,6 +49,7 @@ export function OrderTableView({
   sortDirection,
   onSort,
   poLinkMap,
+  consignmentBySourceOrder,
   commissionByOrder,
 }: OrderTableViewProps) {
   const getOrderShipmentStatus = (items: OrderItem[]) => {
@@ -70,6 +72,9 @@ export function OrderTableView({
     if (sourceType === 'consignment') return '寄賣';
     return '後台';
   };
+
+  const showConsignmentBadge = (order: Order) =>
+    !!order.consignment_mode || consignmentBySourceOrder.has(order.id);
 
   const SortableHead = ({ field, children }: { field: string; children: React.ReactNode }) => (
     <TableHead>
@@ -154,7 +159,7 @@ export function OrderTableView({
                   <TableCell className="font-mono text-xs font-medium">
                     <div className="flex items-center gap-1.5">
                       {displayId.slice(0, 16)}
-                      {order.consignment_mode && (
+                      {showConsignmentBadge(order) && (
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
                       )}
                       {poLinkMap.has(order.id) && (

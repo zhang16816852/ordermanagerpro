@@ -135,6 +135,7 @@ export default function AdminOrderList() {
     shippingPoolMap,
     poLinkMap,
     purchasedByOrderKey,
+    consignmentBySourceOrderId,
     getPendingQuantity,
     syncOrdersMutation,
     confirmOrdersMutation,
@@ -274,27 +275,25 @@ export default function AdminOrderList() {
   const convertToConsignmentMutation = useMutation({
     mutationFn: async (orderIds: string[]) => {
       if (!user) throw new Error('未登入');
-      const { error: markError } = await (supabase
-        .from('orders') as any)
-        .update({ consignment_mode: true })
-        .in('id', orderIds);
-      if (markError) throw markError;
+      const failed: string[] = [];
       for (const orderId of orderIds) {
-        const { data, error } = await supabase.rpc('direct_ship_order', {
+        const { data, error } = await supabase.rpc('convert_order_to_consignment_draft', {
           p_order_id: orderId,
           p_created_by: user.id,
-          p_notes: undefined,
-          p_shipped_at: undefined,
-          p_warehouse_id: undefined,
-          p_warehouse_map: undefined,
-          p_source_map: undefined,
         });
-        if (error) throw error;
+        if (error) {
+          failed.push(orderId);
+          continue;
+        }
+        if (data?.ok === false) failed.push(orderId);
+      }
+      if (failed.length > 0) {
+        throw new Error(`有 ${failed.length} 個訂單無法轉寄賣，可能是非 pending 或已無未出貨品項`);
       }
       return orderIds;
     },
     onSuccess: (orderIds) => {
-      toast.success(`已將 ${orderIds.length} 個訂單轉為寄賣出貨`);
+      toast.success(`已將 ${orderIds.length} 個訂單轉為寄賣草稿（未出貨），可至寄賣管理調整後再出貨`);
       setConvertToConsignmentOpen(false);
       setSelectedOrderIds(new Set());
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
@@ -1002,6 +1001,7 @@ export default function AdminOrderList() {
                   sortDirection={sortDirection}
                   onSort={handleSort}
                   poLinkMap={poLinkMap}
+                  consignmentBySourceOrder={consignmentBySourceOrderId}
                   commissionByOrder={commissionByOrder}
                 />
               </div>
@@ -1015,6 +1015,7 @@ export default function AdminOrderList() {
                 onEdit={(id) => navigate(`/admin/orders/${id}/edit`)}
                 onReverseShipment={handleReverseShipment}
                 statusTab={statusTab}
+                consignmentBySourceOrder={consignmentBySourceOrderId}
                 getOrderShipmentStatus={getOrderShipmentStatus}
                 getOrderTotal={getOrderTotal}
                 commissionByOrder={commissionByOrder}
@@ -1190,17 +1191,17 @@ export default function AdminOrderList() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Store className="h-5 w-5" />
-              轉寄賣出貨
+              轉寄賣（草稿）
             </DialogTitle>
             <DialogDescription>
-              將所選訂單標記為寄賣模式並直接出貨，不開立銷貨單；店家確認售出後才開立收款銷貨單。
+              將所選訂單標記為寄賣模式並建立「未出貨」的寄賣草稿（不扣庫存、不開銷貨單）；可至寄賣管理調整品項後再出貨。
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-lg border divide-y max-h-96 overflow-y-auto">
             {orders.filter(o => selectedOrderIds.has(o.id)).map(order => (
               <div key={order.id} className="flex items-center justify-between px-3 py-2">
                 <div className="text-sm font-medium">{order.code} - {order.stores?.name || '未知店家'}</div>
-                <div className="text-xs text-muted-foreground">{order.order_items.filter(i => i.status !== 'cancelled' && i.status !== 'discontinued' && (i.quantity - i.shipped_quantity) > 0).length} 個品項待寄賣出貨</div>
+                <div className="text-xs text-muted-foreground">{order.order_items.filter(i => i.status !== 'cancelled' && i.status !== 'discontinued' && (i.quantity - i.shipped_quantity) > 0).length} 個品項待轉寄賣（未出貨）</div>
               </div>
             ))}
           </div>
@@ -1212,7 +1213,7 @@ export default function AdminOrderList() {
               onClick={() => convertToConsignmentMutation.mutate(Array.from(selectedOrderIds))}
               disabled={convertToConsignmentMutation.isPending}
             >
-              {convertToConsignmentMutation.isPending ? '處理中...' : '確認轉寄賣出貨'}
+              {convertToConsignmentMutation.isPending ? '處理中...' : '確認轉寄賣'}
             </Button>
           </DialogFooter>
         </DialogContent>

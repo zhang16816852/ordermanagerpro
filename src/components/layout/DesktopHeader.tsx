@@ -41,7 +41,11 @@ export function DesktopHeader({ isExpanded, onToggleCollapse, pageHeader }: Desk
           </Button>
         )}
         {pageHeader?.title && (
-          <span className="text-sm font-semibold tracking-tight truncate min-w-0">{pageHeader.title}</span>
+          typeof pageHeader.title === 'string' ? (
+            <span className="text-sm font-semibold tracking-tight truncate min-w-0">{pageHeader.title}</span>
+          ) : (
+            pageHeader.title
+          )
         )}
       </div>
       <div className="flex items-center gap-4">

@@ -25,7 +25,33 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
     shippingPoolItems.map(item => [item.order_item_id, item.quantity]) || []
   );
 
-  // 1b. Purchase Order linkage — reverse lookup: orderId → { poCount, poIds }
+  // 1b. Consignment orders linkage — lookup: sourceOrderId → consignmentOrder
+  const { data: consignmentOrders = [] } = useQuery({
+    queryKey: ['consignment-source-orders'],
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from('consignment_orders') as any)
+        .select('id, code, source_order_id, direction, status')
+        .eq('direction', 'send_to_store')
+        .not('status', 'in', '(draft,cancelled)');
+      if (error) throw error;
+      return (data || []) as {
+        id: string;
+        code: string;
+        source_order_id: string | null;
+        direction: string;
+        status: string;
+      }[];
+    },
+  });
+
+  const consignmentBySourceOrderId = new Map(
+    consignmentOrders
+      .filter(co => co.source_order_id)
+      .map(co => [co.source_order_id!, co])
+  );
+
+  // 1c. Purchase Order linkage — reverse lookup: orderId → { poCount, poIds }
   //     + per (orderId, productId, variantId) → 已採購數量（source_quantities）
   const { data: poLinkItems = [] } = useQuery({
     queryKey: ['purchase-order-links'],
@@ -291,6 +317,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
     shippingPoolMap,
     poLinkMap,
     purchasedByOrderKey,
+    consignmentBySourceOrderId,
     getPendingQuantity,
     syncOrdersMutation,
     confirmOrdersMutation,

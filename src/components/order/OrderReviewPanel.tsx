@@ -349,12 +349,12 @@ export default function OrderReviewPanel({
                 <Input
                   type="number"
                   value={item.quantity}
-                  onChange={(e) => handleQuantityChange(item.id, Math.max(1, Number(e.target.value)))}
+                  //onChange={(e) => handleQuantityChange(item.id, Math.max(1, Number(e.target.value)))}
                   onKeyDown={(e) => handleTabNav(e, index, "qty")}
                   data-row={index}
                   data-col="qty"
                   className="h-8 text-center"
-                  min={1}
+
                   step={1}
                 />
               </div>

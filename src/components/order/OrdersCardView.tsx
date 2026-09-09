@@ -16,6 +16,7 @@ interface OrdersCardViewProps {
     onEdit: (orderId: string) => void;
     onReverseShipment?: (order: Order) => void;
     statusTab?: string;
+    consignmentBySourceOrder?: Map<string, any>;
     getOrderShipmentStatus: (items: OrderItem[]) => string;
     getOrderTotal: (items: OrderItem[]) => number;
     commissionByOrder?: Map<string, { totalProfit: number; totalCommission: number }>;
@@ -28,6 +29,7 @@ export function OrdersCardView({
     onEdit,
     onReverseShipment,
     statusTab,
+    consignmentBySourceOrder,
     getOrderShipmentStatus,
     getOrderTotal,
     commissionByOrder,
@@ -59,7 +61,7 @@ export function OrdersCardView({
                                     <div className="text-xs font-mono text-muted-foreground">
                                         <span className="flex items-center gap-1.5">
                                             #{order.code || order.id.slice(0, 8)}
-                                            {order.consignment_mode && (
+                                            {(order.consignment_mode || consignmentBySourceOrder?.has(order.id)) && (
                                                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
                                             )}
                                         </span>

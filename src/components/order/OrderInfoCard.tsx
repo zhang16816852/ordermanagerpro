@@ -9,13 +9,15 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ChevronDown, Warehouse } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { ChevronDown, Warehouse, ChevronUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { WarehouseSelector } from '@/components/WarehouseSelector';
 import { StorePicker } from '@/components/ui/StorePicker';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { OrderItemRow } from '@/components/order/OrderItemsTable';
+import type { PanelState } from '@/components/order/OrderItemsPanel';
 
 export type OrderTypeValue = 'sales' | 'purchase' | 'consignment_receive' | 'consignment_send';
 
@@ -50,6 +52,9 @@ interface OrderInfoCardProps {
   onItemWarehouseChange: (id: string, w: string) => void;
   itemSources: Record<string, string>;
   onItemSourceChange: (id: string, src: string) => void;
+  activePanel?: PanelState;
+  onTogglePanel?: () => void;
+  collapsed?: boolean;
 }
 
 export function OrderInfoCard({
@@ -83,19 +88,49 @@ export function OrderInfoCard({
   onItemWarehouseChange,
   itemSources,
   onItemSourceChange,
+  activePanel,
+  onTogglePanel,
+  collapsed = false,
 }: OrderInfoCardProps) {
   const [warehouseExpanded, setWarehouseExpanded] = useState(false);
+
+  const cardTitle = isEditMode ? '訂單資訊' : (
+    orderType === 'purchase' ? '採購資訊' :
+    orderType === 'consignment_receive' ? '寄賣收貨資訊' :
+    orderType === 'consignment_send' ? '寄賣出貨資訊' : '訂單資訊'
+  );
+
+  const summaryLabel = isEditMode
+    ? (displayStoreName || order?.stores?.name)
+    : orderType === 'sales'
+    ? (displayStoreName || '未選門市')
+    : suppliersList.find((s) => s.id === supplierId)?.name || '未選供應商';
+
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <Card>
-        <CardHeader><CardTitle>{isEditMode ? '訂單資訊' : (
-          orderType === 'purchase' ? '採購資訊' :
-          orderType === 'consignment_receive' ? '寄賣收貨資訊' :
-          orderType === 'consignment_send' ? '寄賣出貨資訊' : '訂單資訊'
-        )}</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
+    <Card className="h-full flex flex-col">
+      <CardHeader
+        className="sticky top-0 bg-background z-10 shrink-0 cursor-pointer select-none py-3 px-4"
+        onClick={onTogglePanel}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-base">{cardTitle}</CardTitle>
+            {summaryLabel && (
+              <Badge variant="outline" className="text-xs font-normal max-w-[150px] truncate">
+                {summaryLabel}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-1 text-muted-foreground">
+            {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+          </div>
+        </div>
+      </CardHeader>
+
+      {!collapsed && (
+        <CardContent className="flex-1 min-h-0 overflow-auto p-4 space-y-4" onClick={(e) => e.stopPropagation()}>
           {isEditMode ? (
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-2 gap-4 text-sm bg-muted/40 p-3 rounded-lg">
               <div>
                 <span className="text-muted-foreground">店鋪：</span>
                 <span className="font-medium">{displayStoreName}</span>
@@ -106,18 +141,18 @@ export function OrderInfoCard({
               </div>
               <div>
                 <span className="text-muted-foreground">建立時間：</span>
-                <span>{format(new Date(order!.created_at), 'yyyy/MM/dd HH:mm', { locale: zhTW })}</span>
+                <span>{order?.created_at ? format(new Date(order.created_at), 'yyyy/MM/dd HH:mm', { locale: zhTW }) : '-'}</span>
               </div>
               <div>
                 <span className="text-muted-foreground">來源：</span>
-                <span>{order!.source_type === 'frontend' ? '前台' : order!.source_type === 'consignment' ? '寄賣' : '後台'}</span>
+                <span>{order?.source_type === 'frontend' ? '前台' : order?.source_type === 'consignment' ? '寄賣' : '後台'}</span>
               </div>
             </div>
           ) : (
-            <>
+            <div className="space-y-4">
               {orderType === 'sales' && (
                 storeLocked ? (
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-2 gap-4 text-sm bg-muted/40 p-3 rounded-lg">
                     <div>
                       <span className="text-muted-foreground">店鋪：</span>
                       <span className="font-medium">{displayStoreName}</span>
@@ -206,19 +241,18 @@ export function OrderInfoCard({
                   </div>
                 </>
               )}
-            </>
+            </div>
           )}
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader><CardTitle>備註</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <Textarea placeholder="輸入備註..." value={notes} onChange={(e) => onNotesChange(e.target.value)} rows={4} />
+          <div className="space-y-2">
+            <Label>備註</Label>
+            <Textarea placeholder="輸入備註..." value={notes} onChange={(e) => onNotesChange(e.target.value)} rows={3} />
+          </div>
+
           {!isEditMode && orderType === 'sales' && (
-            <>
+            <div className="space-y-4 pt-2 border-t">
               <div>
-                <label className="text-sm font-medium">出貨時間</label>
+                <Label className="text-sm font-medium">出貨時間</Label>
                 <Input
                   type="datetime-local"
                   value={shippedAt}
@@ -235,10 +269,11 @@ export function OrderInfoCard({
                 </div>
                 <Switch checked={consignmentMode} onCheckedChange={onConsignmentModeChange} />
               </div>
-            </>
+            </div>
           )}
+
           {!isEditMode && orderType === 'sales' && items.length > 0 && (
-            <Collapsible open={warehouseExpanded} onOpenChange={setWarehouseExpanded}>
+            <Collapsible open={warehouseExpanded} onOpenChange={setWarehouseExpanded} className="pt-2 border-t">
               <CollapsibleTrigger asChild>
                 <button className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
                   <Warehouse className="h-4 w-4" />
@@ -250,7 +285,7 @@ export function OrderInfoCard({
                 {!consignmentMode ? (
                   items.map((item) => (
                     <div key={item.id} className="flex items-center gap-2 text-sm">
-                      <span className="w-40 truncate">{item.productName || item.sku || item.id.slice(0, 8)}</span>
+                      <span className="w-36 truncate">{item.productName || item.sku || item.id.slice(0, 8)}</span>
                       <WarehouseSelector
                         value={getItemWarehouse(item.id)}
                         onChange={(w) => onItemWarehouseChange(item.id, w)}
@@ -261,7 +296,7 @@ export function OrderInfoCard({
                         value={itemSources[item.id] || "self"}
                         onValueChange={(v) => onItemSourceChange(item.id, v)}
                       >
-                        <SelectTrigger className="h-8 w-40 text-xs">
+                        <SelectTrigger className="h-8 w-36 text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -280,7 +315,8 @@ export function OrderInfoCard({
             </Collapsible>
           )}
         </CardContent>
-      </Card>
-    </div>
+      )}
+    </Card>
   );
 }
+

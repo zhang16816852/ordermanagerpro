@@ -79,6 +79,8 @@ interface SharedReceiptProps {
   canViewPrice: boolean;
   printButtonLabel?: string;
   printMode?: boolean;
+  webPreview?: boolean;
+  pagination?: boolean;
   defaultPaperSize?: "a4" | "middle-cut";
 }
 
@@ -217,6 +219,8 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
     canViewPrice,
     printButtonLabel,
     printMode,
+    webPreview,
+    pagination: paginationProp,
     defaultPaperSize = "a4",
   } = props;
 
@@ -231,10 +235,13 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
     showQR: true,
   });
 
-  const widthClass: "a4" | "middle-cut" = printOptions.paperSize;
+  const [pagination, setPagination] = useState(paginationProp ?? true);
+  const [paperSize, setPaperSize] = useState<"a4" | "middle-cut">(defaultPaperSize);
+
+  const widthClass: "a4" | "middle-cut" = webPreview ? paperSize : printOptions.paperSize;
   const baseShowPrice = canViewPrice && items.length > 0 && items[0].unit_price !== null;
-  const showPrice = baseShowPrice && printOptions.showPrice;
-  const showQR = printOptions.showQR;
+  const showPrice = webPreview ? baseShowPrice : baseShowPrice && printOptions.showPrice;
+  const showQR = webPreview ? true : printOptions.showQR;
 
   const statusText = status;
 
@@ -335,12 +342,65 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
     return () => clearPrintClasses();
   }, [printMode]);
 
-  // 僅在「列印模式」或「擷取 PDF」期間短暫掛載印刷版型，其餘時間不佔 DOM
-  const shouldRenderPrint = !!printMode || isCapturing;
+  // 僅在「列印模式」或「擷取 PDF」期間短暫掛載印刷版型，webPreview 常駐
+  const shouldRenderPrint = !!printMode || isCapturing || !!webPreview;
+
+  const receiptContent = (
+    <div
+      ref={webPreview ? undefined : printRef}
+      className={[
+        "doc-receipt-wrap",
+        widthClass === "a4" ? "print-a4" : "print-middle-cut",
+        webPreview ? "doc-receipt-web-preview" : "",
+        webPreview && pagination ? "doc-receipt-paginated" : "",
+      ].filter(Boolean).join(" ")}
+      {...(!webPreview && !printMode ? {} : {})}
+    >
+      {(() => {
+        const pages: JSX.Element[] = [];
+        let running = 0;
+        pageChunks.forEach((chunk, pageIndex) => {
+          const isLast = pageIndex === pageChunks.length - 1;
+          pages.push(
+            <ReceiptPage
+              key={pageIndex}
+              items={chunk}
+              startIndex={running}
+              capacity={pageSizes[pageIndex]}
+              pageIndex={pageIndex}
+              totalPages={totalPages}
+              showPrice={showPrice}
+              showQR={showQR}
+              qrValue={qrValue}
+              title={title}
+              docTitleLabel={docTitleLabel}
+              storeName={storeName}
+              code={code}
+              createdAt={createdAt}
+              status={statusText}
+              notes={notes}
+              widthClass={widthClass}
+            >
+              {isLast && (
+                <LastPageSummary
+                  items={items}
+                  showPrice={showPrice}
+                  notes={notes}
+                  canShowPrice={baseShowPrice}
+                />
+              )}
+            </ReceiptPage>
+          );
+          running += chunk.length;
+        });
+        return pages;
+      })()}
+    </div>
+  );
 
   return (
     <>
-      {!printMode && (
+      {!printMode && !webPreview && (
         <>
           <PrintDialog
             isOpen={isDialogOpen}
@@ -360,54 +420,40 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
         </>
       )}
 
-      {shouldRenderPrint &&
-        createPortal(
-        <div
-          ref={printRef}
-          className={`doc-receipt-wrap ${widthClass === "a4" ? "print-a4" : "print-middle-cut"}`}
-        >
-          {(() => {
-            const pages: JSX.Element[] = [];
-            let running = 0;
-            pageChunks.forEach((chunk, pageIndex) => {
-              const isLast = pageIndex === pageChunks.length - 1;
-              pages.push(
-                <ReceiptPage
-                  key={pageIndex}
-                  items={chunk}
-                  startIndex={running}
-                  capacity={pageSizes[pageIndex]}
-                  pageIndex={pageIndex}
-                  totalPages={totalPages}
-                  showPrice={showPrice}
-                  showQR={showQR}
-                  qrValue={qrValue}
-                  title={title}
-                  docTitleLabel={docTitleLabel}
-                  storeName={storeName}
-                  code={code}
-                  createdAt={createdAt}
-                  status={statusText}
-                  notes={notes}
-                  widthClass={widthClass}
-                >
-                  {isLast && (
-                    <LastPageSummary
-                      items={items}
-                      showPrice={showPrice}
-                      notes={notes}
-                      canShowPrice={baseShowPrice}
-                    />
-                  )}
-                </ReceiptPage>
-              );
-              running += chunk.length;
-            });
-            return pages;
-          })()}
-        </div>,
-        document.body
+      {webPreview && !printMode && (
+        <div className="flex flex-wrap items-center justify-end gap-2 pb-3 print:hidden">
+          <div className="flex items-center rounded-lg border overflow-hidden">
+            <button
+              type="button"
+              className={`text-xs px-2 py-1 ${pagination ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+              onClick={() => setPagination(true)}
+            >
+              分頁
+            </button>
+            <button
+              type="button"
+              className={`text-xs px-2 py-1 ${!pagination ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+              onClick={() => setPagination(false)}
+            >
+              連續
+            </button>
+          </div>
+          <select
+            className="text-xs border rounded px-1 py-1"
+            value={paperSize}
+            onChange={(e) => setPaperSize(e.target.value as "a4" | "middle-cut")}
+          >
+            <option value="a4">A4</option>
+            <option value="middle-cut">中一刀</option>
+          </select>
+        </div>
       )}
+
+      {webPreview && receiptContent}
+
+      {shouldRenderPrint && !webPreview &&
+        createPortal(receiptContent, document.body)
+      }
     </>
   );
 }

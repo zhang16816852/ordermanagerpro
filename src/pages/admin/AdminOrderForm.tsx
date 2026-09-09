@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { usePageHeader } from '@/components/layout/PageHeaderContext';
 import { useStoreProductCache } from '@/hooks/useProductCache';
 import { useStoreDraft } from '@/store/useOrderDraftStore';
 import { Button } from '@/components/ui/button';
@@ -44,6 +45,7 @@ export default function AdminOrderForm() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user, isRep, repAssignedStores } = useAuth();
+  const { setPageHeader } = usePageHeader();
 
   const isEditMode = !!orderId;
 
@@ -83,7 +85,7 @@ export default function AdminOrderForm() {
   // Unified order type
   const [orderType, setOrderType] = useState<'sales' | 'purchase' | 'consignment_receive' | 'consignment_send'>(
     (searchParams.get('type') as any) || 'sales'
-  );  const [supplierId, setSupplierId] = useState('');
+  ); const [supplierId, setSupplierId] = useState('');
   const [targetStoreId, setTargetStoreId] = useState('');
   const [expectedDate, setExpectedDate] = useState('');
   const [supplierOrderNumber, setSupplierOrderNumber] = useState('');
@@ -133,7 +135,7 @@ export default function AdminOrderForm() {
   const [consignmentMode, setConsignmentMode] = useState(false);
 
   // Product browsing state
-  const [activePanel, setActivePanel] = useState<'items' | 'products' | null>(null);
+  const [activePanel, setActivePanel] = useState<'information' | 'items' | 'products' | null>(null);
   const [mobileCatalogOpen, setMobileCatalogOpen] = useState(false);
   const [desktopCatalogOpen, setDesktopCatalogOpen] = useState(true);
   const [productSearch, setProductSearch] = useState('');
@@ -910,6 +912,94 @@ export default function AdminOrderForm() {
 
   const isSubmitting = updateOrderMutation.isPending || createPendingMutation.isPending || isPendingMode2 || directShipMutation.isPending || createPurchaseOrderMutation.isPending || createConsignmentReceiveMutation.isPending || createConsignmentSendMutation.isPending;
 
+  const navigateBack = useCallback(() => {
+    if (orderType === 'purchase') navigate('/admin/purchase-orders');
+    else if (orderType === 'consignment_receive' || orderType === 'consignment_send') navigate('/admin/consignment');
+    else navigate('/admin/orders');
+  }, [orderType, navigate]);
+
+  const orderIdVal = order?.id;
+  const orderCodeVal = order?.code;
+  const orderStatusVal = order?.status;
+  const orderConsignmentMode = order?.consignment_mode;
+  const isTogglePending = toggleStatusMutation.isPending;
+
+  // Sync title & back button & status actions into DesktopHeader / MobileHeader
+  useLayoutEffect(() => {
+    const titleText = isEditMode ? '編輯訂單' : (
+      orderType === 'sales' ? '建立銷售訂單' :
+        orderType === 'purchase' ? '建立採購單' :
+          orderType === 'consignment_receive' ? '建立寄賣收貨單' :
+            '建立寄賣出貨單'
+    );
+
+    const typeBadgeElem = !isEditMode ? (
+      <Badge variant="outline" className={
+        orderType === 'purchase' ? 'border-blue-500 text-blue-500' :
+          orderType === 'consignment_receive' ? 'border-purple-500 text-purple-500' :
+            orderType === 'consignment_send' ? 'border-orange-500 text-orange-500' :
+              ''
+      }>
+        {orderType === 'sales' ? '銷售' :
+          orderType === 'purchase' ? '採購' :
+            orderType === 'consignment_receive' ? '寄賣收貨' : '寄賣出貨'}
+      </Badge>
+    ) : null;
+
+    const statusObj = orderStatusVal ? statusLabels[orderStatusVal] || { label: orderStatusVal, className: 'bg-muted text-muted-foreground' } : null;
+
+    setPageHeader({
+      title: (
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-sm font-bold tracking-tight truncate">{titleText}</span>
+          <span className="text-xs text-muted-foreground font-mono truncate hidden sm:inline">
+            {isEditMode ? (orderCodeVal || orderIdVal) : (
+              orderType === 'sales' ? (displayStoreName ? `(${displayStoreName})` : '') :
+                orderType === 'purchase' ? '(採購)' :
+                  orderType === 'consignment_receive' ? '(寄賣收貨)' : '(寄賣出貨)'
+            )}
+          </span>
+        </div>
+      ),
+      onBack: isEditMode ? () => navigate('/admin/orders') : navigateBack,
+      actions: (
+        <div className="flex items-center gap-2">
+          {typeBadgeElem}
+          {statusObj && <Badge className={statusObj.className}>{statusObj.label}</Badge>}
+          {orderConsignmentMode && <Badge variant="secondary">寄賣</Badge>}
+          {isEditMode && orderStatusVal && orderStatusVal !== 'shipped' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => toggleStatusMutation.mutate()}
+              disabled={isTogglePending}
+            >
+              {orderStatusVal === 'pending' ? (
+                <><Lock className="mr-1.5 h-3.5 w-3.5" />鎖定</>
+              ) : (
+                <><Unlock className="mr-1.5 h-3.5 w-3.5" />解鎖</>
+              )}
+            </Button>
+          )}
+        </div>
+      ),
+    });
+
+    return () => setPageHeader(null);
+  }, [
+    setPageHeader,
+    isEditMode,
+    orderIdVal,
+    orderCodeVal,
+    orderStatusVal,
+    orderConsignmentMode,
+    displayStoreName,
+    orderType,
+    isTogglePending,
+    navigate,
+    navigateBack,
+  ]);
+
   // Loading / empty states
   if (isEditMode && orderLoading) {
     return <div className="flex items-center justify-center h-64" role="status" aria-live="polite"><div className="text-muted-foreground">載入中…</div></div>;
@@ -925,33 +1015,7 @@ export default function AdminOrderForm() {
 
   const statusInfo = order ? statusLabels[order.status] || { label: order.status, className: 'bg-muted text-muted-foreground' } : null;
 
-  const typeTitle = isEditMode ? '編輯訂單' : (
-    orderType === 'sales' ? '建立銷售訂單' :
-    orderType === 'purchase' ? '建立採購單' :
-    orderType === 'consignment_receive' ? '建立寄賣收貨單' :
-    '建立寄賣出貨單'
-  );
-
-  const typeBadge = !isEditMode ? (
-    <Badge variant="outline" className={
-      orderType === 'purchase' ? 'border-blue-500 text-blue-500' :
-      orderType === 'consignment_receive' ? 'border-purple-500 text-purple-500' :
-      orderType === 'consignment_send' ? 'border-orange-500 text-orange-500' :
-      ''
-    }>
-      {orderType === 'sales' ? '銷售' :
-       orderType === 'purchase' ? '採購' :
-       orderType === 'consignment_receive' ? '寄賣收貨' : '寄賣出貨'}
-    </Badge>
-  ) : null;
-
-  const navigateBack = () => {
-    if (orderType === 'purchase') navigate('/admin/purchase-orders');
-    else if (orderType === 'consignment_receive' || orderType === 'consignment_send') navigate('/admin/consignment');
-    else navigate('/admin/orders');
-  };
-
-  const orderInfoCard = (
+  const renderOrderInfoCard = (collapsed: boolean = false) => (
     <OrderInfoCard
       orderType={orderType}
       isEditMode={isEditMode}
@@ -980,13 +1044,16 @@ export default function AdminOrderForm() {
       items={items}
       getItemWarehouse={getItemWarehouse}
       itemWarehouses={itemWarehouses}
-      onItemWarehouseChange={(id, w) => setItemWarehouses(prev => ({ ...prev, [id]: w }))}
+      onItemWarehouseChange={(id, w) => setItemWarehouses((prev) => ({ ...prev, [id]: w }))}
       itemSources={itemSources}
-      onItemSourceChange={(id, src) => setItemSources(prev => ({ ...prev, [id]: src }))}
+      onItemSourceChange={(id, src) => setItemSources((prev) => ({ ...prev, [id]: src }))}
+      activePanel={activePanel}
+      onTogglePanel={() => setActivePanel(activePanel === 'information' ? null : 'information')}
+      collapsed={collapsed}
     />
   );
 
-  const renderProductSelector = (bare: boolean = false) => (
+  const renderProductSelector = (bare: boolean = false, collapsed: boolean = false) => (
     <ProductSelector
       products={storeProducts}
       productsLoading={productsLoading}
@@ -997,7 +1064,7 @@ export default function AdminOrderForm() {
       productSearch={productSearch}
       onSearchChange={setProductSearch}
       filterSheetOpen={filterSheetOpen}
-      onFilterSheetToggle={() => setFilterSheetOpen(v => !v)}
+      onFilterSheetToggle={() => setFilterSheetOpen((v) => !v)}
       selectedCategory={selectedCategory}
       onCategoryChange={handleCategoryChange}
       selectedSpecs={selectedSpecs}
@@ -1008,10 +1075,11 @@ export default function AdminOrderForm() {
       activePanel={activePanel}
       onTogglePanel={() => setActivePanel(activePanel === 'products' ? null : 'products')}
       bare={bare}
+      collapsed={collapsed}
     />
   );
 
-  const orderItemsPanel = (
+  const renderOrderItemsPanel = (collapsed: boolean = false) => (
     <OrderItemsPanel
       isEditMode={isEditMode}
       orderType={orderType}
@@ -1025,40 +1093,12 @@ export default function AdminOrderForm() {
       onTogglePriceSync={handleTogglePriceSync}
       activePanel={activePanel}
       onTogglePanel={() => setActivePanel(activePanel === 'items' ? null : 'items')}
+      collapsed={collapsed}
     />
   );
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={isEditMode ? () => navigate('/admin/orders') : navigateBack}>
-            <ArrowLeft className="mr-2 h-4 w-4" />返回
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">{typeTitle}</h1>
-            <p className="text-muted-foreground font-mono text-sm">
-              {isEditMode ? order!.id : (
-                orderType === 'sales' ? `店鋪: ${displayStoreName}` :
-                orderType === 'purchase' ? '向供應商採購' :
-                orderType === 'consignment_receive' ? '供應商寄放貨品' : '寄放貨品至門市'
-              )}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {typeBadge}
-          {statusInfo && <Badge className={statusInfo.className}>{statusInfo.label}</Badge>}
-          {order?.consignment_mode && <Badge variant="secondary">寄賣</Badge>}
-          {isEditMode && order!.status !== 'shipped' && (
-            <Button variant="outline" onClick={() => toggleStatusMutation.mutate()} disabled={toggleStatusMutation.isPending}>
-              {order!.status === 'pending' ? <><Lock className="mr-2 h-4 w-4" />鎖定訂單</> : <><Unlock className="mr-2 h-4 w-4" />解除鎖定</>}
-            </Button>
-          )}
-        </div>
-      </div>
-
+    <div className="space-y-4">
       {/* Type selector (create mode only) */}
       {!isEditMode && !isRep && (
         <Tabs value={orderType} onValueChange={(v) => setOrderType(v as any)}>
@@ -1089,26 +1129,48 @@ export default function AdminOrderForm() {
         </Alert>
       )}
 
-      {/* Main area - DESKTOP (lg+): click panel header to toggle which region expands */}
-      <div className="hidden lg:flex flex-col gap-4 lg:h-[calc(100vh-320px)]">
+      {/* Main area - DESKTOP (lg+): responsive expandable layout */}
+      <div className="hidden lg:flex flex-col gap-4 lg:h-[calc(100vh-210px)]">
         {activePanel === 'items' ? (
           <>
-            {/* Order items expanded: OrderInfo (top-left) + ProductSelector (top-right, narrowed) | OrderItems (bottom, full width) */}
-            <div className="flex flex-row gap-4 lg:flex-[3] min-h-0">
-              <div className="lg:w-[380px] shrink-0 h-full overflow-auto">{orderInfoCard}</div>
-              <div className="flex-1 min-w-0 h-full overflow-auto">{renderProductSelector()}</div>
+            {/* Order items expanded: OrderInfo (top-left, header only) + ProductSelector (top-right, header only) | OrderItems (bottom, full height) */}
+            <div className="flex flex-row gap-4 shrink-0">
+              <div className="lg:w-[380px] shrink-0">{renderOrderInfoCard(true)}</div>
+              <div className="flex-1 min-w-0">{renderProductSelector(false, true)}</div>
             </div>
-            <div className="lg:flex-[4] min-h-[300px] overflow-auto">{orderItemsPanel}</div>
+            <div className="flex-1 min-h-0 overflow-auto">{renderOrderItemsPanel(false)}</div>
+          </>
+        ) : activePanel === 'information' ? (
+          <>
+            {/* Information expanded: OrderInfo (left, full height) | OrderItems (top-right) + ProductSelector (bottom-right) */}
+            <div className="flex flex-row gap-4 min-h-0 lg:flex-1">
+              <div className="lg:flex-[5] min-w-0 overflow-auto h-full">{renderOrderInfoCard(false)}</div>
+              <div className="flex flex-col gap-4 lg:flex-[5] min-w-0 overflow-hidden">
+                <div className="flex-1 min-h-0 overflow-auto">{renderOrderItemsPanel(false)}</div>
+                <div className="flex-1 min-h-0 overflow-auto">{renderProductSelector(false, false)}</div>
+              </div>
+            </div>
+          </>
+        ) : activePanel === 'products' ? (
+          <>
+            {/* Products expanded: OrderInfo (top-left, collapsed) + OrderItems (bottom-left) | ProductSelector (right, wide) */}
+            <div className="flex flex-row gap-4 min-h-0 lg:flex-1">
+              <div className="flex flex-col gap-4 lg:flex-[3] min-w-0 overflow-hidden">
+                <div className="shrink-0">{renderOrderInfoCard(true)}</div>
+                <div className="flex-1 min-h-0 overflow-auto">{renderOrderItemsPanel(false)}</div>
+              </div>
+              <div className="lg:flex-[7] min-w-0 overflow-auto h-full">{renderProductSelector(false, false)}</div>
+            </div>
           </>
         ) : (
           <>
-            {/* Products expanded: OrderInfo (top-left) + OrderItems (bottom-left, shrunk) | ProductSelector (right, full height, wide) */}
-            <div className="flex flex-col lg:flex-row gap-4 min-h-0 lg:flex-1">
+            {/* Default balanced layout: OrderInfo (top-left) + OrderItems (bottom-left) | ProductSelector (right) */}
+            <div className="flex flex-row gap-4 min-h-0 lg:flex-1">
               <div className="flex flex-col gap-4 lg:flex-[3] min-w-0 overflow-hidden">
-                <div className="shrink-0">{orderInfoCard}</div>
-                <div className="flex-1 min-h-0 overflow-auto">{orderItemsPanel}</div>
+                <div className="shrink-0 max-h-[340px] overflow-auto">{renderOrderInfoCard(false)}</div>
+                <div className="flex-1 min-h-0 overflow-auto">{renderOrderItemsPanel(false)}</div>
               </div>
-              <div className="lg:flex-[7] min-w-0 overflow-auto">{renderProductSelector()}</div>
+              <div className="lg:flex-[7] min-w-0 overflow-auto h-full">{renderProductSelector(false, false)}</div>
             </div>
           </>
         )}
@@ -1116,8 +1178,8 @@ export default function AdminOrderForm() {
 
       {/* Main area - MOBILE (<lg): order info + order items inline, catalog in right drawer */}
       <div className="lg:hidden flex flex-col gap-4">
-        {orderInfoCard}
-        {orderItemsPanel}
+        {renderOrderInfoCard(false)}
+        {renderOrderItemsPanel(false)}
       </div>
 
       {/* Mobile bottom floating button (hidden when drawer open) */}
@@ -1125,7 +1187,7 @@ export default function AdminOrderForm() {
         <button
           type="button"
           onClick={() => setMobileCatalogOpen(true)}
-          className="lg:hidden fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg"
+          className="lg:hidden fixed top-1/2 -translate-y-1/2 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg"
           aria-label="開啟商品選擇"
         >
           <Package className="h-6 w-6" />

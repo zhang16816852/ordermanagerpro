@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Eye } from 'lucide-react';
+import { Eye, Share2 } from 'lucide-react';
 import { ConsignmentOrder, ConsignmentDirection, ConsignmentStatus } from '../types';
 
 interface OrderListTabProps {
@@ -49,6 +49,22 @@ export function OrderListTab({ orders, onView, isLoading }: OrderListTabProps) {
     );
   }
 
+  const orderShareLink = (order: ConsignmentOrder) => {
+    const token = order.access_token;
+    if (!token) return null;
+    return `${window.location.origin}/share/consignment/${order.code || order.id}?token=${token}`;
+  };
+
+  const handleShare = (order: ConsignmentOrder) => {
+    const link = orderShareLink(order);
+    if (!link) return;
+    if (navigator.share) {
+      navigator.share({ title: `寄賣單 ${order.code}`, url: link }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(link).then(() => {});
+    }
+  };
+
   return (
     <>
       {/* Desktop: Table */}
@@ -88,6 +104,11 @@ export function OrderListTab({ orders, onView, isLoading }: OrderListTabProps) {
                   <Button size="icon" variant="ghost" onClick={() => onView(order)} aria-label="查看訂單">
                     <Eye className="h-4 w-4" />
                   </Button>
+                  {order.access_token && (
+                    <Button size="icon" variant="ghost" onClick={() => handleShare(order)} aria-label="分享寄賣單">
+                      <Share2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -119,9 +140,16 @@ export function OrderListTab({ orders, onView, isLoading }: OrderListTabProps) {
             </div>
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>{new Date(order.created_at).toLocaleDateString('zh-TW')}</span>
-              <Button size="icon" variant="ghost" onClick={() => onView(order)} aria-label="查看訂單">
-                <Eye className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-1">
+                {order.access_token && (
+                  <Button size="icon" variant="ghost" onClick={() => handleShare(order)} aria-label="分享寄賣單">
+                    <Share2 className="h-4 w-4" />
+                  </Button>
+                )}
+                <Button size="icon" variant="ghost" onClick={() => onView(order)} aria-label="查看訂單">
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
         ))}

@@ -2,7 +2,7 @@ import { createContext, useContext, useState, ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 
 export interface PageHeaderConfig {
-  title?: string;
+  title?: ReactNode;
   back?: string;
   onBack?: () => void;
   actions?: ReactNode;

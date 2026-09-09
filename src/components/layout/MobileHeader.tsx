@@ -39,7 +39,11 @@ export function MobileHeader({ navItems, sidebarOpen, onSidebarOpenChange, pageH
         </Button>
       )}
       {pageHeader?.title && (
-        <span className="text-sm font-semibold tracking-tight truncate flex-1 min-w-0">{pageHeader.title}</span>
+        typeof pageHeader.title === 'string' ? (
+          <span className="text-sm font-semibold tracking-tight truncate flex-1 min-w-0">{pageHeader.title}</span>
+        ) : (
+          <div className="flex-1 min-w-0 truncate">{pageHeader.title}</div>
+        )
       )}
       {pageHeader?.actions && <div className="shrink-0">{pageHeader.actions}</div>}
       <NotificationDropdown />

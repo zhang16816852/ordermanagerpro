@@ -346,6 +346,30 @@
     left: 0 !important;
   }
 
+  /* webPreview 螢幕樣式不洩漏進列印：去邊框/陰影/限寬，並還原分頁 */
+  .doc-receipt-web-preview {
+    max-width: none !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .doc-receipt-web-preview .doc-page {
+    page-break-after: always !important;
+    break-after: page !important;
+    border-bottom: none !important;
+  }
+
+  /* 分頁模式模擬紙張的外框/陰影/固定尺寸不洩漏進列印 */
+  .doc-receipt-web-preview.doc-receipt-paginated .doc-page {
+    width: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
   .doc-page {
     page-break-after: always;
   }
@@ -551,6 +575,46 @@
 .doc-qr-code {
   width: 60px;
   height: 60px;
+}
+
+/* 網頁版分頁預覽：正面顯示 doc-receipt-wrap，套用正常文件版型 */
+.doc-receipt-web-preview {
+  position: static;
+  left: 0;
+  z-index: auto;
+  max-width: 900px;
+  margin: 0 auto;
+  background: white;
+}
+
+/* 連續模式：內容高度、頁間以虛線分隔 */
+.doc-receipt-web-preview:not(.doc-receipt-paginated) .doc-page {
+  border-bottom: 1px dashed #ccc;
+  page-break-after: auto;
+}
+
+.doc-receipt-web-preview:not(.doc-receipt-paginated) .doc-page:last-child {
+  border-bottom: none;
+}
+
+/* 分頁模式：模擬真實紙張（A4 / 中一刀） */
+.doc-receipt-web-preview.doc-receipt-paginated {
+  max-width: none;
+  overflow-x: auto;
+}
+
+.doc-receipt-web-preview.doc-receipt-paginated .doc-page {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto 24px;
+  border: 1px solid #ddd;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+  background: white;
+}
+
+.doc-receipt-web-preview.doc-receipt-paginated.print-middle-cut .doc-page {
+  width: 241mm;
+  min-height: 140mm;
 }
 
 /* ===== End Doc Receipt Print Layout ===== */

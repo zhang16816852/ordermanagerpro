@@ -25,6 +25,7 @@ export interface ConsignmentOrder {
   source_order_id?: string | null;
   received_at?: string | null;
   received_by?: string | null;
+  access_token?: string;
   supplier?: { id: string; name: string } | null;
   store?: { id: string; name: string } | null;
 }

@@ -37,6 +37,7 @@ import {
   RotateCcw,
   Plus,
   Trash2,
+  Share2,
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 
@@ -92,6 +93,19 @@ export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             寄賣單 {order.code} {statusBadge}
+            {order.access_token && (
+              <button
+                type="button"
+                onClick={() => {
+                  const link = `${window.location.origin}/share/consignment/${order.code || order.id}?token=${order.access_token}`;
+                  navigator.clipboard?.writeText(link).then(() => toast.success('分享連結已複製'));
+                }}
+                className="ml-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                title="複製分享連結"
+              >
+                <Share2 className="h-3.5 w-3.5" /> 分享
+              </button>
+            )}
           </DialogTitle>
           <DialogDescription>
             {isSupplier

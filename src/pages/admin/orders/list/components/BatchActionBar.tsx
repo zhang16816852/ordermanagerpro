@@ -127,7 +127,7 @@ export function BatchActionBar({
                       className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
                     >
                       <Store className="h-4 w-4 mr-2" />
-                      轉寄賣
+                      轉寄賣（草稿）
                     </Button>
                     {hasConsignmentSelection && <span className="w-px h-6 bg-primary-foreground/30" />}
                   </>

@@ -508,6 +508,7 @@ export type Database = {
       }
       consignment_orders: {
         Row: {
+          access_token: string
           code: string
           created_at: string
           created_by: string | null
@@ -523,6 +524,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          access_token?: string
           code: string
           created_at?: string
           created_by?: string | null
@@ -538,6 +540,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          access_token?: string
           code?: string
           created_at?: string
           created_by?: string | null
@@ -4451,6 +4454,16 @@ export type Database = {
         }
         Returns: Json
       }
+      batch_upsert_product_options: {
+        Args: {
+          p_groups: Json
+          p_model_relations: Json
+          p_product_id: string
+          p_variant_options: Json
+          p_variants: Json
+        }
+        Returns: Json
+      }
       bind_user_to_store: {
         Args: { p_role: string; p_store_id: string; p_user_id: string }
         Returns: undefined
@@ -4496,6 +4509,10 @@ export type Database = {
       confirm_consignment_sales: {
         Args: { p_confirmed_by: string; p_report_ids: string[] }
         Returns: number
+      }
+      convert_order_to_consignment_draft: {
+        Args: { p_created_by: string; p_order_id: string }
+        Returns: Json
       }
       create_consignment_shipment: {
         Args: {
@@ -4590,6 +4607,10 @@ export type Database = {
         Returns: string[]
       }
       get_rep_commission_rate: { Args: { _user_id: string }; Returns: number }
+      get_shared_consignment_details: {
+        Args: { p_identifier: string; p_token: string }
+        Returns: Json
+      }
       get_shared_order_details: {
         Args: { p_identifier: string; p_token: string }
         Returns: Json

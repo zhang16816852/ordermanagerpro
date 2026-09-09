@@ -30,6 +30,7 @@ interface ProductSelectorProps {
   onTogglePanel: () => void;
   catalogSidebarMaxHeight?: number;
   bare?: boolean;
+  collapsed?: boolean;
 }
 
 export function ProductSelector({
@@ -54,6 +55,7 @@ export function ProductSelector({
   onTogglePanel,
   catalogSidebarMaxHeight = 520,
   bare = false,
+  collapsed = false,
 }: ProductSelectorProps) {
   const viewModes: ViewMode[] = ['products', 'variants', 'gallery', 'table'];
   const viewModeLabels: Record<ViewMode, string> = {
@@ -65,7 +67,7 @@ export function ProductSelector({
 
   const header = (
     <div className="flex items-center justify-between">
-      <CardTitle>商品選擇</CardTitle>
+      <CardTitle className="text-base">商品選擇</CardTitle>
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); onFilterSheetToggle(); }}>
           <Filter className="h-4 w-4" />
@@ -135,24 +137,28 @@ export function ProductSelector({
   if (bare) {
     return (
       <div className="flex flex-col h-full">
-        <div className="sticky top-0 bg-background z-10 shrink-0 cursor-pointer" onClick={onTogglePanel}>
+        <div className="sticky top-0 bg-background z-10 shrink-0 cursor-pointer py-3 px-4" onClick={onTogglePanel}>
           {header}
         </div>
-        <div className="flex-1 min-h-0 overflow-auto p-0" onClick={(e) => e.stopPropagation()}>
-          {body}
-        </div>
+        {!collapsed && (
+          <div className="flex-1 min-h-0 overflow-auto p-0" onClick={(e) => e.stopPropagation()}>
+            {body}
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader className="sticky top-0 bg-background z-10 shrink-0 cursor-pointer" onClick={onTogglePanel}>
+      <CardHeader className="sticky top-0 bg-background z-10 shrink-0 cursor-pointer select-none py-3 px-4" onClick={onTogglePanel}>
         {header}
       </CardHeader>
-      <CardContent className="flex-1 min-h-0 overflow-auto p-0" onClick={(e) => e.stopPropagation()}>
-        {body}
-      </CardContent>
+      {!collapsed && (
+        <CardContent className="flex-1 min-h-0 overflow-auto p-0" onClick={(e) => e.stopPropagation()}>
+          {body}
+        </CardContent>
+      )}
     </Card>
   );
 }

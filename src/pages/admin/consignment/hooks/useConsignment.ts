@@ -72,7 +72,7 @@ export function useConsignment() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('consignment_orders')
-        .select('*, supplier:suppliers(id, name), store:stores(id, name)')
+        .select('*, access_token, supplier:suppliers(id, name), store:stores(id, name)')
         .order('created_at', { ascending: false });
       if (error) throw error;
       return (data || []) as ConsignmentOrder[];
