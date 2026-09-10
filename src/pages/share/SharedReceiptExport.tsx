@@ -82,6 +82,8 @@ interface SharedReceiptProps {
   webPreview?: boolean;
   pagination?: boolean;
   defaultPaperSize?: "a4" | "middle-cut";
+  webShowPrice?: boolean;
+  webShowQR?: boolean;
 }
 
 function HeaderRow({ showPrice }: { showPrice: boolean }) {
@@ -222,6 +224,8 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
     webPreview,
     pagination: paginationProp,
     defaultPaperSize = "a4",
+    webShowPrice: webShowPriceProp,
+    webShowQR: webShowQRProp,
   } = props;
 
   const printRef = useRef<HTMLDivElement>(null);
@@ -237,11 +241,13 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
 
   const [pagination, setPagination] = useState(paginationProp ?? true);
   const [paperSize, setPaperSize] = useState<"a4" | "middle-cut">(defaultPaperSize);
+  const [webShowPrice, setWebShowPrice] = useState(webShowPriceProp ?? true);
+  const [webShowQR, setWebShowQR] = useState(webShowQRProp ?? true);
 
   const widthClass: "a4" | "middle-cut" = webPreview ? paperSize : printOptions.paperSize;
   const baseShowPrice = canViewPrice && items.length > 0 && items[0].unit_price !== null;
-  const showPrice = webPreview ? baseShowPrice : baseShowPrice && printOptions.showPrice;
-  const showQR = webPreview ? true : printOptions.showQR;
+  const showPrice = webPreview ? baseShowPrice && webShowPrice : baseShowPrice && printOptions.showPrice;
+  const showQR = webPreview ? webShowQR : printOptions.showQR;
 
   const statusText = status;
 
@@ -438,6 +444,42 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
               連續
             </button>
           </div>
+          {baseShowPrice && (
+            <div className="flex items-center rounded-lg border overflow-hidden">
+              <button
+                type="button"
+                className={`text-xs px-2 py-1 ${webShowPrice ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+                onClick={() => setWebShowPrice(true)}
+              >
+                顯示價格
+              </button>
+              <button
+                type="button"
+                className={`text-xs px-2 py-1 ${!webShowPrice ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+                onClick={() => setWebShowPrice(false)}
+              >
+                隱藏價格
+              </button>
+            </div>
+          )}
+          {qrValue && (
+            <div className="flex items-center rounded-lg border overflow-hidden">
+              <button
+                type="button"
+                className={`text-xs px-2 py-1 ${webShowQR ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+                onClick={() => setWebShowQR(true)}
+              >
+                顯示 QR
+              </button>
+              <button
+                type="button"
+                className={`text-xs px-2 py-1 ${!webShowQR ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+                onClick={() => setWebShowQR(false)}
+              >
+                隱藏 QR
+              </button>
+            </div>
+          )}
           <select
             className="text-xs border rounded px-1 py-1"
             value={paperSize}

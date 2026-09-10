@@ -423,10 +423,11 @@
 .doc-meta-row {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   border-top: 1px solid #333;
   border-bottom: 1px solid #333;
   padding: 6px 2px;
+  height: 84px;
 }
 
 .doc-meta {
