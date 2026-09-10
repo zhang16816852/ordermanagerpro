@@ -55,9 +55,11 @@ BEGIN
         v_new_status := 'waiting';
       END IF;
 
-      -- 3c. 更新 order_items
+      -- 3c. 更新 order_items 並設定來源追蹤
       UPDATE public.order_items
-      SET shipped_quantity = v_new_shipped_qty, status = v_new_status, updated_at = NOW()
+      SET shipped_quantity = v_new_shipped_qty, status = v_new_status, updated_at = NOW(),
+          source_pool_id = v_item.pool_id,
+          source_order_id = v_item.order_id
       WHERE id = v_item.order_item_id;
 
       -- 收集受影響的訂單 ID

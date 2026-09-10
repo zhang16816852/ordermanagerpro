@@ -105,15 +105,25 @@ export function useRepairOrders(storeId?: string | null) {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await (supabase as any).from('repair_orders').delete().eq('id', id);
+      const { data, error } = await (supabase as any).rpc('delete_repair_order_if_safe', { p_repair_order_id: id });
       if (error) throw error;
+      const result = data as { ok?: boolean; reason?: string; adopted_by?: Array<{ label?: string }> } | null;
+      if (result && result.ok === false) {
+        const err = new Error(result.reason || '刪除失敗') as any;
+        const labels = (result.adopted_by || []).map((b: any) => b?.label).filter(Boolean).join('、');
+        err.hint = labels ? `被引用：${labels}` : '';
+        err.reason = result.reason;
+        throw err;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
       toast.success('維修單已刪除');
     },
     onError: (err: any) => {
-      toast.error('刪除失敗：' + getErrorMessage(err));
+      toast.error(err?.reason ? `刪除失敗：${err.reason}` : `刪除失敗：${getErrorMessage(err)}`, {
+        description: err?.hint || undefined,
+      });
     },
   });
 

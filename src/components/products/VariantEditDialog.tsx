@@ -186,14 +186,27 @@ export function VariantEditDialog({
         init();
     }, [open, variant?.id, product?.id]);
 
-    const resolveOptionValueId = async (groupId: string, label: string): Promise<string | null> => {
+    const getHexCodeForColor = (label: string): string | null => {
+        if (!label) return null;
+        const color = libraryColors.find(c => c.name.trim().toLowerCase() === label.trim().toLowerCase()
+            || c.code?.toUpperCase() === label.trim().toUpperCase());
+        return color?.hex_code || null;
+    };
+
+    const resolveOptionValueId = async (groupId: string, label: string, hexCode?: string | null): Promise<string | null> => {
         if (!label) return null;
         const existing = optionGroups.find(g => g.id === groupId)?.values.find(v => (v.label || v.value) === label);
-        if (existing) return existing.id;
+        if (existing) {
+            if (hexCode && !existing.hex_code) {
+                await (supabase.from('product_option_values') as any).update({ hex_code: hexCode }).eq('id', existing.id);
+            }
+            return existing.id;
+        }
         const { data, error } = await (supabase.from('product_option_values') as any).insert({
             group_id: groupId,
             label,
             value: label,
+            hex_code: hexCode || null,
         }).select().single();
         if (error) throw error;
         return data.id;
@@ -204,7 +217,9 @@ export function VariantEditDialog({
 
         const resolved: { groupId: string; valueId: string }[] = [];
         for (const [groupId, label] of Object.entries(optionValues)) {
-            const valueId = await resolveOptionValueId(groupId, label);
+            const group = optionGroups.find(g => g.id === groupId);
+            const hexCode = group && isColorGroupName(group.name) ? getHexCodeForColor(label) : undefined;
+            const valueId = await resolveOptionValueId(groupId, label, hexCode);
             if (valueId) resolved.push({ groupId, valueId });
         }
 
@@ -216,6 +231,25 @@ export function VariantEditDialog({
         if (inserts.length > 0) {
             const { error } = await (supabase.from('product_variant_options') as any).insert(inserts);
             if (error) throw error;
+        }
+
+        if (product?.id) {
+            const { data: productVariants } = await (supabase.from('product_variants') as any)
+                .select('id')
+                .eq('product_id', product.id);
+            const variantIds = (productVariants || []).map((v: any) => v.id);
+            if (variantIds.length > 0) {
+                const { data: allLinks } = await (supabase.from('product_variant_options') as any)
+                    .select('option_value_id')
+                    .in('variant_id', variantIds);
+
+                const usedValueIds = new Set((allLinks || []).map((l: any) => l.option_value_id));
+                const allGroupValueIds = optionGroups.flatMap(g => g.values.map(v => v.id));
+                const orphanIds = allGroupValueIds.filter(id => !usedValueIds.has(id));
+                if (orphanIds.length > 0) {
+                    await (supabase.from('product_option_values') as any).delete().in('id', orphanIds);
+                }
+            }
         }
     };
 

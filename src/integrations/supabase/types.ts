@@ -1873,6 +1873,8 @@ export type Database = {
           shipped_quantity: number
           shipping_payment: string | null
           sort_order: number
+          source_order_id: string | null
+          source_pool_id: string | null
           status: Database["public"]["Enums"]["order_item_status"]
           store_id: string
           unit_cost: number
@@ -1891,6 +1893,8 @@ export type Database = {
           shipped_quantity?: number
           shipping_payment?: string | null
           sort_order?: number
+          source_order_id?: string | null
+          source_pool_id?: string | null
           status?: Database["public"]["Enums"]["order_item_status"]
           store_id: string
           unit_cost?: number
@@ -1909,6 +1913,8 @@ export type Database = {
           shipped_quantity?: number
           shipping_payment?: string | null
           sort_order?: number
+          source_order_id?: string | null
+          source_pool_id?: string | null
           status?: Database["public"]["Enums"]["order_item_status"]
           store_id?: string
           unit_cost?: number
@@ -4514,6 +4520,16 @@ export type Database = {
         Args: { p_created_by: string; p_order_id: string }
         Returns: Json
       }
+      correct_sales_note: {
+        Args: {
+          p_created_by?: string
+          p_items_to_add?: Json
+          p_items_to_remove?: string[]
+          p_new_items?: Json
+          p_sales_note_id: string
+        }
+        Returns: Json
+      }
       create_consignment_shipment: {
         Args: {
           p_consignment_order_id: string
@@ -4555,12 +4571,19 @@ export type Database = {
         }
         Returns: Json
       }
+      delete_accounting_entry: { Args: { p_entry_id: string }; Returns: Json }
       delete_order_if_unadopted: { Args: { p_order_id: string }; Returns: Json }
+      delete_product_if_safe: { Args: { p_product_id: string }; Returns: Json }
       delete_purchase_order_if_empty: {
         Args: { p_purchase_order_id: string }
         Returns: Json
       }
+      delete_repair_order_if_safe: {
+        Args: { p_repair_order_id: string }
+        Returns: Json
+      }
       delete_sales_note: { Args: { p_sales_note_id: string }; Returns: Json }
+      delete_variant_if_safe: { Args: { p_variant_id: string }; Returns: Json }
       direct_ship_order: {
         Args: {
           p_created_by: string

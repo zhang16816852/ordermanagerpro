@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { SalesNoteStatusBadge } from "./SalesNoteStatusBadge";
 import { SalesReturnDialog } from "./SalesReturnDialog";
+import { SalesNoteCorrectDialog } from "./SalesNoteCorrectDialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -34,6 +35,7 @@ export interface SalesNoteItem {
 export interface SalesNoteDetail {
     id: string;
     code?: string;
+    store_id: string;
     storeName?: string;
     storeCode?: string;
     status: string;
@@ -55,6 +57,7 @@ interface SalesNoteDetailDialogProps {
     enablePayment?: boolean;
     showSku?: boolean;
     enableReturn?: boolean;
+    enableCorrect?: boolean;
 }
 
 export function SalesNoteDetailDialog({
@@ -65,12 +68,14 @@ export function SalesNoteDetailDialog({
     isConfirming,
     enablePayment = false,
     showSku = true,
-    enableReturn = false
+    enableReturn = false,
+    enableCorrect = false
 }: SalesNoteDetailDialogProps) {
     const { user } = useAuth();
     const queryClient = useQueryClient();
     const [entryDialogOpen, setEntryDialogOpen] = useState(false);
     const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+    const [correctDialogOpen, setCorrectDialogOpen] = useState(false);
     const [editingDate, setEditingDate] = useState(false);
     const [newShippedDate, setNewShippedDate] = useState("");
 
@@ -453,6 +458,17 @@ export function SalesNoteDetailDialog({
                                     退貨登記
                                 </Button>
                             )}
+                            {enableCorrect && note.status !== 'received' && note.payment_status !== 'paid' && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-full sm:w-auto text-blue-600 border-blue-300 hover:bg-blue-50"
+                                    onClick={() => setCorrectDialogOpen(true)}
+                                >
+                                    <Pencil className="h-4 w-4 mr-2" />
+                                    修正
+                                </Button>
+                            )}
                             {note.access_token && (
                                 <SharedReceiptExport
                                     items={sortedItems.map((item) => ({
@@ -530,6 +546,13 @@ export function SalesNoteDetailDialog({
                 onOpenChange={setReturnDialogOpen}
                 note={note}
                 accounts={accounts}
+            />
+
+            {/* 修正對話框 */}
+            <SalesNoteCorrectDialog
+                open={correctDialogOpen}
+                onOpenChange={setCorrectDialogOpen}
+                note={note}
             />
         </Dialog>
     );

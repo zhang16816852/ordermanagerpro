@@ -342,12 +342,19 @@ export function useConsignment() {
           .eq('id', co.source_order_id)
           .single();
         // 草稿鏡像來源訂單：取消即刪除；已出貨的來源訂單保留
+        //（改用有守門的 delete_order_if_unadopted，避免繞過引用檢查）
         if (src?.status === 'pending') {
-          const { error: delError } = await (supabase as any)
-            .from('orders')
-            .delete()
-            .eq('id', co.source_order_id);
+          const { data: delResult, error: delError } = await (supabase as any)
+            .rpc('delete_order_if_unadopted', { p_order_id: co.source_order_id });
           if (delError) throw delError;
+          const result = delResult as { ok?: boolean; reason?: string; adopted_by?: Array<{ label?: string }> } | null;
+          if (result && result.ok === false) {
+            const err = new Error(result.reason || '取消寄賣失敗') as any;
+            const labels = (result.adopted_by || []).map((b: any) => b?.label).filter(Boolean).join('、');
+            err.hint = labels ? `被引用：${labels}` : '';
+            err.reason = result.reason;
+            throw err;
+          }
         }
       }
       const { error } = await (supabase as any)
@@ -359,6 +366,13 @@ export function useConsignment() {
     {
       successMessage: '寄賣單已取消',
       invalidateKeys: [['consignment-orders'], ['admin-orders']],
+      onError: (error: any) => {
+        if (error?.reason) {
+          toast.error(`取消失敗：${error.reason}`, {
+            description: error?.hint || undefined,
+          });
+        }
+      },
     }
   );
 

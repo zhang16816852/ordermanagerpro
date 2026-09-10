@@ -132,7 +132,8 @@ BEGIN
       v_order.code, 'store_consignment', p_created_by
     );
 
-    -- 2) 來源 order_items：優先既有連結，legacy 依 product/variant 補找
+    -- 2) 來源 order_items：先由 consignment_order_items.order_item_id 直接對應，
+    --    若無再依 source_order_id + product/variant 精確匹配（避免 A+B 訂單時誤匹配）
     v_oi_id := v_item.order_item_id;
     IF v_oi_id IS NULL AND v_order.source_order_id IS NOT NULL THEN
       SELECT oi.id INTO v_oi_id

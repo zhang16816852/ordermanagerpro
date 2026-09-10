@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -103,6 +103,25 @@ function SortableTableRow({ item, index, viewMode, keyOptions, children }: { ite
             {children}
         </TableRow>
     );
+}
+
+function handleColumnNav(e: ReactKeyboardEvent<HTMLInputElement>, col: string) {
+    if (e.key !== 'Tab' && e.key !== 'Enter') return;
+    e.preventDefault();
+    const table = (e.target as HTMLElement).closest('table, .space-y-3');
+    if (!table) return;
+    const inputs = Array.from(table.querySelectorAll(`input[data-col="${col}"]`)) as HTMLInputElement[];
+    const idx = inputs.indexOf(e.target as HTMLInputElement);
+    if (idx === -1) return;
+    const next = e.shiftKey
+        ? (idx > 0 ? idx - 1 : inputs.length - 1)
+        : (idx < inputs.length - 1 ? idx + 1 : 0);
+    inputs[next].focus();
+    inputs[next].select();
+}
+
+function selectOnFocus(e: React.FocusEvent<HTMLInputElement>) {
+    e.target.select();
 }
 
 export function ServiceItemBadge({ item }: { item: OrderItemRow }) {
@@ -427,6 +446,9 @@ export function OrderItemsTable({
                                                                     type="number"
                                                                     value={item.quantity}
                                                                     onChange={(e) => onUpdateQuantity(index, parseInt(e.target.value) || 1)}
+                                                                    onKeyDown={(e) => handleColumnNav(e, 'qty')}
+                                                                    onFocus={selectOnFocus}
+                                                                    data-col="qty"
                                                                     className="w-20 h-8"
                                                                     min={1}
                                                                 />
@@ -440,6 +462,9 @@ export function OrderItemsTable({
                                                                     type="number"
                                                                     value={item.unitPrice}
                                                                     onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)}
+                                                                    onKeyDown={(e) => handleColumnNav(e, 'price')}
+                                                                    onFocus={selectOnFocus}
+                                                                    data-col="price"
                                                                     className="w-24 text-right ml-auto h-8"
                                                                 />
                                                             ) : (
@@ -517,6 +542,9 @@ export function OrderItemsTable({
                                                                     type="number"
                                                                     value={item.quantity}
                                                                     onChange={(e) => onUpdateQuantity(index, parseInt(e.target.value) || 1)}
+                                                                    onKeyDown={(e) => handleColumnNav(e, 'qty')}
+                                                                    onFocus={selectOnFocus}
+                                                                    data-col="qty"
                                                                     className="w-20 h-8"
                                                                     min={1}
                                                                 />
@@ -530,6 +558,9 @@ export function OrderItemsTable({
                                                                     type="number"
                                                                     value={item.unitPrice}
                                                                     onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)}
+                                                                    onKeyDown={(e) => handleColumnNav(e, 'price')}
+                                                                    onFocus={selectOnFocus}
+                                                                    data-col="price"
                                                                     className="w-24 text-right ml-auto h-8"
                                                                 />
                                                             ) : (
@@ -658,7 +689,7 @@ export function OrderItemsTable({
                                             <div className="space-y-1.5">
                                                 <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Package className="h-3 w-3" /> 數量</label>
                                                 {isEditable ? (
-                                                    <Input type="number" value={item.quantity} onChange={(e) => onUpdateQuantity(index, parseInt(e.target.value) || 1)} className="h-9" min={1} />
+                                                    <Input type="number" value={item.quantity} onChange={(e) => onUpdateQuantity(index, parseInt(e.target.value) || 1)} onKeyDown={(e) => handleColumnNav(e, 'qty')} onFocus={selectOnFocus} data-col="qty" className="h-9" min={1} />
                                                 ) : (
                                                     <div className="font-medium p-1.5 text-sm">{item.quantity}</div>
                                                 )}
@@ -666,7 +697,7 @@ export function OrderItemsTable({
                                             <div className="space-y-1.5">
                                                 <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Tag className="h-3 w-3" /> {priceLabel}</label>
                                                 {showPriceInput ? (
-                                                    <Input type="number" value={item.unitPrice} onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)} className="h-9" />
+                                                    <Input type="number" value={item.unitPrice} onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)} onKeyDown={(e) => handleColumnNav(e, 'price')} onFocus={selectOnFocus} data-col="price" className="h-9" />
                                                 ) : (
                                                     <div className="font-medium p-1.5 text-sm">{formatCurrency(item.unitPrice)}</div>
                                                 )}
@@ -781,7 +812,7 @@ function SortableMobileCard({
                 <div className="space-y-1.5">
                     <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Package className="h-3 w-3" /> 數量</label>
                     {isEditable ? (
-                        <Input type="number" value={item.quantity} onChange={(e) => onUpdateQuantity(index, parseInt(e.target.value) || 1)} className="h-9" min={1} />
+                        <Input type="number" value={item.quantity} onChange={(e) => onUpdateQuantity(index, parseInt(e.target.value) || 1)} onKeyDown={(e) => handleColumnNav(e, 'qty')} onFocus={selectOnFocus} data-col="qty" className="h-9" min={1} />
                     ) : (
                         <div className="font-medium p-1.5 text-sm">{item.quantity}</div>
                     )}
@@ -789,7 +820,7 @@ function SortableMobileCard({
                 <div className="space-y-1.5">
                     <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Tag className="h-3 w-3" /> {priceLabel}</label>
                     {showPriceInput ? (
-                        <Input type="number" value={item.unitPrice} onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)} className="h-9" />
+                        <Input type="number" value={item.unitPrice} onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)} onKeyDown={(e) => handleColumnNav(e, 'price')} onFocus={selectOnFocus} data-col="price" className="h-9" />
                     ) : (
                         <div className="font-medium p-1.5 text-sm">{formatCurrency(item.unitPrice)}</div>
                     )}

@@ -34,6 +34,8 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VariantBatchCreator } from './form/VariantBatchCreator';
 import { VariantEditDialog } from './VariantEditDialog';
+import { StandaloneDeviceModelSelectField, type DeviceSelectionRef } from './StandaloneDeviceModelSelectField';
+import { entityRelationService } from '@/services/entityRelationService';
 
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;
@@ -51,6 +53,21 @@ const STATUS_LABELS: Record<string, string> = {
   sold_out: '售完停產',
 };
 
+const COLOR_GROUP_NAME_RE = /(顏色|色|color)/i;
+function isColorGroupName(name: string): boolean {
+  return COLOR_GROUP_NAME_RE.test(name);
+}
+
+interface BatchEditEntry {
+  field: string;
+  value: string;
+  optionGroupId?: string;
+  optionValueId?: string;
+  newOptionValueLabel?: string;
+  newOptionValueHex?: string;
+  modelRefs?: DeviceSelectionRef[];
+}
+
 export function VariantManager({ products, search }: VariantManagerProps) {
   const queryClient = useQueryClient();
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
@@ -59,7 +76,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
   const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(null);
   const [selectedVariantIds, setSelectedVariantIds] = useState<Set<string>>(new Set());
   const [isBatchEditOpen, setIsBatchEditOpen] = useState(false);
-  const [batchEditEntries, setBatchEditEntries] = useState<Array<{ field: string; value: string }>>([]);
+  const [batchEditEntries, setBatchEditEntries] = useState<BatchEditEntry[]>([]);
 
   // 篩選產品（所有產品皆有變體）
   const productsWithVariants = products.filter(p =>
@@ -143,42 +160,137 @@ export function VariantManager({ products, search }: VariantManagerProps) {
     enabled: !!selectedProductId,
   });
 
+  const { data: optionGroupsData = [] } = useQuery({
+    queryKey: ['product-option-groups', selectedProductId],
+    queryFn: async () => {
+      if (!selectedProductId) return [] as any[];
+      const { data, error } = await (supabase.from('product_option_groups') as any)
+        .select('*, product_option_values(*)')
+        .eq('product_id', selectedProductId)
+        .order('sort_order');
+      if (error) throw error;
+      return (data || []) as any[];
+    },
+    enabled: !!selectedProductId,
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('product_variants').delete().eq('id' as any, id as any);
+      const { data, error } = await (supabase.rpc as any)('delete_variant_if_safe', { p_variant_id: id });
       if (error) throw error;
+      const result = data as { ok?: boolean; reason?: string; adopted_by?: Array<{ label?: string }> } | null;
+      if (result && result.ok === false) {
+        const err = new Error(result.reason || '刪除失敗') as any;
+        const labels = (result.adopted_by || []).map((b: any) => b?.label).filter(Boolean).join('、');
+        err.hint = labels ? `被引用：${labels}` : '';
+        err.reason = result.reason;
+        throw err;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-variants', selectedProductId] });
       toast.success('變體已刪除');
     },
-    onError: (error) => {
-      toast.error(`刪除失敗：${getErrorMessage(error)}`);
+    onError: (error: any) => {
+      toast.error(error?.reason ? `刪除失敗：${error.reason}` : `刪除失敗：${getErrorMessage(error)}`, {
+        description: error?.hint || undefined,
+      });
     },
   });
 
   const batchDeleteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
-      const { error } = await supabase.from('product_variants').delete().in('id' as any, ids as any);
-      if (error) throw error;
+      const results: string[] = [];
+      const blocked: Array<{ id: string; reason: string; hint?: string }> = [];
+      for (const id of ids) {
+        const { data, error } = await (supabase.rpc as any)('delete_variant_if_safe', { p_variant_id: id });
+        if (error) throw error;
+        const result = data as { ok?: boolean; reason?: string; adopted_by?: Array<{ label?: string }> } | null;
+        if (result && result.ok === false) {
+          const labels = (result.adopted_by || []).map((b: any) => b?.label).filter(Boolean).join('、');
+          blocked.push({ id, reason: result.reason || '刪除失敗', hint: labels ? `被引用：${labels}` : undefined });
+        } else {
+          results.push(id);
+        }
+      }
+      if (blocked.length === 0 && results.length === 0) return;
+      if (blocked.length > 0) {
+        const err = new Error(`有 ${blocked.length} 個變體被引用無法刪除`) as any;
+        err.reason = blocked.map(b => b.reason).filter((v, i, a) => a.indexOf(v) === i).join('；');
+        err.hint = blocked.map(b => b.hint).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join('；');
+        throw err;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-variants', selectedProductId] });
       setSelectedVariantIds(new Set());
       toast.success('已批量刪除變體');
     },
-    onError: (error) => {
-      toast.error(`批量刪除失敗：${getErrorMessage(error)}`);
+    onError: (error: any) => {
+      toast.error(error?.reason ? `批量刪除失敗：${error.reason}` : `批量刪除失敗：${getErrorMessage(error)}`, {
+        description: error?.hint || undefined,
+      });
     },
   });
 
   const batchEditMutation = useMutation({
-    mutationFn: async ({ ids, updates }: { ids: string[]; updates: Record<string, any> }) => {
-      const { error } = await supabase.from('product_variants').update(updates as any).in('id' as any, ids as any);
-      if (error) throw error;
+    mutationFn: async (payload: {
+      ids: string[];
+      updates: Record<string, any>;
+      optionGroupId?: string;
+      optionValueId?: string;
+      customLabel?: string;
+      customHex?: string;
+      modelRefs?: DeviceSelectionRef[];
+    }) => {
+      const { ids, updates, optionGroupId, optionValueId, customLabel, customHex, modelRefs } = payload;
+
+      if (Object.keys(updates).length > 0) {
+        const { error } = await (supabase.from('product_variants') as any).update(updates as any).in('id' as any, ids as any);
+        if (error) throw error;
+      }
+
+      if (optionGroupId) {
+        let targetValueId: string | null = null;
+        if (optionValueId) {
+          targetValueId = optionValueId;
+        } else if (customLabel && customLabel.trim()) {
+          const existingRow = (optionGroupsData || []).find(g => g.id === optionGroupId)?.product_option_values?.find(
+            (v: any) => (v.label || v.value || '').trim().toLowerCase() === customLabel.trim().toLowerCase()
+          );
+          if (existingRow) {
+            targetValueId = existingRow.id;
+          } else {
+            const { data, error } = await (supabase.from('product_option_values') as any)
+              .insert({ group_id: optionGroupId, label: customLabel.trim(), value: customLabel.trim(), hex_code: customHex || null })
+              .select('*')
+              .single();
+            if (error) throw error;
+            targetValueId = data.id;
+          }
+        }
+        if (targetValueId) {
+          const { error: delErr } = await (supabase.from('product_variant_options') as any)
+            .delete().in('variant_id', ids as any).eq('option_group_id', optionGroupId);
+          if (delErr) throw delErr;
+          const { error: insErr } = await (supabase.from('product_variant_options') as any)
+            .insert(ids.map(id => ({ variant_id: id, option_group_id: optionGroupId, option_value_id: targetValueId })));
+          if (insErr) throw insErr;
+        }
+      }
+
+      if (modelRefs && modelRefs.length > 0) {
+        for (const id of ids) {
+          await entityRelationService.updateRelations('variant', id, {
+            modelIds: modelRefs.filter(r => r.type === 'model').map(r => r.id),
+            groupIds: modelRefs.filter(r => r.type === 'group').map(r => r.id),
+          });
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['product-variants', selectedProductId] });
+      queryClient.invalidateQueries({ queryKey: ['product-option-groups', selectedProductId] });
       setSelectedVariantIds(new Set());
       setIsBatchEditOpen(false);
       toast.success('已批量更新變體');
@@ -188,7 +300,9 @@ export function VariantManager({ products, search }: VariantManagerProps) {
     },
   });
 
-  const FIELD_OPTIONS: Array<{ value: string; label: string; type: 'number' | 'text' | 'select' }> = [
+  const FIELD_OPTIONS: Array<{ value: string; label: string; type: 'number' | 'text' | 'select' | 'option' | 'model' }> = [
+    { value: 'option', label: '選項群組值', type: 'option' },
+    { value: 'model', label: '型號', type: 'model' },
     { value: 'wholesale_price', label: '批發價', type: 'number' },
     { value: 'retail_price', label: '零售價', type: 'number' },
     { value: 'status', label: '狀態', type: 'select' },
@@ -196,19 +310,54 @@ export function VariantManager({ products, search }: VariantManagerProps) {
     { value: 'barcode', label: '條碼', type: 'text' },
   ];
 
+  const updateBatchEntry = (idx: number, patch: Partial<BatchEditEntry>) => {
+    setBatchEditEntries(prev => prev.map((e, i) => (i === idx ? { ...e, ...patch } : e)));
+  };
+
   const handleBatchEdit = () => {
     const updates: Record<string, any> = {};
+    let optionGroupId: string | undefined;
+    let optionValueId: string | undefined;
+    let customLabel: string | undefined;
+    let customHex: string | undefined;
+    let modelRefs: DeviceSelectionRef[] | undefined;
+
     for (const entry of batchEditEntries) {
-      if (entry.value === '') continue;
-      const opt = FIELD_OPTIONS.find(o => o.value === entry.field);
-      if (!opt) continue;
-      updates[entry.field] = opt.type === 'number' ? parseFloat(entry.value) : entry.value;
+      if (entry.field === 'option') {
+        if (!entry.optionGroupId) continue;
+        if (entry.optionValueId && entry.optionValueId !== '__custom__') {
+          optionGroupId = entry.optionGroupId;
+          optionValueId = entry.optionValueId;
+        } else if ((entry.newOptionValueLabel || '').trim()) {
+          optionGroupId = entry.optionGroupId;
+          customLabel = entry.newOptionValueLabel;
+          customHex = entry.newOptionValueHex || '';
+        }
+      } else if (entry.field === 'model') {
+        if (entry.modelRefs && entry.modelRefs.length > 0) {
+          modelRefs = entry.modelRefs;
+        }
+      } else {
+        const opt = FIELD_OPTIONS.find(o => o.value === entry.field);
+        if (!opt || entry.value === '') continue;
+        updates[entry.field] = opt.type === 'number' ? parseFloat(entry.value) : entry.value;
+      }
     }
-    if (Object.keys(updates).length === 0) {
+
+    if (Object.keys(updates).length === 0 && !optionGroupId && !modelRefs) {
       toast.error('請至少填寫一個欄位');
       return;
     }
-    batchEditMutation.mutate({ ids: Array.from(selectedVariantIds), updates });
+
+    batchEditMutation.mutate({
+      ids: Array.from(selectedVariantIds),
+      updates,
+      optionGroupId,
+      optionValueId,
+      customLabel,
+      customHex,
+      modelRefs,
+    });
   };
 
   const toggleSelectAll = (checked: boolean) => {
@@ -430,20 +579,31 @@ export function VariantManager({ products, search }: VariantManagerProps) {
 
       {/* 批次編輯對話框 */}
       <Dialog open={isBatchEditOpen} onOpenChange={setIsBatchEditOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>批次編輯欄位</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             {batchEditEntries.map((entry, idx) => {
               const opt = FIELD_OPTIONS.find(o => o.value === entry.field);
+              const currentGroup = optionGroupsData.find((g: any) => g.id === entry.optionGroupId);
+              const isColorGroup = isColorGroupName(currentGroup?.name || '');
+              const customMode = entry.optionValueId === '__custom__';
               return (
-                <div key={idx} className="flex items-end gap-2">
+                <div key={idx} className="flex items-start gap-2">
                   <div className="flex-1 space-y-1">
                     <Label className="text-xs">欄位</Label>
                     <Select
                       value={entry.field}
-                      onValueChange={v => setBatchEditEntries(prev => prev.map((e, i) => i === idx ? { ...e, field: v, value: '' } : e))}
+                      onValueChange={v => updateBatchEntry(idx, {
+                        field: v,
+                        value: '',
+                        optionGroupId: undefined,
+                        optionValueId: undefined,
+                        newOptionValueLabel: undefined,
+                        newOptionValueHex: undefined,
+                        modelRefs: undefined,
+                      })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="選擇欄位" />
@@ -458,7 +618,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
                   <div className="flex-[2] space-y-1">
                     <Label className="text-xs">新值</Label>
                     {opt?.type === 'select' ? (
-                      <Select value={entry.value} onValueChange={v => setBatchEditEntries(prev => prev.map((e, i) => i === idx ? { ...e, value: v } : e))}>
+                      <Select value={entry.value} onValueChange={v => updateBatchEntry(idx, { value: v })}>
                         <SelectTrigger>
                           <SelectValue placeholder="選擇狀態" />
                         </SelectTrigger>
@@ -469,13 +629,94 @@ export function VariantManager({ products, search }: VariantManagerProps) {
                           <SelectItem value="discontinued">已停售</SelectItem>
                         </SelectContent>
                       </Select>
+                    ) : opt?.type === 'option' ? (
+                      <div className="space-y-2">
+                        <Select
+                          value={entry.optionGroupId || ''}
+                          onValueChange={v => updateBatchEntry(idx, { optionGroupId: v, optionValueId: undefined, newOptionValueLabel: undefined, newOptionValueHex: undefined })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="選擇選項群組" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {optionGroupsData.length === 0 ? (
+                              <div className="px-3 py-2 text-sm text-muted-foreground">此產品尚無選項群組</div>
+                            ) : optionGroupsData.map((g: any) => (
+                              <SelectItem key={g.id} value={g.id}>{g.name || '（未命名群組）'}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {currentGroup && (
+                          <>
+                            <Select
+                              value={customMode ? '__custom__' : entry.optionValueId || ''}
+                              onValueChange={v => {
+                                if (v === '__custom__') {
+                                  updateBatchEntry(idx, { optionValueId: '__custom__' });
+                                } else {
+                                  updateBatchEntry(idx, { optionValueId: v, newOptionValueLabel: undefined, newOptionValueHex: undefined });
+                                }
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder={customMode ? '輸入新值' : '選擇值或輸入新值'} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(currentGroup.product_option_values || []).map((v: any) => (
+                                  <SelectItem key={v.id} value={v.id}>
+                                    <span className="flex items-center gap-1.5">
+                                      {v.hex_code ? (
+                                        <span className="inline-block w-3 h-3 rounded-full border border-black/10 shrink-0" style={{ backgroundColor: v.hex_code }} />
+                                      ) : null}
+                                      {v.label}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                                <SelectItem value="__custom__">＋ 輸入新值…</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {customMode && (
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  className="h-8 flex-1"
+                                  placeholder="新值名稱"
+                                  value={entry.newOptionValueLabel || ''}
+                                  onChange={e => updateBatchEntry(idx, { newOptionValueLabel: e.target.value })}
+                                />
+                                {isColorGroup && (
+                                  <>
+                                    <Input
+                                      className="h-8 w-[110px] font-mono"
+                                      placeholder="#RRGGBB"
+                                      maxLength={7}
+                                      value={entry.newOptionValueHex || ''}
+                                      onChange={e => updateBatchEntry(idx, { newOptionValueHex: e.target.value })}
+                                    />
+                                    {entry.newOptionValueHex && /^#[0-9a-fA-F]{6}$/.test(entry.newOptionValueHex) && (
+                                      <span className="w-5 h-5 rounded border shrink-0" style={{ backgroundColor: entry.newOptionValueHex }} />
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                            {isColorGroup && (
+                              <p className="text-[11px] text-muted-foreground">顏色群組：可套用既有值，或輸入新值並填色碼</p>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    ) : opt?.type === 'model' ? (
+                      <StandaloneDeviceModelSelectField
+                        selectionOrder={entry.modelRefs || []}
+                        onOrderChange={refs => updateBatchEntry(idx, { modelRefs: refs })}
+                      />
                     ) : (
                       <Input
                         type={opt?.type === 'number' ? 'number' : 'text'}
                         step={opt?.type === 'number' ? '0.01' : undefined}
                         placeholder="輸入新值"
                         value={entry.value}
-                        onChange={e => setBatchEditEntries(prev => prev.map((ent, i) => i === idx ? { ...ent, value: e.target.value } : ent))}
+                        onChange={e => updateBatchEntry(idx, { value: e.target.value })}
                       />
                     )}
                   </div>

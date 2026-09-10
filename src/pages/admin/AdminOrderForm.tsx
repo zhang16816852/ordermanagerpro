@@ -445,9 +445,11 @@ export default function AdminOrderForm() {
     });
     if (itemId) {
       draft.updateItemPrice(itemId, Math.max(0, value));
-      setPriceSyncMap((prev) => ({ ...prev, [itemId]: true }));
+      const nextMap = { ...priceSyncMap, [itemId]: true };
+      setPriceSyncMap(nextMap);
+      draft.setPriceSyncMap(nextMap);
     }
-  }, [draft]);
+  }, [draft, priceSyncMap]);
 
   const handleRemoveItem = useCallback((index: number) => {
     const item = itemsRef.current[index];
@@ -512,8 +514,10 @@ export default function AdminOrderForm() {
   }, [draft]);
 
   const handleTogglePriceSync = useCallback((id: string, checked: boolean) => {
-    setPriceSyncMap((prev) => ({ ...prev, [id]: checked }));
-  }, []);
+    const nextMap = { ...priceSyncMap, [id]: checked };
+    setPriceSyncMap(nextMap);
+    draft.setPriceSyncMap(nextMap);
+  }, [priceSyncMap, draft]);
 
   const syncPrices = useCallback(async () => {
     const brand = isEditMode ? order?.stores?.brand : storeInfo?.brand;
@@ -573,13 +577,21 @@ export default function AdminOrderForm() {
 
       const payload = buildItemsPayload(currentItems);
 
-      const { error } = await supabase.rpc('update_order_with_items', {
+      const { data, error } = await supabase.rpc('update_order_with_items', {
         p_order_id: orderId,
         p_notes: currentNotes || undefined,
         p_items: payload,
         p_deleted_item_ids: currentDeletedIds.length > 0 ? currentDeletedIds : undefined,
       });
       if (error) throw error;
+      const result = data as { ok?: boolean; reason?: string; adopted_by?: Array<{ label?: string }> } | null;
+      if (result && result.ok === false) {
+        const err = new Error(result.reason || '儲存失敗') as any;
+        const labels = (result.adopted_by || []).map((b: any) => b?.label).filter(Boolean).join('、');
+        err.hint = labels ? `被引用：${labels}` : '';
+        err.reason = result.reason;
+        throw err;
+      }
     },
     onSuccess: () => {
       toast.success('訂單已更新');
@@ -588,7 +600,13 @@ export default function AdminOrderForm() {
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       navigate('/admin/orders');
     },
-    onError: (error: Error) => toast.error(getErrorMessage(error)),
+    onError: (error: any) => {
+      if (error?.reason) {
+        toast.error(`儲存失敗：${error.reason}`, { description: error?.hint || undefined });
+      } else {
+        toast.error(getErrorMessage(error));
+      }
+    },
   });
 
   // Create mode: insert order + items (pending)
@@ -720,13 +738,21 @@ export default function AdminOrderForm() {
 
       // 先持久化本地的拆分/編輯結果（direct_ship_order 只讀 DB order_items）
       const prePayload = buildItemsPayload(currentItems);
-      const { error: preSaveError } = await supabase.rpc('update_order_with_items', {
+      const { data: preSaveData, error: preSaveError } = await supabase.rpc('update_order_with_items', {
         p_order_id: orderId,
         p_notes: currentNotes || undefined,
         p_items: prePayload,
         p_deleted_item_ids: currentDeletedIds.length > 0 ? currentDeletedIds : undefined,
       });
       if (preSaveError) throw preSaveError;
+      const preSaveResult = preSaveData as { ok?: boolean; reason?: string; adopted_by?: Array<{ label?: string }> } | null;
+      if (preSaveResult && preSaveResult.ok === false) {
+        const err = new Error(preSaveResult.reason || '儲存失敗') as any;
+        const labels = (preSaveResult.adopted_by || []).map((b: any) => b?.label).filter(Boolean).join('、');
+        err.hint = labels ? `被引用：${labels}` : '';
+        err.reason = preSaveResult.reason;
+        throw err;
+      }
 
       const warehouseMap = currentItems.reduce((acc, i) => {
         const wh = getItemWarehouse(i.id);

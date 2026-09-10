@@ -7,6 +7,7 @@ import { ProductDetailDialog } from '@/components/products/catalog/ProductDetail
 import { useProductCache } from '@/hooks/useProductCache';
 import { useProductMutations } from './hooks/useProductMutations';
 import { usePageHeader } from '@/components/layout/PageHeaderContext';
+import { supabase } from '@/integrations/supabase/client';
 import type { ProductWithPricing } from '@/types/product';
 
 export default function AdminProductFormPage() {
@@ -52,7 +53,7 @@ export default function AdminProductFormPage() {
         }
     };
 
-    const handlePreview = useCallback(() => {
+    const handlePreview = useCallback(async () => {
         const values = formRef.current?.getValues?.() || {};
         const base: any = initialData || {};
         // 變體規格矩陣目前的數值（含尚未存檔的編輯）以「變體 id → spec_values」覆蓋快取中舊的變體規格
@@ -75,9 +76,46 @@ export default function AdminProductFormPage() {
             retail_price: Number(values.retail_price ?? base.retail_price ?? 0),
             has_store_price: base.has_store_price ?? false,
         };
+
+        if (productId) {
+            const variantIds = variants.map((v: any) => v.id).filter(Boolean);
+            const [groupsResult, linksResult] = await Promise.all([
+                (supabase.from('product_option_groups') as any)
+                    .select('*, product_option_values(*)')
+                    .eq('product_id', productId)
+                    .order('sort_order'),
+                variantIds.length > 0
+                    ? (supabase.from('product_variant_options') as any)
+                        .select('*')
+                        .in('variant_id', variantIds)
+                    : Promise.resolve({ data: [] }),
+            ]);
+
+            const groups = (groupsResult.data || []).map((g: any) => ({
+                ...g,
+                values: g.product_option_values || [],
+            }));
+
+            const valueById = new Map<string, any>();
+            groups.forEach((g: any) => g.values.forEach((v: any) => valueById.set(v.id, v)));
+
+            const variantOptionsMap = new Map<string, any[]>();
+            (linksResult.data || []).forEach((vo: any) => {
+                if (!variantOptionsMap.has(vo.variant_id)) variantOptionsMap.set(vo.variant_id, []);
+                const val = valueById.get(vo.option_value_id);
+                if (val) variantOptionsMap.get(vo.variant_id)!.push(val);
+            });
+
+            draft.option_groups = groups;
+            draft.variants = draft.variants.map((v: any) => ({
+                ...v,
+                option_values: variantOptionsMap.get(v.id) || v.option_values || [],
+            }));
+        }
+
         setPreviewProduct(draft as unknown as ProductWithPricing);
         setPreviewOpen(true);
-    }, [initialData]);
+    }, [initialData, productId]);
 
     // 將返回＋標題＋預覽按鈕交由共用 Header 呈現（桌面/手機皆適用）
     useLayoutEffect(() => {

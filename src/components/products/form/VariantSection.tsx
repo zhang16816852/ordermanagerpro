@@ -151,26 +151,56 @@ export function VariantSection({ product }: { product: any }) {
   // 處理刪除 (範例)
   const handleDelete = async (id: string) => {
     if (!confirm('確定要刪除此規格變體嗎？')) return;
-    const { error } = await (supabase.from('product_variants') as any).delete().eq('id', id);
+    const { data, error } = await (supabase.rpc as any)('delete_variant_if_safe', { p_variant_id: id });
     if (error) {
-      toast.error('刪除失敗');
-    } else {
-      toast.success('變體已刪除');
-      refreshVariants();
+      toast.error(`刪除失敗：${getErrorMessage(error)}`);
+      return;
     }
+    const result = data as { ok?: boolean; reason?: string; adopted_by?: Array<{ label?: string }> } | null;
+    if (result && result.ok === false) {
+      const labels = (result.adopted_by || []).map((b: any) => b?.label).filter(Boolean).join('、');
+      toast.error(`刪除失敗：${result.reason || '刪除失敗'}`, {
+        description: labels ? `被引用：${labels}` : undefined,
+      });
+      return;
+    }
+    toast.success('變體已刪除');
+    refreshVariants();
   };
 
   const handleBatchDelete = async () => {
     if (selectedVariantIds.size === 0) return;
     if (!confirm(`確定要刪除所選的 ${selectedVariantIds.size} 個變體？`)) return;
-    const { error } = await (supabase.from('product_variants') as any).delete().in('id', Array.from(selectedVariantIds));
-    if (error) {
-      toast.error('批量刪除失敗');
-    } else {
-      toast.success('已批量刪除變體');
-      setSelectedVariantIds(new Set());
-      refreshVariants();
+    const blocked: Array<{ reason: string; hint?: string }> = [];
+    let deletedCount = 0;
+    for (const id of Array.from(selectedVariantIds)) {
+      const { data, error } = await (supabase.rpc as any)('delete_variant_if_safe', { p_variant_id: id });
+      if (error) {
+        toast.error(`批量刪除失敗：${getErrorMessage(error)}`);
+        return;
+      }
+      const result = data as { ok?: boolean; reason?: string; adopted_by?: Array<{ label?: string }> } | null;
+      if (result && result.ok === false) {
+        const labels = (result.adopted_by || []).map((b: any) => b?.label).filter(Boolean).join('、');
+        blocked.push({ reason: result.reason || '刪除失敗', hint: labels ? `被引用：${labels}` : undefined });
+      } else {
+        deletedCount += 1;
+      }
     }
+    if (blocked.length > 0) {
+      const reasons = blocked.map(b => b.reason).filter((v, i, a) => a.indexOf(v) === i).join('；');
+      const hints = blocked.map(b => b.hint).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join('；');
+      toast.error(`有 ${blocked.length} 個變體被引用無法刪除：${reasons}`, {
+        description: hints || undefined,
+      });
+      if (deletedCount > 0) {
+        toast.success(`已刪除 ${deletedCount} 個變體`);
+      }
+    } else if (deletedCount > 0) {
+      toast.success(`已批量刪除 ${deletedCount} 個變體`);
+    }
+    setSelectedVariantIds(new Set());
+    refreshVariants();
   };
 
   const FIELD_OPTIONS = useMemo<Array<{ value: string; label: string; type: 'number' | 'text' | 'select' }>>(() => ([

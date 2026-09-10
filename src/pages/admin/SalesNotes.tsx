@@ -186,11 +186,12 @@ export default function AdminSalesNotes() {
         p_sales_note_id: id,
       });
       if (error) throw error;
-      const res = (data ?? null) as unknown as { ok?: boolean; reason?: string } | null;
+      const res = (data ?? null) as unknown as { ok?: boolean; reason?: string; adopted_by?: Array<{ label?: string }> } | null;
       if (res && res.ok !== false) return;
       const reason = res?.reason || "刪除失敗";
       const err = new Error(reason) as Error & { hint?: string };
-      err.hint = "請先處理會計/佣金/寄賣紀錄後再刪除";
+      const labels = (res?.adopted_by || []).map((b: any) => b?.label).filter(Boolean).join("、");
+      err.hint = labels ? `被引用：${labels}（請先處理後再刪除）` : "請先處理會計/佣金/寄賣紀錄後再刪除";
       throw err;
     },
     onSuccess: () => {
@@ -234,6 +235,7 @@ export default function AdminSalesNotes() {
     return {
       id: live.id,
       code: live.code,
+      store_id: live.store_id,
       storeName: live.store?.name,
       storeCode: live.store?.code,
       status: live.status,
@@ -479,6 +481,7 @@ export default function AdminSalesNotes() {
         note={dialogData}
         enablePayment={true}
         enableReturn={!isRep}
+        enableCorrect={!isRep}
       />
     </div>
   );

@@ -150,15 +150,26 @@ export function useProductMutations(forceRefresh: () => Promise<void>) {
 
     const deleteMutation = useMutation({
         mutationFn: async (id: string) => {
-            const { error } = await (supabase.from('products') as any).delete().eq('id', id);
+            const { data, error } = await (supabase.rpc as any)('delete_product_if_safe', { p_product_id: id });
             if (error) throw error;
+            const result = data as { ok?: boolean; reason?: string; adopted_by?: Array<{ label?: string }> } | null;
+            if (result && result.ok === false) {
+                const err = new Error(result.reason || '刪除失敗');
+                const labels = (result.adopted_by || []).map((b: any) => b?.label).filter(Boolean).join('、');
+                (err as any).hint = labels ? `被引用：${labels}` : '';
+                (err as any).reason = result.reason;
+                throw err;
+            }
         },
         onSuccess: async () => {
             await forceRefresh();
             toast.success('產品已刪除');
         },
-        onError: (error) => {
-            toast.error(getErrorMessage(error, '刪除失敗'));
+        onError: (error: any) => {
+            const reason = error?.reason;
+            toast.error(reason ? `刪除失敗：${reason}` : getErrorMessage(error, '刪除失敗'), {
+                description: error?.hint || undefined,
+            });
         },
     });
 

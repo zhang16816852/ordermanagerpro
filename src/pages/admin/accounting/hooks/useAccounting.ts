@@ -188,72 +188,16 @@ export function useAccounting(selectedMonth?: string) {
 
   const deleteEntryMutation = useMutation({
     mutationFn: async (entry: AccountingEntry) => {
-      // Reverse account balance changes
-      if (entry.type === 'transfer' || entry.type === 'currency_exchange' || entry.type === 'topup') {
-        if (entry.account_id) {
-          const sourceAccount = accounts.find(a => a.id === entry.account_id);
-          if (sourceAccount) {
-            await (supabase as any)
-              .from('accounts')
-              .update({ balance: sourceAccount.balance + entry.amount })
-              .eq('id', entry.account_id);
-          }
-        }
-        if (entry.transfer_to_account_id) {
-          const destAccount = accounts.find(a => a.id === entry.transfer_to_account_id);
-          if (destAccount) {
-            const receivedAmount = entry.type === 'currency_exchange' && entry.exchange_rate
-              ? (entry.original_amount || 0) * entry.exchange_rate
-              : entry.amount;
-            await (supabase as any)
-              .from('accounts')
-              .update({ balance: destAccount.balance - receivedAmount })
-              .eq('id', entry.transfer_to_account_id);
-          }
-        }
-      } else if (entry.type === 'income' || entry.type === 'expense') {
-        // Reverse the signed balance change
-        if (entry.account_id) {
-          const account = accounts.find(a => a.id === entry.account_id);
-          if (account) {
-            const signedAmount = entry.type === 'income' ? entry.amount : -entry.amount;
-            const { error: accountError } = await (supabase as any)
-              .from('accounts')
-              .update({ balance: account.balance - signedAmount })
-              .eq('id', entry.account_id);
-            if (accountError) throw accountError;
-          }
-        }
-      }
-
-      // 收集 references 中的銷貨單 IDs（刪除前先取）
-      const salesNoteIdsFromRefs: string[] = [];
-      if (entry.references && entry.references.length > 0) {
-        for (const ref of entry.references) {
-          if (ref.reference_type === 'sales_note' && ref.reference_id) {
-            salesNoteIdsFromRefs.push(ref.reference_id);
-          }
-        }
-      }
-
-      // Delete references (CASCADE will handle this, but explicit for clarity)
-      await (supabase as any).from('accounting_entry_references').delete().eq('entry_id', entry.id);
-
-      const { error } = await (supabase as any).from('accounting_entries').delete().eq('id', entry.id);
+      // 改走單一事務 RPC：後端回退帳戶餘額 + 清理子表 + 同步收款狀態
+      const { data, error } = await (supabase as any).rpc('delete_accounting_entry', { p_entry_id: entry.id });
       if (error) throw error;
-
-      // 同步銷貨單收款狀態（entry row 或 references 子表中的銷貨單）
-      const salesNoteIds = new Set<string>();
-      if (entry.reference_type === 'sales_note' && entry.reference_id) {
-        salesNoteIds.add(entry.reference_id);
-      }
-      for (const id of salesNoteIdsFromRefs) {
-        salesNoteIds.add(id);
-      }
-      for (const noteId of salesNoteIds) {
-        const { error: noteError } = await (supabase as any)
-          .rpc('sync_sales_note_payment_status', { p_sales_note_id: noteId });
-        if (noteError) throw noteError;
+      const result = data as { ok?: boolean; reason?: string; adopted_by?: Array<{ label?: string }> } | null;
+      if (result && result.ok === false) {
+        const err = new Error(result.reason || '刪除失敗') as any;
+        const labels = (result.adopted_by || []).map((b: any) => b?.label).filter(Boolean).join('、');
+        err.hint = labels ? `被引用：${labels}` : '';
+        err.reason = result.reason;
+        throw err;
       }
     },
     onSuccess: () => {
@@ -261,9 +205,16 @@ export function useAccounting(selectedMonth?: string) {
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
       queryClient.invalidateQueries({ queryKey: ['admin-sales-notes'] });
       queryClient.invalidateQueries({ queryKey: ['store-sales-notes'] });
+      queryClient.invalidateQueries({ queryKey: ['shipping-settlements'] });
       toast.success('記錄已刪除');
     },
-    onError: () => toast.error('刪除失敗'),
+    onError: (err: any) => {
+      if (err?.reason) {
+        toast.error(`刪除失敗：${err.reason}`, { description: err?.hint || undefined });
+      } else {
+        toast.error('刪除失敗');
+      }
+    },
   });
 
   const recordPaymentMutation = useMutation({

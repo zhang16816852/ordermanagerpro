@@ -64,6 +64,11 @@ interface OptionGroupInput {
   values: OptionValueInput[];
 }
 
+interface OptionGroupSuggestion {
+  name: string;
+  values: { label: string; value: string; hexCode: string }[];
+}
+
 interface GeneratedVariant {
   sku: string;
   name: string;
@@ -216,6 +221,8 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
   const [diffSummary, setDiffSummary] = useState<{ added: number; kept: number; removed: GeneratedVariant[]; priceUpdated: number } | null>(null);
   const isUnified = !!product?.unified_pricing;
   const loadExistingDataDbValueToColorId = useRef(new Map<string, string>());
+  const [suggestions, setSuggestions] = useState<OptionGroupSuggestion[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
 
   const { models: deviceModels, groups: deviceGroups, fetchData: fetchDeviceData } = useDeviceModelStore();
   const { colors: libraryColors, fetchColors } = useColorStore();
@@ -228,6 +235,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
           fetchColors(),
         ]);
         await loadExistingData();
+        fetchSuggestions();
       }
     };
     init();
@@ -392,6 +400,95 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     }
   };
 
+  const fetchSuggestions = async () => {
+    try {
+      setSuggestionsLoading(true);
+      const { data: productCategories, error: catErr } = await supabase
+        .from('product_category_links')
+        .select('category_id')
+        .eq('product_id', product.id);
+
+      if (catErr) throw catErr;
+      const categoryIds = [...new Set((productCategories || []).map(l => l.category_id))];
+      if (categoryIds.length === 0) {
+        setSuggestions([]);
+        return;
+      }
+
+      const { data: siblingLinks, error: siblingErr } = await supabase
+        .from('product_category_links')
+        .select('product_id')
+        .in('category_id', categoryIds)
+        .is('variant_id', null)
+        .neq('product_id', product.id);
+
+      if (siblingErr) throw siblingErr;
+      const siblingIds = [...new Set((siblingLinks || []).map(l => l.product_id))];
+      if (siblingIds.length === 0) {
+        setSuggestions([]);
+        return;
+      }
+
+      const { data: groups, error: groupsErr } = await supabase
+        .from('product_option_groups')
+        .select('*, product_option_values(*)')
+        .in('product_id', siblingIds)
+        .order('sort_order');
+
+      if (groupsErr) throw groupsErr;
+
+      const byName = new Map<string, Map<string, { label: string; value: string; hexCode: string }>>();
+      for (const g of (groups || []) as any[]) {
+        const name = (g.name || '').trim();
+        if (!name) continue;
+        if (!byName.has(name)) byName.set(name, new Map());
+        const valueMap = byName.get(name)!;
+        for (const v of (g.product_option_values || []) as any[]) {
+          const label = (v.label || '').trim();
+          if (!label) continue;
+          if (!valueMap.has(label)) {
+            valueMap.set(label, { label, value: v.value || label, hexCode: v.hex_code || '' });
+          }
+        }
+      }
+
+      const loaded: OptionGroupSuggestion[] = [];
+      byName.forEach((valueMap, name) => {
+        const values = Array.from(valueMap.values());
+        if (values.length === 0) return;
+        loaded.push({ name, values });
+      });
+
+      setSuggestions(loaded);
+    } catch (err) {
+      console.error('載入選項建議失敗:', err);
+      setSuggestions([]);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  };
+
+  const importSuggestion = (sug: OptionGroupSuggestion) => {
+    setOptionGroups(prev => {
+      const existing = prev.find(g => g.name.trim().toLowerCase() === sug.name.toLowerCase());
+      if (existing) {
+        return prev.map(g => {
+          if (g.id !== existing.id) return g;
+          const existingLabels = new Set(g.values.map(v => v.label.trim().toLowerCase()));
+          const toAdd = sug.values.filter(v => !existingLabels.has(v.label.trim().toLowerCase()));
+          return { ...g, values: [...g.values, ...toAdd.map(v => createOptionValue(v.label, v.value, '', '', v.hexCode))] };
+        });
+      }
+      const group = createOptionGroup(sug.name);
+      group.values = sug.values.map(v => createOptionValue(v.label, v.value, '', '', v.hexCode));
+      return [...prev, group];
+    });
+  };
+
+  const importAllSuggestions = () => {
+    suggestions.forEach(s => importSuggestion(s));
+  };
+
   const getGroupSelectedColorIds = (values: OptionValueInput[]): string[] => {
     const ids: string[] = [];
     for (const v of values) {
@@ -444,6 +541,12 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
     const activeGroups = optionGroups.filter(g =>
       g.values.some(v => v.label.trim()),
     );
+
+    const unnamedGroups = optionGroups.filter(g => !g.name.trim() && g.values.some(v => v.label.trim()));
+    if (unnamedGroups.length > 0) {
+      toast.error(`有 ${unnamedGroups.length} 個選項群組未填寫名稱，請補填名稱後再生成`);
+      return;
+    }
 
     if (activeGroups.length === 0) {
       // No option groups — only device models path
@@ -656,10 +759,11 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
 
       // 3. 變體-選項連結（依 SKU + client ref 串接）
       const variantOptionsPayload: { sku: string; group_ref: string; value_ref: string }[] = [];
+      const namedGroupIds = new Set(optionGroups.filter(g => g.name.trim()).map(g => g.id));
       for (const genVariant of generatedVariants) {
         for (const clientValueId of genVariant.optionValueIds) {
           const group = optionGroups.find(g => g.values.some(val => val.id === clientValueId));
-          if (!group) continue;
+          if (!group || !namedGroupIds.has(group.id)) continue;
           variantOptionsPayload.push({
             sku: genVariant.sku,
             group_ref: group.id,
@@ -754,6 +858,7 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
 
   const resetForm = () => {
     setOptionGroups([]);
+    setSuggestions([]);
     setSelectedDeviceRefs([]);
     setDefaultWholesalePrice('');
     setDefaultRetailPrice('');
@@ -875,6 +980,49 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
                 <Plus className="h-4 w-4 mr-1" />新增群組
               </Button>
             </div>
+
+            {!suggestionsLoading && suggestions.length > 0 && (
+              <div className="rounded-lg border border-dashed bg-muted/30 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm text-muted-foreground">
+                    分類建議（依此產品分類彙整自其他產品）
+                  </Label>
+                  <Button variant="outline" size="sm" onClick={importAllSuggestions}>
+                    <Sparkles className="h-3.5 w-3.5 mr-1" />全部套用
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {suggestions.map(sug => {
+                    const applied = optionGroups.some(
+                      g => g.name.trim().toLowerCase() === sug.name.toLowerCase()
+                    );
+                    return (
+                      <div
+                        key={sug.name}
+                        className="flex items-center gap-2 rounded-md border bg-card px-2 py-1 text-sm"
+                      >
+                        <span className="font-medium shrink-0">{sug.name}</span>
+                        <span className="text-muted-foreground text-xs truncate max-w-[200px]">
+                          {sug.values.map(v => v.label).join('、')}
+                        </span>
+                        {applied ? (
+                          <Badge variant="secondary" className="text-xs shrink-0">已套用</Badge>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs shrink-0"
+                            onClick={() => importSuggestion(sug)}
+                          >
+                            套用
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {optionGroups.length === 0 && (
               <div className="text-center py-6 text-muted-foreground text-sm border rounded-lg">

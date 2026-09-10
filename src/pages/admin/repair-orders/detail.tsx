@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, Edit, Printer, Smartphone, User, DollarSign, Clock, History, ClipboardCheck, Package, Truck, PackageCheck, Loader2 } from 'lucide-react';
+import { ArrowLeft, Edit, Printer, Smartphone, User, DollarSign, Clock, History, ClipboardCheck, Package, Truck, PackageCheck, Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { useRepairOrderDetail, useRepairOrders, useRepairAssigneeMap } from '@/hooks/useRepairOrders';
@@ -26,7 +26,7 @@ export default function AdminRepairOrderDetail() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { order, isLoading } = useRepairOrderDetail(id || '');
-  const { acceptAndStartMutation } = useRepairOrders();
+  const { acceptAndStartMutation, deleteMutation } = useRepairOrders();
   const assignees = useRepairAssigneeMap();
   const printRef = useRef<HTMLDivElement>(null);
   const [showReceipt, setShowReceipt] = useState(false);
@@ -287,6 +287,20 @@ export default function AdminRepairOrderDetail() {
           <Button variant="outline" onClick={() => navigate(`${repairBase}/${id}/edit`)}>
             <Edit className="mr-2 h-4 w-4" />
             編輯
+          </Button>
+          <Button
+            variant="outline"
+            className="text-destructive hover:bg-destructive/10"
+            disabled={deleteMutation.isPending}
+            onClick={() => {
+              if (!confirm('確定要刪除此維修單嗎？此操作無法復原。')) return;
+              deleteMutation.mutate(order.id, {
+                onSuccess: () => navigate(`${repairBase}`),
+              });
+            }}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            刪除
           </Button>
         </div>
       </div>
