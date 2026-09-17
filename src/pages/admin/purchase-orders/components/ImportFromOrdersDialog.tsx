@@ -137,8 +137,7 @@ export function ImportFromOrdersDialog({
                 </TableCell>
                 <TableCell className="font-mono text-sm">{item.sku}</TableCell>
                 <TableCell>
-                  {item.product_name}
-                  {item.variant_name && <span className="text-muted-foreground ml-1">- {item.variant_name}</span>}
+                  {item.variant_name || item.product_name}
                 </TableCell>
                 <TableCell className="text-right">{item.quantity}</TableCell>
                 <TableCell className="text-right text-muted-foreground">${item.estimated_cost}</TableCell>

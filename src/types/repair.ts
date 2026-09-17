@@ -78,4 +78,4 @@ export const REPAIR_ITEM_TYPE_LABELS: Record<RepairItemType, string> = {
   part: '零件材料',
 };
 
-export type { DeviceBlock, RepairBlockItem } from '@/components/repair/DeviceBlockSection';
+export type { DeviceBlock, RepairBlockItem } from '@/components/repair/deviceBlockTypes';

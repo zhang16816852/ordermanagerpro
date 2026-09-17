@@ -28,6 +28,7 @@ export interface ConsignmentOrder {
   access_token?: string;
   supplier?: { id: string; name: string } | null;
   store?: { id: string; name: string } | null;
+  items?: Array<{ id: string; quantity: number; unit_price: number }> | null;
 }
 
 export interface ConsignmentOrderItem {

@@ -23,6 +23,8 @@ import { AccountingEntry, AccountingEntryReference, Account, AccountingCategory 
 
 export interface SalesNoteItem {
     id: string;
+    orderItemId?: string;
+    orderCode?: string;
     quantity: number;
     productName: string;
     productSku: string;

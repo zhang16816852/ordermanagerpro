@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, RefreshCw, Upload, Download, Table2, ShoppingCart, Filter } from 'lucide-react';
 import { VariantManager } from '@/components/products/VariantManager';
+import { CopyProductDialog } from '@/components/products/CopyProductDialog';
 import { toast } from 'sonner';
 
 import { useProductsList } from './hooks/useProductsList';
@@ -43,6 +44,7 @@ export default function AdminProducts() {
     const [isSelectionOpen, setIsSelectionOpen] = useState(false);
     const [quickCreateSaving, setQuickCreateSaving] = useState(false);
     const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+    const [copyProduct, setCopyProduct] = useState<ProductWithPricing | null>(null);
 
     const adminFilterCount = useMemo(() => {
         let count = 0;
@@ -225,7 +227,7 @@ export default function AdminProducts() {
                                 getModels={getProductModels}
                                 getModelGroups={getProductModelGroups}
                                 onEdit={(p) => navigate(`/admin/products/${p.id}/edit`)}
-                                onCopy={(p: any) => handleCopy(p, (id) => navigate(`/admin/products/${id}/edit`))}
+                                onCopy={(p: any) => setCopyProduct(p as ProductWithPricing)}
                                 onDelete={(p) => setDeleteProduct(p as any)}
                                 onUpdateVariant={(id, updates) => updateVariantPriceMutation.mutate({ id, ...updates })}
                             />
@@ -272,6 +274,15 @@ export default function AdminProducts() {
                 isSelectionOpen={isSelectionOpen}
                 setIsSelectionOpen={setIsSelectionOpen}
                 products={filteredProducts as any}
+            />
+            <CopyProductDialog
+                open={!!copyProduct}
+                onOpenChange={(open) => { if (!open) setCopyProduct(null); }}
+                product={copyProduct as any}
+                onCopied={(id) => {
+                    forceRefresh();
+                    navigate(`/admin/products/${id}/edit`);
+                }}
             />
         </div>
     );

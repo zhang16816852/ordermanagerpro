@@ -145,7 +145,7 @@ export function OrderGridProductPicker({
                 className="gap-1 pr-1.5 cursor-pointer hover:bg-destructive/10 hover:text-destructive transition-colors text-[10px]"
                 onClick={() => removeVariant(item.variantId)}
               >
-                {item.productName}: {item.variantName}
+                {item.variantName || item.productName}
                 <X className="h-2.5 w-2.5" />
               </Badge>
             ))}

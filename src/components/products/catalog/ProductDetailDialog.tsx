@@ -313,7 +313,7 @@ export function ProductDetailDialog({
         }
         if (selectedVariant) {
             addItem(product, selectedVariant);
-            toast.success(`${product.name} (${selectedVariant.name}) 已加入購物車`, { id: 'cart-add', duration: 2000 });
+            toast.success(`${selectedVariant.name} 已加入購物車`, { id: 'cart-add', duration: 2000 });
         } else {
             addItem(product);
             toast.success(`${product.name} 已加入購物車`, { id: 'cart-add', duration: 2000 });

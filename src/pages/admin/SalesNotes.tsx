@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Search, FileText, CalendarIcon, X } from "lucide-react";
+import { Search, FileText, CalendarIcon, X, CheckSquare, Download } from "lucide-react";
 import { SalesNoteListTable } from "@/components/sales/SalesNoteListTable";
 import { SalesNoteDetailDialog, SalesNoteDetail } from "@/components/sales/SalesNoteDetailDialog";
 import { toast } from "sonner";
@@ -29,6 +29,7 @@ export default function AdminSalesNotes() {
   const [statusFilter, setStatusFilter] = useState<string>(searchParams.get("status") || "all");
   const [repFilter, setRepFilter] = useState<string>(searchParams.get("rep") || "all");
   const [selectedNote, setSelectedNote] = useState<typeof salesNotes[number] | null>(null);
+  const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const from = searchParams.get("from");
     const to = searchParams.get("to");
@@ -102,11 +103,13 @@ export default function AdminSalesNotes() {
             sort_order,
             order_item:order_items(
               id,
+              order_id,
               quantity,
               unit_price,
               sort_order,
               product_id,
               variant_id,
+              order:orders(code),
               product:products(name, code),
               product_variant:product_variants(name)
             )
@@ -249,6 +252,8 @@ export default function AdminSalesNotes() {
         .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
         .map((item: any) => ({
           id: item.id,
+          orderItemId: item.order_item?.id,
+          orderCode: item.order_item?.order?.code,
           quantity: item.quantity,
           returnedQuantity: item.returned_quantity ?? 0,
           productName: item.order_item?.product?.name || "未知產品",
@@ -259,6 +264,61 @@ export default function AdminSalesNotes() {
         }))
     };
   })() : null;
+
+  const exportSelectedNotes = async () => {
+    const notesToExport = (salesNotes || []).filter((n) => selectedNoteIds.includes(n.id));
+    if (notesToExport.length === 0) {
+      toast.error("請先勾選要匯出的銷貨單");
+      return;
+    }
+    const xlsx = await import("xlsx");
+    const rows: (string | number)[][] = [];
+    let grandTotal = 0;
+    let grandQty = 0;
+
+    for (const note of notesToExport) {
+      const items = [...(note.sales_note_items || [])].sort(
+        (a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
+      );
+      rows.push([`銷貨單 ${note.code || note.id.slice(0, 8)}`, "", "", ""]);
+      rows.push([
+        "店家",
+        note.store?.name || "-",
+        "日期",
+        note.shipped_at
+          ? format(new Date(note.shipped_at), "yyyy/MM/dd")
+          : format(new Date(note.created_at), "yyyy/MM/dd"),
+      ]);
+      rows.push(["商品名稱", "數量", "單價", "銷售金額"]);
+
+      let subtotal = 0;
+      let qty = 0;
+      for (const item of items) {
+        const name =
+          item.order_item?.product_variant?.name ||
+          item.order_item?.product?.name ||
+          "未知產品";
+        const unit = Number(item.order_item?.unit_price || 0);
+        const amt = Number(item.quantity || 0) * unit;
+        rows.push([name, Number(item.quantity || 0), unit, amt]);
+        subtotal += amt;
+        qty += Number(item.quantity || 0);
+      }
+      rows.push(["小計", qty, "", subtotal]);
+      rows.push([]);
+      grandTotal += subtotal;
+      grandQty += qty;
+    }
+
+    rows.push(["總計", `${notesToExport.length} 張 · 共 ${grandQty} 件`, "", grandTotal]);
+
+    const ws = xlsx.utils.aoa_to_sheet(rows);
+    ws["!cols"] = [{ wch: 44 }, { wch: 14 }, { wch: 12 }, { wch: 14 }];
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, "銷貨單");
+    xlsx.writeFile(wb, `銷貨單匯出_${format(new Date(), "yyyyMMdd")}.xlsx`);
+    toast.success(`已匯出 ${notesToExport.length} 張銷貨單`);
+  };
 
   return (
     <div className="space-y-6">
@@ -453,6 +513,26 @@ export default function AdminSalesNotes() {
             ))}
           </div>
 
+          {selectedNoteIds.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 mb-3 px-3 py-2 rounded-md border bg-muted/30">
+              <CheckSquare className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">
+                已選取 <strong>{selectedNoteIds.length}</strong> 張銷貨單
+              </span>
+              <div className="flex-1" />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedNoteIds([])}
+              >
+                取消選取
+              </Button>
+              <Button size="sm" onClick={exportSelectedNotes}>
+                <Download className="h-4 w-4 mr-1.5" />匯出 Excel
+              </Button>
+            </div>
+          )}
+
           <SalesNoteListTable
             data={tableData}
             isLoading={isLoading}
@@ -471,6 +551,9 @@ export default function AdminSalesNotes() {
               }
             }}
             showStoreColumn={true}
+            selectable={true}
+            selectedIds={selectedNoteIds}
+            onSelectionChange={setSelectedNoteIds}
           />
         </CardContent>
       </Card>

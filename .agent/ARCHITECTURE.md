@@ -126,7 +126,7 @@ App 掛載 → CacheService.init() 完成前顯示「載入中...」
   - `index.tsx`：Tabs（寄賣單 / 銷售回報審核，審核 tab 帶 pending 數 badge）
   - `hooks/useConsignment.ts`：資料 queries（suppliers/stores/products/orders/pendingReports/accounts/warehouses）+ `useOrderDetail`（內嵌查 items + summary + settlements + sales）+ mutations（createOrder / addItem / removeItem / cancelOrder / receiveItems / ship / confirmReports / rejectReport / returnItems / settle / updateItem / reverseShipment），全部用 `useSupabaseAction`（自動 toast + invalidate）。`invalidateAll` 已納入 `['shipping-pool']`/`['shipping-pool-items']`；`updateItemMutation`（send_to_store 且 `order_item_id` 存在時同步鏡像 `order_items.quantity/unit_price`）、`reverseShipmentMutation`（rpc `reverse_consignment_shipment`，invalidate consignment/admin-orders/shipping-pool/inventory-*）
   - `components/`：`OrderListTab.tsx`、`CreateOrderDialog.tsx`、`OrderDetailDialog.tsx`（內嵌 Receive/Ship/Return/Settle/Reverse/Edit 六 Dialog）、`ReportsTab.tsx`
-  - 建立流程兩步：insert 表頭（`code='TMP'`，trigger 產 `CS-YYMMDD-XXXXX`）→ 逐筆 addItem；方向 `receive_from_supplier` 選供應商、`send_to_store` 選門市
+  - 建立流程兩步：insert 表頭（`code='CS-DRAFT-{id8}'` 暫存碼，draft→active 時 trigger 產 `CS{YYMM}{店碼}{0001}`）→ 逐筆 addItem；方向 `receive_from_supplier` 選供應商、`send_to_store` 選門市
   - 明細數量/金額以 view `consignment_order_item_summary` 為準；退回/回報上限 = `remaining_quantity`
   - v1.3：出貨訊息改「已出貨（店家寄賣…）」、審核成功提示「已依店家開立收款銷貨單」、`OrderDetailDialog` ShipDialog 說明改「不開立銷貨單」、send_to_store 單已收貨時顯示綠色收貨橫幅（received_at）
 - **門市端 `/sales-notes`**（`src/pages/store/SalesNotes.tsx`，v1.3 起為母頁）：Tabs（`?tab=consignment` 寄賣銷售回報 / `?tab=sales-notes` 銷貨單確認收貨）。寄賣 tab 查 direction=send_to_store active 單 + items + summary，Dialog 填數量/實際售價/備註 → `report_consignment_sale` RPC；銷貨單 tab 為原列表＋確認收貨 Dialog。`/consignment-sales` 舊路由改 `<Navigate to="/sales-notes" replace />`；sidebar 合併為單一「寄賣/銷貨」入口；`ConsignmentSales.tsx` 已刪除
@@ -149,6 +149,8 @@ App 掛載 → CacheService.init() 完成前顯示「載入中...」
   - `src/components/sales/SalesNoteCorrectDialog.tsx`（新建）：三個區塊——① 目前品項 checkbox 勾選移除（退回出貨池；已退貨品項 disabled）；② 追加品項兩個子區塊（同店家出貨池→query `shipping_pool`（`enabled: open && storeId`）；同店家 pending/processing 訂單未出貨量 `quantity - shipped_quantity > 0`，各自數量輸入上限 clamp）；③ 完全新品（`SearchableSelect` 產品/變體選項由 `useProductCache()` 過濾 `item_type≠repair_part/shipping`＋`!is_hidden` 建出，數量/單價輸入，加入後可刪除）。底部原始/修正後總額（`correctedTotal = original − removed + added`）與「新品將自動建立新訂單」警示；提交經 `(supabase.rpc as any)('correct_sales_note', { p_sales_note_id, p_items_to_remove, p_items_to_add, p_new_items, p_created_by })`（jsonb 陣列**直接傳、勿 stringify**），成功 invalidate `admin-sales-notes`/`store-sales-notes`/`admin-orders`/`shipping-pool-items`/`inventory-list`；**須至少移除／追加／新品其一才可送出**
   - `SalesNoteDetailDialog.tsx`：`SalesNoteDetail` interface 加 `store_id`（必填，供出貨池/訂單查詢過濾店家）；props 加 `enableCorrect?`（預設 false）；`enableCorrect && note.status !== 'received' && note.payment_status !== 'paid'` 時顯示藍色「修正」按鈕（Pencil）並渲染 `<SalesNoteCorrectDialog>`（繼承既有 `SalesReturnDialog` 的 open/note pattern）
   - `src/pages/admin/SalesNotes.tsx`：`dialogData` 映射補 `store_id`；`<SalesNoteDetailDialog enableCorrect={!isRep}>`（業務無修正權）。Store 端 `store/SalesNotes.tsx` 與會計 `ReferenceViewer.tsx` 維持預設 false（RPC 僅 admin，不接線）
+- **寄賣雙視角（2026-09-12）**：`ConsignmentPage` 新增「訂單視角／店家視角」切換（searchParams `view` 持久化）。店家視角＝新元件 `src/pages/admin/consignment/components/StoreViewTab.tsx`：`send_to_store` 依目標店家分組、`receive_from_supplier` 依供應商分組（`consignment_order_items` 以 `quantity×unit_price` 加總為組內總額），組內列出各單 code/狀態 badge/日期/總額＋查看按鈕（開既有 `OrderDetailDialog`）。`useConsignment` orders query select 增加 `consignment_order_items(id, quantity, unit_price)`（供前端加總，無需後端聚合）
+- **變體名稱單一顯示（全站 UI 慣例，2026-09-12）**：品項名稱一律「有變體只顯示變體名（`variant?.name`），無變體才回退產品名」；**商品卡容器（代表整支商品：商品卡片、Dialog 標題、BrandPricing、AddProductCard 的 `code - name` 等）保留產品名**。共改 15+ 處：`OrderItemsTable`（getComponentInfo 已 variant 優先，移除 compact「name - variant」重複與詳情/卡片子列）、`ItemsTableView`、orders/list `ItemTableView`/`AggregateTableView`/`AggregateCardsView`、store `SalesNotes` 寄賣回報表、PO `OrderDetailDialog`/`ReceivingTab`/`ImportFromOrdersDialog`、consignment `OrderDetailDialog`（明細＋編輯品項）/`ReportsTab`、`OrderReviewPanel`、`CartPanel`、`OrderGridProductPicker` 已選 badge、`useInventory`（name＝variant、specs 欄改顯示所屬產品名）、`ProductDetailDialog` 加購物車 toast、accounting `ReferenceViewer`。天然已合規：`SharedReceiptExport`（`variant ?? name`）、`SalesNoteDetailDialog`、維修零件名（`part_name || variant?.name || product?.name`）、repair detail 兩頁、`PurchaseReturnDialog`
 
 ## 8. 組件架構重點
 
@@ -161,7 +163,13 @@ App 掛載 → CacheService.init() 完成前顯示「載入中...」
 - `src/utils/SpecEngine.ts`、`specLogic.ts`、`specTree.ts`、`specSerializer.ts`、`specFormatter.ts`：規格引擎 v6 前端實作
 - `src/utils/productModelResolver.ts`：產品/變體 ↔ 型號關聯解析（`buildModelMaps`、`processEntityModels`）
 - `src/utils/excelImport.ts` / `excelExport.ts` / `templateImport.ts` / `templateExport.ts`：Excel 匯入/匯出與訂單範本
+- `src/utils/variantReferenceCheck.ts`：`checkVariantReferences(variantIds)` 批次檢查 7 張業務表（order_items/purchase_order_items/inventory_movements/product_inventory/consignment_order_items/repair_order_items/supplier_product_mappings）是否引用指定變體，回傳 `{ok, referenced[]}`；`groupReferencesByVariant` 依變體聚合。對齊 RPC `delete_variant_if_safe` 的守門表清單
 - `src/lib/`：`supabase-helpers.ts`（型別工具）、`formatters.ts`、`order-grid-utils.ts`、`errorMessages.ts`、`exportUtils.ts`、`utils.ts`
+
+## 10. 產品複製與變體批次編輯（2026-09-10）
+
+- **`src/components/products/CopyProductDialog.tsx`**（三頁籤複製 wizard）：基本資訊／型號群組／選項群組＋預覽摘要。執行：先 `duplicate_product_with_variants`（完整複製，變體 SKU 帶 `-COPY-XXXX` 後綴），再依 `optionsChanged`／`modelsChanged` 分流——選項群組有改則 DELETE 複製變體後 `batch_upsert_product_options`（以 SKU 前綴重新生成），僅型號有改則重寫 `entity_model_relations`（帶 `sort_order`），皆未改則沿用複製結果。判別基準用 `originalGroupsRef`／`originalDeviceRefsRef` 快照比較。掛在 `ProductsPage`（列表「複製」按鈕）
+- **`VariantBatchCreator.tsx` smart merge + 防孤兒**：`existingDbVariantsRef`（DB 變體含 `_dbId`）供 `mergeWithExisting` 依 `identityKey` 比對保存既有 SKU（RPC 依 SKU UPSERT 就地更新），避免加值/調價時產生重複或孤兒；`handleSave` 對「SKU 不在新組合」的既有變體跑 `checkVariantReferences`——無引用者存 `orphanCleanupRef`、RPC 成功後以 `delete_variant_if_safe` 清除；被引用者彈 `orphanConfirm` Dialog（列出引用 Badge）可返回調整或「仍要儲存（被引用者保留）」
 
 ## 10. Edge Functions（supabase/functions/）
 

@@ -11,10 +11,13 @@ export interface Supplier {
   is_active: boolean;
 }
 
+export type PurchaseOrderPurpose = 'general' | 'repair_parts';
+
 export interface PurchaseOrder {
   id: string;
   supplier_id: string | null;
   status: PurchaseOrderStatus;
+  purpose: PurchaseOrderPurpose;
   order_date: string;
   expected_date: string | null;
   received_date: string | null;

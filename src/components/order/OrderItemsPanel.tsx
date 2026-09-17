@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { OrderItemsTable, OrderItemRow } from '@/components/order/OrderItemsTable';
+import { OrderItemsTable } from '@/components/order/OrderItemsTable';
+import { OrderItemRow } from '@/components/order/orderItemsTypes';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 export type PanelState = 'information' | 'items' | 'products' | null;

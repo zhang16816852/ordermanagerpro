@@ -16,7 +16,7 @@ import { zhTW } from 'date-fns/locale';
 import { WarehouseSelector } from '@/components/WarehouseSelector';
 import { StorePicker } from '@/components/ui/StorePicker';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { OrderItemRow } from '@/components/order/OrderItemsTable';
+import { OrderItemRow } from '@/components/order/orderItemsTypes';
 import type { PanelState } from '@/components/order/OrderItemsPanel';
 
 export type OrderTypeValue = 'sales' | 'purchase' | 'consignment_receive' | 'consignment_send';

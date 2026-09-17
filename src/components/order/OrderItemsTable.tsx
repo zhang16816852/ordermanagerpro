@@ -1,147 +1,14 @@
-import { useState, useCallback, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { Trash2, Package, Tag, Calculator, Save, LayoutList, Rows3, GripVertical, Grid3x3, ArrowUpDown, ArrowUp, ArrowDown, CopyPlus } from 'lucide-react';
-import { Tables } from '@/integrations/supabase/types';
+import { useState, useCallback, useMemo, useRef } from 'react';
+import type { DragEndEvent } from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable';
 import { formatCurrency } from '@/lib/formatters';
-import {
-    DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent,
-} from '@dnd-kit/core';
-import {
-    SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { useTableTemplates } from '@/hooks/useTableTemplates';
 import { OrderGridRenderer } from '@/components/order-grid/OrderGridRenderer';
 import type { ProductWithPricing } from '@/types/product';
-
-export interface OrderItemRow {
-    id: string;
-    productId: string;
-    quantity: number;
-    unitPrice: number;
-    isNew?: boolean;
-    variantId?: string;
-    variantName?: string;
-    selectedModelName?: string;
-    sku?: string;
-    productName?: string;
-    sort_order?: number;
-    itemType?: 'product' | 'shipping' | 'packaging' | 'repair_part';
-    unitCost?: number;
-    shippingPayment?: string | null;
-    tempKey?: string;
-    parentTempKey?: string;
-}
-
-interface OrderItemsTableProps {
-    items: OrderItemRow[];
-    products?: Tables<'products'>[];
-    onUpdateQuantity: (index: number, value: number) => void;
-    onUpdatePrice?: (index: number, value: number) => void;
-    onRemove: (index: number) => void;
-    onSplit?: (index: number) => void;
-    isEditable: boolean;
-    onReorder?: (items: OrderItemRow[]) => void;
-    priceSyncMap?: Record<string, boolean>;
-    onTogglePriceSync?: (id: string, checked: boolean) => void;
-    defaultCompact?: boolean;
-    priceLabel?: string;
-}
-
-function SortableTableRow({ item, index, viewMode, keyOptions, children }: { item: OrderItemRow; index: number; viewMode: 'compact' | 'detailed' | 'grid'; keyOptions: Array<{ name: string; value: string }>; children: React.ReactNode }) {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
-    const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.45 : 1 };
-    return (
-        <TableRow ref={setNodeRef} style={style} {...attributes}>
-            <TableCell {...listeners} className="cursor-grab active:cursor-grabbing w-8 text-center text-muted-foreground hover:text-foreground">
-                <GripVertical className="h-4 w-4 mx-auto" />
-            </TableCell>
-            {viewMode === 'compact' ? (
-                <TableCell className="font-medium">
-                    <div className="flex flex-col">
-                        <span>{item.variantName || item.productName || item.sku || item.id.slice(0, 8)}</span>
-                        <span className="inline-flex items-center gap-1 flex-wrap">
-                            {item.selectedModelName && <span className="text-xs font-mono text-muted-foreground">{item.selectedModelName}</span>}
-                            <ServiceItemBadge item={item} />
-                        </span>
-                    </div>
-                </TableCell>
-            ) : (
-                <>
-                    <TableCell className="font-medium">
-                        {item.variantName || item.productName || item.sku || item.id.slice(0, 8)}
-                        {item.isNew && <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 border-green-200">新增</Badge>}
-                        <ServiceItemBadge item={item} />
-                    </TableCell>
-                    {/* 关键选项欄位 */}
-                    {keyOptions.map((opt, idx) => (
-                        <TableCell key={idx} className="text-xs text-muted-foreground w-[100px]">
-                            <div className="truncate">{opt.value}</div>
-                            <div className="text-[10px] text-muted-foreground/70">{opt.name}</div>
-                        </TableCell>
-                    ))}
-                </>
-            )}
-            {children}
-        </TableRow>
-    );
-}
-
-function handleColumnNav(e: ReactKeyboardEvent<HTMLInputElement>, col: string) {
-    if (e.key !== 'Tab' && e.key !== 'Enter') return;
-    e.preventDefault();
-    const table = (e.target as HTMLElement).closest('table, .space-y-3');
-    if (!table) return;
-    const inputs = Array.from(table.querySelectorAll(`input[data-col="${col}"]`)) as HTMLInputElement[];
-    const idx = inputs.indexOf(e.target as HTMLInputElement);
-    if (idx === -1) return;
-    const next = e.shiftKey
-        ? (idx > 0 ? idx - 1 : inputs.length - 1)
-        : (idx < inputs.length - 1 ? idx + 1 : 0);
-    inputs[next].focus();
-    inputs[next].select();
-}
-
-function selectOnFocus(e: React.FocusEvent<HTMLInputElement>) {
-    e.target.select();
-}
-
-export function ServiceItemBadge({ item }: { item: OrderItemRow }) {
-    if (item.itemType === 'shipping') {
-        return (
-            <Badge variant="secondary" className="ml-2 bg-orange-50 text-orange-700 border-orange-200">
-                運費{item.shippingPayment === 'monthly' ? '・月結' : ''}
-            </Badge>
-        );
-    }
-    if (item.itemType === 'packaging') {
-        return (
-            <Badge variant="secondary" className="ml-2 bg-sky-50 text-sky-700 border-sky-200">包裝</Badge>
-        );
-    }
-    if (item.parentTempKey) {
-        return <Badge variant="outline" className="ml-2 text-muted-foreground">加購</Badge>;
-    }
-    return null;
-}
+import { OrderItemsToolbar } from './OrderItemsToolbar';
+import { OrderItemsDesktopTable } from './OrderItemsDesktopTable';
+import { OrderItemsMobileList } from './OrderItemsMobileList';
+import type { NameSort, OrderItemRow, OrderItemsTableProps, ViewMode } from './orderItemsTypes';
 
 export function OrderItemsTable({
     items,
@@ -157,14 +24,11 @@ export function OrderItemsTable({
     defaultCompact = false,
     priceLabel = '單價',
 }: OrderItemsTableProps) {
-    const [viewMode, setViewMode] = useState<'compact' | 'detailed' | 'grid'>(
+    const [viewMode, setViewMode] = useState<ViewMode>(
         defaultCompact ? 'compact' : 'detailed'
     );
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
     const { templates } = useTableTemplates();
-    const sensors = useSensors(
-        useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
-    );
 
     // 获取变体及其关键选项
     const getVariantWithOptions = (item: OrderItemRow) => {
@@ -245,7 +109,7 @@ export function OrderItemsTable({
     }, [items, canReorder]);
 
     // 名稱欄位排序（點擊表頭，default → asc → desc → default 循環）
-    const [nameSort, setNameSort] = useState<'default' | 'asc' | 'desc'>('default');
+    const [nameSort, setNameSort] = useState<NameSort>('default');
     const manualOrderRef = useRef<string[]>([]);
 
     const compareByName = (a: OrderItemRow, b: OrderItemRow) => {
@@ -272,22 +136,6 @@ export function OrderItemsTable({
         }
     };
 
-    // 三模式循环切换
-    const cycleViewMode = () => {
-        if (viewMode === 'compact') {
-            setViewMode('detailed');
-        } else if (viewMode === 'detailed') {
-            if (applicableTemplates.length > 0) {
-                setViewMode('grid');
-                setSelectedTemplateId(applicableTemplates[0].id);
-            } else {
-                setViewMode('compact');
-            }
-        } else {
-            setViewMode('compact');
-        }
-    };
-
     const gridProducts = useMemo(() => {
         if (viewMode !== 'grid' || !products) return [];
         return (products as any as ProductWithPricing[]) || [];
@@ -295,58 +143,19 @@ export function OrderItemsTable({
 
     return (
         <div className="space-y-4">
-            {/* 三模式切换按钮 + Template 下拉菜单 */}
-            <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                    variant={viewMode === 'compact' ? 'default' : 'outline'}
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setViewMode('compact')}
-                >
-                    <LayoutList className="h-3.5 w-3.5 mr-1" />簡潔
-                </Button>
-                <Button
-                    variant={viewMode === 'detailed' ? 'default' : 'outline'}
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setViewMode('detailed')}
-                >
-                    <Rows3 className="h-3.5 w-3.5 mr-1" />詳細
-                </Button>
-                <Button
-                    variant={viewMode === 'grid' ? 'default' : 'outline'}
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => {
-                        if (applicableTemplates.length > 0) {
-                            setViewMode('grid');
-                            setSelectedTemplateId(applicableTemplates[0].id);
-                        }
-                    }}
-                    disabled={applicableTemplates.length === 0}
-                >
-                    <Grid3x3 className="h-3.5 w-3.5 mr-1" />表格
-                </Button>
-
-                {/* Template 下拉菜单（仅网格模式显示） */}
-                {viewMode === 'grid' && applicableTemplates.length > 0 && (
-                    <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
-                        <SelectTrigger className="w-[200px] h-7 text-xs">
-                            <SelectValue placeholder="选择表格模板" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {applicableTemplates.map(t => (
-                                <SelectItem key={t.id} value={t.id} className="text-xs">
-                                    {t.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                )}
-                {viewMode === 'grid' && applicableTemplates.length === 0 && (
-                    <span className="text-xs text-muted-foreground">無適用表格模板</span>
-                )}
-            </div>
+            <OrderItemsToolbar
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+                onEnterGrid={() => {
+                    if (applicableTemplates.length > 0) {
+                        setViewMode('grid');
+                        setSelectedTemplateId(applicableTemplates[0].id);
+                    }
+                }}
+                applicableTemplates={applicableTemplates}
+                selectedTemplateId={selectedTemplateId}
+                onTemplateChange={setSelectedTemplateId}
+            />
 
             {/* 网格模式 - 有 Template 时显示 OrderGridRenderer */}
             {viewMode === 'grid' && currentTemplate && gridProducts.length > 0 && (
@@ -370,354 +179,46 @@ export function OrderItemsTable({
             {/* 简洁和详细模式的表格渲染 */}
             {(viewMode === 'compact' || viewMode === 'detailed') && (
                 <>
-                    {/* Desktop Table */}
-                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                        <SortableContext items={canReorder ? sortedItems.map(i => i.id) : []} strategy={verticalListSortingStrategy}>
-                            <div className="hidden md:block rounded-md border">
-                                <Table>
-                                    <TableHeader className="bg-muted/50">
-                                        <TableRow>
-                                            {canReorder && <TableHead className="w-8"></TableHead>}
-                                            {viewMode === 'compact' ? (
-                                                canReorder ? (
-                                                    <TableHead>
-                                                        <button
-                                                            type="button"
-                                                            onClick={handleNameHeaderClick}
-                                                            className="inline-flex items-center gap-1 font-medium text-muted-foreground hover:text-foreground cursor-pointer"
-                                                        >
-                                                            名稱
-                                                            {nameSort === 'asc' ? (
-                                                                <ArrowUp className="h-3.5 w-3.5" />
-                                                            ) : nameSort === 'desc' ? (
-                                                                <ArrowDown className="h-3.5 w-3.5" />
-                                                            ) : (
-                                                                <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
-                                                            )}
-                                                        </button>
-                                                    </TableHead>
-                                                ) : (
-                                                    <TableHead>名稱</TableHead>
-                                                )
-                                            ) : (
-                                                <>
-                                                    {canReorder ? (
-                                                        <TableHead>
-                                                            <button
-                                                                type="button"
-                                                                onClick={handleNameHeaderClick}
-                                                                className="inline-flex items-center gap-1 font-medium text-muted-foreground hover:text-foreground cursor-pointer"
-                                                            >
-                                                                名稱
-                                                                {nameSort === 'asc' ? (
-                                                                    <ArrowUp className="h-3.5 w-3.5" />
-                                                                ) : nameSort === 'desc' ? (
-                                                                    <ArrowDown className="h-3.5 w-3.5" />
-                                                                ) : (
-                                                                    <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
-                                                                )}
-                                                            </button>
-                                                        </TableHead>
-                                                    ) : (
-                                                        <TableHead>名稱</TableHead>
-                                                    )}
-                                                    {/* 关键选项标题 */}
-                                                    {items.length > 0 && getVariantWithOptions(items[0]).keyOptions.map((opt, idx) => (
-                                                        <TableHead key={idx} className="w-[100px]">{opt.name}</TableHead>
-                                                    ))}
-                                                </>
-                                            )}
-                                            <TableHead className="w-24">數量</TableHead>
-                                            <TableHead className="text-right w-28">{priceLabel}</TableHead>
-                                            <TableHead className="text-right w-28">小計</TableHead>
-                                            {showPriceSync && <TableHead className="w-24 text-center">存為店價</TableHead>}
-                                            {isEditable && !canReorder && <TableHead className="w-12"></TableHead>}
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {canReorder
-                                            ? sortedItems.map((item, index) => {
-                                                const { keyOptions } = getVariantWithOptions(item);
-                                                return (
-                                                    <SortableTableRow key={item.id} item={item} index={index} viewMode={viewMode} keyOptions={keyOptions}>
-                                                        <TableCell>
-                                                            {isEditable ? (
-                                                                <Input
-                                                                    type="number"
-                                                                    value={item.quantity}
-                                                                    onChange={(e) => onUpdateQuantity(index, parseInt(e.target.value) || 1)}
-                                                                    onKeyDown={(e) => handleColumnNav(e, 'qty')}
-                                                                    onFocus={selectOnFocus}
-                                                                    data-col="qty"
-                                                                    className="w-20 h-8"
-                                                                    min={1}
-                                                                />
-                                                            ) : (
-                                                                <span>{item.quantity}</span>
-                                                            )}
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            {showPriceInput ? (
-                                                                <Input
-                                                                    type="number"
-                                                                    value={item.unitPrice}
-                                                                    onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)}
-                                                                    onKeyDown={(e) => handleColumnNav(e, 'price')}
-                                                                    onFocus={selectOnFocus}
-                                                                    data-col="price"
-                                                                    className="w-24 text-right ml-auto h-8"
-                                                                />
-                                                            ) : (
-                                                                <span>{formatCurrency(item.unitPrice)}</span>
-                                                            )}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-semibold">
-                                                            {formatCurrency(item.quantity * item.unitPrice)}
-                                                        </TableCell>
-                                                        {showPriceSync && (
-                                                            <TableCell className="text-center">
-                                                                <Checkbox
-                                                                    checked={priceSyncMap?.[item.id] ?? false}
-                                                                    onCheckedChange={(checked) => onTogglePriceSync?.(item.id, !!checked)}
-                                                                />
-                                                            </TableCell>
-                                                        )}
-                                                        {isEditable && (
-                                                            <TableCell>
-                                                                <div className="flex items-center justify-end gap-1">
-                                                                    {onSplit && item.quantity > 1 && (
-                                                                        <Button
-                                                                            variant="ghost" size="icon"
-                                                                            onClick={() => onSplit(index)}
-                                                                            className="text-muted-foreground hover:text-foreground hover:bg-muted h-8 w-8"
-                                                                            title="拆分行"
-                                                                        >
-                                                                            <CopyPlus className="h-4 w-4" />
-                                                                        </Button>
-                                                                    )}
-                                                                    <Button
-                                                                        variant="ghost" size="icon"
-                                                                        onClick={() => onRemove(index)}
-                                                                        className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8"
-                                                                    >
-                                                                        <Trash2 className="h-4 w-4" />
-                                                                    </Button>
-                                                                </div>
-                                                            </TableCell>
-                                                        )}
-                                                    </SortableTableRow>
-                                                );
-                                            })
-                                            : items.map((item, index) => {
-                                                const { name } = getComponentInfo(item);
-                                                const { keyOptions } = getVariantWithOptions(item);
-                                                return (
-                                                    <TableRow key={item.id}>
-                                                        {viewMode === 'compact' ? (
-                                                            <TableCell className="font-medium">
-                                                                <div className="flex flex-col">
-                                                                    <span>{name} - {item.variantName || '無變體'}</span>
-                                                                    <span className="text-xs font-mono text-muted-foreground">
-                                                                        {item.selectedModelName && <span className="ml-2">{item.selectedModelName}</span>}
-                                                                    </span>
-                                                                </div>
-                                                            </TableCell>
-                                                        ) : (
-                                                            <>
-                                                                <TableCell className="font-medium">
-                                                                    {name}
-                                                                    {item.isNew && <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 border-green-200">新增</Badge>}
-                                                                </TableCell>
-                                                                {keyOptions.map((opt, idx) => (
-                                                                    <TableCell key={idx} className="text-xs text-muted-foreground w-[100px]">
-                                                                        <div className="truncate">{opt.value}</div>
-                                                                        <div className="text-[10px] text-muted-foreground/70">{opt.name}</div>
-                                                                    </TableCell>
-                                                                ))}
-                                                            </>
-                                                        )}
-                                                        <TableCell>
-                                                            {isEditable ? (
-                                                                <Input
-                                                                    type="number"
-                                                                    value={item.quantity}
-                                                                    onChange={(e) => onUpdateQuantity(index, parseInt(e.target.value) || 1)}
-                                                                    onKeyDown={(e) => handleColumnNav(e, 'qty')}
-                                                                    onFocus={selectOnFocus}
-                                                                    data-col="qty"
-                                                                    className="w-20 h-8"
-                                                                    min={1}
-                                                                />
-                                                            ) : (
-                                                                <span>{item.quantity}</span>
-                                                            )}
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            {showPriceInput ? (
-                                                                <Input
-                                                                    type="number"
-                                                                    value={item.unitPrice}
-                                                                    onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)}
-                                                                    onKeyDown={(e) => handleColumnNav(e, 'price')}
-                                                                    onFocus={selectOnFocus}
-                                                                    data-col="price"
-                                                                    className="w-24 text-right ml-auto h-8"
-                                                                />
-                                                            ) : (
-                                                                <span>{formatCurrency(item.unitPrice)}</span>
-                                                            )}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-semibold">
-                                                            {formatCurrency(item.quantity * item.unitPrice)}
-                                                        </TableCell>
-                                                        {showPriceSync && (
-                                                            <TableCell className="text-center">
-                                                                <Checkbox
-                                                                    checked={priceSyncMap?.[item.id] ?? false}
-                                                                    onCheckedChange={(checked) => onTogglePriceSync?.(item.id, !!checked)}
-                                                                />
-                                                            </TableCell>
-                                                        )}
-                                                        {isEditable && (
-                                                            <TableCell>
-                                                                <div className="flex items-center justify-end gap-1">
-                                                                    {onSplit && item.quantity > 1 && (
-                                                                        <Button
-                                                                            variant="ghost" size="icon"
-                                                                            onClick={() => onSplit(index)}
-                                                                            className="text-muted-foreground hover:text-foreground hover:bg-muted h-8 w-8"
-                                                                            title="拆分行"
-                                                                        >
-                                                                            <CopyPlus className="h-4 w-4" />
-                                                                        </Button>
-                                                                    )}
-                                                                    <Button
-                                                                        variant="ghost" size="icon"
-                                                                        onClick={() => onRemove(index)}
-                                                                        className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8"
-                                                                    >
-                                                                        <Trash2 className="h-4 w-4" />
-                                                                    </Button>
-                                                                </div>
-                                                            </TableCell>
-                                                        )}
-                                                    </TableRow>
-                                                );
-                                            })}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </SortableContext>
-                    </DndContext>
-
-                    {/* Mobile Cards */}
-                    <div className="md:hidden space-y-3">
-                        {canReorder ? (
-                            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                                <SortableContext items={sortedItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
-                                    {sortedItems.map((item, index) => {
-                                        const { keyOptions } = getVariantWithOptions(item);
-                                        return (
-                                            <SortableMobileCard
-                                                key={item.id}
-                                                item={item}
-                                                index={index}
-                                                viewMode={viewMode}
-                                                keyOptions={keyOptions}
-                                                isEditable={isEditable}
-                                                onUpdateQuantity={onUpdateQuantity}
-                                                onUpdatePrice={onUpdatePrice}
-                                                onRemove={onRemove}
-                                                onSplit={onSplit}
-                                                showPriceInput={showPriceInput}
-                                                showPriceSync={showPriceSync}
-                                                priceSyncMap={priceSyncMap}
-                                                onTogglePriceSync={onTogglePriceSync}
-                                                priceLabel={priceLabel}
-                                                getComponentInfo={getComponentInfo}
-                                            />
-                                        );
-                                    })}
-                                </SortableContext>
-                            </DndContext>
-                        ) : (
-                            items.map((item, index) => {
-                                const { name } = getComponentInfo(item);
-                                const { keyOptions } = getVariantWithOptions(item);
-                                return (
-                                    <div key={item.id} className="bg-card border rounded-lg p-4 shadow-sm space-y-3 relative overflow-hidden">
-                                        {item.isNew && (
-                                            <div className="absolute top-0 left-0 bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-br-lg">
-                                                NEW
-                                            </div>
-                                        )}
-                                        <div className="flex justify-between items-start pt-1">
-                                            <div className="space-y-1">
-                                                <div className="font-bold text-sm leading-snug">
-                                                    {viewMode === 'compact' ? `${name} - ${item.variantName || '無變體'}` : name}
-                                                    {item.isNew && <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 border-green-200">新增</Badge>}
-                                                </div>
-                                                {viewMode === 'compact' ? (
-                                                    item.selectedModelName && (<div className="text-xs text-muted-foreground">{item.selectedModelName}</div>)
-                                                ) : (
-                                                    <>
-                                                        {item.variantName && (<div className="text-xs text-muted-foreground">{item.variantName}</div>)}
-                                                        {item.selectedModelName && (<div className="text-xs text-muted-foreground/70">型號: {item.selectedModelName}</div>)}
-                                                        {/* 关键选项显示 */}
-                                                        {keyOptions.map((opt, idx) => (
-                                                            <div key={idx} className="text-xs text-muted-foreground/60">
-                                                                {opt.name}: {opt.value}
-                                                            </div>
-                                                        ))}
-                                                    </>
-                                                )}
-                                            </div>
-                                            {isEditable && (
-                                                <div className="flex items-center gap-1.5">
-                                                    {onSplit && item.quantity > 1 && (
-                                                        <Button variant="outline" size="icon" onClick={() => onSplit(index)} className="text-muted-foreground h-8 w-8" title="拆分行">
-                                                            <CopyPlus className="h-4 w-4" />
-                                                        </Button>
-                                                    )}
-                                                    <Button variant="outline" size="icon" onClick={() => onRemove(index)} className="text-destructive border-destructive/20 h-8 w-8">
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4 pt-2 border-t border-dashed">
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Package className="h-3 w-3" /> 數量</label>
-                                                {isEditable ? (
-                                                    <Input type="number" value={item.quantity} onChange={(e) => onUpdateQuantity(index, parseInt(e.target.value) || 1)} onKeyDown={(e) => handleColumnNav(e, 'qty')} onFocus={selectOnFocus} data-col="qty" className="h-9" min={1} />
-                                                ) : (
-                                                    <div className="font-medium p-1.5 text-sm">{item.quantity}</div>
-                                                )}
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Tag className="h-3 w-3" /> {priceLabel}</label>
-                                                {showPriceInput ? (
-                                                    <Input type="number" value={item.unitPrice} onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)} onKeyDown={(e) => handleColumnNav(e, 'price')} onFocus={selectOnFocus} data-col="price" className="h-9" />
-                                                ) : (
-                                                    <div className="font-medium p-1.5 text-sm">{formatCurrency(item.unitPrice)}</div>
-                                                )}
-                                            </div>
-                                        </div>
-                                        {showPriceSync && (
-                                            <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
-                                                <Checkbox id={`sync-${item.id}`} checked={priceSyncMap?.[item.id] ?? false} onCheckedChange={(checked) => onTogglePriceSync?.(item.id, !!checked)} />
-                                                <label htmlFor={`sync-${item.id}`} className="cursor-pointer flex items-center gap-1"><Save className="h-3 w-3" /> 存為店價</label>
-                                            </div>
-                                        )}
-                                        <div className="flex justify-between items-center bg-muted/30 p-2 rounded-md">
-                                            <span className="text-xs text-muted-foreground flex items-center gap-1"><Calculator className="h-3 w-3" /> 小計</span>
-                                            <span className="font-bold text-primary">{formatCurrency(item.quantity * item.unitPrice)}</span>
-                                        </div>
-                                    </div>
-                                );
-                            })
-                        )}
-                    </div>
+                    <OrderItemsDesktopTable
+                        items={items}
+                        sortedItems={sortedItems}
+                        canReorder={canReorder}
+                        viewMode={viewMode}
+                        nameSort={nameSort}
+                        onNameHeaderClick={handleNameHeaderClick}
+                        priceLabel={priceLabel}
+                        showPriceSync={showPriceSync}
+                        priceSyncMap={priceSyncMap}
+                        onTogglePriceSync={onTogglePriceSync}
+                        isEditable={isEditable}
+                        showPriceInput={showPriceInput}
+                        onUpdateQuantity={onUpdateQuantity}
+                        onUpdatePrice={onUpdatePrice}
+                        onSplit={onSplit}
+                        onRemove={onRemove}
+                        onDragEnd={handleDragEnd}
+                        getComponentInfo={getComponentInfo}
+                        getVariantWithOptions={getVariantWithOptions}
+                    />
+                    <OrderItemsMobileList
+                        items={items}
+                        sortedItems={sortedItems}
+                        canReorder={canReorder}
+                        viewMode={viewMode}
+                        isEditable={isEditable}
+                        onUpdateQuantity={onUpdateQuantity}
+                        onUpdatePrice={onUpdatePrice}
+                        onRemove={onRemove}
+                        onSplit={onSplit}
+                        showPriceInput={showPriceInput}
+                        showPriceSync={showPriceSync}
+                        priceSyncMap={priceSyncMap}
+                        onTogglePriceSync={onTogglePriceSync}
+                        priceLabel={priceLabel}
+                        onDragEnd={handleDragEnd}
+                        getComponentInfo={getComponentInfo}
+                        getVariantWithOptions={getVariantWithOptions}
+                    />
                 </>
             )}
 
@@ -726,115 +227,6 @@ export function OrderItemsTable({
                 <div className="text-xl font-bold text-primary">
                     總計：{formatCurrency(getTotalAmount())}
                 </div>
-            </div>
-        </div>
-    );
-}
-
-function SortableMobileCard({
-    item,
-    index,
-    viewMode,
-    keyOptions,
-    isEditable,
-    onUpdateQuantity,
-    onUpdatePrice,
-    onRemove,
-    onSplit,
-    showPriceInput,
-    showPriceSync,
-    priceSyncMap,
-    onTogglePriceSync,
-    priceLabel,
-    getComponentInfo,
-}: {
-    item: OrderItemRow;
-    index: number;
-    viewMode: 'compact' | 'detailed' | 'grid';
-    keyOptions: Array<{ name: string; value: string }>;
-    isEditable: boolean;
-    onUpdateQuantity: (index: number, value: number) => void;
-    onUpdatePrice?: (index: number, value: number) => void;
-    onRemove: (index: number) => void;
-    onSplit?: (index: number) => void;
-    showPriceInput: boolean;
-    showPriceSync: boolean;
-    priceSyncMap: Record<string, boolean> | undefined;
-    onTogglePriceSync?: (id: string, checked: boolean) => void;
-    priceLabel: string;
-    getComponentInfo: (item: OrderItemRow) => { name: string };
-}) {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
-    const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.45 : 1 };
-    const { name } = getComponentInfo(item);
-    return (
-        <div ref={setNodeRef} style={style} {...attributes} className="bg-card border rounded-lg p-4 shadow-sm space-y-3 relative overflow-hidden">
-            <div {...listeners} className="cursor-grab active:cursor-grabbing text-muted-foreground absolute top-2 right-2">
-                <GripVertical className="h-4 w-4" />
-            </div>
-            {item.isNew && (
-                <div className="absolute top-0 left-0 bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-br-lg">NEW</div>
-            )}
-            <div className="flex justify-between items-start pt-1">
-                <div className="space-y-1">
-                    <div className="font-bold text-sm leading-snug">
-                        {viewMode === 'compact' ? `${name} - ${item.variantName || '無變體'}` : name}
-                        {item.isNew && <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 border-green-200">新增</Badge>}
-                    </div>
-                    {viewMode === 'compact' ? (
-                        item.selectedModelName && (<div className="text-xs text-muted-foreground">{item.selectedModelName}</div>)
-                    ) : (
-                        <>
-                            {item.variantName && (<div className="text-xs text-muted-foreground">{item.variantName}</div>)}
-                            {item.selectedModelName && (<div className="text-xs text-muted-foreground/70">型號: {item.selectedModelName}</div>)}
-                            {keyOptions.map((opt, idx) => (
-                                <div key={idx} className="text-xs text-muted-foreground/60">
-                                    {opt.name}: {opt.value}
-                                </div>
-                            ))}
-                        </>
-                    )}
-                </div>
-                {isEditable && (
-                    <div className="flex items-center gap-1.5">
-                        {onSplit && item.quantity > 1 && (
-                            <Button variant="outline" size="icon" onClick={() => onSplit(index)} className="text-muted-foreground h-8 w-8" title="拆分行">
-                                <CopyPlus className="h-4 w-4" />
-                            </Button>
-                        )}
-                        <Button variant="outline" size="icon" onClick={() => onRemove(index)} className="text-destructive border-destructive/20 h-8 w-8">
-                            <Trash2 className="h-4 w-4" />
-                        </Button>
-                    </div>
-                )}
-            </div>
-            <div className="grid grid-cols-2 gap-4 pt-2 border-t border-dashed">
-                <div className="space-y-1.5">
-                    <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Package className="h-3 w-3" /> 數量</label>
-                    {isEditable ? (
-                        <Input type="number" value={item.quantity} onChange={(e) => onUpdateQuantity(index, parseInt(e.target.value) || 1)} onKeyDown={(e) => handleColumnNav(e, 'qty')} onFocus={selectOnFocus} data-col="qty" className="h-9" min={1} />
-                    ) : (
-                        <div className="font-medium p-1.5 text-sm">{item.quantity}</div>
-                    )}
-                </div>
-                <div className="space-y-1.5">
-                    <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Tag className="h-3 w-3" /> {priceLabel}</label>
-                    {showPriceInput ? (
-                        <Input type="number" value={item.unitPrice} onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)} onKeyDown={(e) => handleColumnNav(e, 'price')} onFocus={selectOnFocus} data-col="price" className="h-9" />
-                    ) : (
-                        <div className="font-medium p-1.5 text-sm">{formatCurrency(item.unitPrice)}</div>
-                    )}
-                </div>
-            </div>
-            {showPriceSync && (
-                <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
-                    <Checkbox id={`sync-${item.id}`} checked={priceSyncMap?.[item.id] ?? false} onCheckedChange={(checked) => onTogglePriceSync?.(item.id, !!checked)} />
-                    <label htmlFor={`sync-${item.id}`} className="cursor-pointer flex items-center gap-1"><Save className="h-3 w-3" /> 存為店價</label>
-                </div>
-            )}
-            <div className="flex justify-between items-center bg-muted/30 p-2 rounded-md">
-                <span className="text-xs text-muted-foreground flex items-center gap-1"><Calculator className="h-3 w-3" /> 小計</span>
-                <span className="font-bold text-primary">{formatCurrency(item.quantity * item.unitPrice)}</span>
             </div>
         </div>
     );

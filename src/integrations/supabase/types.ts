@@ -2762,6 +2762,7 @@ export type Database = {
           id: string
           notes: string | null
           order_date: string
+          purpose: string
           received_date: string | null
           status: Database["public"]["Enums"]["purchase_order_status"]
           supplier_id: string | null
@@ -2776,6 +2777,7 @@ export type Database = {
           id?: string
           notes?: string | null
           order_date?: string
+          purpose?: string
           received_date?: string | null
           status?: Database["public"]["Enums"]["purchase_order_status"]
           supplier_id?: string | null
@@ -2790,6 +2792,7 @@ export type Database = {
           id?: string
           notes?: string | null
           order_date?: string
+          purpose?: string
           received_date?: string | null
           status?: Database["public"]["Enums"]["purchase_order_status"]
           supplier_id?: string | null
@@ -3169,8 +3172,10 @@ export type Database = {
           id: string
           internal_notes: string | null
           labor_fee: number
+          order_date: string
           parts_cost: number
           payment_method: string | null
+          payment_status: string
           reported_issue: string | null
           started_at: string | null
           status: Database["public"]["Enums"]["repair_order_status"]
@@ -3208,8 +3213,10 @@ export type Database = {
           id?: string
           internal_notes?: string | null
           labor_fee?: number
+          order_date?: string
           parts_cost?: number
           payment_method?: string | null
+          payment_status?: string
           reported_issue?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["repair_order_status"]
@@ -3247,8 +3254,10 @@ export type Database = {
           id?: string
           internal_notes?: string | null
           labor_fee?: number
+          order_date?: string
           parts_cost?: number
           payment_method?: string | null
+          payment_status?: string
           reported_issue?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["repair_order_status"]
@@ -4526,6 +4535,7 @@ export type Database = {
           p_items_to_add?: Json
           p_items_to_remove?: string[]
           p_new_items?: Json
+          p_price_updates?: Json
           p_sales_note_id: string
         }
         Returns: Json
@@ -4889,6 +4899,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      sync_repair_order_payment_status: {
+        Args: { p_repair_order_id: string }
+        Returns: undefined
+      }
       sync_sales_note_payment_status: {
         Args: { p_sales_note_id: string }
         Returns: undefined
@@ -4929,6 +4943,10 @@ export type Database = {
       upsert_store_products_batch: {
         Args: { p_items: Json }
         Returns: undefined
+      }
+      upsert_variant_options: {
+        Args: { p_items: Json; p_variant_id: string }
+        Returns: Json
       }
     }
     Enums: {

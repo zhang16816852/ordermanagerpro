@@ -208,10 +208,7 @@ export function ReceivingTab() {
                         return (
                           <tr key={item.id} className={`border-b last:border-0 ${isItemDone ? 'bg-green-50/50' : ''}`}>
                             <td className="py-2 px-3">
-                              <p className="font-medium">{item.product?.name || '-'}</p>
-                              {item.variant?.name && (
-                                <p className="text-xs text-muted-foreground">{item.variant.name}</p>
-                              )}
+                              <p className="font-medium">{item.variant?.name || item.product?.name || '-'}</p>
                             </td>
                             <td className="text-right py-2 px-3">{item.quantity}</td>
                             <td className="text-right py-2 px-3">

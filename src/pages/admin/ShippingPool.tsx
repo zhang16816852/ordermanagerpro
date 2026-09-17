@@ -1,99 +1,24 @@
 import { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { GripVertical, Search, Package, Truck, Send, Store, Undo2, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { Package, Truck, Undo2 } from "lucide-react";
+import { arrayMove } from "@dnd-kit/sortable";
+import { DragEndEvent } from "@dnd-kit/core";
 import { PageHeader } from '@/components/layout/PageHeader';
-import { MobileFooter } from '@/components/layout/MobileFooter';
-import { toast } from "sonner";
-import { getErrorMessage } from '@/lib/errorMessages';
-import { formatCurrency } from '@/lib/formatters';
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
-
-// 批次取得出貨池品項在各倉庫的庫存（product_id + variant_id → warehouse_id → qty）
-function usePoolStock(items: ShippingPoolItem[]) {
-  const productIds = [...new Set(items.map(i => i.order_item?.product_id).filter(Boolean))];
-  return useQuery({
-    queryKey: ["shipping-pool-stock", productIds.join(",")],
-    queryFn: async () => {
-      if (productIds.length === 0) return {};
-      const { data, error } = await (supabase
-        .from("product_inventory") as any)
-        .select("product_id, variant_id, warehouse_id, quantity")
-        .in("product_id", productIds);
-      if (error) throw error;
-      const map: Record<string, Record<string, number>> = {};
-      for (const row of (data || []) as Array<{ product_id: string; variant_id: string | null; warehouse_id: string; quantity: number }>) {
-        const key = `${row.product_id}:${row.variant_id || ""}`;
-        if (!map[key]) map[key] = {};
-        map[key][row.warehouse_id] = row.quantity;
-      }
-      return map;
-    },
-    staleTime: 30_000,
-  });
-}
-
-interface ShippingPoolItem {
-  id: string;
-  order_item_id: string;
-  quantity: number;
-  store_id: string;
-  created_at: string;
-  order_item: {
-    id: string;
-    order_id: string;
-    product_id: string;
-    variant_id: string | null;
-    order?: { code: string; consignment_mode?: boolean };
-    quantity: number;
-    shipped_quantity: number;
-    unit_price: number;
-    product: { name: string; sku: string };
-    product_variant?: { name: string } | null;
-  };
-}
-
-interface GroupedByStore {
-  storeId: string;
-  storeName: string;
-  storeCode: string | null;
-  items: ShippingPoolItem[];
-  totalQuantity: number;
-}
-
-function SortablePoolRow({ item, isRemoving, children }: { item: ShippingPoolItem; isRemoving?: boolean; children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.45 : 1,
-  };
-  return (
-    <TableRow ref={setNodeRef} style={style} {...attributes}>
-      <TableCell {...listeners} className="cursor-grab active:cursor-grabbing w-10 text-center text-muted-foreground hover:text-foreground">
-        <GripVertical className="h-3.5 w-3.5 mx-auto" />
-      </TableCell>
-      {children}
-    </TableRow>
-  );
-}
+import { ShippingPoolFilterBar } from "./shippingPool/ShippingPoolFilterBar";
+import { ShippingPoolGroups } from "./shippingPool/ShippingPoolGroups";
+import { ShipDialog } from "./shippingPool/ShipDialog";
+import { ShippingPoolMobileFooters } from "./shippingPool/ShippingPoolMobileFooters";
+import { usePoolStock } from "./shippingPool/usePoolStock";
+import { useShippingPoolSource } from "./shippingPool/useShippingPoolSource";
+import { useShippingPoolMutations } from "./shippingPool/useShippingPoolMutations";
+import { GroupedByStore, PoolSortDir, PoolSortField, ShippingPoolItem } from "./shippingPool/shippingPoolTypes";
 
 export default function AdminShippingPool() {
   const { user } = useAuth();
@@ -107,38 +32,17 @@ export default function AdminShippingPool() {
   const [showShipDialog, setShowShipDialog] = useState(false);
   const [notes, setNotes] = useState("");
   const [shippedAt, setShippedAt] = useState<string>(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
-  const [warehouseMap, setWarehouseMap] = useState<Record<string, string>>({});
-  const [sourceMap, setSourceMap] = useState<Record<string, string>>({});
   const [consignmentOverrideMap, setConsignmentOverrideMap] = useState<Record<string, boolean>>({});
   const [localOrder, setLocalOrder] = useState<Record<string, string[]>>({});
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
-
-  const getItemWarehouse = (orderItemId: string) => warehouseMap[orderItemId] || defaultWarehouse?.id || '';
-  const getItemSource = (orderItemId: string) => sourceMap[orderItemId] || 'self';
-
-  // 出貨來源：sc = 供應商寄賣（FIFO）；wh:{id} = 自有倉庫
-  const getSourceValue = (orderItemId: string) =>
-    getItemSource(orderItemId) === 'supplier_consignment'
-      ? 'sc'
-      : `wh:${getItemWarehouse(orderItemId)}`;
-
-  const setSourceValue = (orderItemId: string, value: string) => {
-    if (value === 'sc') {
-      setSourceMap(prev => ({ ...prev, [orderItemId]: 'supplier_consignment' }));
-      setWarehouseMap(prev => {
-        const next = { ...prev };
-        delete next[orderItemId];
-        return next;
-      });
-    } else if (value.startsWith('wh:')) {
-      const warehouseId = value.slice(3);
-      setWarehouseMap(prev => ({ ...prev, [orderItemId]: warehouseId }));
-      setSourceMap(prev => ({ ...prev, [orderItemId]: 'self' }));
-    }
-  };
+  const {
+    warehouseMap,
+    sourceMap,
+    setWarehouseMap,
+    setSourceMap,
+    getSourceValue,
+    setSourceValue,
+  } = useShippingPoolSource(defaultWarehouse?.id);
 
   const { data: stores } = useQuery({
     queryKey: ["admin-stores"],
@@ -209,10 +113,10 @@ export default function AdminShippingPool() {
   }, [] as GroupedByStore[]) || [];
 
   // 抬頭欄位排序
-  const [sortField, setSortField] = useState<'product' | 'quantity' | 'unit_price' | 'subtotal' | 'created_at'>('created_at');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [sortField, setSortField] = useState<PoolSortField>('created_at');
+  const [sortDir, setSortDir] = useState<PoolSortDir>('asc');
 
-  const handleSort = (field: typeof sortField) => {
+  const handleSort = (field: PoolSortField) => {
     // 排序列（欄位或方向）變動時清掉手動拖曳順序，讓表頭排序立即生效
     setLocalOrder({});
     if (sortField === field) {
@@ -223,7 +127,7 @@ export default function AdminShippingPool() {
     }
   };
 
-  const getSortValue = (item: ShippingPoolItem, field: typeof sortField): string | number => {
+  const getSortValue = (item: ShippingPoolItem, field: PoolSortField): string | number => {
     switch (field) {
       case 'product':
         return (item.order_item?.product_variant?.name || item.order_item?.product?.name || '').toLowerCase();
@@ -334,90 +238,20 @@ export default function AdminShippingPool() {
     });
   };
 
-  // 批次將選取出貨池品項移回訂單（移出出貨池），單一 RPC 一次寫入，避免逐筆刪除
-  const batchRemoveMutation = useMutation({
-    mutationFn: async (poolIds: string[]) => {
-      if (!user) throw new Error("未登入");
-      if (poolIds.length === 0) throw new Error("請至少選擇一個品項");
-
-      const { data, error } = await supabase.rpc("remove_items_from_shipping_pool", {
-        p_pool_ids: poolIds,
-        p_created_by: user.id,
-      });
-      if (error) throw error;
-      return data as { deleted_count: number; reverted_order_ids: string[] };
-    },
-    onSuccess: (data) => {
-      const revertedCount = data?.reverted_order_ids?.length || 0;
-      toast.success(
-        `已將 ${data?.deleted_count ?? 0} 個品項移出出貨池${revertedCount > 0 ? `，${revertedCount} 個訂單回退為待確認` : ""}`
-      );
-      setSelectedPoolItemIds(new Set());
-      queryClient.invalidateQueries({ queryKey: ["shipping-pool"] });
-      queryClient.invalidateQueries({ queryKey: ["shipping-pool-items"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
-    },
-    onError: (error: Error) => {
-      toast.error(getErrorMessage(error));
-    },
-  });
-
-  const shipMutation = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error("未登入");
-      if (selectedStores.size === 0) throw new Error("請選擇至少一個店家");
-
-      // 出貨前先把「目前畫面順序」（表頭排序＋拖曳）回寫 DB，
-      // 確保 ship_from_pool 依顯示順序建立銷貨單品項
-      for (const group of sortedGroups) {
-        if (!selectedStores.has(group.storeId)) continue;
-        const payload = group.items.map((item, idx) => ({
-          id: item.id,
-          sort_order: idx + 1,
-        }));
-        if (payload.length === 0) continue;
-        const { error: reorderError } = await supabase.rpc("reorder_shipping_pool_items", { p_items: payload });
-        if (reorderError) throw reorderError;
-      }
-
-      const { data, error } = await supabase.rpc("ship_from_pool", {
-        p_store_ids: Array.from(selectedStores),
-        p_created_by: user.id,
-        p_notes: notes || undefined,
-        p_shipped_at: shippedAt ? new Date(shippedAt).toISOString() : undefined,
-        p_warehouse_id: undefined,
-        p_warehouse_map: warehouseMap,
-        p_source_map: sourceMap,
-        p_consignment_override_map: consignmentOverrideMap,
-      });
-
-      if (error) throw error;
-      return data as Array<{ sales_note_id: string; store_id: string }>;
-    },
-    onSuccess: (data) => {
-      const noteCount = (data || []).filter(d => d.sales_note_id).length;
-      toast.success(
-        noteCount > 0
-          ? `已建立 ${noteCount} 個銷售單並出貨${data && data.length > noteCount ? `，${data.length - noteCount} 個店家以寄賣方式出貨` : ''}`
-          : `已出貨（${data?.length ?? 0} 個店家皆為寄賣方式，確認售出後再開立銷貨單）`,
-        {
-          action: noteCount > 0 ? {
-            label: "檢視銷貨單",
-            onClick: () => window.location.href = "/admin/sales-notes",
-          } : undefined,
-        }
-      );
-      setSelectedStores(new Set());
-      setShowShipDialog(false);
-      setNotes("");
-      queryClient.invalidateQueries({ queryKey: ["shipping-pool"] });
-      queryClient.invalidateQueries({ queryKey: ["shipping-pool-items"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-sales-notes"] });
-    },
-    onError: (error: Error) => {
-      toast.error(getErrorMessage(error));
-    },
+  const { batchRemoveMutation, shipMutation } = useShippingPoolMutations({
+    user,
+    queryClient,
+    selectedStores,
+    sortedGroups,
+    notes,
+    shippedAt,
+    warehouseMap,
+    sourceMap,
+    consignmentOverrideMap,
+    setSelectedPoolItemIds,
+    setSelectedStores,
+    setShowShipDialog,
+    setNotes,
   });
 
   const getSelectedSummary = () => {
@@ -433,29 +267,24 @@ export default function AdminShippingPool() {
   const selectedPoolItems = shippingPoolItems?.filter(i => selectedStores.has(i.store_id)) || [];
   const { data: poolStock } = usePoolStock(selectedPoolItems);
 
-  const SortableHead = ({ field, children, className }: { field: typeof sortField; children: React.ReactNode; className?: string }) => (
-    <TableHead className={className}>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-8 px-1 -ml-1 font-medium text-muted-foreground hover:text-foreground"
-        onClick={() => handleSort(field)}
-      >
-        {children}
-        {sortField === field ? (
-          sortDir === 'asc' ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />
-        ) : (
-          <ArrowUpDown className="ml-1 h-3 w-3 opacity-30" />
-        )}
-      </Button>
-    </TableHead>
-  );
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value) next.set("search", value);
+      else next.delete("search");
+      return next;
+    }, { replace: true });
+  };
 
-  const getDisplayName = (item: ShippingPoolItem) => {
-    const variant = item.order_item?.product_variant?.name;
-    const product = item.order_item?.product?.name;
-    if (variant) return variant;
-    return product || '';
+  const handleStoreFilterChange = (value: string) => {
+    setStoreFilter(value);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value && value !== "all") next.set("store", value);
+      else next.delete("store");
+      return next;
+    }, { replace: true });
   };
 
   return (
@@ -495,332 +324,65 @@ export default function AdminShippingPool() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4 mb-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="搜尋店鋪或產品..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setSearchParams((prev) => {
-                    const next = new URLSearchParams(prev);
-                    if (e.target.value) next.set("search", e.target.value);
-                    else next.delete("search");
-                    return next;
-                  }, { replace: true });
-                }}
-                className="pl-10"
-              />
-            </div>
-            <Select value={storeFilter} onValueChange={(v) => {
-              setStoreFilter(v);
-              setSearchParams((prev) => {
-                const next = new URLSearchParams(prev);
-                if (v && v !== "all") next.set("store", v);
-                else next.delete("store");
-                return next;
-              }, { replace: true });
-            }}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="篩選店鋪" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">所有店鋪</SelectItem>
-                {stores?.map((store) => (
-                  <SelectItem key={store.id} value={store.id}>
-                    {store.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <ShippingPoolFilterBar
+            search={search}
+            onSearchChange={handleSearchChange}
+            storeFilter={storeFilter}
+            onStoreFilterChange={handleStoreFilterChange}
+            stores={stores}
+          />
 
-          {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">載入中...</div>
-          ) : filteredGroups.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              目前沒有待出貨的項目
-            </div>
-          ) : (
-            <Accordion type="multiple" defaultValue={filteredGroups.map(g => g.storeId)} className="space-y-4">
-              {filteredGroups.map((group) => {
-                const isSelected = selectedStores.has(group.storeId);
-
-                return (
-                  <AccordionItem key={group.storeId} value={group.storeId} className="border rounded-lg">
-                    <AccordionTrigger className="px-4 hover:no-underline">
-                      <div className="flex items-center gap-4 flex-1">
-                        <div
-                          role="checkbox"
-                          aria-checked={isSelected}
-                          onClick={(e) => { toggleStore(group.storeId); e.stopPropagation(); }}
-                          className={`w-4 h-4 border rounded ${isSelected ? 'bg-primary' : ''}`}
-                        />
-                        <Store className="h-5 w-5 text-muted-foreground" />
-                        <div className="flex-1 text-left">
-                          <span className="font-medium">{group.storeName}</span>
-                          {group.storeCode && (
-                            <span className="text-muted-foreground ml-2">({group.storeCode})</span>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <Badge variant="secondary">{group.items.length} 項</Badge>
-                          <Badge variant="outline">共 {group.totalQuantity} 件</Badge>
-                        </div>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-4 pb-4">
-                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleDragEnd(group.storeId, e)}>
-                        <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-10">
-                              <Checkbox
-                                checked={group.items.length > 0 && group.items.every(i => selectedPoolItemIds.has(i.id))}
-                                onCheckedChange={() => toggleAllInGroup(group)}
-                                aria-label="全選此店家品項"
-                              />
-                            </TableHead>
-                            <SortableHead field="product">商品</SortableHead>
-                            <SortableHead field="quantity" className="text-right">出貨數量</SortableHead>
-                            <SortableHead field="unit_price" className="text-right">單價</SortableHead>
-                            <SortableHead field="subtotal" className="text-right">小計</SortableHead>
-                            <SortableHead field="created_at">加入時間</SortableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          <SortableContext items={group.items.map(i => i.id)} strategy={verticalListSortingStrategy}>
-                              {group.items.map((item) => (
-                                <SortablePoolRow key={item.id} item={item}>
-                                  <TableCell className="flex items-center gap-2">
-                                    <Checkbox
-                                      checked={selectedPoolItemIds.has(item.id)}
-                                      onCheckedChange={() => togglePoolItem(item.id)}
-                                      aria-label="選取此品項"
-                                    />
-                                  </TableCell>
-                                  <TableCell className="text-sm">
-                                    <span className="font-medium">
-                                      {getDisplayName(item)}
-                                    </span>
-                                    <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
-                                      來源單號: {item.order_item?.order?.code || item.order_item?.order_id.slice(0, 8)}
-                                      {item.order_item?.order?.consignment_mode && (
-                                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
-                                      )}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-right">{item.quantity}</TableCell>
-                                  <TableCell className="text-right">
-                                    {formatCurrency(item.order_item?.unit_price)}
-                                  </TableCell>
-                                  <TableCell className="text-right font-medium">
-                                    {formatCurrency(item.quantity * (item.order_item?.unit_price || 0))}
-                                  </TableCell>
-                                  <TableCell className="text-muted-foreground">
-                                    {format(new Date(item.created_at), "MM/dd HH:mm")}
-                                  </TableCell>
-                                </SortablePoolRow>
-                              ))}
-                            </SortableContext>
-                          </TableBody>
-                        </Table>
-                      </DndContext>
-                    </AccordionContent>
-                  </AccordionItem>
-                );
-              })}
-            </Accordion>
-          )}
+          <ShippingPoolGroups
+            isLoading={isLoading}
+            groups={filteredGroups}
+            selectedStores={selectedStores}
+            onToggleStore={toggleStore}
+            selectedPoolItemIds={selectedPoolItemIds}
+            onTogglePoolItem={togglePoolItem}
+            onToggleAllInGroup={toggleAllInGroup}
+            onDragEnd={handleDragEnd}
+            sortField={sortField}
+            sortDir={sortDir}
+            onSort={handleSort}
+          />
         </CardContent>
       </Card>
 
-      <Dialog open={showShipDialog} onOpenChange={(open) => {
-        setShowShipDialog(open);
-        if (open) {
-          setWarehouseMap({});
-          setSourceMap({});
-        }
-      }}>
-        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col p-0">
-          <DialogHeader className="p-6 pb-2">
-            <DialogTitle className="flex items-center gap-2">
-              <Send className="h-5 w-5" />
-              確認出貨
-            </DialogTitle>
-            <DialogDescription>
-              將選定店家的待出貨品項出貨。一般品項合併產生銷售單；寄賣品項以店家寄賣方式出貨，確認售出後才開立銷貨單。出貨後資料將從集貨池中移除。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-6 space-y-4">
-            <div className="rounded-lg border p-4 bg-muted/50">
-              <div className="grid grid-cols-3 gap-2 text-sm">
-                <div>
-                  <span className="text-muted-foreground">店家數量：</span>
-                  <span className="font-medium">{summary.storeCount}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">商品項目：</span>
-                  <span className="font-medium">{summary.itemCount}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">總數量：</span>
-                  <span className="font-medium">{summary.totalQuantity}</span>
-                </div>
-              </div>
-            </div>
-            {filteredGroups.filter(g => selectedStores.has(g.storeId)).map(group => {
-              const groupTotal = group.items.reduce((sum, item) => sum + item.quantity * (item.order_item?.unit_price || 0), 0);
-              return (
-                <div key={group.storeId} className="space-y-2 border rounded p-3">
-                  <div className="flex items-center justify-between border-b pb-1">
-                    <h3 className="font-bold text-primary">{group.storeName}</h3>
-                    <Badge variant="outline">{group.items.length} 項 / {group.totalQuantity} 件</Badge>
-                  </div>
-                  <Table>
-                    <TableHeader className="bg-muted/30">
-                      <TableRow>
-                        <TableHead>商品</TableHead>
-                        <TableHead className="text-right">數量</TableHead>
-                        <TableHead className="text-right">單價</TableHead>
-                        <TableHead className="text-right">小計</TableHead>
-                        <TableHead className="w-16 text-center">寄賣</TableHead>
-                        <TableHead>出貨來源</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {group.items.map(item => {
-                        const isConsignment = !!item.order_item?.order?.consignment_mode;
-                        const isOverride = !isConsignment && !!consignmentOverrideMap[item.order_item_id];
-                        const showConsignment = isConsignment || isOverride;
-                        const stockKey = `${item.order_item?.product_id}:${item.order_item?.variant_id || ""}`;
-                        const stockByWh = poolStock?.[stockKey] || {};
-                        return (
-                          <TableRow key={item.id}>
-                            <TableCell className="text-sm">
-                              {getDisplayName(item)}
-                              {isConsignment && <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>}
-                            </TableCell>
-                            <TableCell className="text-right">{item.quantity}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(item.order_item?.unit_price)}</TableCell>
-                            <TableCell className="text-right font-medium">{formatCurrency(item.quantity * (item.order_item?.unit_price || 0))}</TableCell>
-                            <TableCell className="text-center">
-                              {isConsignment ? (
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
-                              ) : (
-                                <Switch
-                                  checked={isOverride}
-                                  onCheckedChange={(v) => setConsignmentOverrideMap(prev => ({ ...prev, [item.order_item_id]: v }))}
-                                  title="此項目改以店家寄賣方式出貨"
-                                  aria-label="轉為店家寄賣出貨"
-                                />
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {showConsignment ? (
-                                <span className="text-xs text-muted-foreground">店家寄賣</span>
-                              ) : (
-                                <Select
-                                  value={getSourceValue(item.order_item_id)}
-                                  onValueChange={(v) => setSourceValue(item.order_item_id, v)}
-                                >
-                                  <SelectTrigger className="h-8 w-56 text-xs">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {ownWarehouses.map(w => (
-                                      <SelectItem key={w.id} value={`wh:${w.id}`}>
-                                        自有 · {w.name}（庫存:{stockByWh[w.id] ?? 0}）
-                                      </SelectItem>
-                                    ))}
-                                    <SelectItem value="sc">供應商寄賣（FIFO）</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                  <div className="text-right text-sm font-bold">
-                    合計：{formatCurrency(groupTotal)}
-                  </div>
-                </div>
-              );
-            })}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium">出貨時間</label>
-                <Input
-                  type="datetime-local"
-                  value={shippedAt}
-                  onChange={(e) => setShippedAt(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">備註（選填）</label>
-                <Textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="輸入出貨備註..."
-                  className="mt-1"
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="p-6 pt-2 bg-muted/20 border-t">
-            <Button variant="outline" onClick={() => setShowShipDialog(false)}>
-              取消
-            </Button>
-            <Button
-              onClick={() => shipMutation.mutate()}
-              disabled={shipMutation.isPending}
-            >
-              {shipMutation.isPending ? "處理中..." : "確認出貨"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ShipDialog
+        open={showShipDialog}
+        onOpenChange={(open) => {
+          setShowShipDialog(open);
+          if (open) {
+            setWarehouseMap({});
+            setSourceMap({});
+          }
+        }}
+        summary={summary}
+        groups={filteredGroups}
+        selectedStores={selectedStores}
+        ownWarehouses={ownWarehouses}
+        poolStock={poolStock}
+        consignmentOverrideMap={consignmentOverrideMap}
+        onConsignmentOverrideChange={(orderItemId, v) => setConsignmentOverrideMap(prev => ({ ...prev, [orderItemId]: v }))}
+        getSourceValue={getSourceValue}
+        onSourceValueChange={setSourceValue}
+        shippedAt={shippedAt}
+        onShippedAtChange={setShippedAt}
+        notes={notes}
+        onNotesChange={setNotes}
+        isPending={shipMutation.isPending}
+        onConfirm={() => shipMutation.mutate()}
+      />
 
-      {/* Mobile rollback-to-order footer */}
-      <MobileFooter visible={selectedPoolItemIds.size > 0}>
-        <div className="flex items-center gap-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm text-muted-foreground">已選擇 {selectedPoolItemIds.size} 個品項</p>
-            <p className="text-xs text-muted-foreground">移出出貨池並回滾為待出貨</p>
-          </div>
-          <Button
-            variant="destructive"
-            onClick={() => batchRemoveMutation.mutate(Array.from(selectedPoolItemIds))}
-            disabled={batchRemoveMutation.isPending}
-            className="shrink-0"
-          >
-            <Undo2 className="h-4 w-4 mr-2" />
-            {batchRemoveMutation.isPending ? "處理中..." : "回滾成訂單"}
-          </Button>
-        </div>
-      </MobileFooter>
-
-      {/* Mobile Ship Footer */}
-      <MobileFooter visible={selectedStores.size > 0}>
-        <div className="flex items-center gap-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm text-muted-foreground">已選擇 {summary.storeCount} 店家</p>
-            <p className="text-xs text-muted-foreground">{summary.totalQuantity} 件商品</p>
-          </div>
-          <Button
-            onClick={() => setShowShipDialog(true)}
-            disabled={shipMutation.isPending}
-            className="shrink-0"
-          >
-            <Truck className="h-4 w-4 mr-2" />
-            確認出貨
-          </Button>
-        </div>
-      </MobileFooter>
+      <ShippingPoolMobileFooters
+        rollbackCount={selectedPoolItemIds.size}
+        isRollbackPending={batchRemoveMutation.isPending}
+        onRollback={() => batchRemoveMutation.mutate(Array.from(selectedPoolItemIds))}
+        storeCount={summary.storeCount}
+        totalQuantity={summary.totalQuantity}
+        isShipPending={shipMutation.isPending}
+        onOpenShipDialog={() => setShowShipDialog(true)}
+      />
     </div>
   );
 }

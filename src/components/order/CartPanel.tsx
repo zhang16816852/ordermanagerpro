@@ -80,13 +80,8 @@ export default function CartPanel({
                   <div className="flex justify-between items-start gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm break-words leading-tight">
-                        {item.productName || item.name}
+                        {item.variantName || item.productName || item.name}
                       </p>
-                      {item.variantName && (
-                        <p className="text-xs font-medium text-muted-foreground mt-0.5">
-                          {item.variantName}
-                        </p>
-                      )}
                       {item.options && item.options.length > 0 && (
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {item.options.join(' / ')}
@@ -161,13 +156,8 @@ export default function CartPanel({
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
                           <div className="font-semibold text-sm">
-                            {item.productName || item.name}
+                            {item.variantName || item.productName || item.name}
                           </div>
-                          {item.variantName && (
-                            <div className="text-xs font-medium text-muted-foreground">
-                              {item.variantName}
-                            </div>
-                          )}
                           {item.options && item.options.length > 0 && (
                             <div className="text-xs text-muted-foreground">
                               {item.options.join(' / ')}

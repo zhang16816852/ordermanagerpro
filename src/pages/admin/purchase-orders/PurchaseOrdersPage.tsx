@@ -7,7 +7,7 @@ import { OrderForm } from './components/OrderForm';
 import { SupplierForm } from './components/SupplierForm';
 import { OrderDetailDialog } from './components/OrderDetailDialog';
 import { PurchaseOrder } from './types';
-import { usePurchaseOrders } from './hooks/usePurchaseOrders';
+import { usePurchaseOrders, PurchaseOrderFilters } from './hooks/usePurchaseOrders';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -17,7 +17,20 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ClipboardList, Users, Plus, PackageCheck } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
+import { isSameDay } from 'date-fns';
+import { format } from 'date-fns';
+import { zhTW } from 'date-fns/locale';
+import { ClipboardList, Users, Plus, PackageCheck, CalendarIcon, X, Trash2 } from 'lucide-react';
 
 export default function AdminPurchaseOrders() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -26,6 +39,37 @@ export default function AdminPurchaseOrders() {
   const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null);
   const [createOrderOpen, setCreateOrderOpen] = useState(false);
   const [createSupplierOpen, setCreateSupplierOpen] = useState(false);
+
+  const [filters, setFilters] = useState<PurchaseOrderFilters>({
+    supplierId: searchParams.get('supplier') || undefined,
+    purpose: searchParams.get('purpose') || undefined,
+    status: searchParams.get('status') || undefined,
+    dateFrom: searchParams.get('from') || undefined,
+    dateTo: searchParams.get('to') || undefined,
+  });
+  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>(
+    filters.dateFrom && filters.dateTo
+      ? { from: new Date(filters.dateFrom), to: new Date(filters.dateTo) }
+      : {}
+  );
+
+  const updateFilterUrl = (patch: PurchaseOrderFilters) => {
+    setFilters((prev) => {
+      const next = { ...prev, ...patch };
+      setSearchParams((prevParams) => {
+        const sp = new URLSearchParams(prevParams);
+        const keys: (keyof PurchaseOrderFilters)[] = ['supplierId', 'purpose', 'status', 'dateFrom', 'dateTo'];
+        keys.forEach((k) => {
+          const spKey = k === 'supplierId' ? 'supplier' : k === 'dateFrom' ? 'from' : k === 'dateTo' ? 'to' : k;
+          const v = next[k];
+          if (v && v !== 'all') sp.set(spKey, v);
+          else sp.delete(spKey);
+        });
+        return sp;
+      }, { replace: true });
+      return next;
+    });
+  };
 
   // Custom hook for all DB operations
   const {
@@ -49,7 +93,7 @@ export default function AdminPurchaseOrders() {
     receiveItemsMutation,
     makePaymentMutation,
     unlinkOrdersFromPurchaseMutation,
-  } = usePurchaseOrders(viewingOrder?.id);
+  } = usePurchaseOrders(viewingOrder?.id, filters);
 
   return (
     <div className="space-y-6">
@@ -89,6 +133,116 @@ export default function AdminPurchaseOrders() {
         </TabsList>
 
         <TabsContent value="orders" className="space-y-4">
+          {/* Filters */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={filters.supplierId || 'all'} onValueChange={(v) => updateFilterUrl({ supplierId: v })}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="全部供應商" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部供應商</SelectItem>
+                {suppliers.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={filters.purpose || 'all'} onValueChange={(v) => updateFilterUrl({ purpose: v })}>
+              <SelectTrigger className="w-32">
+                <SelectValue placeholder="全部類型" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部類型</SelectItem>
+                <SelectItem value="general">一般進貨</SelectItem>
+                <SelectItem value="repair_parts">維修叫料</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={filters.status || 'all'} onValueChange={(v) => updateFilterUrl({ status: v })}>
+              <SelectTrigger className="w-32">
+                <SelectValue placeholder="全部狀態" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部狀態</SelectItem>
+                <SelectItem value="draft">草稿</SelectItem>
+                <SelectItem value="ordered">已下單</SelectItem>
+                <SelectItem value="partial_received">部分收貨</SelectItem>
+                <SelectItem value="received">已收貨</SelectItem>
+                <SelectItem value="cancelled">已取消</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Date range filter */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-[260px] justify-start text-left font-normal",
+                    !dateRange.from && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dateRange?.from ? (
+                    dateRange.to && !isSameDay(dateRange.from, dateRange.to) ? (
+                      <>
+                        {format(dateRange.from, "yyyy/MM/dd")} ~ {format(dateRange.to, "yyyy/MM/dd")}
+                      </>
+                    ) : (
+                      format(dateRange.from, "yyyy/MM/dd")
+                    )
+                  ) : (
+                    <span>選擇日期範圍</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="range"
+                  selected={dateRange as any}
+                  onSelect={(range) => {
+                    const resolved: { from?: Date; to?: Date } = range?.from && !range.to
+                      ? { from: range.from, to: range.from }
+                      : range || {};
+                    setDateRange(resolved);
+                    updateFilterUrl({
+                      dateFrom: resolved.from ? format(resolved.from, "yyyy-MM-dd") : undefined,
+                      dateTo: resolved.to ? format(resolved.to, "yyyy-MM-dd") : undefined,
+                    });
+                  }}
+                  numberOfMonths={2}
+                  locale={zhTW}
+                />
+              </PopoverContent>
+            </Popover>
+            {(filters.dateFrom || filters.dateTo) && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="清除日期篩選"
+                onClick={() => {
+                  setDateRange({});
+                  updateFilterUrl({ dateFrom: undefined, dateTo: undefined });
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+            {(filters.supplierId || filters.purpose || filters.status || filters.dateFrom || filters.dateTo) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => {
+                  setDateRange({});
+                  updateFilterUrl({ supplierId: undefined, purpose: undefined, status: undefined, dateFrom: undefined, dateTo: undefined });
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" />清除篩選
+              </Button>
+            )}
+          </div>
+
           <OrderListTab
             orders={orders}
             onView={(order) => setViewingOrder(order)}

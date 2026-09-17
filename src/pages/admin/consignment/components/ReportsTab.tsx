@@ -109,10 +109,7 @@ export function ReportsTab({ reports, isLoading }: ReportsTabProps) {
                 </td>
                 <td className="py-2 px-3">{report.store?.name || '-'}</td>
                 <td className="py-2 px-3">
-                  {report.item?.product?.name || '-'}
-                  {report.item?.variant?.name && (
-                    <span className="text-xs text-muted-foreground ml-1">({report.item.variant.name})</span>
-                  )}
+                  {report.item?.variant?.name || report.item?.product?.name || '-'}
                 </td>
                 <td className="text-right py-2 px-3 font-medium">{report.quantity}</td>
                 <td className="text-right py-2 px-3">

@@ -186,71 +186,14 @@ export function VariantEditDialog({
         init();
     }, [open, variant?.id, product?.id]);
 
-    const getHexCodeForColor = (label: string): string | null => {
-        if (!label) return null;
-        const color = libraryColors.find(c => c.name.trim().toLowerCase() === label.trim().toLowerCase()
-            || c.code?.toUpperCase() === label.trim().toUpperCase());
-        return color?.hex_code || null;
-    };
-
-    const resolveOptionValueId = async (groupId: string, label: string, hexCode?: string | null): Promise<string | null> => {
-        if (!label) return null;
-        const existing = optionGroups.find(g => g.id === groupId)?.values.find(v => (v.label || v.value) === label);
-        if (existing) {
-            if (hexCode && !existing.hex_code) {
-                await (supabase.from('product_option_values') as any).update({ hex_code: hexCode }).eq('id', existing.id);
-            }
-            return existing.id;
-        }
-        const { data, error } = await (supabase.from('product_option_values') as any).insert({
-            group_id: groupId,
-            label,
-            value: label,
-            hex_code: hexCode || null,
-        }).select().single();
+    const upsertVariantOptions = async (variantId: string, optionValues: Record<string, string>) => {
+        const items = Object.entries(optionValues || {}).map(([groupId, label]) => ({ group_id: groupId, label }));
+        const { data, error } = await (supabase.rpc as any)('upsert_variant_options', {
+            p_variant_id: variantId,
+            p_items: items,
+        });
         if (error) throw error;
-        return data.id;
-    };
-
-    const manageVariantOptions = async (variantId: string, optionValues: Record<string, string>) => {
-        await (supabase.from('product_variant_options') as any).delete().eq('variant_id', variantId);
-
-        const resolved: { groupId: string; valueId: string }[] = [];
-        for (const [groupId, label] of Object.entries(optionValues)) {
-            const group = optionGroups.find(g => g.id === groupId);
-            const hexCode = group && isColorGroupName(group.name) ? getHexCodeForColor(label) : undefined;
-            const valueId = await resolveOptionValueId(groupId, label, hexCode);
-            if (valueId) resolved.push({ groupId, valueId });
-        }
-
-        const inserts = resolved.map(({ groupId, valueId }) => ({
-            variant_id: variantId,
-            option_group_id: groupId,
-            option_value_id: valueId,
-        }));
-        if (inserts.length > 0) {
-            const { error } = await (supabase.from('product_variant_options') as any).insert(inserts);
-            if (error) throw error;
-        }
-
-        if (product?.id) {
-            const { data: productVariants } = await (supabase.from('product_variants') as any)
-                .select('id')
-                .eq('product_id', product.id);
-            const variantIds = (productVariants || []).map((v: any) => v.id);
-            if (variantIds.length > 0) {
-                const { data: allLinks } = await (supabase.from('product_variant_options') as any)
-                    .select('option_value_id')
-                    .in('variant_id', variantIds);
-
-                const usedValueIds = new Set((allLinks || []).map((l: any) => l.option_value_id));
-                const allGroupValueIds = optionGroups.flatMap(g => g.values.map(v => v.id));
-                const orphanIds = allGroupValueIds.filter(id => !usedValueIds.has(id));
-                if (orphanIds.length > 0) {
-                    await (supabase.from('product_option_values') as any).delete().in('id', orphanIds);
-                }
-            }
-        }
+        if (data?.ok === false) throw new Error(data.reason || '更新變體選項失敗');
     };
 
     const createMutation = useMutation({
@@ -275,7 +218,7 @@ export function VariantEditDialog({
             const { data, error } = await (supabase.from('product_variants') as any).insert(finalData).select().single();
             if (error) throw error;
 
-            await manageVariantOptions(data.id, optionValues || {});
+            await upsertVariantOptions(data.id, optionValues || {});
 
             if (values.spec_values && (product as any)?.category_ids?.length > 0) {
                 const serializedSpecsData = serializeSpecs(values.spec_values, specMap);
@@ -326,7 +269,7 @@ export function VariantEditDialog({
             const { error } = await (supabase.from('product_variants') as any).update(finalUpdates).eq('id', variant!.id);
             if (error) throw error;
 
-            await manageVariantOptions(variant!.id, optionValues || {});
+            await upsertVariantOptions(variant!.id, optionValues || {});
 
             if (values.spec_values && (product as any)?.category_ids?.length > 0) {
                 const serializedSpecsData = serializeSpecs(values.spec_values, specMap);

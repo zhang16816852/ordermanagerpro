@@ -2,17 +2,19 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useConsignment } from './hooks/useConsignment';
 import { OrderListTab } from './components/OrderListTab';
+import { StoreViewTab } from './components/StoreViewTab';
 import { CreateOrderDialog } from './components/CreateOrderDialog';
 import { OrderDetailDialog } from './components/OrderDetailDialog';
 import { ReportsTab } from './components/ReportsTab';
 import { ConsignmentOrder } from './types';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, ClipboardList, ClipboardCheck } from 'lucide-react';
+import { Plus, ClipboardList, ClipboardCheck, ListOrdered, Building2 } from 'lucide-react';
 
 export default function AdminConsignment() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'orders');
+  const [view, setView] = useState<string>(searchParams.get('view') || 'list');
   const [createOpen, setCreateOpen] = useState(false);
   const [viewingOrder, setViewingOrder] = useState<ConsignmentOrder | null>(null);
   const {
@@ -21,6 +23,16 @@ export default function AdminConsignment() {
     pendingReports,
     reportsLoading,
   } = useConsignment();
+
+  const setViewParam = (v: string) => {
+    setView(v);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (v !== 'list') next.set("view", v);
+      else next.delete("view");
+      return next;
+    }, { replace: true });
+  };
 
   return (
     <div className="space-y-6">
@@ -58,11 +70,37 @@ export default function AdminConsignment() {
         </TabsList>
 
         <TabsContent value="orders" className="space-y-4">
-          <OrderListTab
-            orders={orders}
-            onView={(order) => setViewingOrder(order)}
-            isLoading={ordersLoading}
-          />
+          {/* View toggle: 訂單視角 / 店家視角 */}
+          <div className="flex gap-1">
+            <Button
+              variant={view === 'list' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewParam('list')}
+            >
+              <ListOrdered className="h-4 w-4 mr-1.5" />訂單視角
+            </Button>
+            <Button
+              variant={view === 'partner' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewParam('partner')}
+            >
+              <Building2 className="h-4 w-4 mr-1.5" />店家視角
+            </Button>
+          </div>
+
+          {view === 'partner' ? (
+            <StoreViewTab
+              orders={orders}
+              onView={(order) => setViewingOrder(order)}
+              isLoading={ordersLoading}
+            />
+          ) : (
+            <OrderListTab
+              orders={orders}
+              onView={(order) => setViewingOrder(order)}
+              isLoading={ordersLoading}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="reports" className="space-y-4">

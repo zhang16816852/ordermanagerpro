@@ -2,9 +2,74 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（編輯訂單 Maximum update depth 修復，2026-09-16）
+
+- **根因**：`AdminOrderForm.tsx` 以行內箭頭 `onToggleStatus: () => c.toggleStatusMutation.mutate()` 傳給 `useAdminOrderFormHeader`，每次 render 皆產生**新函數 identity**；該 hook 的 `useLayoutEffect` deps 又含 `onToggleStatus`/`navigate`/`navigateBack` → 每次 render effect 重跑並 `setPageHeader(新物件)` → `PageHeaderProvider` 更新 → 所有 `usePageHeader` consumer（含 AppLayoutContent 與 AdminOrderForm 自身）重 render → 新箭頭 → effect 重跑 → **無限迴圈**（報錯位置在 SidebarNav/AppLayout tree，實為 context 迴圈表象）。
+- **修法（`useAdminOrderFormHeader.tsx`，僅此一檔）**：回呼一律存進 `callbacksRef`（每 render 更新 ref.current，不放入 deps），effect 內自 ref 取值呼叫；dep array 改只留純值（`setPageHeader`/`isEditMode`/`orderIdVal`/`orderCodeVal`/`orderStatusVal`/`orderConsignmentMode`/`displayStoreName`/`orderType`/`isTogglePending`）。此模式對未來任何「呼叫端傳入不穩定回呼」皆免疫。`ProductFormPage` 的 setPageHeader effect 因 `handlePreview`/`initialData` 皆已 useCallback/useMemo 穩定，無此問題。
+
+## 近期變更（訂單/出貨池/銷售-寄賣數量關係守門補強，2026-09-16）
+
+- **Migration `20260916000004_strengthen_quantity_guards.sql`（已套用遠端）**：為「訂單 ↔ 出貨池 ↔ 銷售單/寄賣單」間 4 支轉換 RPC 補上**二次數量驗證**（全部只 REPLACE body、簽名不變，前端零改動）：
+  - **`ship_from_pool`**：每項出貨前檢查 `pool.quantity ≤ order_items.quantity - shipped_quantity`，超賣直接 `RAISE EXCEPTION '出貨池品項 % 欲出貨 % 件，但訂單尚未出貨僅剩 % 件…'`（修補原本完全信賴 pool 建池正確、無二次驗證的洞）。
+  - **`create_consignment_shipment`**：重用既有來源 `order_items`（`v_oi_id IS NOT NULL` 分支）時，檢查 `v_oi_shipped + v_ship_qty > v_oi_qty` 即 RAISE（防止寄賣重複/超量出貨）；`order_item_id` NULL 的新建分支不受影響。
+  - **`create_consignment_shipment_layer`**：加低成本 sanity bound——傳入出貨量 `v_qty > v_oi.quantity`（order_item 宣告總量）即 RAISE。⚠️ 本層**刻意不讀 `shipped_quantity`**：三支呼叫端（ship_from_pool/direct_ship/create_order）都在呼叫前已先更新 shipped_quantity，讀剩餘量會誤判；剩餘量驗證由呼叫端負責。
+  - **`update_order_with_items`**：新增兩組不依賴收款狀態的守門（`{ok:false, reason}` 格式，前端 `useOrderFormMutations` 已會解析 toast）——① 刪除既有品項若 `shipped_quantity > 0` 一律擋下（原本靠 `sales_note_items` FK 拋模糊錯誤）；② 既有品項新 `quantity` 不可低於 `shipped_quantity`（防止負剩餘）。
+- **驗證（遠端 BEGIN…ROLLBACK）**：`ship_from_pool` 故意塞超額 pool 列→正確 RAISE 且交易回滾、無殘留；正常剩餘量出貨成功；`update_order_with_items` 改量/刪除已出貨品項皆回 `{ok:false, reason}`。
+
+## 近期變更（直轉銷售單清出貨池 + 回補殘留修復，2026-09-16）
+
+- **根因**：`direct_ship_order` 一般分支只把「剩餘未出貨量」全寫進銷貨單，**不曾 `DELETE FROM shipping_pool`**（僅寄賣分支經 layer 清池）→ 有出貨池品項的訂單直轉銷售單後，池內殘留同一品項（STALE 列）。後續 `delete_sales_note`／`correct_sales_note` 回補池採「累加」（`pool_qty + 退回量`）→ 疊上殘留列 ⇒ **出貨池數量翻倍（×2）**（OD26091600001 已出現此情況：池 qty 2 vs 訂單 qty 1、pool 4 vs qty 2 等）。另有 `OD26091400012`：兩池列各 8、商品 qty 5，總池量 16 遠超剩餘 5。
+- **Migration `20260916000005_fix_direct_ship_pool_cleanup.sql`（已套用遠端）**：三修並行，前端零改動：
+  - **`direct_ship_order`**：寄賣＋一般兩分支，逐項 `UPDATE shipped` 後立即 `DELETE FROM shipping_pool WHERE order_item_id = ...`（維持「已出貨 ⇒ 不在出貨池」不變式，與 `ship_from_pool`／`create_consignment_shipment_layer` 一致）。
+  - **`delete_sales_note` / `correct_sales_note`**（移除分支）：回補後加「上限防呆」——回補後剩餘量 ≤ 0 → 刪除殘留列；> 0 但 pool 超過剩餘量 → 截斷至剩餘量。覆蓋合法累加（同 item 多單正確）與殘留超量（stale + 累加 = ×2）兩種路徑。
+  - **既有資料修復**（order_item 級重建，非列級）：① `remaining <= 0` 的池列全部刪除（68→22）；② 多列且 `SUM(pool) > remaining` 時，先刪該 item 全部列，再重建**單列 = 剩餘量**（沿用最早列之 store/warehouse/sort_order），正確修復 OD26091400012（池 16→5）與 OD26091600001（46 列 ×2 全清）。
+- **遠端驗證**：修復後 `shipping_pool` 全 22 列，`rows_for_fully_shipped = 0`、`over_remaining = 0`；3 支函式守門均已 live（`direct_ship_order` 清池✓、`delete_sales_note`/`correct_sales_note` 上限防呆✓）。
+
+## 近期變更（決定性分享 token + 寄賣單號碼依 shipped_at，2026-09-16）
+
+- **決定性分享 token（migration `20260916000002_share_token_deterministic.sql`，已套用遠端）**：`sales_notes`＋`consignment_orders` 的分享 `access_token` 改為「由單號 code 決定性推導」——新表 `public.app_secrets`（key/value，RLS 僅 admin policy `app_secrets_admin_all`）＋seed `share_token_v1`（`encode(gen_random_bytes(32),'hex')`）；新 RPC **`share_token_for_code(p_code TEXT) RETURNS UUID`**（SECURITY DEFINER，`SET search_path = public`，revoke public/anon、grant authenticated）＝ `extensions.hmac(p_code::bytea, secret::bytea, 'sha256')` 前 16 bytes 組 UUID 8-4-4-4-12（⚠️ 需 schema-qualify `extensions.hmac`，pgcrypto 在 extensions schema，`search_path=public` 下裸 hmac 會 42883）。**驗證改 OR 條件**：(storage `access_token = p_token::UUID` **或** `share_token_for_code(code) = p_token::UUID`)——不回填既有資料、不覆寫 stored token，RPC 預生成的隨機回傳 token 仍有效、舊 QR 不失效；「刪除單號重用」時舊決定性連結會指到新單（使用者已知悉接受，見下方已知風險）。`get_shared_sales_note_details`／`get_shared_consignment_details`（SECURITY DEFINER）重發改用此 OR 驗證，前者 items 改依 `COALESCE(sni.sort_order,0), oi.sort_order, oi.created_at` 排序、後者回傳新增 `shipped_at`；`orders` 維持隨機永久 token 不動。pgcrypto 亦由本 migration `CREATE EXTENSION IF NOT EXISTS`。
+- **寄賣單號碼改依出貨時間（migration `20260916000003_consignment_code_by_shipped_at.sql`，已套用遠端）**：`consignment_orders` 新增 **`shipped_at TIMESTAMPTZ`**；新 RPC **`next_consignment_code(p_shipped_at, p_store_id)`**（SECURITY DEFINER）產 **`CS{YYMM}{店碼}{0001}`**（YYMM 看出貨月份，fallback created_at/NOW；店碼取 `stores.code`，receive_from_supplier 或無碼時 fallback `'SP'`；流水 4 位，`system_sequences` key `consignment_{YYMM}_{store_id|SP}` 逐月逐店累加）。`trgfn_generate_consignment_code` 改 **BEFORE INSERT OR UPDATE OF status**：INSERT draft → 暫存碼 `CS-DRAFT-{id 前 8 碼}`（唯一性依 uuid 前 8 hex，且 BEFORE trigger 看得到 default 已套用產生的 id）；INSERT 非 draft → 正式碼；UPDATE draft→active 且 code 為 `CS-DRAFT-%`/NULL → 換正式碼（月份看 shipped_at）。
+- **`create_consignment_shipment_layer` 改 canonical 6 參數**（drop 舊 3 參數 `(jsonb,uuid,uuid)`）：`(p_store_id uuid, p_created_by uuid, p_order_items jsonb, p_shipped_at timestamptz DEFAULT NULL, p_notes text DEFAULT NULL, p_warehouse_id uuid DEFAULT NULL)`——INSERT 帶 `shipped_at`、既有 draft 轉 active UPDATE 也帶；倉庫 fallback `COALESCE(p_warehouse_id,(SELECT id FROM warehouses WHERE code='own'))`。**三支呼叫端全部重發並串 `p_shipped_at`**：`ship_from_pool`（8 參數，保留遠端 audit_logs／整池 DELETE／ANY()-in 回滾／FOREACH 收斂 body，僅 layer call 改 5 參數 `(v_store_id,p_created_by,v_consignment_items,v_shipped_at,p_notes)`）、`direct_ship_order`（7 參數，consignment 分支 call 6 參數＋warehouse）、`create_order_with_sales_note`（7 參數，consignment 分支 call 6 參數）。`create_consignment_shipment` 重發：落地 `shipped_at=COALESCE(p_shipped_at,NOW())`＋activation UPDATE 帶上＋回傳加 `'code'`（修復原 `p_shipped_at` dead param、且補全「下單即出貨／出貨池」路徑的寄賣碼月份正確）。前端零改動（useConsignment 仍傳 `p_shipped_at: null`、分享按鈕用 stored token）。
+- ⚠️ **已知風險（不法規避）**：`sales_notes` code 採遞補制（`generate_sequential_code` NOT EXISTS 重用空缺序號）＋決定性 token ⇒ 刪掉一單再產生同號新單時，**持舊單決定性分享連結者會看到新單**（隨機 stored token 連結不受影響）。寄賣碼為累加制無此問題。使用者已於 2026-09-16 拍板接受此權衡；若日後不可接受，需改 sales_notes 為累加制或於決定性 token 中混入建立時間。
+
+## 近期變更（銷貨單刪除 23505 修復，2026-09-16）
+
+- **根因**：`correct_sales_note` 對**同一品項「先移除（Phase 1 寫 `sales_note_deletion` movement）再加回（Phase 2 寫 `sales_shipment`）」**同張銷貨單後，`delete_sales_note` 對該 `order_item_id` 又要 **INSERT 另一筆 `sales_note_deletion`**，撞上部分唯一索引 `idx_invmov_unique_deletion`（`(sales_note_id, order_item_id) WHERE source_type='sales_note_deletion' AND order_item_id IS NOT NULL`，migration `20260905000005` 定義）→ 23505、整支 RPC 交易回滾、單刪不掉。次級殘留：舊出貨路徑的 `sales_shipment` movement `order_item_id` 為 NULL，`correct_sales_note` Phase 1 只依 order_item_id 刪舊 shipment，刪不到這些 NULL 列（僅 ledger 歷史，不影響帳面）。
+- **Migration `20260916000001_fix_sales_note_deletion_merge.sql`（已套用遠端）**：新增共用 **`public.upsert_sales_note_deletion_movement(p_sales_note_id, p_order_item_id, p_product_id, p_variant_id, p_warehouse_id, p_quantity, p_reference_code, p_created_by)`**（SECURITY DEFINER，`REVOKE ... FROM public, anon, authenticated`；**僅供 delete/correct 兩支內部呼叫，不開放直接執行**，避免任意加庫存）——若 `(sales_note_id, order_item_id)` 已有 `sales_note_deletion` 列則**累加（UPDATE `quantity_change`＋`balance_after`）**並**手動同步 `product_inventory.quantity`**（BEFORE INSERT trigger `trg_sync_inventory_on_movement` 只對 INSERT 生效，UPDATE 不會自動扣/加），否則照舊 INSERT（trigger 處理）。`delete_sales_note`（非寄賣分支）與 `correct_sales_note`（Phase 1 移除非寄賣分支）皆改呼叫此 helper，其餘 log 完全複製原 migration 不變。驗證：於遠端 `BEGIN...ROLLBACK` 內呼叫 `delete_sales_note` 成功回滾、品項 `shipped_quantity→0/waiting`、出貨池回補，無 23505。
+
+## 近期變更（大型元件拆分 Phase 1–4：全站 16 支 ≥400 檔案已拆，2026-09-13）
+
+分批把 55 支 ≥400 行的過大檔案拆成「型別檔＋queries/mutations hook＋子視圖元件＋薄殼」組合，全程 **UI 行為不變**；每批 `npm run typecheck`（0 errors）＋`npm run lint`（0 errors，59 warnings 皆既有）＋`npm run build` 通過。規則：薄殼不做型別 re-export；純型別檔／純元件檔不觸發 react-refresh 警告；拆分後子視圖自行持有原屬父元件的 state/effect/遞迴 renderer，行為保持一致。
+
+- **`CatalogSidebar` 拆分（`src/components/products/catalog/`，818→244 薄殼，本批）**：新 `catalogSidebarTypes.ts`（CatalogSidebarProps＋4 section props＋`getFilterConfig`）、`sidebarPrimitives.tsx`（SectionHeader/SectionSkeleton/EmptyState）、`CategoryFilterSection`（持有 expandedCategories）、`BrandSeriesFilterSection`（持有 expandedBrands）、`DeviceModelFilterSection`（持有 modelSearch/expandedDeviceBrands/expandedDeviceSeries＋自動展開 effect＋deviceModelTree/deviceModelLookup/deviceBrandNameMap/總數 memo＋隱藏守門「`totalDeviceModelCount===0 && !modelSearch` 時 return null」，故殼不再需要 model 相關 memo）、`SpecFilterSection`（包既有 `AdvancedSpecFilters`）。4 importer（`ProductSelector`、store `Catalog.tsx`、`ProductsPage`、`OrderComposer`）完全不用改。
+- **`SalesNoteCorrectDialog` 拆分（`src/components/sales/`，809→236 薄殼，本批）**：新 `salesNoteCorrectTypes.ts`（CorrectAddItem/CorrectNewItem/PoolItem/OrderItemCandidate/NoteReference/PriceChange/itemLabel）、`useSalesNoteCorrectQueries.ts`（`otherNoteRefs`/`poolItems`/`orderCandidates` 三支 query，從 dialog 抽出）、`CorrectPriceTable`（改價表，`onPriceEdit` 由殼傳 setter 邏輯）、`CorrectRemoveTable`（勾選移除）、`CorrectAddTable`（出貨池＋訂單未出貨兩區塊）、`CorrectNewItemSection`（內含 newItemDraft/options/handleAddNewItem 處理，`products` 以 `any[]` 傳入）、`CorrectSummary`（確認區）。僅 `SalesNoteDetailDialog.tsx:12` import，不受影響。
+- 先期完成：`EntryForm`(1684)、`OrderListPage`(1363)、`AdminOrderForm`(1368)、`Stores`(1049)、consignment `OrderDetailDialog`(914)、repair `detail.tsx`(903)、`DeviceBlockSection`(819)、`OrderItemsTable`(839)、`ShippingPool`(826，新目錄 `src/pages/admin/shippingPool/`)。過程中修復落網 importer：`useOrderFormMutations.ts` 改由 `@/components/order/orderItemsTypes` import `OrderItemRow`（原本誤 import `OrderItemsTable`）；`src/types/repair.ts` 改由 `deviceBlockTypes` import。
+- **剩餘 53 支仍 ≥400**（`npm run` 掃描），薄殼門檻目標 <400：`Stores` 846、`VariantBatchCreator` 825、`Reps` 777、`VariantManager` 772、`OrderListPage` 757、`SpecValueEditor` 756、`AdminOrderForm` 751、`VariantSection` 721、`RepCommissionPage` 720、`AcceptInvite` 688 等，續拆時仍以「型別/hook/子視圖/薄殼」手法並依上述位址慣例。
+
+## 近期變更（維修收款＋維修單日期＋採購類型＋銷貨匯出＋寄賣雙視角＋變體名稱單一顯示，2026-09-12）
+
+- **維修單收款（migration `20260912000001_repair_payment_status.sql`）**：`repair_orders` 新增 `payment_status`（`unpaid`/`paid` 預設 `unpaid`）；新 RPC `public.sync_repair_order_payment_status(p_repair_order_id)`（SECURITY DEFINER，revoke public/anon、grant authenticated）——計算「該維修單若有任一 `accounting_entries`（`type='income'`、`payment_status IN ('paid','partial')`，entry row `reference_type='repair_order'` 直接綁定 **或** `accounting_entry_references` 子表有該單據）→ `paid`」；`NULL` 直接 return。前端：`useAccounting.createEntryMutation` 收款後呼叫同步（並 invalidate `['repair_orders']`）；`delete_accounting_entry` RPC（`20260911000006`）收集 `v_repair_order_ids` 於回退後迴圈同步；維修單詳情（admin＋store）新增「登記收款」按鈕開 `EntryDialog`（`prefill.repair` 帶 `repairOrderId/repairCode/storeId/customerName/description`，`EntryForm` repair 模式寫 `reference_type='repair_order'`）＋列表（`RepairOrdersPage`/store index）每列顯示收款狀態 `PaymentStatusBadge`。
+- **維修單日期（migration `20260912000002_repair_order_date.sql`）**：`repair_orders` 新增 `order_date DATE NOT NULL DEFAULT CURRENT_DATE`（單據日期）；admin/store「新增/編輯」表單日期輸入預設今天，卡片顯示 `單據日期` 與 `建立於`。⚠️ lint 慣例：字串中勿混入全形空格（`no-irregular-whitespace`）。
+- **採購單類型（migration `20260912000003_purchase_orders_purpose.sql`）**：`purchase_orders` 新增 `purpose`（`general`/`repair_parts`）；`RepairPurchaseDialog` 建立時寫 `'repair_parts'`；`usePurchaseOrders` 新增 `PurchaseOrderFilters`（`supplierId/purpose/status/dateFrom/dateTo`，server-side `.eq/.gte/.lte`＋queryKey 依賴）；`PurchaseOrdersPage` 篩選列（供應商/類型/狀態/日期區間 Popover＋Calendar zhTW＋清除篩選）；`OrderListTab` 新增「類型」欄＋`getTypeBadge`（維修叫料 violet／一般進貨 secondary，mobile card badge）。
+- **銷貨單勾選匯出（Excel）**：`SalesNoteListTable` 新增 `selectable/selectedIds/onSelectionChange`（桌面 checkbox 欄＋表頭全選、mobile card checkbox）；`AdminSalesNotes` 加選取工具列（已選 N 張／取消／匯出 Excel，`import("xlsx")` 動態載入）。格式：每單表頭列（銷貨單 code、店家、日期、類型）＋品項列（變體單一名、數量、單價、銷售金額=qty×unit_price）＋單張小計＋總計（N 張・共 X 件・總額）；檔名 `銷貨單匯出_yyyyMMdd.xlsx`、sheet「銷貨單」。
+- **寄賣雙視角（`ConsignmentPage`）**：新增訂單視角／店家視角切換（searchParams `'view'` 持久化）；店家視角＝新元件 `StoreViewTab.tsx`，`send_to_store` 依目標店家分組、`receive_from_supplier` 依供應商分組（`consignment_order_items` 以 `quantity×unit_price` 加總），組內列出各單 code/狀態/日期/總額＋查看。
+- **變體名稱單一顯示（全站 UI）**：顯示品項名稱一律「**有變體只顯示變體名，無變體才回退產品名**」，不再「產品 - 變體」並陳；**商品卡容器（代表整支商品，如商品卡片/Dialog 標題）保留產品名**。已改：`OrderItemsTable`（`getComponentInfo` 已優先 variant，修正 compact 重複「name - variant」與詳情子列）、`ItemsTableView`、admin `orders/list` 的 `ItemTableView`/`AggregateTableView`/`AggregateCardsView`、store `SalesNotes`（寄賣回報表）、PO `OrderDetailDialog`/`ReceivingTab`/`ImportFromOrdersDialog`、consignment `OrderDetailDialog`（明細＋編輯品項）/`ReportsTab`、`OrderReviewPanel`、`CartPanel`、`OrderGridProductPicker` badge、`useInventory`（name＝variant、specs 欄改顯示所屬產品名）、`ProductDetailDialog` 加入購物車 toast、accounting `ReferenceViewer`、分享/列印（`SharedReceiptExport` 原即 `variant ?? name`）、`SalesNoteDetailDialog` 原即 variant 優先、維修單零件名 already `part_name || variant?.name || product?.name`，皆無需更動。`npm run typecheck`＋`npm run lint`（0 errors，62 warnings 為既有）＋build 成功。
+
 ## 專案一句話
 
 手機/3C 通路訂單管理系統：後台管理（商品/品牌/庫存/採購/會計/出貨）+ 門市端（訂單/銷貨/維修/收貨）+ 媒合市場，採「Supabase 後端 + IndexedDB 離線優先快取」架構。
+
+## 近期變更（變體生成共用層 + 兩入口去重，2026-09-12）
+
+- **共用邏輯層 `src/utils/variantGeneration.ts`（單一真值）**：`VariantBatchCreator`（`/admin/products` 批次建立變體）與 `CopyProductDialog`（複製產品 wizard）重複的「變體產生＋payload 組裝」全部抽到此模組，SKU／名稱／排序／payload 規則兩入口完全一致，**改動本檔＝兩入口同時生效**。核心 API：
+  - 型別：`OptionValueInput`（含 `wholesalePrice/retailPrice/hexCode`）、`OptionGroupInput`、`SharedVariant`（＝舊 GeneratedVariant，含 `optionValueIds/_modelGroupId/_modelGroupType/_dbId`）、`ModelItem`、`ModelItemRef`、`VariantEditableField`、`OptionGroupRef`、`OptionGroupSuggestion`、`GenerateVariantCombo`。
+  - 生成：`getActiveGroups`（name＋有值）、`cartesianProduct`、`generateVariantCombos(input)`（笛卡爾：第一群組 outer、型號 inner；無群組時直接 `modelItems` 逐一建）、`buildVariantPayload`（套價格／barcode，unified 覆寫逐值價）、`resolveVariantPrices`。
+  - 輔助：`createOptionValue/createOptionGroup`、`skuPartOf/normalizeSegment/parseVariantNumber/isColorGroupName/isPredefinedColorValue`、`buildPriceMap`、`findLibraryColor`/`resolveColorValue`（色彩庫比對，name→code）、`getColorGroupValueIds/getActiveValueLabels`。
+  - payload：`buildGroupsPayload`、`buildDedupedVariantsPayload`（SKU 去重）、`buildVariantOptionsPayload`、`buildModelRelationsPayload`（依是否有逐變體 `_modelGroupId` 自動切 per-variant／全變體×全部 refs 模式）、`estimateComboCount`。
+- **共用元件 `src/components/products/variant/`（新目錄）**：`VariantOptionsEditor.tsx`（群組卡＋`ColorSelectField` 色彩庫＋每值 名稱/SKU值/批發/零售/色碼＋批量貼上 Dialog＋分類建議欄 props `suggestions/suggestionsLoading/onImportSuggestion/onImportAllSuggestions`，全受控 props `groups/onChange`）與 `VariantPreviewTable.tsx`（`variants: SharedVariant[]/onUpdate/onRemove/disablePrices` 可編輯表格，價格用 `parseFloat||0`）。
+- **`VariantBatchCreator.tsx` 重構**：移除本機 `OptionValueInput/OptionGroupInput/GeneratedVariant/OptionValueTable/cartesianProduct/isColorGroupName/findLibraryColor` 及 payload 組裝，全部改引用共用層＋兩元件；**保留** VBC 特有的 suggestions 抓取、barcode 列表、預設價＋unified 提示、`mergeWithExisting`/`identityKey`（含 DB 快照 smart merge）、`diffSummary`（新增/更新/保留/孤立清單）、`batch_upsert_product_options` RPC、`checkVariantReferences`＋orphan 確認 Dialog、`delete_variant_if_safe` 清理。
+- **`CopyProductDialog.tsx` 重構**：選項 Tab 改用 `VariantOptionsEditor`（升級為 VBC 全功能版：色彩庫＋每值批發/零售價＋批量貼上＋SKU 值輸入）；預覽 Tab 改用 `VariantPreviewTable`；可用變體計算改用共用 `estimateComboCount`；`buildVariants` 改用 `generateVariantCombos`＋`buildVariantPayload`；payload 組裝改用共用 builder。**行為守則**：`currentSignature` 與 `optionsChanged` 快照**含每值 `wholesalePrice/retailPrice`**（改價即標 preview stale／觸發重建，避免 RPC 舊價覆寫新編輯）；Copy 型號語意為「全部變體 × 全部 refs」（非逐變體），故 handleCopy 對 `variantsForRegen` 先 strip 掉 `_modelGroupId/_modelGroupType` 再送 `buildModelRelationsPayload`；`loadOriginalData` 的 value 補 `wholesalePrice/retailPrice=''` 對齊共用型別。
+- ⚠️ 慣例：jsonb RPC payload 一律直接傳 JS 陣列（不 `JSON.stringify`）；`npm run typecheck`＋`npm run lint` 通過、build 成功。
 
 ## 技術棧
 
@@ -335,14 +400,16 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 
 ## 近期變更（銷貨單修正 correct_sales_note + reverse_consignment_shipment bug 修復，2026-09-11）
 
-- **Migration `20260911000007_correct_sales_note.sql`**：新 RPC `correct_sales_note(p_sales_note_id UUID, p_items_to_remove UUID[] DEFAULT '{}', p_items_to_add JSONB DEFAULT '[]', p_new_items JSONB DEFAULT '[]', p_created_by UUID DEFAULT NULL) RETURNS JSONB`（SECURITY DEFINER，僅 admin）——在**不失效 QR code / access_token**（欄位不動）的前提下修正已出貨銷貨單的品項：
+- **Migration `20260911000007_correct_sales_note.sql`＋`20260911000008_correct_sales_note_add_price_updates.sql`**：RPC `correct_sales_note(p_sales_note_id UUID, p_items_to_remove UUID[] DEFAULT '{}', p_items_to_add JSONB DEFAULT '[]', p_new_items JSONB DEFAULT '[]', p_created_by UUID DEFAULT NULL, p_price_updates JSONB DEFAULT '[]') RETURNS JSONB`（SECURITY DEFINER，僅 admin）——在**不失效 QR code / access_token**（欄位不動）的前提下修正已出貨銷貨單的品項與價格。⚠️ 原 5 參數版本已於 `20260911000009` DROP，現為**單一 6 參數**簽名（避免 PostgREST overload 歧義）。
   - **守門**：銷貨單存在、`status <> 'received'`、無會計分錄（`accounting_entries`＋`accounting_entry_references` two-path）、無 `rep_commission_payouts`、無未 reversed 的 `consignment_sales`；追加來源**僅限同店家**（.eq store_id 比對，跨店擋下）。
   - **Phase 1 移除**（`p_items_to_remove`＝sales_note_item ids）：先 DELETE 舊 `sales_shipment` movement 釋放 `(sales_note_id, order_item_id)` unique 索引 → 新增 reversal movement 回勾庫存 → 回退 `order_items.shipped_quantity/status` → 品項**退回出貨池**（`shipping_pool` 依 `UNIQUE(order_item_id)` 採 SELECT/UPDATE 或 INSERT，`trg_shipping_pool_auto_sort_order` 自動派號）→ DELETE sales_note_item。
   - **Phase 2 追加**（`p_items_to_add`＝`[{order_item_id, quantity}]`，可來自出貨池或同店家訂單未出貨量）：檢查剩餘未出貨量 `quantity - shipped_quantity >= quantity` → 新增 sales_note_item（`sort_order = MAX+1`）→ 依 `order_items.inventory_source_type` 扣庫存（store_consignment 走 `allocate_inventory`，其餘 `inventory_movements` `sales_shipment`）→ 回填 `shipped_quantity/status` → 從出貨池移除該 order_item。
   - **Phase 3 完全新品**（`p_new_items`＝`[{product_id, variant_id?, quantity, unit_price}]`）：先建 `orders`（`source_type='admin_proxy'`、`status='shipped'`、`consignment_mode=false`、店名如「系統自動建立（銷貨單修正）」＋`p_created_by`）＋ `order_items`（status='shipped'、`shipped_quantity=quantity`、`unit_price` fallback `unified_wholesale_price/unified_retail_price`）→ 再建 sales_note_item（`inventory_source_type='self'`）→ 扣損庫存 `sales_shipment`。
-  - **Phase 4**：touch `sales_notes.updated_at`、受影響訂單全數出貨時收斂為 `shipped`、回傳 items 快照；`REVOKE ALL...GRANT EXECUTE TO authenticated`。
-- **前端 `src/components/sales/SalesNoteCorrectDialog.tsx`（新建）**：三個區塊——① 目前品項 checkbox 勾選移除（退回出貨池）；② 追加品項（同店家出貨池＋訂單未出貨量兩個區塊，各自數量輸入上限）；③ 完全新品（`SearchableSelect` 產品/變體 + 數量/單價，加入後可刪除，UI 明示「將自動建立新訂單」）。底部顯示原始/修正後總額與新品警示；提交經 `(supabase.rpc as any)('correct_sales_note', ...)`，成功 invalidate `admin-sales-notes`/`store-sales-notes`/`admin-orders`/`shipping-pool-items`/`inventory-list`。**須先選「移除」或「追加」或「新品」至少其一才可送出**。
-- **`SalesNoteDetailDialog`**：`SalesNoteDetail` 新增 `store_id`；新增 `enableCorrect?` prop（預設 false）；`enableCorrect && note.status !== 'received' && note.payment_status !== 'paid'` 時顯示「修正」按鈕（Pencil，藍色），渲染 `<SalesNoteCorrectDialog>`。Admin `SalesNotes.tsx` 傳 `enableCorrect={!isRep}`、`dialogData` 補 `store_id`；Store 端與 `ReferenceViewer` 未接線（維持預設 false）。
+  - **Phase 4 價格更新（2026-09-11）**（`p_price_updates`＝`[{order_item_id, new_unit_price}]`）：**直接改 `order_items.unit_price`**——`sales_note_items` 無自有價格欄，所有讀取（銷貨單總額、分享頁、會計、佣金）皆由 `order_item.unit_price` FK 動態取得，故單一資料源改價自動同步，不會雙價斷點。守門：`new_unit_price>=0`、order_item 須屬此銷貨單；其他**已收款**銷貨單引用同一 order_item 時 RAISE 擋下；未收款引用不擋、收集於回傳 `price_updates[].other_affected_sales_notes` 供前端警示。
+  - **Phase 5**：touch `sales_notes.updated_at`、受影響訂單全數出貨時收斂為 `shipped`、回傳 items 快照＋`price_updates[]`（`old_unit_price/new_unit_price/order_code/other_affected_sales_notes`）；`REVOKE ALL...GRANT EXECUTE TO authenticated`。
+- **前端 `src/components/sales/SalesNoteCorrectDialog.tsx`（新建）**：四個區塊——**⓪ 修改價格**（每列原價＋可編輯「調整為」輸入＋差異金額，改價即時顯示 `+/-` 紅綠；同 `order_item` 被其他銷貨單引用時顯示警示——**已收款**引用會**禁用該列輸入**（
+`blockedPaid`）並紅字標示不可改價，未收款引用顯示黃色「同步影響其它 SL…」；提交附 `p_price_updates` 並在確認區列出每筆「原價 → 新價」與同步影響單據）**；① 目前品項 checkbox 勾選移除（退回出貨池）；② 追加品項（同店家出貨池＋訂單未出貨量兩個區塊，各自數量輸入上限）；③ 完全新品（`SearchableSelect` 產品/變體 + 數量/單價，加入後可刪除，UI 明示「將自動建立新訂單」）。底部顯示原始/修正後總額（含調價差異）與新品警示；提交經 `(supabase.rpc as any)('correct_sales_note', ...)`，成功 invalidate `admin-sales-notes`/`store-sales-notes`/`admin-orders`/`shipping-pool-items`/`inventory-list`。**須「移除／追加／新品／調價」至少其一才可送出**。
+- **`SalesNoteDetailDialog`**：`SalesNoteDetail` 新增 `store_id`；`SalesNoteItem` 新增 `orderItemId`＋`orderCode`（供改價與影響訂單顯示）；新增 `enableCorrect?` prop（預設 false）；`enableCorrect && note.status !== 'received' && note.payment_status !== 'paid'` 時顯示「修正」按鈕（Pencil，藍色），渲染 `<SalesNoteCorrectDialog>`。Admin `SalesNotes.tsx` 傳 `enableCorrect={!isRep}`、`dialogData` 補 `store_id`＋查詢加 `order_id`/`order:orders(code)`；Store 端與 `ReferenceViewer` 未接線（維持預設 false，已同步 `store_id` 修正 TS）。
 - **`reverse_consignment_shipment` bug 修復（`20260804000002`）**：移除會誤配商品的 lookup（篩 `oi.source_order_id IS NOT NULL`＋`LIMIT 1` 卻**無 product/variant 條件**），保留以 product/variant＋`source_order_id` 精確比對的既存路徑。
 
 ## 近期變更（安全刪除守門全面化，2026-09-11）
@@ -354,7 +421,16 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 - **寄賣取消守門**：`useConsignment.cancelOrderMutation` 由直接 `DELETE FROM consignment_orders` 改呼叫既有 `delete_order_if_unadopted` RPC，被引用時 toast 顯示 reason。
 - 所有守門 RPC 遵循既有慣例：`SECURITY DEFINER`、`SET search_path = public`、`has_role(auth.uid(),'admin')`、`REVOKE ALL ... FROM public, anon`、`GRANT EXECUTE ... TO authenticated`；前端一律用 `(supabase.rpc as any)`（未進 types.ts 型別，勿手改 typegen）。
 
-## 近期變更（產品複製 RPC 修復，2026-09-11）
+## 近期變更（變體選項改用 RPC 原子化，2026-09-12）
+
+- **Migration `20260912000000_upsert_variant_options.sql`**：新 RPC `public.upsert_variant_options(p_variant_id UUID, p_items JSONB) RETURNS JSONB`（SECURITY DEFINER，`SET search_path = public`，REVOKE public/anon、GRANT authenticated）——將 `VariantEditDialog` 的 `manageVariantOptions`（原本逐筆 delete/insert + orphan 清理，5~8 次前端 HTTP，非交易）搬進**單一資料庫 transaction** 內完成：
+  - **選項值對齊**：依 `group_id` + `(label OR value) = p_label` 找既有值；不存在則 INSERT（`value=label`、`sort_order=MAX+1`）。
+  - **顏色 hex_code 自動填入**：組名匹配 `~* '(顏色|色|color)'` 時，查 `product_colors`（trim 小寫 name / trim 大寫 code）取 `hex_code`；既有值 `hex_code` 為 NULL 時補 UPDATE，不覆寫已有值。解法是：前端新建 color option value 時 hex_code 為空的根因。
+  - **連結重建**：DELETE → INSERT `product_variant_options`。
+  - **orphan 清理**：該產品所有群組的值中，無任何變體使用的 `product_option_values` 自動刪除（比前端 scope 更完整、DB 即時來源）。
+  - 版本 trigger（`increment_product_option_values/groups/variant_options_version`）自動 bump，不手動。**不呼叫 `sync_storefront_items`**（顏色不影響店頭顯示名）。
+  - 守門回傳 `{ok:false, reason}`；`p_items` 直接傳 JS 陣列、不 `JSON.stringify`。
+- **前端 `src/components/products/VariantEditDialog.tsx`**：移除 `getHexCodeForColor`、`resolveOptionValueId`、`manageVariantOptions` 三個函式，新增共用 `upsertVariantOptions` 呼叫 RPC（兩處：create/update mutation）。
 
 - **Migration `20260911000002_fix_duplicate_product_rpc.sql`**：重寫 `duplicate_product_with_variants` RPC，修復 3 個 bug + 補齊缺失功能：
   1. **`emr_exactly_one_entity` 違規（根因）**：舊版 variant-level `entity_model_relations` 複製時**同時設定 `product_id` 與 `variant_id`**，違反 CHECK constraint（要求僅能擇一）。修正為 variant-level 設 `product_id=NULL, variant_id=new_variant_id`。
@@ -396,3 +472,27 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 - **P2 型號/群組交錯順序**：`entityRelationService.updateRelations` 新增 `ordered` 參數（`{id, type}` 陣列），依序指派 `sort_order` 並在餘下項補遺；`parseModelString` 回傳 `ordered`（含 model/group/exclude 的交錯序列）並傳入 `updateRelations`；`productModelResolver` 新增 `orderedMap`（`entityId → rules` 依 `sort_order` 交錯產生 `device_model_rules`），`useProductCache` 於抓取 relations 時選 `sort_order, created_at` 並傳遞至 `buildModelMaps`；確保匯入後的 relations `sort_order` 可在重匯出時反映於 `適用型號` cell。
 - **P3 系列欄修復**：`useProductExport.ts` 新增從 `brand_series` 抓取 id→name 對照表作為 `seriesMap`，並傳入 `generateProductExcel`，解決以往匯出「系列」永遠空白的問題。
 - **已知問題（另案處理）**：Option 欄（`option:<groupId>`）目前匯入時被 `serializeSpecs` 靜默丟棄，選項值無法 round-trip。已記錄為已知問題，將於後續專案處理。
+
+## 近期變更（複製產品 wizard + 變體批次編輯防孤兒，2026-09-10）
+
+### 複製產品 wizard（`src/components/products/CopyProductDialog.tsx`，新增）
+- 產品列表「複製」改開三頁籤 wizard（基本資訊／型號群組／選項群組）＋預覽摘要（名稱、SKU 前綴、模型數、預估變體數 vs 原數）；`ProductsPage.tsx` 的 `onCopy` 改為開此 Dialog（`forceRefresh`＋導航 `onCopied`）。
+- **變體預覽（2026-09-12）**：新增第四頁籤「變體預覽」——「生成變體預覽」按鈕依目前「選項群組 × 型號群組 × SKU 前綴」笛卡爾展開出**確切變體清單**（SKU＝`前綴-選項值…(-型號)`），可直接編輯每列的 SKU／變體名稱／條碼／批發價／零售價／刪除該列；價格預設取自原產品第一個變體。生成時記錄 signature（群組＋refs＋前綴），選項/型號/前綴後續變更會顯示「請重新生成」警示；複製時：signature 相符 → 用（含編輯的）清單，否則依目前選項現場重建（避免過時清單）。摘要卡片改顯示「已生成 N 個」並列原變體數。
+- **執行邏輯（`handleCopy`）**：先 `duplicate_product_with_variants` 完整複製（含變體、option groups/values/variant_options、entity_model_relations、entity_spec_values、images、category_links、addon_bindings，變體 SKU 帶 `-COPY-XXXX` 後綴，RPC 未變）。
+- **智能分流（避免累贅複製後孤兒）**：
+  - 「選項群組結構有改」→ 先 `DELETE product_variants`（全新複製無引用）再 `batch_upsert_product_options` 依「SKU 前綴＋選項值」重新生成變體、選項連結與模型關聯。
+  - 「僅型號群組有改」→ 直接刪除並重插新變體的 `entity_model_relations`（`sort_order` 依選取順序）。
+  - 「皆未改」→ 直接用 RPC 複製結果（沿用 `-COPY-XXXX` SKU），不再重建。
+  - 判別基準：`optionsChanged`＝現在選項群組（name/label/value）與載入原產品的快照 `originalGroupsRef` JSON 比較；`modelsChanged`＝`selectedDeviceRefs` 與 `originalDeviceRefsRef` 的 `type:id` 鍵比較。
+
+### 變體引用檢查（`src/utils/variantReferenceCheck.ts`，新增）
+- `checkVariantReferences(variantIds)` 批次查 **7 張業務表**（`order_items`／`purchase_order_items`／`inventory_movements`／`product_inventory`／`consignment_order_items`／`repair_order_items`／`supplier_product_mappings(internal_variant_id)`）回傳 `{ok, referenced:[{variant_id, variant_sku, table, label, count}]}`；`groupReferencesByVariant` 依變體聚合（含 SKU）。對齊 `delete_variant_if_safe`（migration `20260911000003`）的守門表清單。
+
+### VariantBatchCreator smart merge + 防孤兒（`src/components/products/form/VariantBatchCreator.tsx`）
+- **既有 DB 快照**：`loadExistingData` 時將 DB 變體（含 `_dbId`）存入 `existingDbVariantsRef`。
+- **Smart merge**：`mergeWithExisting` 除與「前一次生成」比對外，另以 `identityKey`（optionValueIds 排序＋modelGroupId）比對 **DB 快照**——命中時**保留既有 SKU**（`sku: dbMatch.sku`），讓 `batch_upsert_product_options` 依 SKU UPSERT 就地更新（新增值不會再造成同組合重複變體）；命中標記 `_dbId`。
+- **孤兒偵測與清理**：合併後 SKU 不在 payload 的 DB 變體＝潛在孤兒。儲存（`handleSave`）時先 `checkVariantReferences`：
+  - 全部未引用 → 存入 `orphanCleanupRef`，RPC 成功後逐個 `delete_variant_if_safe` 清除。
+  - 部分被引用 → 彈出確認 Dialog（列出每變體引用來源 Badge，如「訂單品項 ×3」），可「返回調整」或「仍要儲存（被引用者保留）」；被引用者保留原樣（失去選項連結）。
+- **diff 顯示**改為「新增 N／更新 N（既有就地更新）／保留 N」＋孤兒警示清單（取代原先「移除⋯僅提示，儲存時不會刪除」的誤導文案）；`updated` 命中時價格變動仍以 Amber 提示「原有手動修改已覆寫」。
+- ⚠️ 沿用既有慣例：jsonb payload 直接傳 JS 陣列（不 `JSON.stringify`）、RPC 呼叫 `(supabase.rpc as any)`、`npm run typecheck`＋`npm run lint` 通過、build 成功。

@@ -1,5 +1,6 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { SalesNoteStatusBadge } from "./SalesNoteStatusBadge";
@@ -36,6 +37,9 @@ interface SalesNoteListTableProps {
     onView: (note: any) => void; // Using any for now as the specialized data object might differ, but we pass the original object back
     onDelete?: (id: string) => void;
     showStoreColumn?: boolean;
+    selectable?: boolean;
+    selectedIds?: string[];
+    onSelectionChange?: (ids: string[]) => void;
 }
 
 export function SalesNoteListTable({
@@ -43,7 +47,10 @@ export function SalesNoteListTable({
     isLoading,
     onView,
     onDelete,
-    showStoreColumn = true
+    showStoreColumn = true,
+    selectable = false,
+    selectedIds = [],
+    onSelectionChange
 }: SalesNoteListTableProps) {
     const copyShareLink = (note: SalesNoteSummary) => {
         const token = note.access_token;
@@ -54,6 +61,26 @@ export function SalesNoteListTable({
         const link = `${window.location.origin}/share/sale/${note.code || note.id}?token=${token}`;
         navigator.clipboard.writeText(link);
         toast.success("連結已複製到剪貼簿");
+    };
+
+    const selectedSet = new Set(selectedIds);
+    const allSelected = (data?.length ?? 0) > 0 && (data?.every(n => selectedSet.has(n.id)) ?? false);
+
+    const toggleAll = () => {
+        if (!data || !onSelectionChange) return;
+        const next = allSelected
+            ? selectedSet
+            : new Set([...selectedSet, ...data.map(n => n.id)]);
+        onSelectionChange(allSelected ? [...selectedSet].filter(id => !data.some(n => n.id === id)) : [...next]);
+    };
+
+    const toggleOne = (id: string) => {
+        if (!onSelectionChange) return;
+        if (selectedSet.has(id)) {
+            onSelectionChange([...selectedSet].filter(v => v !== id));
+        } else {
+            onSelectionChange([...selectedSet, id]);
+        }
     };
 
     // 1. Loading 狀態同樣需要手機版的 Skeleton
@@ -114,6 +141,15 @@ export function SalesNoteListTable({
                 <Table>
                     <TableHeader className="bg-muted/50">
                         <TableRow>
+                            {selectable && (
+                                <TableHead className="w-10">
+                                    <Checkbox
+                                        checked={allSelected}
+                                        onCheckedChange={toggleAll}
+                                        aria-label="全選銷貨單"
+                                    />
+                                </TableHead>
+                            )}
                             <TableHead className="w-[140px]">銷貨單編號</TableHead>
                             {showStoreColumn && <TableHead>店鋪</TableHead>}
                             <TableHead>狀態</TableHead>
@@ -127,6 +163,15 @@ export function SalesNoteListTable({
                     <TableBody>
                         {data.map((note) => (
                             <TableRow key={note.id} className={`hover:bg-muted/50 transition-colors ${note.status === "received" ? "bg-green-50/40" : ""}`}>
+                                {selectable && (
+                                    <TableCell>
+                                        <Checkbox
+                                            checked={selectedSet.has(note.id)}
+                                            onCheckedChange={() => toggleOne(note.id)}
+                                            aria-label={`選取銷貨單 ${note.code || note.id}`}
+                                        />
+                                    </TableCell>
+                                )}
                                 <TableCell className="font-mono text-xs font-medium">{note.code || note.id.slice(0, 8)}</TableCell>
                                 {showStoreColumn && (
                                     <TableCell>
@@ -203,7 +248,16 @@ export function SalesNoteListTable({
                         {/* 頂部：狀態與編號 */}
                         <div className="flex justify-between items-start">
                             <div className="space-y-1">
-                                <div className="text-xs font-mono text-muted-foreground">#{note.code || note.id.slice(0, 8)}</div>
+                                <div className="flex items-center gap-2">
+                                    {selectable && (
+                                        <Checkbox
+                                            checked={selectedSet.has(note.id)}
+                                            onCheckedChange={() => toggleOne(note.id)}
+                                            aria-label={`選取銷貨單 ${note.code || note.id}`}
+                                        />
+                                    )}
+                                    <span className="text-xs font-mono text-muted-foreground">#{note.code || note.id.slice(0, 8)}</span>
+                                </div>
                                 <div className="flex items-center gap-2">
                                     {note.status === "received" ? (
                                         <CheckCircle2 className="h-4 w-4 text-green-500" />

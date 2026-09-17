@@ -5,7 +5,15 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { PurchaseOrder, Supplier, PurchaseOrderItem, ProductWithPrice, PurchaseOrderStatus } from '../types';
 
-export function usePurchaseOrders(viewingOrderId?: string) {
+export interface PurchaseOrderFilters {
+  supplierId?: string;
+  purpose?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrderFilters) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -24,12 +32,27 @@ export function usePurchaseOrders(viewingOrderId?: string) {
   });
 
   const { data: orders = [], isLoading: ordersLoading } = useQuery({
-    queryKey: ['purchase-orders', suppliers],
+    queryKey: ['purchase-orders', suppliers, filters],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      let query = (supabase as any)
         .from('purchase_orders')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('*');
+      if (filters?.supplierId && filters.supplierId !== 'all') {
+        query = query.eq('supplier_id', filters.supplierId);
+      }
+      if (filters?.purpose && filters.purpose !== 'all') {
+        query = query.eq('purpose', filters.purpose);
+      }
+      if (filters?.status && filters.status !== 'all') {
+        query = query.eq('status', filters.status);
+      }
+      if (filters?.dateFrom) {
+        query = query.gte('order_date', filters.dateFrom);
+      }
+      if (filters?.dateTo) {
+        query = query.lte('order_date', filters.dateTo);
+      }
+      const { data, error } = await query.order('created_at', { ascending: false });
       if (error) throw error;
 
       return ((data || []) as any[]).map((order) => ({

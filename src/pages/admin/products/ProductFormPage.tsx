@@ -58,10 +58,12 @@ export default function AdminProductFormPage() {
         const base: any = initialData || {};
         // 變體規格矩陣目前的數值（含尚未存檔的編輯）以「變體 id → spec_values」覆蓋快取中舊的變體規格
         const variantSpecsMap = (formRef.current as any)?.__getVariantSpecs?.() || null;
+
         const variants = (base.variants || []).map((v: any) => {
             const overrides = variantSpecsMap?.[v.id];
             return overrides ? { ...v, spec_values: overrides } : v;
         });
+
         const draft: any = {
             ...base,
             name: values.name ?? base.name ?? '',
@@ -78,18 +80,25 @@ export default function AdminProductFormPage() {
         };
 
         if (productId) {
-            const variantIds = variants.map((v: any) => v.id).filter(Boolean);
-            const [groupsResult, linksResult] = await Promise.all([
+            const [allVariantsResult, groupsResult] = await Promise.all([
+                (supabase.from('product_variants') as any)
+                    .select('*')
+                    .eq('product_id', productId)
+                    .order('sort_order', { ascending: true }),
                 (supabase.from('product_option_groups') as any)
                     .select('*, product_option_values(*)')
                     .eq('product_id', productId)
                     .order('sort_order'),
-                variantIds.length > 0
-                    ? (supabase.from('product_variant_options') as any)
-                        .select('*')
-                        .in('variant_id', variantIds)
-                    : Promise.resolve({ data: [] }),
             ]);
+
+            const allVariants = allVariantsResult.data || [];
+            const variantIds = allVariants.map((v: any) => v.id);
+
+            const linksResult = variantIds.length > 0
+                ? await (supabase.from('product_variant_options') as any)
+                    .select('*')
+                    .in('variant_id', variantIds)
+                : { data: [] };
 
             const groups = (groupsResult.data || []).map((g: any) => ({
                 ...g,
@@ -107,9 +116,10 @@ export default function AdminProductFormPage() {
             });
 
             draft.option_groups = groups;
-            draft.variants = draft.variants.map((v: any) => ({
+            draft.variants = allVariants.map((v: any) => ({
                 ...v,
                 option_values: variantOptionsMap.get(v.id) || v.option_values || [],
+                ...(variantSpecsMap?.[v.id] ? { spec_values: variantSpecsMap[v.id] } : {}),
             }));
         }
 

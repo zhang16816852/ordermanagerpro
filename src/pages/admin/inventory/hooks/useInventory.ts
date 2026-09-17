@@ -52,9 +52,9 @@ export function useInventory() {
 
         return {
             id: item.id,
-            name: variant ? `${product?.name} (${variant.name})` : product?.name || '-',
+            name: variant?.name || product?.name || '-',
             code: variant?.sku || product?.code || '-',
-            specs: variant?.name || '-',
+            specs: variant ? product?.name || '-' : '-',
             quantity: item.quantity,
             updatedAt: item.updated_at,
             isLowStock: item.quantity <= 5,

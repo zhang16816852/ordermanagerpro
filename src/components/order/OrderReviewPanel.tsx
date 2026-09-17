@@ -90,10 +90,7 @@ function SortableRow({
       </TableCell>
       <TableCell className="text-muted-foreground text-xs w-8">{index + 1}</TableCell>
       <TableCell>
-        <div className="font-medium text-sm">{item.productName || item.name}</div>
-        {item.variantName && (
-          <div className="text-xs text-muted-foreground">{item.variantName}</div>
-        )}
+        <div className="font-medium text-sm">{item.variantName || item.productName || item.name}</div>
         <div className="text-xs text-muted-foreground font-mono">{item.sku}</div>
       </TableCell>
       <TableCell className="w-20">
@@ -336,10 +333,7 @@ export default function OrderReviewPanel({
           <div key={item.id} className="rounded-lg border bg-card p-4 space-y-3">
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm truncate">{item.productName || item.name}</div>
-                {item.variantName && (
-                  <div className="text-xs text-muted-foreground">{item.variantName}</div>
-                )}
+                <div className="font-medium text-sm truncate">{item.variantName || item.productName || item.name}</div>
               </div>
               <span className="text-xs text-muted-foreground shrink-0 ml-2">#{index + 1}</span>
             </div>

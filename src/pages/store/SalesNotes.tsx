@@ -23,6 +23,7 @@ import { formatCurrency } from '@/lib/formatters';
 interface SalesNoteWithItems {
   id: string;
   code?: string;
+  store_id: string;
   status: 'draft' | 'shipped' | 'received';
   payment_status?: string;
   shipped_at: string | null;
@@ -33,8 +34,12 @@ interface SalesNoteWithItems {
     id: string;
     quantity: number;
     returned_quantity?: number;
+    sort_order?: number;
     order_items: {
       id: string;
+      order_id: string;
+      unit_price?: number;
+      order: { code: string | null } | null;
       product: { name: string; code: string } | null;
       product_variant: { name: string } | null;
     } | null;
@@ -100,6 +105,7 @@ export default function StoreSalesNotes() {
         .select(`
           id,
           code,
+          store_id,
           status,
           payment_status,
           shipped_at,
@@ -113,7 +119,10 @@ export default function StoreSalesNotes() {
             sort_order,
             order_items (
               id,
+              order_id,
+              order:orders (code),
               sort_order,
+              unit_price,
               product:products (name, code),
               product_variant:product_variants (name)
             )
@@ -269,6 +278,7 @@ export default function StoreSalesNotes() {
     return {
       id: note.id,
       code: note.code,
+      store_id: note.store_id,
       status: note.status,
       payment_status: note.payment_status,
       created_at: note.created_at,
@@ -279,11 +289,14 @@ export default function StoreSalesNotes() {
         .sort((a, b) => ((a as any).sort_order ?? 0) - ((b as any).sort_order ?? 0))
         .map((item) => ({
           id: item.id,
+          orderItemId: (item as any).order_items?.id,
+          orderCode: (item as any).order_items?.order?.code,
           quantity: item.quantity,
           returnedQuantity: (item as any).returned_quantity ?? 0,
           productSku: item.order_items?.product?.code || '',
           productName: item.order_items?.product?.name || '',
           variantName: item.order_items?.product_variant?.name || null,
+          unitPrice: (item as any).order_items?.unit_price,
           sortOrder: (item as any).sort_order ?? 0,
         })),
     };
@@ -403,10 +416,7 @@ export default function StoreSalesNotes() {
                               return (
                                 <tr key={item.id} className="border-b last:border-0">
                                   <td className="py-2 px-3">
-                                    <p className="font-medium">{item.product.name}</p>
-                                    {item.product_variant?.name && (
-                                      <p className="text-xs text-muted-foreground">{item.product_variant.name}</p>
-                                    )}
+                                    <p className="font-medium">{item.product_variant?.name || item.product.name}</p>
                                   </td>
                                   <td className="text-right py-2 px-3">{shipped}</td>
                                   <td className="text-right py-2 px-3">{sold}</td>

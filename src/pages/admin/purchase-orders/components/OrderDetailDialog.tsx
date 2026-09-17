@@ -148,8 +148,7 @@ export function OrderDetailDialog({
       <>
         <TableCell className="font-mono text-xs">{item.variant?.sku || item.product?.code}</TableCell>
         <TableCell>
-          <p className="text-sm font-medium">{item.product?.name}</p>
-          {item.variant?.name && <p className="text-xs text-muted-foreground">{item.variant.name}</p>}
+          <p className="text-sm font-medium">{item.variant?.name || item.product?.name}</p>
         </TableCell>
         <TableCell className="font-mono text-xs">{mapping?.vendor_product_id || '-'}</TableCell>
         <TableCell className="text-sm">{mapping?.vendor_product_name || '-'}</TableCell>

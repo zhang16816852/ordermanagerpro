@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Wrench } from 'lucide-react';
+import { Plus, Search, Wrench, Wallet } from 'lucide-react';
 import { DataTable } from '@/components/shared/DataTable';
 import { ColumnDef } from '@tanstack/react-table';
 import { formatDate, formatCurrency } from '@/lib/formatters';
@@ -11,6 +11,9 @@ import { useRepairOrders, useRepairAssigneeMap } from '@/hooks/useRepairOrders';
 import { REPAIR_ORDER_STATUS_LABELS, REPAIR_ORDER_STATUS_COLORS, isRepairOrderAcceptable, isRepairOrderWorking, isRepairOrderClosed, RepairOrder as RepairOrderType } from '@/types/repair';
 import { useAuth } from '@/hooks/useAuth';
 import { useRepairBase } from '@/lib/repairBase';
+import { EntryDialog } from '@/pages/admin/accounting/components/EntryDialog';
+import { useAccounting } from '@/pages/admin/accounting/hooks/useAccounting';
+import { EntryPrefill } from '@/pages/admin/accounting/components/EntryForm';
 
 type WorkbenchTab = 'pending' | 'mine' | 'all' | 'closed';
 
@@ -28,8 +31,11 @@ export default function AdminRepairOrders() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { orders, isLoading, updateStatusMutation, acceptAndStartMutation } = useRepairOrders();
   const assignees = useRepairAssigneeMap();
+  const { accounts, categories, createEntryMutation, isLoadingAccounts, isLoadingCategories } = useAccounting();
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [tab, setTab] = useState<WorkbenchTab>((searchParams.get('tab') as WorkbenchTab) || 'pending');
+  const [collectEntryOpen, setCollectEntryOpen] = useState(false);
+  const [collectPrefill, setCollectPrefill] = useState<EntryPrefill | null>(null);
 
   const userId = user?.id;
 
@@ -159,27 +165,99 @@ export default function AdminRepairOrders() {
       ),
     },
     {
-      header: '建立時間',
-      accessorKey: 'created_at',
+      header: '收款狀態',
+      id: 'payment_status',
+      cell: ({ row }) => {
+        const paid = row.original.payment_status === 'paid';
+        return (
+          <Badge
+            variant={paid ? 'secondary' : 'outline'}
+            className={paid
+              ? 'text-[11px] font-normal bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300'
+              : 'text-[11px] font-normal text-amber-600 border-amber-300 dark:text-amber-400'}
+          >
+            {paid ? '已收款' : '未收款'}
+          </Badge>
+        );
+      },
+    },
+    {
+      header: '單據日期',
+      id: 'order_date',
       cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">{formatDate(row.original.created_at)}</span>
+        <div className="flex flex-col">
+          <span className="text-xs">{formatDate(row.original.order_date || row.original.created_at)}</span>
+          {row.original.order_date && (
+            <span className="text-[10px] text-muted-foreground">建立 {formatDate(row.original.created_at)}</span>
+          )}
+        </div>
       ),
     },
     {
       header: '操作',
       id: 'actions',
       cell: ({ row }) => {
+        const outstanding = (row.original.total_price || 0) - (row.original.discount || 0) - (row.original.deposit || 0);
+        const canCollect = row.original.payment_status !== 'paid' && outstanding > 0;
         if (isRepairOrderAcceptable(row.original.status) && userId) {
+          return (
+            <div className="flex gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  acceptAndStartMutation.mutate({ id: row.original.id, userId });
+                }}
+              >
+                接單
+              </Button>
+              {canCollect && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-emerald-600 border-emerald-300 hover:bg-emerald-50 dark:text-emerald-400 px-2"
+                  title="登記維修收款"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCollectPrefill({
+                      repair: {
+                        subType: 'income_repair',
+                        repairOrderId: row.original.id,
+                        amount: outstanding,
+                        description: `維修收款 ${row.original.code || ''}`,
+                      },
+                    });
+                    setCollectEntryOpen(true);
+                  }}
+                >
+                  <Wallet className="h-3.5 w-3.5" />
+                  收款
+                </Button>
+              )}
+            </div>
+          );
+        }
+        if (canCollect) {
           return (
             <Button
               size="sm"
               variant="outline"
-              onClick={(e) => {
-                e.stopPropagation();
-                acceptAndStartMutation.mutate({ id: row.original.id, userId });
+              className="text-emerald-600 border-emerald-300 hover:bg-emerald-50 dark:text-emerald-400"
+              onClick={() => {
+                setCollectPrefill({
+                  repair: {
+                    subType: 'income_repair',
+                    repairOrderId: row.original.id,
+                    amount: outstanding,
+                    description: `維修收款 ${row.original.code || ''}`,
+                  },
+                });
+                setCollectEntryOpen(true);
               }}
             >
-              接單
+              <Wallet className="h-3.5 w-3.5" />
+              收款
             </Button>
           );
         }
@@ -237,6 +315,21 @@ export default function AdminRepairOrders() {
       </div>
 
       <DataTable columns={columns} data={filtered} isLoading={isLoading} />
+
+      <EntryDialog
+        open={collectEntryOpen}
+        onOpenChange={setCollectEntryOpen}
+        prefill={collectPrefill}
+        categories={categories}
+        accounts={accounts}
+        isLoading={isLoadingAccounts || isLoadingCategories || createEntryMutation.isPending}
+        onSubmit={(data, references) => {
+          createEntryMutation.mutate(
+            { data, references },
+            { onSuccess: () => setCollectEntryOpen(false) }
+          );
+        }}
+      />
     </div>
   );
 }

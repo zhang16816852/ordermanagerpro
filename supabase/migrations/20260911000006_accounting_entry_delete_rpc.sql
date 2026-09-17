@@ -20,6 +20,8 @@ DECLARE
   v_received NUMERIC;
   v_sales_note_ids UUID[] := '{}';
   v_note_id UUID;
+  v_repair_order_ids UUID[] := '{}';
+  v_ro_id UUID;
   v_lines JSONB := '[]'::jsonb;
 BEGIN
   IF NOT public.has_role(auth.uid(), 'admin') THEN
@@ -42,6 +44,20 @@ BEGIN
   LOOP
     IF NOT (v_note_id = ANY(v_sales_note_ids)) THEN
       v_sales_note_ids := array_append(v_sales_note_ids, v_note_id);
+    END IF;
+  END LOOP;
+
+  -- 1b. 收集受影響的維修單 IDs（entry row + references 子表）
+  IF v_entry.reference_type = 'repair_order' AND v_entry.reference_id IS NOT NULL THEN
+    v_repair_order_ids := array_append(v_repair_order_ids, v_entry.reference_id);
+  END IF;
+  FOR v_ro_id IN
+    SELECT aer.reference_id
+    FROM public.accounting_entry_references aer
+    WHERE aer.entry_id = p_entry_id AND aer.reference_type = 'repair_order' AND aer.reference_id IS NOT NULL
+  LOOP
+    IF NOT (v_ro_id = ANY(v_repair_order_ids)) THEN
+      v_repair_order_ids := array_append(v_repair_order_ids, v_ro_id);
     END IF;
   END LOOP;
 
@@ -87,6 +103,11 @@ BEGIN
   -- 5. 同步銷貨單收款狀態
   FOR v_note_id IN SELECT unnest(v_sales_note_ids) LOOP
     PERFORM public.sync_sales_note_payment_status(v_note_id);
+  END LOOP;
+
+  -- 6. 同步維修單收款狀態
+  FOR v_ro_id IN SELECT unnest(v_repair_order_ids) LOOP
+    PERFORM public.sync_repair_order_payment_status(v_ro_id);
   END LOOP;
 
   RETURN jsonb_build_object('ok', true);

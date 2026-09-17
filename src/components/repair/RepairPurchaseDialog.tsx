@@ -27,7 +27,7 @@ import { Truck, Package, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/formatters';
 import { getErrorMessage } from '@/lib/errorMessages';
-import { DeviceBlock, RepairBlockItem } from '@/components/repair/DeviceBlockSection';
+import { DeviceBlock, RepairBlockItem } from '@/components/repair/deviceBlockTypes';
 import { EntryDialog } from '@/pages/admin/accounting/components/EntryDialog';
 import { EntryPrefill } from '@/pages/admin/accounting/components/EntryForm';
 import { useAccounting } from '@/pages/admin/accounting/hooks/useAccounting';
@@ -158,6 +158,7 @@ export function RepairPurchaseDialog({
         .from('purchase_orders')
         .insert({
           supplier_id: supplierId,
+          purpose: 'repair_parts',
           status: directReceive ? 'received' : 'draft',
           order_date: poDate,
           received_date: directReceive ? poDate : null,

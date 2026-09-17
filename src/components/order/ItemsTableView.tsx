@@ -57,12 +57,7 @@ export function ItemsTableView({ items, isLoading, statusLabels }: ItemsTableVie
                             return (
                                 <TableRow key={item.id}>
                                     <TableCell>
-                                        {item.product?.name}
-                                        {item.product_variant && (
-                                            <span className="text-muted-foreground ml-1">
-                                                - {item.product_variant.name}
-                                            </span>
-                                        )}
+                                        {item.product_variant?.name || item.product?.name}
                                     </TableCell>
                                     <TableCell className="text-right">{item.quantity}</TableCell>
                                     <TableCell className="text-right">{item.shipped_quantity}</TableCell>

@@ -108,12 +108,7 @@ export function ItemTableView({
                     </TableCell>
                     <TableCell className="font-mono text-xs">{item.product?.code}</TableCell>
                     <TableCell className="text-sm">
-                      {item.product?.name}
-                      {item.product_variant && (
-                        <span className="text-muted-foreground ml-1">
-                          - {item.product_variant.name}
-                        </span>
-                      )}
+                      {item.product_variant?.name || item.product?.name}
                       {item.orderId && poLinkMap.has(item.orderId) && (
                         <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0 font-normal border-amber-500 text-amber-600">
                           已轉採購
@@ -159,7 +154,7 @@ export function ItemTableView({
                   </TableCell>
                   <TableCell className="font-mono text-xs line-through">{item.product?.code}</TableCell>
                   <TableCell className="text-sm italic">
-                    <span className="line-through">{item.product?.name}</span>
+                    <span className="line-through">{item.product_variant?.name || item.product?.name}</span>
                     <Badge variant="outline" className="ml-1 text-[10px] h-4">
                       {item.status === 'cancelled' ? '已取消' : '已停售'}
                     </Badge>

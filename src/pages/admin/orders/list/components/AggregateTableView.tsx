@@ -111,10 +111,7 @@ export function AggregateTableView({
                   />
                 </TableCell>
                 <TableCell>
-                  <div className="font-medium break-words whitespace-normal">{item.productName}</div>
-                  {item.variantName && (
-                    <div className="text-sm text-muted-foreground break-words whitespace-normal">{item.variantName}</div>
-                  )}
+                  <div className="font-medium break-words whitespace-normal">{item.variantName || item.productName}</div>
                 </TableCell>
                 <TableCell className="font-mono text-sm">{item.sku}</TableCell>
                 <TableCell className="text-center">

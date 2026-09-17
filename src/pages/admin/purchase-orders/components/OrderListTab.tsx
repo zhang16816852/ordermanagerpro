@@ -29,6 +29,13 @@ export function OrderListTab({
   onStatusChange,
   isLoading
 }: OrderListTabProps) {
+  const getTypeBadge = (purpose?: string) => {
+    if (purpose === 'repair_parts') {
+      return <Badge variant="outline" className="border-violet-500 text-violet-600 whitespace-nowrap">維修叫料</Badge>;
+    }
+    return <Badge variant="secondary" className="whitespace-nowrap">一般進貨</Badge>;
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'draft': return <Badge variant="secondary">草稿</Badge>;
@@ -65,6 +72,7 @@ export function OrderListTab({
             <TableRow>
               <TableHead>編號</TableHead>
               <TableHead>供應商</TableHead>
+              <TableHead>類型</TableHead>
               <TableHead>廠商單號</TableHead>
               <TableHead>日期</TableHead>
               <TableHead className="text-right">總額</TableHead>
@@ -77,6 +85,7 @@ export function OrderListTab({
               <TableRow key={order.id}>
                 <TableCell className="font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
                 <TableCell>{order.supplier?.name || '-'}</TableCell>
+                <TableCell>{getTypeBadge(order.purpose)}</TableCell>
                 <TableCell className="text-sm">{order.supplier_order_number || '-'}</TableCell>
                 <TableCell>{order.order_date}</TableCell>
                 <TableCell className="text-right font-medium">{formatCurrency(order.total_amount)}</TableCell>
@@ -118,6 +127,7 @@ export function OrderListTab({
               <div className="min-w-0">
                 <p className="font-mono text-xs text-muted-foreground">{order.id.slice(0, 8)}</p>
                 <p className="font-medium truncate">{order.supplier?.name || '-'}</p>
+                <div className="mt-1">{getTypeBadge(order.purpose)}</div>
               </div>
               {getStatusBadge(order.status)}
             </div>

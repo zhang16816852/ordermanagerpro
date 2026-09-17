@@ -73,10 +73,7 @@ export function AggregateCardsView({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <h3 className="font-medium truncate">{item.productName}</h3>
-                      {item.variantName && (
-                        <p className="text-sm text-muted-foreground truncate">{item.variantName}</p>
-                      )}
+                      <h3 className="font-medium truncate">{item.variantName || item.productName}</h3>
                       <p className="text-xs text-muted-foreground font-mono mt-0.5">{item.sku}</p>
                     </div>
                     <Badge variant="secondary" className="font-bold text-base px-3 py-1 shrink-0">

@@ -162,6 +162,18 @@ export function useAccounting(selectedMonth?: string) {
           }
         }
       }
+
+      // 同步維修單收款狀態
+      if (data.reference_type === 'repair_order' && data.reference_id) {
+        await (supabase as any).rpc('sync_repair_order_payment_status', { p_repair_order_id: data.reference_id });
+      }
+      if (references && references.length > 0) {
+        for (const ref of references) {
+          if (ref.reference_type === 'repair_order' && ref.reference_id) {
+            await (supabase as any).rpc('sync_repair_order_payment_status', { p_repair_order_id: ref.reference_id });
+          }
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounting-entries'] });
@@ -169,6 +181,7 @@ export function useAccounting(selectedMonth?: string) {
       queryClient.invalidateQueries({ queryKey: ['admin-sales-notes'] });
       queryClient.invalidateQueries({ queryKey: ['store-sales-notes'] });
       queryClient.invalidateQueries({ queryKey: ['sales-note-payment'] });
+      queryClient.invalidateQueries({ queryKey: ['repair_orders'] });
       toast.success('記錄已新增');
     },
     onError: () => toast.error('新增失敗'),
@@ -206,6 +219,7 @@ export function useAccounting(selectedMonth?: string) {
       queryClient.invalidateQueries({ queryKey: ['admin-sales-notes'] });
       queryClient.invalidateQueries({ queryKey: ['store-sales-notes'] });
       queryClient.invalidateQueries({ queryKey: ['shipping-settlements'] });
+      queryClient.invalidateQueries({ queryKey: ['repair_orders'] });
       toast.success('記錄已刪除');
     },
     onError: (err: any) => {
@@ -258,12 +272,31 @@ export function useAccounting(selectedMonth?: string) {
           .rpc('sync_sales_note_payment_status', { p_sales_note_id: noteId });
         if (noteError) throw noteError;
       }
+
+      // 同步維修單收款狀態
+      const repairOrderIds = new Set<string>();
+      if (entry.reference_type === 'repair_order' && entry.reference_id) {
+        repairOrderIds.add(entry.reference_id);
+      }
+      if (entry.references) {
+        for (const ref of entry.references) {
+          if (ref.reference_type === 'repair_order' && ref.reference_id) {
+            repairOrderIds.add(ref.reference_id);
+          }
+        }
+      }
+      for (const roId of repairOrderIds) {
+        const { error: roError } = await (supabase as any)
+          .rpc('sync_repair_order_payment_status', { p_repair_order_id: roId });
+        if (roError) throw roError;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounting-entries'] });
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
       queryClient.invalidateQueries({ queryKey: ['admin-sales-notes'] });
       queryClient.invalidateQueries({ queryKey: ['store-sales-notes'] });
+      queryClient.invalidateQueries({ queryKey: ['repair_orders'] });
       toast.success('付款已記錄');
     },
     onError: () => toast.error('記錄付款失敗'),

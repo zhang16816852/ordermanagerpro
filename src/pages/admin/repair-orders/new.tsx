@@ -16,22 +16,14 @@ import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/formatters';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { useRepairBase } from '@/lib/repairBase';
-import { ModelPickerOption } from '@/components/repair/ModelPicker';
-import {
-  DeviceBlock,
-  createEmptyDeviceBlock,
-  calcBlockTotals,
-  DeviceBlockSection,
-  DeviceBlockSummaryCard,
-} from '@/components/repair/DeviceBlockSection';
+import { useDeviceModels } from '@/hooks/useDeviceModels';
 import { ProductFormDialog } from '@/components/products/form/ProductFormDialog';
+import { DeviceBlock, createEmptyDeviceBlock, calcBlockTotals } from '@/components/repair/deviceBlockTypes';
+import { DeviceBlockSection } from '@/components/repair/DeviceBlockSection';
+import { DeviceBlockSummaryCard } from '@/components/repair/FeesFieldsSection';
 import { useProductMutations } from '@/pages/admin/products/hooks/useProductMutations';
 import { StorePicker } from '@/components/ui/StorePicker';
 import { RepairPurchaseDialog } from '@/components/repair/RepairPurchaseDialog';
-
-interface DeviceModelOption extends ModelPickerOption {
-  specifications: any;
-}
 
 export default function AdminRepairOrderForm() {
   const navigate = useNavigate();
@@ -47,23 +39,7 @@ export default function AdminRepairOrderForm() {
     queryClient.invalidateQueries({ queryKey: ['repair_parts'] });
   });
 
-  const { data: deviceModels = [] } = useQuery<DeviceModelOption[]>({
-    queryKey: ['device_models_list'],
-    queryFn: async () => {
-      const { data } = await (supabase
-        .from('device_models') as any)
-        .select('*, device_brand:brand_id(name)')
-        .order('name');
-      return (data || []).map((m: any) => ({
-        id: m.id,
-        name: m.name,
-        device_type: m.device_type,
-        specifications: m.specifications,
-        brand_name: m.device_brand?.name || null,
-        aliases: Array.isArray(m.aliases) ? m.aliases.filter((a: string) => a) : null,
-      })) as DeviceModelOption[];
-    },
-  });
+  const { data: deviceModels = [] } = useDeviceModels();
 
   const { data: checklistLibrary = [] } = useQuery({
     queryKey: ['repair_checklist_library'],
@@ -98,6 +74,7 @@ export default function AdminRepairOrderForm() {
   const [status, setStatus] = useState('pending');
   const [assignedTo, setAssignedTo] = useState<string>(user?.id || '');
   const [sourceStoreId, setSourceStoreId] = useState<string>(storeId || '');
+  const [orderDate, setOrderDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [blocks, setBlocks] = useState<DeviceBlock[]>(() => [createEmptyDeviceBlock()]);
   const [existingItemIds, setExistingItemIds] = useState<string[]>([]);
 
@@ -155,6 +132,7 @@ export default function AdminRepairOrderForm() {
         setStatus(orderData.status);
         setAssignedTo(orderData.assigned_to || '');
         setSourceStoreId(orderData.store_id || '');
+        if (orderData.order_date) setOrderDate(orderData.order_date.slice(0, 10));
 
         const mappedItems = (itemsData || []).map((i: any) => {
           const isPart = i.item_type === 'part' || !!(i.product_id || i.variant_id);
@@ -374,6 +352,7 @@ export default function AdminRepairOrderForm() {
     discount: block.discount,
     deposit: block.deposit,
     store_id: sourceStoreId || null,
+    order_date: orderDate,
     created_by: user?.id,
   });
 
@@ -498,6 +477,10 @@ export default function AdminRepairOrderForm() {
               ))}
             </SelectContent>
           </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>單據日期</Label>
+          <Input type="date" value={orderDate} onChange={(e) => setOrderDate(e.target.value)} />
         </div>
         <div className="space-y-2">
           <Label>接案人</Label>
