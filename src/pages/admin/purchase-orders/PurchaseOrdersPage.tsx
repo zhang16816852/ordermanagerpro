@@ -5,7 +5,7 @@ import { SupplierTab } from './components/SupplierTab';
 import { ReceivingTab } from './components/ReceivingTab';
 import { OrderForm } from './components/OrderForm';
 import { SupplierForm } from './components/SupplierForm';
-import { OrderDetailDialog } from './components/OrderDetailDialog';
+import { PurchaseOrderDetailDialog } from './components/PurchaseOrderDetailDialog';
 import { PurchaseOrder } from './types';
 import { usePurchaseOrders, PurchaseOrderFilters } from './hooks/usePurchaseOrders';
 import { Button } from '@/components/ui/button';
@@ -88,6 +88,8 @@ export default function AdminPurchaseOrders() {
     deleteOrderMutation,
     createSupplierMutation,
     addItemMutation,
+    updateItemMutation,
+    deleteItemMutation,
     reorderItemsMutation,
     importItemsMutation,
     receiveItemsMutation,
@@ -332,7 +334,7 @@ export default function AdminPurchaseOrders() {
             </DialogDescription>
           </DialogHeader>
           {viewingOrder && (
-            <OrderDetailDialog
+            <PurchaseOrderDetailDialog
               key={viewingOrder.id}
               order={viewingOrder}
               orderItems={orderItems}
@@ -345,6 +347,8 @@ export default function AdminPurchaseOrders() {
               onImportItems={(items) => importItemsMutation.mutate({ purchaseOrderId: viewingOrder.id, items })}
               onReceiveItems={(items) => receiveItemsMutation.mutate(items)}
               onMakePayment={(data) => makePaymentMutation.mutate({ orderId: viewingOrder.id, ...data })}
+              onUpdateItem={(data) => updateItemMutation.mutate(data)}
+              onDeleteItem={(itemId) => deleteItemMutation.mutate(itemId)}
               onUnlinkOrder={(orderId) => {
                 if (window.confirm(`確定要解除與此訂單（${sourceOrderMap[orderId] || orderId.slice(0, 8)}）的採購關聯嗎？\n未收貨的數量將從採購單中扣除，並可重新進行採購。`)) {
                   unlinkOrdersFromPurchaseMutation.mutate({ purchaseOrderId: viewingOrder.id, orderIds: [orderId] });

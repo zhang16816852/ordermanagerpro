@@ -64,8 +64,7 @@ export function InternalProductSelector({ onSelect, onClose }: InternalProductSe
                   return variants.map(v => (
                     <TableRow key={v.id}>
                       <TableCell>
-                        <div className="font-medium">{p.name}</div>
-                        <div className="text-sm text-muted-foreground">{v.name || v.sku}</div>
+                        <div className="font-medium">{v.name || v.sku}</div>
                       </TableCell>
                       <TableCell className="text-sm">{v.sku}</TableCell>
                       <TableCell>

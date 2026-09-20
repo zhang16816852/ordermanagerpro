@@ -44,15 +44,21 @@ function AdminOverview() {
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
             const { data, error } = await (supabase
-                .from('accounting_entries') as any)
-                .select('amount, transaction_date')
-                .eq('type', 'income')
-                .gte('transaction_date', sevenDaysAgo.toISOString())
-                .order('transaction_date', { ascending: true });
+                .from('sales_notes') as any)
+                .select(`
+                    shipped_at,
+                    sales_note_items(
+                        quantity,
+                        order_item:order_items(unit_price)
+                    )
+                `)
+                .not('shipped_at', 'is', null)
+                .gte('shipped_at', sevenDaysAgo.toISOString())
+                .order('shipped_at', { ascending: true });
 
             if (error) throw error;
 
-            // 按日期分組匯總
+            // 依出貨日分組，加總各品項 數量 × 單價
             const dailyMap: Record<string, number> = {};
             // 初始化最近 7 天
             for (let i = 6; i >= 0; i--) {
@@ -61,11 +67,14 @@ function AdminOverview() {
                 dailyMap[date.toISOString().split('T')[0]] = 0;
             }
 
-            (data as any[]).forEach(entry => {
-                const dateKey = entry.transaction_date.split('T')[0];
-                if (dailyMap[dateKey] !== undefined) {
-                    dailyMap[dateKey] += entry.amount;
-                }
+            (data as any[]).forEach((note: any) => {
+                if (!note.shipped_at) return;
+                const dateKey = note.shipped_at.split('T')[0];
+                if (dailyMap[dateKey] === undefined) return;
+                (note.sales_note_items || []).forEach((item: any) => {
+                    const unitPrice = Number(item.order_item?.unit_price) || 0;
+                    dailyMap[dateKey] += unitPrice * (Number(item.quantity) || 0);
+                });
             });
 
             return Object.entries(dailyMap).map(([date, amount]) => ({
@@ -139,7 +148,7 @@ function AdminOverview() {
                 <TrendChart 
                     className="md:col-span-2"
                     title="最近七日銷售趨勢"
-                    subtitle="反映全站點實體與數位訂單的成交總額"
+                    subtitle="依銷貨單出貨時間計算的成交總額"
                     data={trendData}
                     xKey="date"
                     yKey="amount"

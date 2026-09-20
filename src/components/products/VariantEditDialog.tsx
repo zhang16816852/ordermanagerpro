@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Tables, TablesInsert } from '@/integrations/supabase/types';
+import { Tables } from '@/integrations/supabase/types';
 import { OptionGroupWithValues } from '@/types/product';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,25 +33,23 @@ import {
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { StandaloneDeviceModelSelectField } from './StandaloneDeviceModelSelectField';
-import { OptionValueCombobox } from './form/OptionValueCombobox';
 import { DynamicSpecsFields } from './form/sections/DynamicSpecsFields';
 import { serializeSpecs, deserializeSpecs } from '@/utils/specLogic';
 import { useSpecStore } from '@/store/useSpecStore';
 import { entityRelationService } from '@/services/entityRelationService';
 import { ProductImageManager } from '@/components/products/images/ProductImageManager';
 import { VariantBindingManager } from './form/sections/VariantBindingManager';
-import { ColorSelectField } from './form/ColorSelectField';
-import { useColorStore } from '@/store/useColorStore';
-
-const COLOR_GROUP_NAME_RE = /(顏色|色|color)/i;
-
-function isColorGroupName(name: string): boolean {
-  return COLOR_GROUP_NAME_RE.test(name);
-}
+import { VariantOptionsEditor } from '@/components/products/variant/VariantOptionsEditor';
+import { fetchOptionSuggestions } from './form/variantBatchCreatorUtils';
+import {
+    createOptionGroup,
+    createOptionValue,
+    type OptionGroupInput,
+    type OptionGroupSuggestion,
+} from '@/utils/variantGeneration';
 
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;
-type VariantInsert = TablesInsert<'product_variants'>;
 
 interface VariantEditDialogProps {
     open: boolean;
@@ -70,8 +68,11 @@ export function VariantEditDialog({
 }: VariantEditDialogProps) {
     const queryClient = useQueryClient();
     const { specMap } = useSpecStore();
-    const { colors: libraryColors, getColorByName, getColorByCode } = useColorStore();
-    const [optionGroups, setOptionGroups] = useState<OptionGroupWithValues[]>([]);
+    const [optionGroups, setOptionGroups] = useState<OptionGroupInput[]>([]);
+    const [selectedValueIds, setSelectedValueIds] = useState<Record<string, string>>({});
+    const [suggestions, setSuggestions] = useState<OptionGroupSuggestion[]>([]);
+    const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+    const originalNamesRef = useRef<Record<string, string>>({});
     const isUnified = !!product?.unified_pricing;
 
     const form = useForm({
@@ -87,7 +88,6 @@ export function VariantEditDialog({
             selectedGroupIds: [] as string[],
             selectedExclusionIds: [] as string[],
             category_ids: [] as string[],
-            optionValues: {} as Record<string, string>,
         }
     });
 
@@ -101,10 +101,7 @@ export function VariantEditDialog({
         if (initializedRef.current === variantId && variantId !== 'new') return;
         initializedRef.current = variantId;
 
-        const init = async () => {
-            useSpecStore.getState().fetchSpecs();
-            useColorStore.getState().fetchColors();
-
+        const loadOptionData = async () => {
             const { data: groups, error: groupsError } = await supabase
                 .from('product_option_groups')
                 .select('*')
@@ -127,30 +124,51 @@ export function VariantEditDialog({
                     groupsWithValues.push({ ...group, values: values || [] });
                 }
             }
-            setOptionGroups(groupsWithValues);
 
-            const valueIdToLabel: Record<string, string> = {};
-            for (const g of groupsWithValues) {
-                for (const v of g.values) {
-                    valueIdToLabel[v.id] = v.label || v.value || '';
+            const loadedGroups: OptionGroupInput[] = groupsWithValues.map(g => ({
+                id: g.id,
+                name: g.name,
+                values: g.values.map(v => ({
+                    id: v.id,
+                    label: v.label || '',
+                    value: v.value || '',
+                    wholesalePrice: '',
+                    retailPrice: '',
+                    hexCode: v.hex_code || '',
+                })),
+            }));
+            setOptionGroups(loadedGroups);
+            originalNamesRef.current = Object.fromEntries(loadedGroups.map(g => [g.id, g.name]));
+
+            const selected: Record<string, string> = {};
+            if (variant) {
+                const { data: variantOptions } = await (supabase.from('product_variant_options') as any)
+                    .select('option_group_id, option_value_id')
+                    .eq('variant_id', variant.id);
+                if (variantOptions) {
+                    for (const opt of variantOptions) {
+                        const group = loadedGroups.find(g => g.id === opt.option_group_id);
+                        if (group && group.values.some(v => v.id === opt.option_value_id)) {
+                            selected[opt.option_group_id] = opt.option_value_id;
+                        }
+                    }
                 }
             }
+            setSelectedValueIds(selected);
+        };
+
+        const init = async () => {
+            useSpecStore.getState().fetchSpecs();
+            await loadOptionData();
+            fetchSuggestionsForProduct();
 
             if (variant) {
-                const [links, groupLinks, exclusions, specValues, variantOptions] = await Promise.all([
+                const [links, groupLinks, exclusions, specValues] = await Promise.all([
                     (supabase.from('entity_model_relations') as any).select('model_id').eq('variant_id', variant.id).eq('relation_type', 'include').not('model_id', 'is', null),
                     (supabase.from('entity_model_relations') as any).select('group_id').eq('variant_id', variant.id).eq('relation_type', 'include').not('group_id', 'is', null),
                     (supabase.from('entity_model_relations') as any).select('model_id').eq('variant_id', variant.id).eq('relation_type', 'exclude').not('model_id', 'is', null),
                     (supabase.from('entity_spec_values') as any).select('*').eq('entity_id', variant.id).eq('entity_type', 'variant').is('deleted_at', null),
-                    (supabase.from('product_variant_options') as any).select('option_group_id, option_value_id').eq('variant_id', variant.id),
                 ]);
-
-                const optionValues: Record<string, string> = {};
-                if (variantOptions.data) {
-                    for (const opt of variantOptions.data) {
-                        optionValues[opt.option_group_id] = valueIdToLabel[opt.option_value_id] || '';
-                    }
-                }
 
                 form.reset({
                     sku: variant.sku,
@@ -164,7 +182,6 @@ export function VariantEditDialog({
                     selectedGroupIds: groupLinks.data?.map(l => l.group_id) || [],
                     selectedExclusionIds: exclusions.data?.map(l => l.model_id) || [],
                     category_ids: (product as any)?.category_ids || [],
-                    optionValues,
                 });
             } else {
                 form.reset({
@@ -179,21 +196,111 @@ export function VariantEditDialog({
                     selectedGroupIds: [],
                     selectedExclusionIds: [],
                     category_ids: (product as any)?.category_ids || [],
-                    optionValues: {},
                 });
             }
         };
         init();
     }, [open, variant?.id, product?.id]);
 
-    const upsertVariantOptions = async (variantId: string, optionValues: Record<string, string>) => {
-        const items = Object.entries(optionValues || {}).map(([groupId, label]) => ({ group_id: groupId, label }));
-        const { data, error } = await (supabase.rpc as any)('upsert_variant_options', {
-            p_variant_id: variantId,
-            p_items: items,
+    const fetchSuggestionsForProduct = async () => {
+        if (!product) return;
+        try {
+            setSuggestionsLoading(true);
+            const loaded = await fetchOptionSuggestions(product);
+            setSuggestions(loaded);
+        } catch (err) {
+            console.error('載入選項建議失敗:', err);
+            setSuggestions([]);
+        } finally {
+            setSuggestionsLoading(false);
+        }
+    };
+
+    const importSuggestion = (sug: OptionGroupSuggestion) => {
+        setOptionGroups(prev => {
+            const existing = prev.find(g => g.name.trim().toLowerCase() === sug.name.toLowerCase());
+            if (existing) {
+                return prev.map(g => {
+                    if (g.id !== existing.id) return g;
+                    const existingLabels = new Set(g.values.map(v => v.label.trim().toLowerCase()));
+                    const toAdd = sug.values.filter(v => !existingLabels.has(v.label.trim().toLowerCase()));
+                    return { ...g, values: [...g.values, ...toAdd.map(v => createOptionValue(v.label, v.value, '', '', v.hexCode))] };
+                });
+            }
+            const group = createOptionGroup(sug.name);
+            group.values = sug.values.map(v => createOptionValue(v.label, v.value, '', '', v.hexCode));
+            return [...prev, group];
+        });
+    };
+
+    const importAllSuggestions = () => {
+        suggestions.forEach(s => importSuggestion(s));
+    };
+
+    const handleSelectValue = (groupId: string, valueId: string) => {
+        setSelectedValueIds(prev => {
+            const next = { ...prev };
+            if (!valueId || next[groupId] === valueId) {
+                delete next[groupId];
+            } else {
+                next[groupId] = valueId;
+            }
+            return next;
+        });
+    };
+
+    useEffect(() => {
+        setSelectedValueIds(prev => {
+            let changed = false;
+            const next: Record<string, string> = {};
+            for (const g of optionGroups) {
+                const selId = prev[g.id];
+                if (!selId) continue;
+                if (g.values.some(v => v.id === selId)) next[g.id] = selId;
+                else changed = true;
+            }
+            return changed ? next : prev;
+        });
+    }, [optionGroups]);
+
+    const syncVariantOptions = async (variantId: string) => {
+        const options: { name: string; display: string; label: string; value: string }[] = [];
+        const keepGroupIds = new Set<string>();
+        for (const group of optionGroups) {
+            const selId = selectedValueIds[group.id];
+            if (!selId) continue;
+            const val = group.values.find(v => v.id === selId);
+            if (!val || !val.label.trim()) continue;
+            keepGroupIds.add(group.id);
+            const originalName = originalNamesRef.current[group.id] || group.name;
+            options.push({
+                name: originalName,
+                display: group.name.trim() || originalName,
+                label: val.label.trim(),
+                value: val.value.trim() || val.label.trim(),
+            });
+        }
+
+        const { data, error } = await (supabase.rpc as any)('upsert_product_variant_options_batch', {
+            p_product_id: product!.id,
+            p_variants: [{ variant_id: variantId, options }],
         });
         if (error) throw error;
-        if (data?.ok === false) throw new Error(data.reason || '更新變體選項失敗');
+        if (data && (data as any)?.ok === false) throw new Error((data as any).reason || '同步選項失敗');
+
+        const { data: links } = await (supabase.from('product_variant_options') as any)
+            .select('option_group_id')
+            .eq('variant_id', variantId);
+        const toRemove = (links || [])
+            .map((l: any) => l.option_group_id)
+            .filter((id: string) => !keepGroupIds.has(id));
+        if (toRemove.length > 0) {
+            const { error: delErr } = await (supabase.from('product_variant_options') as any)
+                .delete()
+                .eq('variant_id', variantId)
+                .in('option_group_id', toRemove);
+            if (delErr) throw delErr;
+        }
     };
 
     const createMutation = useMutation({
@@ -204,7 +311,6 @@ export function VariantEditDialog({
                 selectedExclusionIds,
                 category_ids,
                 spec_values,
-                optionValues,
                 ...dataToInsert
             } = values;
 
@@ -218,7 +324,7 @@ export function VariantEditDialog({
             const { data, error } = await (supabase.from('product_variants') as any).insert(finalData).select().single();
             if (error) throw error;
 
-            await upsertVariantOptions(data.id, optionValues || {});
+            await syncVariantOptions(data.id);
 
             if (values.spec_values && (product as any)?.category_ids?.length > 0) {
                 const serializedSpecsData = serializeSpecs(values.spec_values, specMap);
@@ -239,6 +345,7 @@ export function VariantEditDialog({
         onSuccess: () => {
             if (product) {
                 queryClient.invalidateQueries({ queryKey: ['product-variants', product.id] });
+                queryClient.invalidateQueries({ queryKey: ['products'] });
             }
             toast.success('變體已新增');
             onOpenChange(false);
@@ -257,7 +364,6 @@ export function VariantEditDialog({
                 selectedExclusionIds,
                 category_ids,
                 spec_values,
-                optionValues,
                 ...updates
             } = values;
 
@@ -269,7 +375,7 @@ export function VariantEditDialog({
             const { error } = await (supabase.from('product_variants') as any).update(finalUpdates).eq('id', variant!.id);
             if (error) throw error;
 
-            await upsertVariantOptions(variant!.id, optionValues || {});
+            await syncVariantOptions(variant!.id);
 
             if (values.spec_values && (product as any)?.category_ids?.length > 0) {
                 const serializedSpecsData = serializeSpecs(values.spec_values, specMap);
@@ -290,6 +396,7 @@ export function VariantEditDialog({
         onSuccess: () => {
             if (product) {
                 queryClient.invalidateQueries({ queryKey: ['product-variants', product.id] });
+                queryClient.invalidateQueries({ queryKey: ['products'] });
             }
             toast.success('變體已更新');
             onOpenChange(false);
@@ -350,52 +457,22 @@ export function VariantEditDialog({
                             />
                         </div>
 
-                        {optionGroups.length > 0 && (
-                            <div className="space-y-4">
-                                <Label className="text-sm font-medium">選項</Label>
-                                <div className="grid gap-4 sm:grid-cols-2">
-                                    {optionGroups.map((group) => {
-                                        const isColorGroup = isColorGroupName(group.name);
-                                        return (
-                                        <FormField
-                                            key={group.id}
-                                            control={form.control}
-                                            name={`optionValues.${group.id}`}
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel>{group.name}</FormLabel>
-                                                    <FormControl>
-                                                        {isColorGroup ? (
-                                                            <ColorSelectField
-                                                                multiple={false}
-                                                                selectedColorIds={(() => {
-                                                                    const val = field.value || '';
-                                                                    const color = getColorByName(val) ?? getColorByCode(val);
-                                                                    return color ? [color.id] : [];
-                                                                })()}
-                                                                onChange={(ids) => {
-                                                                    const color = libraryColors.find(c => c.id === ids[0]);
-                                                                    field.onChange(color ? color.name : '');
-                                                                }}
-                                                            />
-                                                        ) : (
-                                                            <OptionValueCombobox
-                                                                group={group}
-                                                                value={field.value || ''}
-                                                                onChange={field.onChange}
-                                                                placeholder={`輸入或選擇${group.name}`}
-                                                            />
-                                                        )}
-                                                    </FormControl>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
+                        <div className="space-y-2">
+                            <Label className="text-sm font-medium">選項群組與本變體選值</Label>
+                            <p className="text-xs text-muted-foreground">
+                                可新增／編輯選項群組與值（影響全產品）；並於每個群組內點選本變體使用的值（每群組限一個）。未選值的群組不會建立此變體關聯；取消勾選即移除關聯。
+                            </p>
+                            <VariantOptionsEditor
+                                groups={optionGroups}
+                                onChange={setOptionGroups}
+                                suggestions={suggestions}
+                                suggestionsLoading={suggestionsLoading}
+                                onImportSuggestion={importSuggestion}
+                                onImportAllSuggestions={importAllSuggestions}
+                                selectedValueIds={selectedValueIds}
+                                onSelectValue={handleSelectValue}
+                            />
+                        </div>
 
                         <div className="grid gap-4 sm:grid-cols-2">
                             <FormField

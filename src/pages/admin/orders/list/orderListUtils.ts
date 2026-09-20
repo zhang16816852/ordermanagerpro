@@ -8,7 +8,7 @@ export const getDisplayProductName = (productName: string = '', variantName?: st
 export const getOrderShipmentStatus = (items: OrderItem[]) => {
   if (items.length === 0) return 'waiting';
   const allProcessed = items.every((i) =>
-    i.status === 'shipped' || i.status === 'cancelled' || i.status === 'discontinued'
+    i.status === 'shipped' || i.status === 'cancelled' || i.status === 'discontinued' || i.status === 'out_of_stock'
   );
   const someShipped = items.some((i) => i.shipped_quantity > 0);
   if (allProcessed) return 'shipped';

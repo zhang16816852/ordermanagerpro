@@ -86,7 +86,7 @@ export function useOrderListSelections() {
     const key = getAggregateItemKey(item.productId, item.variantId);
     setSelectedAggregateItems(prev => {
       const next = new Map(prev);
-      if (checked) {
+      if (checked && item.totalPendingQuantity > 0) {
         next.set(key, {
           productId: item.productId,
           variantId: item.variantId,
@@ -109,6 +109,7 @@ export function useOrderListSelections() {
     if (checked) {
       const next = new Map<string, AggregateSelectionItem>();
       aggregatedItems.forEach(item => {
+        if (item.totalPendingQuantity <= 0) return;
         next.set(getAggregateItemKey(item.productId, item.variantId), {
           productId: item.productId,
           variantId: item.variantId,

@@ -12,7 +12,8 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { getContrastColor } from '@/utils/colorUtils';
-import { Sparkles, Plus, X, GripVertical } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Sparkles, Plus, X, GripVertical, CheckCircle2 } from 'lucide-react';
 import { ColorSelectField } from '@/components/products/form/ColorSelectField';
 import { useColorStore } from '@/store/useColorStore';
 import type { ProductColor } from '@/types/colors';
@@ -32,6 +33,9 @@ interface VariantOptionsEditorProps {
   suggestionsLoading?: boolean;
   onImportSuggestion?: (sug: OptionGroupSuggestion) => void;
   onImportAllSuggestions?: () => void;
+  // 「本變體選值」：供單一變體編輯時指定每群組使用的值（每群組限一個，valueId 為空字串＝取消）
+  selectedValueIds?: Record<string, string>;
+  onSelectValue?: (groupId: string, valueId: string) => void;
 }
 
 export function VariantOptionsEditor({
@@ -41,6 +45,8 @@ export function VariantOptionsEditor({
   suggestionsLoading = false,
   onImportSuggestion,
   onImportAllSuggestions,
+  selectedValueIds,
+  onSelectValue,
 }: VariantOptionsEditorProps) {
   const [bulkPasteTargetGroupId, setBulkPasteTargetGroupId] = useState<string | null>(null);
   const [bulkPasteText, setBulkPasteText] = useState('');
@@ -246,6 +252,45 @@ export function VariantOptionsEditor({
                 <X className="h-4 w-4" />
               </Button>
             </div>
+
+            {onSelectValue && (
+              <div className="flex flex-wrap items-center gap-1.5 rounded-md bg-muted/40 border border-dashed p-2">
+                <Label className="text-xs text-muted-foreground w-full">本變體選值（每群組限一個，點擊切換）</Label>
+                {group.values.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">尚無選項值，請先在上方新增</span>
+                ) : (
+                  group.values.map(v => {
+                    const isSelected = selectedValueIds?.[group.id] === v.id;
+                    const libColor = findLibraryColor(libraryColors, v);
+                    const swatch = v.hexCode || libColor?.hex_code || '';
+                    const selectable = Boolean((v.label || v.value).trim());
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        disabled={!selectable}
+                        title={v.label || v.value}
+                        onClick={() => onSelectValue(group.id, isSelected ? '' : v.id)}
+                        className={cn(
+                          'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors',
+                          isSelected
+                            ? 'border-primary bg-primary/10 text-primary font-medium'
+                            : 'border-border hover:bg-muted',
+                          !selectable && 'opacity-40 cursor-not-allowed',
+                        )}
+                      >
+                        <span
+                          className="h-3 w-3 rounded-full border border-black/20 shrink-0"
+                          style={{ backgroundColor: swatch || '#e2e8f0' }}
+                        />
+                        {v.label || v.value || '（未命名）'}
+                        <CheckCircle2 className={cn('h-3.5 w-3.5', isSelected ? 'opacity-100' : 'opacity-0')} />
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
 
             <ColorSelectField
               selectedColorIds={selectedColorIds}

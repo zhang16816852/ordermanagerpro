@@ -53,19 +53,26 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
 
   // 1c. Purchase Order linkage — reverse lookup: orderId → { poCount, poIds }
   //     + per (orderId, productId, variantId) → 已採購數量（source_quantities）
+  //     + per (productId, variantId) → 已訂/在途/已收（供訂單總攬）
+  // 僅計算「真正下單」的採購單（草稿/已取消不算已訂）
+  const activePOStatuses = ['ordered', 'partial_received', 'received'];
+  const isActivePO = (status?: string | null) => activePOStatuses.includes(status || '');
   const { data: poLinkItems = [] } = useQuery({
     queryKey: ['purchase-order-links'],
     queryFn: async () => {
       const { data, error } = await (supabase
         .from('purchase_order_items') as any)
-        .select('source_order_ids, source_quantities, purchase_order_id, product_id, variant_id');
+        .select('source_order_ids, source_quantities, purchase_order_id, product_id, variant_id, quantity, received_quantity, purchase_orders(status)');
       if (error) throw error;
       return (data || []) as {
         source_order_ids: string[] | null;
         source_quantities: Record<string, number> | null;
         purchase_order_id: string;
+        purchase_orders?: { status: string | null } | { status: string | null }[] | null;
         product_id: string | null;
         variant_id: string | null;
+        quantity: number;
+        received_quantity: number;
       }[];
     },
   });
@@ -73,26 +80,40 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
   const poLinkMap = new Map<string, { poCount: number; poIds: string[] }>();
   // key: `${orderId}|${productId}|${variantId ?? 'null'}` → 已採購數量
   const purchasedByOrderKey = new Map<string, number>();
+  // key: `${productId}_${variantId ?? 'null'}` → 已下單/在途/已收
+  const poProductStats = new Map<string, { orderedQty: number; receivedQty: number; inTransitQty: number }>();
   for (const poi of poLinkItems) {
-    if (!poi.source_order_ids) continue;
-    for (const orderId of poi.source_order_ids) {
-      const existing = poLinkMap.get(orderId);
-      if (existing) {
-        if (!existing.poIds.includes(poi.purchase_order_id)) {
-          existing.poIds.push(poi.purchase_order_id);
-          existing.poCount = existing.poIds.length;
+    const poStatus = Array.isArray(poi.purchase_orders)
+      ? poi.purchase_orders?.[0]?.status
+      : poi.purchase_orders?.status;
+    if (!isActivePO(poStatus)) continue;
+    if (poi.source_order_ids) {
+      for (const orderId of poi.source_order_ids) {
+        const existing = poLinkMap.get(orderId);
+        if (existing) {
+          if (!existing.poIds.includes(poi.purchase_order_id)) {
+            existing.poIds.push(poi.purchase_order_id);
+            existing.poCount = existing.poIds.length;
+          }
+        } else {
+          poLinkMap.set(orderId, { poCount: 1, poIds: [poi.purchase_order_id] });
         }
-      } else {
-        poLinkMap.set(orderId, { poCount: 1, poIds: [poi.purchase_order_id] });
+      }
+      // 累計該品項 (orderId × product × variant) 的已採購量
+      if (poi.source_quantities) {
+        for (const [orderId, qty] of Object.entries(poi.source_quantities)) {
+          const key = `${orderId}|${poi.product_id || 'null'}|${poi.variant_id || 'null'}`;
+          purchasedByOrderKey.set(key, (purchasedByOrderKey.get(key) || 0) + (qty || 0));
+        }
       }
     }
-    // 累計該品項 (orderId × product × variant) 的已採購量
-    if (poi.source_quantities) {
-      for (const [orderId, qty] of Object.entries(poi.source_quantities)) {
-        const key = `${orderId}|${poi.product_id || 'null'}|${poi.variant_id || 'null'}`;
-        purchasedByOrderKey.set(key, (purchasedByOrderKey.get(key) || 0) + (qty || 0));
-      }
-    }
+    // 依品項累計已下單/已收/在途（含非訂單來源的進貨）
+    const pkey = `${poi.product_id || 'null'}_${poi.variant_id || 'null'}`;
+    const stats = poProductStats.get(pkey) || { orderedQty: 0, receivedQty: 0, inTransitQty: 0 };
+    stats.orderedQty += poi.quantity || 0;
+    stats.receivedQty += poi.received_quantity || 0;
+    stats.inTransitQty += Math.max(0, (poi.quantity || 0) - (poi.received_quantity || 0));
+    poProductStats.set(pkey, stats);
   }
 
   // 2. Stores list for filter — only stores with orders of this status
@@ -189,7 +210,8 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
           return order.order_items.every(item =>
             item.shipped_quantity >= item.quantity ||
             item.status === 'cancelled' ||
-            item.status === 'discontinued'
+            item.status === 'discontinued' ||
+            item.status === 'out_of_stock'
           );
         })
         .map(order => order.id);
@@ -317,6 +339,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
     shippingPoolMap,
     poLinkMap,
     purchasedByOrderKey,
+    poProductStats,
     consignmentBySourceOrderId,
     getPendingQuantity,
     syncOrdersMutation,

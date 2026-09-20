@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -56,6 +56,9 @@ export function AggregateToPODialog({
   // Editable items state — initialized from selectedItems when dialog opens
   const [editableItems, setEditableItems] = useState<EditableItem[]>([]);
 
+  // 使用者手動改過單價的 key 集合（自動帶入價格時不覆寫手動輸入）
+  const touchedCostRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     if (open) {
       setEditableItems(selectedItems.map((item, i) => ({
@@ -76,6 +79,7 @@ export function AggregateToPODialog({
       setAddVariantId('');
       setAddQuantity('1');
       setAddUnitCost('');
+      touchedCostRef.current.clear();
     }
   }, [open, selectedItems]);
 
@@ -150,27 +154,72 @@ export function AggregateToPODialog({
     enabled: open && showAddItem && !!addProductId,
   });
 
-  const getUnitCost = (productId: string, variantId: string | null): number => {
-    if (supplierId) {
-      const mapping = supplierMappings.find(
-        (m: any) => m.internal_product_id === productId && m.internal_variant_id === variantId
-      );
-      if (mapping?.vendor_unit_cost) return mapping.vendor_unit_cost;
-    }
-    return 0;
-  };
+  const selectedProductIds = useMemo(
+    () => [...new Set(selectedItems.map((item) => item.productId))],
+    [selectedItems]
+  );
+  const selectedVariantIds = useMemo(
+    () => [...new Set(selectedItems.filter((item) => item.variantId).map((item) => item.variantId as string))],
+    [selectedItems]
+  );
 
-  // When supplier changes, update unit costs for items that have 0 cost
+  // 為已選品項撈取批發價，確保單價能正確帶入（不再停留在 0）
+  const { data: selectedProductPrices = [] } = useQuery({
+    queryKey: ['products-for-po-price', selectedProductIds],
+    queryFn: async () => {
+      if (selectedProductIds.length === 0) return [];
+      const { data, error } = await (supabase as any)
+        .from('products')
+        .select('id, wholesale_price')
+        .in('id', selectedProductIds);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: open && selectedProductIds.length > 0,
+  });
+
+  const { data: selectedVariantPrices = [] } = useQuery({
+    queryKey: ['variants-for-po-price', selectedVariantIds],
+    queryFn: async () => {
+      if (selectedVariantIds.length === 0) return [];
+      const { data, error } = await (supabase as any)
+        .from('product_variants')
+        .select('id, wholesale_price')
+        .in('id', selectedVariantIds);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: open && selectedVariantIds.length > 0,
+  });
+
+  const productWholesaleMap = useMemo(
+    () => new Map<string, number>(selectedProductPrices.map((p: any) => [p.id, Number(p.wholesale_price) || 0] as [string, number])),
+    [selectedProductPrices]
+  );
+  const variantWholesaleMap = useMemo(
+    () => new Map<string, number>(selectedVariantPrices.map((v: any) => [v.id, Number(v.wholesale_price) || 0] as [string, number])),
+    [selectedVariantPrices]
+  );
+
+  // 供應商對照或任一批發價來源就緒時，自動補齊尚未手動編輯的單價
+  // （解析優先序：供應商對照價 → 變體批發價 → 產品批發價）
   useEffect(() => {
-    if (!supplierId || supplierMappings.length === 0) return;
+    if (supplierId.length === 0 && supplierMappings.length === 0 && productWholesaleMap.size === 0 && variantWholesaleMap.size === 0) return;
     setEditableItems(prev => prev.map(item => {
-      if (item.unitCost === 0) {
-        const cost = getUnitCost(item.productId, item.variantId);
-        if (cost > 0) return { ...item, unitCost: cost };
+      if (touchedCostRef.current.has(item.key)) return item;
+      let cost = 0;
+      if (supplierId) {
+        const mapping = supplierMappings.find(
+          (m: any) => m.internal_product_id === item.productId && m.internal_variant_id === item.variantId
+        );
+        if (mapping?.vendor_unit_cost) cost = mapping.vendor_unit_cost;
       }
+      if (cost <= 0 && item.variantId) cost = variantWholesaleMap.get(item.variantId) || 0;
+      if (cost <= 0) cost = productWholesaleMap.get(item.productId) || 0;
+      if (cost > 0) return { ...item, unitCost: cost };
       return item;
     }));
-  }, [supplierId, supplierMappings]);
+  }, [supplierId, supplierMappings, productWholesaleMap, variantWholesaleMap]);
 
   const handleUpdateQuantity = (key: string, qty: number) => {
     setEditableItems(prev => prev.map(item =>
@@ -179,6 +228,7 @@ export function AggregateToPODialog({
   };
 
   const handleUpdateUnitCost = (key: string, cost: number) => {
+    touchedCostRef.current.add(key);
     setEditableItems(prev => prev.map(item =>
       item.key === key ? { ...item, unitCost: Math.max(0, cost) } : item
     ));
@@ -370,7 +420,7 @@ export function AggregateToPODialog({
           {/* Editable Items List */}
           <div className="space-y-2">
             <Label>產品清單（{editableItems.length} 項）</Label>
-            <ScrollArea className="max-h-[40vh] rounded-md border">
+            <ScrollArea className="h-[320px] rounded-md border">
               <div className="p-2 space-y-1">
                 {editableItems.length === 0 && (
                   <div className="text-sm text-muted-foreground text-center py-4">無產品，請點擊下方新增</div>

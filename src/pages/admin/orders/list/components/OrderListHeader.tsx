@@ -4,6 +4,7 @@ import { Plus, Package, FileText, ClipboardList, PlusCircle } from 'lucide-react
 import { PageHeader } from '@/components/layout/PageHeader';
 import { OrderFilters } from './OrderFilters';
 import type {
+  AggregateFilterMode,
   OrderStatusTab,
   OrderViewMode,
 } from '../orderListTypes';
@@ -14,6 +15,8 @@ interface OrderListHeaderProps {
   onStatusTabChange: (v: OrderStatusTab) => void;
   viewMode: OrderViewMode;
   onViewModeChange: (v: OrderViewMode) => void;
+  aggStatus: AggregateFilterMode;
+  onAggStatusChange: (v: AggregateFilterMode) => void;
   search: string;
   onSearchChange: (v: string) => void;
   storeFilter: string;
@@ -39,6 +42,8 @@ export function OrderListHeader({
   onStatusTabChange,
   viewMode,
   onViewModeChange,
+  aggStatus,
+  onAggStatusChange,
   search,
   onSearchChange,
   storeFilter,
@@ -90,6 +95,8 @@ export function OrderListHeader({
         onStatusTabChange={onStatusTabChange}
         viewMode={viewMode}
         onViewModeChange={onViewModeChange}
+        aggStatus={aggStatus}
+        onAggStatusChange={onAggStatusChange}
         search={search}
         onSearchChange={onSearchChange}
         storeFilter={storeFilter}

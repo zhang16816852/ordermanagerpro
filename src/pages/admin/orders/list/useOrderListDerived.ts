@@ -2,7 +2,13 @@ import { useCallback, useMemo } from 'react';
 import { Order, OrderItem } from '@/types/order';
 import { AggregatedItem } from './components/AggregateTableView';
 import { getDisplayProductName, getOrderTotal } from './orderListUtils';
-import type { AggregateSelectionItem, OrderViewMode } from './orderListTypes';
+import type { AggregateFilterMode, AggregateSelectionItem, OrderViewMode } from './orderListTypes';
+
+export interface PoProductStats {
+  orderedQty: number;
+  receivedQty: number;
+  inTransitQty: number;
+}
 
 export interface UseOrderListDerivedParams {
   orders: Order[];
@@ -16,6 +22,8 @@ export interface UseOrderListDerivedParams {
   sortDirection: 'asc' | 'desc';
   getPendingQuantity: (item: OrderItem) => number;
   purchasedByOrderKey: Map<string, number>;
+  poProductStats: Map<string, PoProductStats>;
+  aggStatus: AggregateFilterMode;
   selectedOrderIds: Set<string>;
   selectedItems: Map<string, any>;
   selectedAggregateItems: Map<string, AggregateSelectionItem>;
@@ -56,6 +64,8 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
     sortDirection,
     getPendingQuantity,
     purchasedByOrderKey,
+    poProductStats,
+    aggStatus,
     selectedOrderIds,
     selectedItems,
     selectedAggregateItems,
@@ -161,7 +171,7 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
     if (viewMode !== 'items') return [];
     return orders?.flatMap(order =>
       order.order_items
-        .filter(item => getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued')
+        .filter(item => getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued' && item.status !== 'out_of_stock')
         .filter(item => itemMatchesSearch(item))
         .map(item => ({
           ...item,
@@ -181,7 +191,7 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
     if (viewMode !== 'items') return [];
     return orders?.flatMap(order =>
       order.order_items
-        .filter(item => item.status === 'cancelled' || item.status === 'discontinued')
+        .filter(item => item.status === 'cancelled' || item.status === 'discontinued' || item.status === 'out_of_stock')
         .filter(item => itemMatchesSearch(item))
         .map(item => ({
           ...item,
@@ -203,7 +213,7 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
 
     const allItems = orders?.flatMap(order =>
       order.order_items
-        .filter(item => getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued')
+        .filter(item => getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued' && item.status !== 'out_of_stock')
         .filter(item => itemMatchesSearch(item))
         .map(item => ({
           ...item,
@@ -218,27 +228,22 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
     const grouped = new Map<string, AggregatedItem>();
     for (const item of allItems) {
       const key = `${item.product_id}_${item.variant_id || 'null'}`;
-      const purchasedKey = `${item.orderId}|${item.product_id}|${item.variant_id || 'null'}`;
-      const alreadyPurchased = purchasedByOrderKey.get(purchasedKey) || 0;
-      const remaining = Math.max(0, item.pendingQuantity - alreadyPurchased);
-      if (remaining <= 0) continue;
-
       if (grouped.has(key)) {
         const existing = grouped.get(key)!;
-        existing.totalPendingQuantity += remaining;
+        existing.totalDemand += item.pendingQuantity;
         if (!existing.sourceOrderIds.includes(item.orderId)) {
           existing.sourceOrderIds.push(item.orderId);
         }
-        existing.sourceQuantities[item.orderId] = (existing.sourceQuantities[item.orderId] || 0) + remaining;
+        existing.sourceQuantities[item.orderId] = (existing.sourceQuantities[item.orderId] || 0) + item.pendingQuantity;
         const existingStore = existing.storeBreakdown.find(s => s.storeId === item.storeId);
         if (existingStore) {
-          existingStore.quantity += remaining;
+          existingStore.quantity += item.pendingQuantity;
         } else {
           existing.storeBreakdown.push({
             storeId: item.storeId,
             storeName: item.storeName,
             storeCode: item.storeCode,
-            quantity: remaining,
+            quantity: item.pendingQuantity,
           });
         }
       } else {
@@ -248,21 +253,42 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
           productName: getDisplayProductName(item.product?.name, item.product_variant?.name),
           variantName: item.product_variant?.name || null,
           sku: item.product?.code || '',
-          totalPendingQuantity: remaining,
+          totalPendingQuantity: 0,
+          totalDemand: item.pendingQuantity,
+          orderedQty: 0,
+          receivedQty: 0,
+          inTransitQty: 0,
+          outstandingQty: 0,
           sourceOrderIds: [item.orderId],
-          sourceQuantities: { [item.orderId]: remaining },
+          sourceQuantities: { [item.orderId]: item.pendingQuantity },
           storeBreakdown: [{
             storeId: item.storeId,
             storeName: item.storeName,
             storeCode: item.storeCode,
-            quantity: remaining,
+            quantity: item.pendingQuantity,
           }],
         });
       }
     }
 
-    return Array.from(grouped.values()).sort((a, b) => a.productName.localeCompare(b.productName));
-  }, [orders, viewMode, getPendingQuantity, itemMatchesSearch, purchasedByOrderKey]);
+    for (const agg of grouped.values()) {
+      const stats = poProductStats.get(`${agg.productId}_${agg.variantId || 'null'}`) ||
+        { orderedQty: 0, receivedQty: 0, inTransitQty: 0 };
+      agg.orderedQty = stats.orderedQty;
+      agg.receivedQty = stats.receivedQty;
+      agg.inTransitQty = stats.inTransitQty;
+      agg.outstandingQty = Math.max(0, agg.totalDemand - stats.orderedQty);
+      agg.totalPendingQuantity = agg.outstandingQty;
+    }
+
+    let result = Array.from(grouped.values());
+    if (aggStatus === 'outstanding') {
+      result = result.filter(a => a.outstandingQty > 0);
+    } else if (aggStatus === 'ordered') {
+      result = result.filter(a => a.inTransitQty > 0);
+    }
+    return result.sort((a, b) => a.productName.localeCompare(b.productName));
+  }, [orders, viewMode, getPendingQuantity, itemMatchesSearch, poProductStats, aggStatus]);
 
   // 從選取的訂單彙整品項，供「轉採購單」使用（扣除已採購量，避免重複採購）
   const poItemsFromOrders = useMemo(() => {
@@ -270,7 +296,7 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
     const grouped = new Map<string, AggregateSelectionItem>();
     for (const order of orders.filter(o => selectedOrderIds.has(o.id))) {
       for (const item of order.order_items) {
-        if (item.status === 'cancelled' || item.status === 'discontinued') continue;
+        if (item.status === 'cancelled' || item.status === 'discontinued' || item.status === 'out_of_stock') continue;
         const pending = item.quantity - item.shipped_quantity;
         if (pending <= 0) continue;
         const purchasedKey = `${order.id}|${item.product_id}|${item.variant_id || 'null'}`;
@@ -348,7 +374,7 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
       for (const item of order.order_items) {
         const pending = getPendingQuantity(item);
         if (pending <= 0) continue;
-        if (item.status === 'cancelled' || item.status === 'discontinued') continue;
+        if (item.status === 'cancelled' || item.status === 'discontinued' || item.status === 'out_of_stock') continue;
         if (!grouped[order.store_id]) {
           grouped[order.store_id] = { storeName: order.stores?.name || '', items: [] };
         }

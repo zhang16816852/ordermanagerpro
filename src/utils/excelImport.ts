@@ -39,6 +39,7 @@ export async function parseProductExcel(buffer: ArrayBuffer): Promise<{ rows: an
         }
 
         const headerKeys = rows[headerRowIndex].map(h => String(h).trim());
+        const displayRow = rows[0] || [];
         const dataRows = rows.slice(headerRowIndex + 1);
 
         // 偵測哪些 base column 存在於 header
@@ -54,7 +55,10 @@ export async function parseProductExcel(buffer: ArrayBuffer): Promise<{ rows: an
 
             const item: any = {
                 _categoryName: sheetName,
-                _specs: {}
+                _specs: {},
+                _optionValues: {},
+                _optionValueSkus: {},
+                _optionNames: {}
             };
 
             headerKeys.forEach((key, index) => {
@@ -69,6 +73,19 @@ export async function parseProductExcel(buffer: ArrayBuffer): Promise<{ rows: an
                         item.id = String(value).trim();
                     } else {
                         item[key] = value;
+                    }
+                } else if (key.startsWith('option:')) {
+                    const rest = key.slice('option:'.length).trim();
+                    const isValueCol = rest.toLowerCase().endsWith('.value');
+                    const groupName = (isValueCol ? rest.slice(0, -'.value'.length) : rest).trim();
+                    const cell = String(value).trim();
+                    if (groupName && cell) {
+                        if (isValueCol) item._optionValueSkus[groupName] = cell;
+                        else item._optionValues[groupName] = cell;
+                    }
+                    if (groupName && !isValueCol) {
+                        const displayName = String(displayRow[index] ?? '').trim();
+                        if (displayName) item._optionNames[groupName] = displayName;
                     }
                 } else if (key && key.includes(':')) {
                     item._specs[key] = String(value).trim();

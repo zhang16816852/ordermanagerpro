@@ -60,13 +60,15 @@ export function AggregateCardsView({
         const isSelected = selectedItems.has(key);
         const selectedData = selectedItems.get(key);
         const isExpanded = expandedCards.has(key);
+        const isFullyOrdered = item.outstandingQty <= 0;
 
         return (
           <Collapsible key={key} open={isExpanded} onOpenChange={() => toggleExpand(key)}>
-            <div className={`rounded-lg border bg-card p-4 ${isSelected ? 'ring-2 ring-primary' : ''}`}>
+            <div className={`rounded-lg border bg-card p-4 ${isSelected ? 'ring-2 ring-primary' : ''} ${isFullyOrdered ? 'opacity-70' : ''}`}>
               <div className="flex items-start gap-3">
                 <Checkbox
                   checked={isSelected}
+                  disabled={isFullyOrdered}
                   onCheckedChange={(checked) => onToggleSelection(item, checked === true)}
                   className="mt-1"
                 />
@@ -76,10 +78,23 @@ export function AggregateCardsView({
                       <h3 className="font-medium truncate">{item.variantName || item.productName}</h3>
                       <p className="text-xs text-muted-foreground font-mono mt-0.5">{item.sku}</p>
                     </div>
-                    <Badge variant="secondary" className="font-bold text-base px-3 py-1 shrink-0">
-                      {isSelected ? selectedData?.quantity : item.totalPendingQuantity}
+                    <Badge
+                      variant={isFullyOrdered ? 'outline' : 'destructive'}
+                      className="font-bold text-base px-3 py-1 shrink-0"
+                    >
+                      {isSelected ? selectedData?.quantity : item.outstandingQty}
                     </Badge>
                   </div>
+
+                  {!isSelected && (
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <span>總需求 <span className="font-semibold text-foreground">{item.totalDemand}</span></span>
+                      <span>
+                        已訂 <span className="font-semibold text-foreground">{item.orderedQty}</span>
+                        <span className="text-muted-foreground/80">（在途 {item.inTransitQty}・已收 {item.receivedQty}）</span>
+                      </span>
+                    </div>
+                  )}
 
                   {isSelected && (
                     <div className="mt-3 flex items-center gap-2">
@@ -87,11 +102,11 @@ export function AggregateCardsView({
                       <Input
                         type="number"
                         min={1}
-                        max={item.totalPendingQuantity}
-                        value={selectedData?.quantity ?? item.totalPendingQuantity}
+                        max={item.outstandingQty}
+                        value={selectedData?.quantity ?? item.outstandingQty}
                         onChange={(e) => {
                           const val = parseInt(e.target.value) || 1;
-                          onUpdateQuantity(key, Math.min(Math.max(1, val), item.totalPendingQuantity));
+                          onUpdateQuantity(key, Math.min(Math.max(1, val), item.outstandingQty));
                         }}
                         className="w-24 h-8 text-center"
                       />

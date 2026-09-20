@@ -2,6 +2,17 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（訂單列表桌面批次動作修復 + 缺貨排除需求，2026-09-20）
+
+- **桌面漏掉商品視圖批次動作（`BatchActionBar.tsx`）**：原本「加入出貨池／轉採購單／標記停產/取消」的 `viewMode === 'items'` 區塊只寫在**行動端底欄**，桌面浮動選單無此段 → 桌面上勾選品項後看不到任何動作。已於桌面選單補上同區塊（`rounded-full shadow-inner` 樣式），並把選單容器改 `max-w-[95vw] flex-wrap justify-center` 避免按鈕溢出。
+- **缺貨(`out_of_stock`) 排除（全管線一致化，`useOrderListDerived.ts` 等）**：`out_of_stock` 原為有定義狀態卻無排除邏輯。現比照 `cancelled`/`discontinued`：① `allPendingItems` 與 `aggregatedItems` 需求計算排除（**訂單總攬不再把缺貨品項記入需求**）；② `allCancelledItems` 納入並可「還原待出貨」（`ItemTableView` 徽章改三態：`已取消`／`缺貨`／`已停售`）；③ `poItemsFromOrders`/`poItemsSource` 排除（缺貨品項不進採購單）；④ 收尾判斷 `getOrderShipmentStatus`（`orderListUtils`/`OrderTableView`）、`syncOrdersMutation`、directShip 倉庫帶入等處一致視 `out_of_stock` 為已處理。⚠️ 目前全站仍**無 UI 可把品項設為 `out_of_stock`**（`cancelItemsMutation` 僅支援 `cancelled`/`waiting`），此為相容未來資料的防呆。
+- **驗證**：`npm run typecheck`（0 errors）、`npm run lint`（0 errors，62 warnings 既有）、`npm run build` 通過。
+
+## 近期變更（採購單詳情對話框更名 `PurchaseOrderDetailDialog` + 品項搜尋，2026-09-20）
+
+- **更名（`src/pages/admin/purchase-orders/components/OrderDetailDialog.tsx` → `PurchaseOrderDetailDialog.tsx`）**：為避免與訂單系統 `OrderDetailDialog`（`src/components/order/OrderDetailDialog.tsx`）及寄賣頁 `OrderDetailDialog`（`src/pages/admin/consignment/components/OrderDetailDialog.tsx`）同名混淆，元件／Props 一併更名為 `PurchaseOrderDetailDialog`／`PurchaseOrderDetailDialogProps`（`git mv` 保留歷史，僅 `PurchaseOrdersPage.tsx` L8/L337 引用，UI 行為不變）。
+- **品項表格搜尋（`PurchaseOrderDetailDialog.tsx`）**：頂部新增搜尋列（L447 input、L456「共 N 項符合」）—— trim＋toLowerCase 比對「產品名／變體名／SKU／產品 code／`vendor_product_id`／`vendor_product_name`／來源訂單字串（`sourceOrderMap[id] || id.slice(0,8)`）」。`visibleItems` memo（L138，`isFiltering` 時比對、否則回全量；`getMappingKey` 已前移至 L136 避免閉包 TDZ）驅動表格（`SortableContext` L499、`visibleItems.map` L501/L518）與空狀態分流 L509「查無符合的品項」／L526「目前無任何品項」；**全量資料不受影響**——L306/L325 `localItems.map`（匯出/存檔組裝）與 `liveTotal`（L126）維持全量；`isFiltering` 時停用拖曳排序（L175/L187）。
+
 ## 近期變更（編輯訂單 Maximum update depth 修復，2026-09-16）
 
 - **根因**：`AdminOrderForm.tsx` 以行內箭頭 `onToggleStatus: () => c.toggleStatusMutation.mutate()` 傳給 `useAdminOrderFormHeader`，每次 render 皆產生**新函數 identity**；該 hook 的 `useLayoutEffect` deps 又含 `onToggleStatus`/`navigate`/`navigateBack` → 每次 render effect 重跑並 `setPageHeader(新物件)` → `PageHeaderProvider` 更新 → 所有 `usePageHeader` consumer（含 AppLayoutContent 與 AdminOrderForm 自身）重 render → 新箭頭 → effect 重跑 → **無限迴圈**（報錯位置在 SidebarNav/AppLayout tree，實為 context 迴圈表象）。
@@ -53,7 +64,7 @@
 - **採購單類型（migration `20260912000003_purchase_orders_purpose.sql`）**：`purchase_orders` 新增 `purpose`（`general`/`repair_parts`）；`RepairPurchaseDialog` 建立時寫 `'repair_parts'`；`usePurchaseOrders` 新增 `PurchaseOrderFilters`（`supplierId/purpose/status/dateFrom/dateTo`，server-side `.eq/.gte/.lte`＋queryKey 依賴）；`PurchaseOrdersPage` 篩選列（供應商/類型/狀態/日期區間 Popover＋Calendar zhTW＋清除篩選）；`OrderListTab` 新增「類型」欄＋`getTypeBadge`（維修叫料 violet／一般進貨 secondary，mobile card badge）。
 - **銷貨單勾選匯出（Excel）**：`SalesNoteListTable` 新增 `selectable/selectedIds/onSelectionChange`（桌面 checkbox 欄＋表頭全選、mobile card checkbox）；`AdminSalesNotes` 加選取工具列（已選 N 張／取消／匯出 Excel，`import("xlsx")` 動態載入）。格式：每單表頭列（銷貨單 code、店家、日期、類型）＋品項列（變體單一名、數量、單價、銷售金額=qty×unit_price）＋單張小計＋總計（N 張・共 X 件・總額）；檔名 `銷貨單匯出_yyyyMMdd.xlsx`、sheet「銷貨單」。
 - **寄賣雙視角（`ConsignmentPage`）**：新增訂單視角／店家視角切換（searchParams `'view'` 持久化）；店家視角＝新元件 `StoreViewTab.tsx`，`send_to_store` 依目標店家分組、`receive_from_supplier` 依供應商分組（`consignment_order_items` 以 `quantity×unit_price` 加總），組內列出各單 code/狀態/日期/總額＋查看。
-- **變體名稱單一顯示（全站 UI）**：顯示品項名稱一律「**有變體只顯示變體名，無變體才回退產品名**」，不再「產品 - 變體」並陳；**商品卡容器（代表整支商品，如商品卡片/Dialog 標題）保留產品名**。已改：`OrderItemsTable`（`getComponentInfo` 已優先 variant，修正 compact 重複「name - variant」與詳情子列）、`ItemsTableView`、admin `orders/list` 的 `ItemTableView`/`AggregateTableView`/`AggregateCardsView`、store `SalesNotes`（寄賣回報表）、PO `OrderDetailDialog`/`ReceivingTab`/`ImportFromOrdersDialog`、consignment `OrderDetailDialog`（明細＋編輯品項）/`ReportsTab`、`OrderReviewPanel`、`CartPanel`、`OrderGridProductPicker` badge、`useInventory`（name＝variant、specs 欄改顯示所屬產品名）、`ProductDetailDialog` 加入購物車 toast、accounting `ReferenceViewer`、分享/列印（`SharedReceiptExport` 原即 `variant ?? name`）、`SalesNoteDetailDialog` 原即 variant 優先、維修單零件名 already `part_name || variant?.name || product?.name`，皆無需更動。`npm run typecheck`＋`npm run lint`（0 errors，62 warnings 為既有）＋build 成功。
+- **變體名稱單一顯示（全站 UI）**：顯示品項名稱一律「**有變體只顯示變體名，無變體才回退產品名**」，不再「產品 - 變體」並陳；**商品卡容器（代表整支商品，如商品卡片/Dialog 標題）保留產品名**。已改：`OrderItemsTable`（`getComponentInfo` 已優先 variant，修正 compact 重複「name - variant」與詳情子列）、`ItemsTableView`、admin `orders/list` 的 `ItemTableView`/`AggregateTableView`/`AggregateCardsView`、store `SalesNotes`（寄賣回報表）、PO `PurchaseOrderDetailDialog`/`ReceivingTab`/`ImportFromOrdersDialog`、consignment `OrderDetailDialog`（明細＋編輯品項）/`ReportsTab`、`OrderReviewPanel`、`CartPanel`、`OrderGridProductPicker` badge、`useInventory`（name＝variant、specs 欄改顯示所屬產品名）、`ProductDetailDialog` 加入購物車 toast、accounting `ReferenceViewer`、分享/列印（`SharedReceiptExport` 原即 `variant ?? name`）、`SalesNoteDetailDialog` 原即 variant 優先、維修單零件名 already `part_name || variant?.name || product?.name`，皆無需更動。`npm run typecheck`＋`npm run lint`（0 errors，62 warnings 為既有）＋build 成功。
 
 ## 專案一句話
 

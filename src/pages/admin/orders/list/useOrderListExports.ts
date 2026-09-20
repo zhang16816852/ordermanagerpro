@@ -23,7 +23,11 @@ export function useOrderListExports({
     return {
       '產品名稱': item.productName,
       'SKU': item.sku,
-      '總需求量': item.maxQuantity,
+      '總需求': agg?.totalDemand ?? item.maxQuantity,
+      '已訂': agg?.orderedQty ?? 0,
+      '在途': agg?.inTransitQty ?? 0,
+      '已收': agg?.receivedQty ?? 0,
+      '欠貨': agg?.outstandingQty ?? item.maxQuantity,
       '叫貨量': item.quantity,
       '門市明細': storeDetail,
     };
@@ -31,7 +35,7 @@ export function useOrderListExports({
 
   const handleExportAggregateCSV = async () => {
     const data = Array.from(selectedAggregateItems.values()).map(buildAggregateDownloadData);
-    await exportToCSV(data, `叫貨總覽_${statusTab}`);
+    await exportToCSV(data, `訂單總攬_${statusTab}`);
   };
 
   const handleExportAggregateExcel = async () => {
@@ -39,8 +43,8 @@ export function useOrderListExports({
     const xlsx = await import('xlsx');
     const ws = xlsx.utils.json_to_sheet(data);
     const wb = xlsx.utils.book_new();
-    xlsx.utils.book_append_sheet(wb, ws, '叫貨總覽');
-    xlsx.writeFile(wb, `叫貨總覽_${statusTab}_${Date.now()}.xlsx`);
+    xlsx.utils.book_append_sheet(wb, ws, '訂單總攬');
+    xlsx.writeFile(wb, `訂單總攬_${statusTab}_${Date.now()}.xlsx`);
   };
 
   const handleExportOrdersCSV = async () => {

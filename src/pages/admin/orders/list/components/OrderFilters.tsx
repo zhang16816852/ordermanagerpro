@@ -4,12 +4,15 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { StorePicker } from '@/components/ui/StorePicker';
 import { Search, Package, Truck, CheckSquare, List, LayoutGrid, ClipboardList, Calendar } from 'lucide-react';
+import type { AggregateFilterMode } from '../orderListTypes';
 
 interface OrderFiltersProps {
   statusTab: 'pending' | 'processing' | 'shipped';
   onStatusTabChange: (v: 'pending' | 'processing' | 'shipped') => void;
   viewMode: 'orders' | 'items' | 'aggregate';
   onViewModeChange: (v: 'orders' | 'items' | 'aggregate') => void;
+  aggStatus: AggregateFilterMode;
+  onAggStatusChange: (v: AggregateFilterMode) => void;
   search: string;
   onSearchChange: (v: string) => void;
   storeFilter: string;
@@ -31,6 +34,8 @@ export function OrderFilters({
   onStatusTabChange,
   viewMode,
   onViewModeChange,
+  aggStatus,
+  onAggStatusChange,
   search,
   onSearchChange,
   storeFilter,
@@ -86,10 +91,39 @@ export function OrderFilters({
             onClick={() => onViewModeChange('aggregate')}
             className="h-8"
           >
-            <ClipboardList className="h-4 w-4 mr-1" /> 叫貨總覽
+            <ClipboardList className="h-4 w-4 mr-1" /> 訂單總攬
           </Button>
         </div>
       </div>
+
+      {viewMode === 'aggregate' && (
+        <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg w-fit">
+          <Button
+            variant={aggStatus === 'all' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => onAggStatusChange('all')}
+            className="h-7 px-3 text-xs"
+          >
+            全部
+          </Button>
+          <Button
+            variant={aggStatus === 'outstanding' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => onAggStatusChange('outstanding')}
+            className="h-7 px-3 text-xs"
+          >
+            欠貨未足
+          </Button>
+          <Button
+            variant={aggStatus === 'ordered' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => onAggStatusChange('ordered')}
+            className="h-7 px-3 text-xs"
+          >
+            已訂在途
+          </Button>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row items-center gap-3">
         <div className="relative flex-1">

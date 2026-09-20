@@ -110,6 +110,8 @@ export function useProductImportUploader(
 
                 const relationPromises: any[] = [];
                 const variantSpecPromises: any[] = [];
+                const variantOptionPromises: any[] = [];
+                const optionsByProduct = new Map<string, { variant_id: string; options: { name: string; display: string; label: string; value?: string }[] }[]>();
 
                 for (const [code, row] of chunkProductsMap) {
                     const pId = productIdMap.get(code);
@@ -245,7 +247,7 @@ export function useProductImportUploader(
                     const pId = productIdMap.get(sku);
                     if (!pId || row.device_models === undefined) continue;
                     const relations = parseModelString(String(row.device_models));
-                    relationPromises.push(entityRelationService.updateRelations('product', String(pId), relations, relations.ordered));
+                    relationPromises.push(entityRelationService.updateRelations('product', String(pId), relations));
                 }
 
                 const { data: insertedVariants } = await (supabase.from('product_variants') as any).select('id, sku').in('sku', variantsToInsert.map(v => (v as any).sku));
@@ -259,7 +261,28 @@ export function useProductImportUploader(
 
                     if (row.variant_device_models !== undefined) {
                         const relations = parseModelString(String(row.variant_device_models));
-                        relationPromises.push(entityRelationService.updateRelations('variant', String(vId), relations, relations.ordered));
+                        relationPromises.push(entityRelationService.updateRelations('variant', String(vId), relations));
+                    }
+
+                    const optionValues = row._optionValues || {};
+                    const optionValueSkus = row._optionValueSkus || {};
+                    const optionNames = row._optionNames || {};
+                    const optionItems = Object.entries(optionValues)
+                        .map(([group_name, label]) => ({
+                            name: group_name.trim(),
+                            display: String(optionNames[group_name] ?? group_name).trim() || group_name.trim(),
+                            label: String(label).trim(),
+                            value: optionValueSkus[group_name] !== undefined ? String(optionValueSkus[group_name]).trim() : undefined,
+                        }))
+                        .filter(o => o.name && o.label);
+                    if (optionItems.length > 0) {
+                        const pId = productIdMap.get(row.product_code);
+                        if (pId) {
+                            const strPId = String(pId);
+                            const list = optionsByProduct.get(strPId) || [];
+                            list.push({ variant_id: String(vId), options: optionItems });
+                            optionsByProduct.set(strPId, list);
+                        }
                     }
 
                     const catId = row.category_ids?.[0] || row.category_id;
@@ -284,11 +307,23 @@ export function useProductImportUploader(
                     }
                 }
 
+                for (const [pId, variants] of optionsByProduct) {
+                    variantOptionPromises.push(
+                        (supabase.rpc as any)('upsert_product_variant_options_batch', {
+                            p_product_id: String(pId),
+                            p_variants: variants
+                        })
+                    );
+                }
+
                 for (let i = 0; i < relationPromises.length; i += 5) {
                     await Promise.all(relationPromises.slice(i, i + 5));
                 }
                 for (let i = 0; i < variantSpecPromises.length; i += 5) {
                     await Promise.all(variantSpecPromises.slice(i, i + 5));
+                }
+                for (let i = 0; i < variantOptionPromises.length; i += 5) {
+                    await Promise.all(variantOptionPromises.slice(i, i + 5));
                 }
             };
 

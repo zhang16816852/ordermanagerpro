@@ -1,9 +1,10 @@
-import { useState } from 'react';
-import { Trash2, Pencil, Check, X, Download, Plus, Upload } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Trash2, Pencil, Check, X, Download, Plus, Upload, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { SupplierProductMapping } from '../../hooks/useSupplierMappings';
 import { MappingExportDialog } from './MappingExportDialog';
@@ -30,6 +31,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
   });
   const [exportOpen, setExportOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [addValues, setAddValues] = useState<{
     vendor_product_id: string;
@@ -92,6 +94,21 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
     resetAddForm();
     setAddOpen(false);
   };
+
+  const filteredMappings = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return mappings;
+    return mappings.filter((rule) => {
+      const internalProd = rule.internal_product?.name || '';
+      const internalVar = rule.internal_variant?.name || '';
+      return (
+        (rule.vendor_product_id || '').toLowerCase().includes(q) ||
+        (rule.vendor_product_name || '').toLowerCase().includes(q) ||
+        internalProd.toLowerCase().includes(q) ||
+        internalVar.toLowerCase().includes(q)
+      );
+    });
+  }, [search, mappings]);
 
   if (isLoading) {
     return <div className="text-center py-8 text-muted-foreground">載入對照規則中...</div>;
@@ -164,7 +181,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
                 ) : (
                   <InternalProductSelector
                     onSelect={(productId, variantId, productName, variantName) => {
-                      const label = variantName ? `${productName} (${variantName})` : productName;
+                      const label = variantName || productName;
                       setAddValues(prev => ({ ...prev, internal_product_id: productId, internal_variant_id: variantId, internal_label: label }));
                     }}
                     onClose={() => {}}
@@ -211,25 +228,43 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
         </Button>
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>廠商產品代號</TableHead>
-              <TableHead>廠商產品名稱</TableHead>
-              <TableHead>系統內部產品</TableHead>
-              <TableHead className="w-[100px] text-right">單價</TableHead>
-              <TableHead className="w-[100px] text-right">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {mappings.map((rule) => {
-              const internalProd = rule.internal_product?.name || '未知產品';
-              const internalVar = rule.internal_variant?.name || '';
-              const internalLabel = internalVar ? `${internalProd} (${internalVar})` : internalProd;
-              const isEditing = editingId === rule.id;
+      <div className="relative">
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="搜尋廠商代號 / 廠商名稱 / 系統產品..."
+          className="pl-8"
+        />
+      </div>
 
-              return (
+      <div className="rounded-md border overflow-hidden">
+        <ScrollArea className="h-[450px]">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>廠商產品代號</TableHead>
+                <TableHead>廠商產品名稱</TableHead>
+                <TableHead>系統內部產品</TableHead>
+                <TableHead className="w-[100px] text-right">單價</TableHead>
+                <TableHead className="w-[100px] text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredMappings.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    查無符合「{search}」的對照規則
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredMappings.map((rule) => {
+                  const internalProd = rule.internal_product?.name || '未知產品';
+                  const internalVar = rule.internal_variant?.name || '';
+                  const internalLabel = internalVar || internalProd;
+                  const isEditing = editingId === rule.id;
+
+                  return (
                 <TableRow key={rule.id}>
                   <TableCell className="font-medium">
                     {isEditing ? (
@@ -320,9 +355,10 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
                   </TableCell>
                 </TableRow>
               );
-            })}
+              }))}
           </TableBody>
         </Table>
+        </ScrollArea>
       </div>
 
       <MappingExportDialog
@@ -394,7 +430,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
               ) : (
                 <InternalProductSelector
                   onSelect={(productId, variantId, productName, variantName) => {
-                    const label = variantName ? `${productName} (${variantName})` : productName;
+                    const label = variantName || productName;
                     setAddValues(prev => ({ ...prev, internal_product_id: productId, internal_variant_id: variantId, internal_label: label }));
                   }}
                   onClose={() => {}}

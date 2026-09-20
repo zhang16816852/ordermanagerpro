@@ -16,6 +16,7 @@ const VARIANT_DIFF_MAP: Record<string, (keyof ImportRow)[]> = {
     '變體零售價': ['variant_retail_price'],
     '變體狀態': ['variant_status'],
     '變體條碼': ['barcode'],
+    '選項': ['_optionValues'],
 };
 
 export function useProductImportValidator(
@@ -142,7 +143,124 @@ export function useProductImportValidator(
             if (data) existingVariants.push(...data);
         }
 
-            const seenVariantIds = new Set<string>();
+        const existingVariantIds = existingVariants.map(v => v.id).filter(Boolean);
+
+        const groupByIdInfo = new Map<string, { product_id: string; name: string; ln: string }>();
+        const dbGroupsByProduct = new Map<string, { id: string; ln: string }[]>();
+        if (productIds.length > 0) {
+            const { data: optionGroups } = await (supabase.from('product_option_groups') as any)
+                .select('id, name, product_id')
+                .in('product_id', productIds);
+            (optionGroups || []).forEach((g: any) => {
+                const info = {
+                    product_id: g.product_id,
+                    name: String(g.name || '').trim(),
+                    ln: String(g.name || '').trim().toLowerCase(),
+                };
+                groupByIdInfo.set(g.id, info);
+                const arr = dbGroupsByProduct.get(info.product_id) || [];
+                arr.push({ id: g.id, ln: info.ln });
+                dbGroupsByProduct.set(info.product_id, arr);
+            });
+        }
+
+        const dbVariantOptions = new Map<string, Record<string, { label: string; value: string }>>();
+        const dbGroupVariantLabels = new Map<string, Record<string, string>>();
+        if (existingVariantIds.length > 0) {
+            const { data: variantOptions } = await (supabase.from('product_variant_options') as any)
+                .select('variant_id, option_group_id, product_option_values(label, value)')
+                .in('variant_id', existingVariantIds);
+            (variantOptions || []).forEach((vo: any) => {
+                const info = groupByIdInfo.get(vo.option_group_id);
+                const pov = vo.product_option_values;
+                if (!info || !pov) return;
+                const label = String(pov.label ?? '').trim();
+                const value = String(pov.value ?? '').trim();
+                const map = dbVariantOptions.get(vo.variant_id) || {};
+                map[info.ln] = { label, value };
+                dbVariantOptions.set(vo.variant_id, map);
+                const gl = dbGroupVariantLabels.get(vo.option_group_id) || {};
+                gl[vo.variant_id] = label;
+                dbGroupVariantLabels.set(vo.option_group_id, gl);
+            });
+        }
+
+        // 產品層級：以與 RPC 相同的解析規則判斷選項是否有異動（含改名與 SKU 段）
+        const fileOptionColsByProduct = new Map<string, Map<string, { name: string; display: string; labels: Record<string, string>; skus: Record<string, string> }>>();
+        rawParsed.forEach(row => {
+            if (!row.is_variant) return;
+            const cols = fileOptionColsByProduct.get(row.product_code) || new Map();
+            const names = row._optionValues || {};
+            const displays = row._optionNames || {};
+            const skus = row._optionValueSkus || {};
+            Object.keys(names).forEach(colName => {
+                if (!cols.has(colName)) {
+                    cols.set(colName, { name: colName, display: displays[colName] || colName, labels: {}, skus: {} });
+                }
+                const col = cols.get(colName)!;
+                if (row.variant_id) {
+                    col.labels[row.variant_id] = String(names[colName]).trim();
+                    if (skus[colName]) col.skus[row.variant_id] = String(skus[colName]).trim();
+                }
+            });
+            fileOptionColsByProduct.set(row.product_code, cols);
+        });
+
+        const resolveOptionColumn = (
+            col: { name: string; display: string; labels: Record<string, string> },
+            dbGroups: { id: string; ln: string }[],
+            matched: Set<string>
+        ): { target: { id: string; ln: string } | null; changed: boolean } => {
+            const lnName = col.name.toLowerCase();
+            const lnDisp = col.display.toLowerCase();
+            const byName = dbGroups.find(g => g.ln === lnName);
+            if (byName) {
+                if (lnDisp !== lnName && !dbGroups.some(g => g.id !== byName.id && g.ln === lnDisp)) {
+                    return { target: byName, changed: true };
+                }
+                return { target: byName, changed: false };
+            }
+            const byDisplay = dbGroups.find(g => g.ln === lnDisp);
+            if (byDisplay) return { target: byDisplay, changed: false };
+            const variantKeys = Object.keys(col.labels);
+            if (variantKeys.length > 0) {
+                const orphans = dbGroups.filter(g => !matched.has(g.id));
+                const orphansMatch = orphans.filter(g => {
+                    const dbMap = dbGroupVariantLabels.get(g.id) || {};
+                    return variantKeys.every(vId => String(dbMap[vId] ?? '') === col.labels[vId]);
+                });
+                if (orphansMatch.length === 1) return { target: orphansMatch[0], changed: true };
+            }
+            return { target: null, changed: true };
+        };
+
+        const optionChangedProducts = new Set<string>();
+        fileOptionColsByProduct.forEach((cols, code) => {
+            const product = (existingProducts || []).find(p => p.code === code);
+            if (!product) { optionChangedProducts.add(code); return; }
+            const dbGroups = dbGroupsByProduct.get(product.id) || [];
+            const matched = new Set<string>();
+            cols.forEach(col => {
+                dbGroups.forEach(g => {
+                    if (g.ln === col.name.toLowerCase() || g.ln === col.display.toLowerCase()) matched.add(g.id);
+                });
+            });
+            let changed = false;
+            for (const col of cols.values()) {
+                const { target, changed: colChanged } = resolveOptionColumn(col, dbGroups, matched);
+                if (colChanged || !target) { changed = true; break; }
+                for (const [vId, label] of Object.entries(col.labels)) {
+                    const cur = (dbVariantOptions.get(vId) || {})[target.ln];
+                    if (!cur || cur.label !== label) { changed = true; break; }
+                    const sku = col.skus[vId];
+                    if (sku !== undefined && cur.value !== sku) { changed = true; break; }
+                }
+                if (changed) break;
+            }
+            if (changed) optionChangedProducts.add(code);
+        });
+
+        const seenVariantIds = new Set<string>();
 
         const enrichedRows = rawParsed.map(row => {
             const product = (existingProducts || []).find(p =>
@@ -199,6 +317,10 @@ export function useProductImportValidator(
                 if (Number(variant.retail_price) !== Number(row.variant_retail_price)) diff.push('變體零售價');
                 if (variant.status !== row.variant_status) diff.push('變體狀態');
                 if (variant.barcode !== row.barcode) diff.push('變體條碼');
+            }
+
+            if (optionChangedProducts.has(row.product_code) && !diff.includes('選項')) {
+                diff.push('選項');
             }
 
             const { errors } = validateRow(row as any);

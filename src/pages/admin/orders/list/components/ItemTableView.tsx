@@ -156,7 +156,7 @@ export function ItemTableView({
                   <TableCell className="text-sm italic">
                     <span className="line-through">{item.product_variant?.name || item.product?.name}</span>
                     <Badge variant="outline" className="ml-1 text-[10px] h-4">
-                      {item.status === 'cancelled' ? '已取消' : '已停售'}
+                      {item.status === 'cancelled' ? '已取消' : item.status === 'out_of_stock' ? '缺貨' : '已停售'}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">{item.quantity}</TableCell>

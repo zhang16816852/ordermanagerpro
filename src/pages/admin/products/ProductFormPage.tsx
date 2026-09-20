@@ -116,11 +116,15 @@ export default function AdminProductFormPage() {
             });
 
             draft.option_groups = groups;
-            draft.variants = allVariants.map((v: any) => ({
-                ...v,
-                option_values: variantOptionsMap.get(v.id) || v.option_values || [],
-                ...(variantSpecsMap?.[v.id] ? { spec_values: variantSpecsMap[v.id] } : {}),
-            }));
+            draft.variants = allVariants.map((v: any) => {
+                const cached = (base.variants || []).find((cv: any) => cv.id === v.id) || {};
+                return {
+                    ...cached,
+                    ...v,
+                    option_values: variantOptionsMap.get(v.id) || cached.option_values || [],
+                    ...(variantSpecsMap?.[v.id] ? { spec_values: variantSpecsMap[v.id] } : {}),
+                };
+            });
         }
 
         setPreviewProduct(draft as unknown as ProductWithPricing);

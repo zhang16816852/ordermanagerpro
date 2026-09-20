@@ -39,6 +39,9 @@ export interface ImportRow {
     product_id?: string;
     variant_id?: string;
     _specs?: Record<string, any>;
+    _optionValues?: Record<string, string>;
+    _optionValueSkus?: Record<string, string>;
+    _optionNames?: Record<string, string>;
     category_ids?: string[];
     category_names?: string[];
     errors: string[];

@@ -192,21 +192,32 @@ async function createWorkbook(
             row2Instructions.push(instruction);
         });
 
-        const optionGroupMap = new Map<string, { id: string, name: string, sort_order: number }>();
+        const optionNameMap = new Map<string, { name: string, sort_order: number }>();
         groupProducts.forEach(p => {
             (p.option_groups || []).forEach((og: any) => {
-                if (og?.id && !optionGroupMap.has(og.id)) {
-                    optionGroupMap.set(og.id, { id: og.id, name: og.name || '', sort_order: og.sort_order || 0 });
+                const name = String(og?.name || '').trim();
+                if (!name) return;
+                const key = name.toLowerCase();
+                const existing = optionNameMap.get(key);
+                if (!existing) {
+                    optionNameMap.set(key, { name, sort_order: og.sort_order || 0 });
+                } else if ((og.sort_order || 0) < existing.sort_order) {
+                    existing.sort_order = og.sort_order || 0;
                 }
             });
         });
-        const optionGroups = Array.from(optionGroupMap.values()).sort((a, b) => a.sort_order - b.sort_order);
+        const optionGroups = Array.from(optionNameMap.values()).sort((a, b) => a.sort_order - b.sort_order);
 
         optionGroups.forEach(og => {
             row1Names.push(og.name);
-            row2Instructions.push('');
+            row2Instructions.push('選項名稱（顯示名，可改名）');
             row3Paths.push(og.name);
-            row4Ids.push(`option:${og.id}`);
+            row4Ids.push(`option:${og.name}`);
+
+            row1Names.push(`${og.name} SKU值`);
+            row2Instructions.push('選項 SKU 段（變體 SKU 生成用）');
+            row3Paths.push(`${og.name}.value`);
+            row4Ids.push(`option:${og.name}.value`);
         });
 
         const rows: any[] = [row1Names, row2Instructions, row3Paths, row4Ids];
@@ -311,11 +322,27 @@ function buildRowV3(item: any, isVariant: boolean, headerIds: string[], brandMap
 
     const settings = item.spec_values || {};
 
+    const optionGroupsForRow: any[] = isVariant
+        ? (parent?.option_groups || [])
+        : (item.option_groups || []);
+    const groupNameById = new Map<string, string>();
+    optionGroupsForRow.forEach((g: any) => {
+        if (g?.id) groupNameById.set(g.id, String(g.name || '').trim().toLowerCase());
+    });
+
     headerIds.forEach(key => {
         if (key.startsWith('option:')) {
-            const groupId = key.slice('option:'.length);
-            const ov = (item.option_values || []).find((o: any) => o.group_id === groupId);
-            row.push(ov ? (ov.label || ov.value || '') : '');
+            const rest = key.slice('option:'.length).trim();
+            const isValueCol = rest.toLowerCase().endsWith('.value');
+            const groupName = (isValueCol ? rest.slice(0, -'.value'.length) : rest).trim().toLowerCase();
+            const ov = (item.option_values || []).find((o: any) => groupNameById.get(o.group_id) === groupName);
+            if (!ov) {
+                row.push('');
+            } else if (isValueCol) {
+                row.push(ov.value ?? ov.label ?? '');
+            } else {
+                row.push(ov.label || ov.value || '');
+            }
         } else if (baseValues[key] !== undefined) {
             row.push(baseValues[key]);
         } else {

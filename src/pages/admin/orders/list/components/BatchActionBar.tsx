@@ -70,7 +70,7 @@ export function BatchActionBar({
     <>
       {/* Desktop: Floating pill */}
       <div className="hidden md:flex fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
-        <div className="bg-primary text-primary-foreground px-6 py-4 rounded-full shadow-2xl flex items-center gap-6 border-4 border-background/20 ring-1 ring-primary/30">
+        <div className="bg-primary text-primary-foreground px-6 py-4 rounded-full shadow-2xl flex items-center gap-6 border-4 border-background/20 ring-1 ring-primary/30 max-w-[95vw] flex-wrap justify-center">
           <div className="flex items-center gap-2 border-r border-primary-foreground/30 pr-6">
             <Package className="h-5" />
             <span className="font-bold text-lg">
@@ -224,6 +224,41 @@ export function BatchActionBar({
                     解除採購
                   </Button>
                 )}
+              </>
+            )}
+
+            {viewMode === 'items' && !isRep && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onShipItems}
+                  disabled={isLoading}
+                  className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
+                >
+                  <Truck className="h-4 w-4 mr-2" />
+                  加入出貨池
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onConvertToPO}
+                  disabled={isLoading}
+                  className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
+                >
+                  <ClipboardList className="h-4 w-4 mr-2" />
+                  轉採購單
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={onCancelItems}
+                  disabled={isLoading}
+                  className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
+                >
+                  <XCircle className="h-4 w-4 mr-2" />
+                  標記停產/取消
+                </Button>
               </>
             )}
 

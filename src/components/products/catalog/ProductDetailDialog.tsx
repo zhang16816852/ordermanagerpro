@@ -185,10 +185,11 @@ export function ProductDetailDialog({
             const opts = pickerOptions;
             const matchedVariants = (product.variants || []).filter((v: any) => {
                 const mModel = !opts.modelDisplay || v.modelDisplay === opts.modelDisplay;
-                const mO1 = !opts.option_1 || v.option_1 === opts.option_1;
-                const mO2 = !opts.option_2 || v.option_2 === opts.option_2;
-                const mO3 = !opts.option_3 || v.option_3 === opts.option_3;
-                return mModel && mO1 && mO2 && mO3;
+                const optionEntries = Object.entries(opts).filter(([k, val]) => k !== 'modelDisplay' && val != null);
+                const mOptions = optionEntries.length === 0 || optionEntries.every(([groupId, valueId]) =>
+                    v.option_values?.some((ov: any) => ov.group_id === groupId && ov.id === valueId)
+                );
+                return mModel && mOptions;
             });
             matchedVariants.forEach((v: any) => addModels(v));
         } else {

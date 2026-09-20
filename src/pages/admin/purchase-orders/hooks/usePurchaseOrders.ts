@@ -272,7 +272,8 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
       if (viewingOrderId) {
         const { data: items } = await (supabase as any)
           .from('purchase_order_items')
-          .select('quantity, unit_cost');
+          .select('quantity, unit_cost')
+          .eq('purchase_order_id', viewingOrderId);
         const newTotal = (items || []).reduce((sum: number, i: any) => sum + (i.quantity || 0) * (i.unit_cost || 0), 0);
         await (supabase as any)
           .from('purchase_orders')
@@ -307,7 +308,8 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
       if (viewingOrderId) {
         const { data: items } = await (supabase as any)
           .from('purchase_order_items')
-          .select('quantity, unit_cost');
+          .select('quantity, unit_cost')
+          .eq('purchase_order_id', viewingOrderId);
         const newTotal = (items || []).reduce((sum: number, i: any) => sum + (i.quantity || 0) * (i.unit_cost || 0), 0);
         await (supabase as any)
           .from('purchase_orders')

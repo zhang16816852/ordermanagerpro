@@ -14,6 +14,7 @@ import { useOrderListSelections } from './useOrderListSelections';
 import { useOrderListExports } from './useOrderListExports';
 import { itemStatusLabels } from './orderListTypes';
 import type {
+  AggregateFilterMode,
   OrderStatusTab,
   OrderViewMode,
 } from './orderListTypes';
@@ -38,6 +39,11 @@ export function useOrderListPageController() {
   const [dateTo, setDateTo] = useState('');
   const [poFilter, setPoFilter] = useState<'all' | 'has_po' | 'no_po'>('all');
   const [repFilter, setRepFilter] = useState<string>('all');
+  const [aggStatus, setAggStatus] = useState<AggregateFilterMode>(
+    searchParams.get('agg') === 'outstanding' ? 'outstanding'
+      : searchParams.get('agg') === 'ordered' ? 'ordered'
+      : 'all'
+  );
 
   const { repsData, repAssignedStoreIds } = useOrderListQueries(repFilter);
 
@@ -100,6 +106,7 @@ export function useOrderListPageController() {
     shippingPoolMap,
     poLinkMap,
     purchasedByOrderKey,
+    poProductStats,
     consignmentBySourceOrderId,
     getPendingQuantity,
     syncOrdersMutation,
@@ -123,6 +130,8 @@ export function useOrderListPageController() {
     sortDirection,
     getPendingQuantity,
     purchasedByOrderKey,
+    poProductStats,
+    aggStatus,
     selectedOrderIds,
     selectedItems,
     selectedAggregateItems,
@@ -208,6 +217,7 @@ export function useOrderListPageController() {
       .filter(item =>
         item.status !== 'cancelled' &&
         item.status !== 'discontinued' &&
+        item.status !== 'out_of_stock' &&
         (item.quantity - item.shipped_quantity) > 0
       );
     if (items.length === 0) return;
@@ -264,9 +274,21 @@ export function useOrderListPageController() {
 
   const handleViewModeChange = (v: OrderViewMode) => {
     setViewMode(v);
+    setSelectedAggregateItems(new Map());
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set("view", v);
+      return next;
+    }, { replace: true });
+  };
+
+  const handleAggStatusChange = (v: AggregateFilterMode) => {
+    setAggStatus(v);
+    setSelectedAggregateItems(new Map());
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (v === 'all') next.delete('agg');
+      else next.set('agg', v);
       return next;
     }, { replace: true });
   };
@@ -296,10 +318,13 @@ export function useOrderListPageController() {
     setStatusTab,
     handleStatusTabChange,
     handleViewModeChange,
+    handleAggStatusChange,
     handleStoreFilterChange,
     handleExportOrdersCSV,
     viewMode,
     setViewMode,
+    aggStatus,
+    setAggStatus,
     search,
     setSearch,
     storeFilter,

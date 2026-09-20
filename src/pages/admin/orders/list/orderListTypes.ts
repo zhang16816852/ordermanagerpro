@@ -2,6 +2,7 @@ import type { Order } from '@/types/order';
 
 export type OrderStatusTab = 'pending' | 'processing' | 'shipped';
 export type OrderViewMode = 'orders' | 'items' | 'aggregate';
+export type AggregateFilterMode = 'all' | 'outstanding' | 'ordered';
 
 export interface AggregateSelectionItem {
   productId: string;

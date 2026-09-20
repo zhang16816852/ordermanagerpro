@@ -21,6 +21,7 @@ export default function AdminOrderList() {
   const {
     statusTab,
     viewMode,
+    aggStatus,
     search,
     setSearch,
     storeFilter,
@@ -109,6 +110,8 @@ export default function AdminOrderList() {
         onStatusTabChange={c.handleStatusTabChange}
         viewMode={viewMode}
         onViewModeChange={c.handleViewModeChange}
+        aggStatus={aggStatus}
+        onAggStatusChange={c.handleAggStatusChange}
         search={search}
         onSearchChange={setSearch}
         storeFilter={storeFilter}

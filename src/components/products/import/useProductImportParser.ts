@@ -137,6 +137,9 @@ export function useProductImportParser(
                 product_id: !is_variant ? row.id : undefined,
                 variant_id: is_variant ? row.id : undefined,
                 _specs: row._specs || {},
+                _optionValues: row._optionValues || {},
+                _optionValueSkus: row._optionValueSkus || {},
+                _optionNames: row._optionNames || {},
                 _presentFields: presentColumns,
                 errors: [],
                 isValid: true

@@ -13,6 +13,11 @@ export interface AggregatedItem {
   variantName: string | null;
   sku: string;
   totalPendingQuantity: number;
+  totalDemand: number;
+  orderedQty: number;
+  receivedQty: number;
+  inTransitQty: number;
+  outstandingQty: number;
   sourceOrderIds: string[];
   sourceQuantities: Record<string, number>;
   storeBreakdown: {
@@ -53,7 +58,8 @@ export function AggregateTableView({
 
   const getItemKey = (item: AggregatedItem) => `${item.productId}_${item.variantId || 'null'}`;
 
-  const allSelected = items.length > 0 && items.every(item => selectedItems.has(getItemKey(item)));
+  const selectableItems = items.filter(item => item.totalPendingQuantity > 0);
+  const allSelected = selectableItems.length > 0 && selectableItems.every(item => selectedItems.has(getItemKey(item)));
   const someSelected = items.some(item => selectedItems.has(getItemKey(item)));
 
   if (isLoading) {
@@ -87,7 +93,9 @@ export function AggregateTableView({
             </TableHead>
             <TableHead>產品名稱</TableHead>
             <TableHead className="w-28">SKU</TableHead>
-            <TableHead className="w-24 text-center">總需求量</TableHead>
+            <TableHead className="w-20 text-center">總需求</TableHead>
+            <TableHead className="w-28 text-center">已訂(在途/已收)</TableHead>
+            <TableHead className="w-20 text-center">欠貨</TableHead>
             <TableHead className="w-32 text-center">建議叫貨量</TableHead>
             <TableHead className="w-12"></TableHead>
           </TableRow>
@@ -98,15 +106,17 @@ export function AggregateTableView({
             const isSelected = selectedItems.has(key);
             const selectedData = selectedItems.get(key);
             const isExpanded = expandedRows.has(key);
+            const isFullyOrdered = item.outstandingQty <= 0;
 
             return [
               <TableRow
                 key={key}
-                className={isSelected ? 'bg-primary/5' : ''}
+                className={`${isSelected ? 'bg-primary/5' : ''} ${isFullyOrdered ? 'opacity-70' : ''}`}
               >
                 <TableCell>
                   <Checkbox
                     checked={isSelected}
+                    disabled={isFullyOrdered}
                     onCheckedChange={(checked) => onToggleSelection(item, checked === true)}
                   />
                 </TableCell>
@@ -116,20 +126,34 @@ export function AggregateTableView({
                 <TableCell className="font-mono text-sm">{item.sku}</TableCell>
                 <TableCell className="text-center">
                   <Badge variant="secondary" className="font-bold text-base px-3 py-1">
-                    {item.totalPendingQuantity}
+                    {item.totalDemand}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-center">
+                  <div className="text-base font-bold">{item.orderedQty}</div>
+                  <div className="text-xs text-muted-foreground">
+                    在途 {item.inTransitQty}・已收 {item.receivedQty}
+                  </div>
+                </TableCell>
+                <TableCell className="text-center">
+                  <Badge
+                    variant={isFullyOrdered ? 'outline' : 'destructive'}
+                    className="font-bold text-base px-3 py-1"
+                  >
+                    {item.outstandingQty}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-center">
                   <Input
                     type="number"
                     min={1}
-                    max={item.totalPendingQuantity}
-                    value={selectedData?.quantity ?? item.totalPendingQuantity}
+                    max={item.outstandingQty}
+                    value={selectedData?.quantity ?? item.outstandingQty}
                     onChange={(e) => {
                       const val = parseInt(e.target.value) || 1;
-                      onUpdateQuantity(key, Math.min(Math.max(1, val), item.totalPendingQuantity));
+                      onUpdateQuantity(key, Math.min(Math.max(1, val), item.outstandingQty));
                     }}
-                    disabled={!isSelected}
+                    disabled={!isSelected || isFullyOrdered}
                     className="w-20 text-center mx-auto h-8"
                   />
                 </TableCell>
@@ -150,7 +174,7 @@ export function AggregateTableView({
               </TableRow>,
               isExpanded && (
                 <TableRow key={`${key}-detail`}>
-                  <TableCell colSpan={6} className="bg-muted/20 p-0">
+                  <TableCell colSpan={8} className="bg-muted/20 p-0">
                     <div className="px-12 py-3">
                       <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
                         <Store className="h-4 w-4" />

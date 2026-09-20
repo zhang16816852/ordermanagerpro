@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -16,8 +16,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Plus, PackageCheck, CreditCard, Download, FileSpreadsheet, X, GripVertical, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, PackageCheck, CreditCard, Download, FileSpreadsheet, X, GripVertical, ArrowUpDown, ArrowUp, ArrowDown, Trash2, Search } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 import { PurchaseOrder, PurchaseOrderItem, ProductWithPrice } from '../types';
 import { ItemForm } from './ItemForm';
@@ -48,7 +49,7 @@ function SortableRow({ item, children }: { item: PurchaseOrderItem; children: Re
   );
 }
 
-interface OrderDetailDialogProps {
+interface PurchaseOrderDetailDialogProps {
   order: PurchaseOrder;
   orderItems: PurchaseOrderItem[];
   products: ProductWithPrice[];
@@ -60,11 +61,13 @@ interface OrderDetailDialogProps {
   onReceiveItems: (data: any) => void;
   onMakePayment: (data: any) => void;
   onUnlinkOrder: (orderId: string) => void;
+  onUpdateItem?: (data: { itemId: string; quantity: number; unit_cost: number }) => void;
+  onDeleteItem?: (itemId: string) => void;
   onReorder?: (items: PurchaseOrderItem[]) => void;
   isLoading: boolean;
 }
 
-export function OrderDetailDialog({
+export function PurchaseOrderDetailDialog({
   order,
   orderItems,
   products,
@@ -76,9 +79,11 @@ export function OrderDetailDialog({
   onReceiveItems,
   onMakePayment,
   onUnlinkOrder,
+  onUpdateItem,
+  onDeleteItem,
   onReorder,
   isLoading
-}: OrderDetailDialogProps) {
+}: PurchaseOrderDetailDialogProps) {
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [excelImportOpen, setExcelImportOpen] = useState(false);
@@ -88,17 +93,72 @@ export function OrderDetailDialog({
   const [localItems, setLocalItems] = useState<PurchaseOrderItem[]>(orderItems);
   const [nameSort, setNameSort] = useState<'default' | 'asc' | 'desc'>('default');
   const manualOrderRef = useRef<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // 數量 / 單價 的行內編輯暫存值
+  const [rowDrafts, setRowDrafts] = useState<Record<string, { quantity: number; unit_cost: number }>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
     setLocalItems(orderItems);
+    const drafts: Record<string, { quantity: number; unit_cost: number }> = {};
+    for (const it of orderItems) {
+      drafts[it.id] = { quantity: it.quantity, unit_cost: Number(it.unit_cost) || 0 };
+    }
+    setRowDrafts(drafts);
+    setEditingId(null);
   }, [orderItems]);
+
+  const canEdit = !!onUpdateItem && order.status !== 'cancelled';
+  const canDelete = !!onDeleteItem && order.status !== 'cancelled';
+
+  const draftOf = (item: PurchaseOrderItem) => rowDrafts[item.id] || { quantity: item.quantity, unit_cost: Number(item.unit_cost) || 0 };
+
+  const commitRow = (id: string) => {
+    if (!onUpdateItem || !editingId) return;
+    const d = rowDrafts[id];
+    if (!d) return;
+    onUpdateItem({ itemId: id, quantity: Math.max(1, d.quantity || 1), unit_cost: Math.max(0, d.unit_cost || 0) });
+    setEditingId(null);
+  };
+
+  // 依目前行內編輯值（含未儲存的草稿）動態計算總額
+  const liveTotal = useMemo(() => {
+    return localItems.reduce((sum, item) => {
+      const d = draftOf(item);
+      return sum + d.quantity * d.unit_cost;
+    }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localItems, rowDrafts]);
+
+  const isFiltering = searchQuery.trim() !== '';
+
+  const getMappingKey = (item: PurchaseOrderItem) => `${item.product_id}_${item.variant_id || 'null'}`;
+
+  const visibleItems = useMemo(() => {
+    if (!isFiltering) return localItems;
+    const q = searchQuery.trim().toLowerCase();
+    return localItems.filter((item) => {
+      const mapping = supplierMappingMap[getMappingKey(item)];
+      const sourceCodes = (item.source_order_ids || []).map(id => sourceOrderMap[id] || id.slice(0, 8)).join(' ');
+      const haystack = [
+        item.product?.name,
+        item.variant?.name,
+        item.variant?.sku,
+        item.product?.code,
+        mapping?.vendor_product_id,
+        mapping?.vendor_product_name,
+        sourceCodes,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localItems, searchQuery, supplierMappingMap, sourceOrderMap]);
 
   const canReorder = !!onReorder && order.status !== 'cancelled';
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
-
-  const getMappingKey = (item: PurchaseOrderItem) => `${item.product_id}_${item.variant_id || 'null'}`;
 
   const getItemName = (item: PurchaseOrderItem) => item.variant?.name || item.product?.name || '';
 
@@ -112,6 +172,7 @@ export function OrderDetailDialog({
   };
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
+    if (isFiltering) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIndex = localItems.findIndex(i => i.id === active.id);
@@ -120,10 +181,10 @@ export function OrderDetailDialog({
     applyOrder(arrayMove(localItems, oldIndex, newIndex));
     setNameSort('default');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localItems, onReorder]);
+  }, [localItems, onReorder, isFiltering]);
 
   const handleNameHeaderClick = () => {
-    if (!canReorder) return;
+    if (!canReorder || isFiltering) return;
     if (nameSort === 'default') {
       manualOrderRef.current = localItems.map(i => i.id);
       applyOrder([...localItems].sort(compareByName));
@@ -175,14 +236,68 @@ export function OrderDetailDialog({
             <span className="text-muted-foreground text-xs">-</span>
           )}
         </TableCell>
-        <TableCell className="text-right font-medium">{item.quantity}</TableCell>
+        <TableCell className="text-right">
+          {canEdit && item.received_quantity <= 0 ? (
+            <Input
+              type="number"
+              min={1}
+              value={draftOf(item).quantity}
+              onFocus={() => setEditingId(item.id)}
+              onBlur={() => commitRow(item.id)}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                setRowDrafts(prev => ({ ...prev, [item.id]: { ...draftOf(item), quantity: Number.isNaN(v) ? 1 : Math.max(1, v) } }));
+              }}
+              className="h-7 w-16 text-right"
+              aria-label={`${item.variant?.name || item.product?.name || ''} 數量`}
+            />
+          ) : (
+            <span className="font-medium">{item.quantity}</span>
+          )}
+        </TableCell>
         <TableCell className="text-right">
           <span className={item.received_quantity >= item.quantity ? 'text-green-600 font-bold' : 'text-orange-600'}>
             {item.received_quantity}
           </span>
         </TableCell>
-        <TableCell className="text-right">{formatCurrency(item.unit_cost)}</TableCell>
-        <TableCell className="text-right font-bold">{formatCurrency(item.quantity * item.unit_cost)}</TableCell>
+        <TableCell className="text-right">
+          {canEdit ? (
+            <Input
+              type="number"
+              min={0}
+              step={0.01}
+              value={draftOf(item).unit_cost}
+              onFocus={() => setEditingId(item.id)}
+              onBlur={() => commitRow(item.id)}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                setRowDrafts(prev => ({ ...prev, [item.id]: { ...draftOf(item), unit_cost: Number.isNaN(v) ? 0 : Math.max(0, v) } }));
+              }}
+              className="h-7 w-24 text-right"
+              aria-label={`${item.variant?.name || item.product?.name || ''} 單價`}
+            />
+          ) : (
+            formatCurrency(item.unit_cost)
+          )}
+        </TableCell>
+        <TableCell className="text-right font-bold">{formatCurrency(draftOf(item).quantity * draftOf(item).unit_cost)}</TableCell>
+        {canDelete && (
+          <TableCell className="text-right">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={() => {
+                if (window.confirm('確定要從此採購單移除該品項嗎？')) {
+                  onDeleteItem?.(item.id);
+                }
+              }}
+              aria-label="刪除品項"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </TableCell>
+        )}
       </>
     );
   };
@@ -239,6 +354,8 @@ export function OrderDetailDialog({
       default: return <Badge variant="secondary">{status}</Badge>;
     }
   };
+
+  const colSpan = (canReorder ? 1 : 0) + 9 + (canDelete ? 1 : 0);
 
   return (
     <div className="space-y-6 py-4">
@@ -323,6 +440,24 @@ export function OrderDetailDialog({
         </div>
       </div>
 
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="搜尋品項（名稱 / SKU / 廠商 / 來源訂單）"
+            className="pl-8"
+            aria-label="搜尋品項"
+          />
+        </div>
+        {isFiltering && (
+          <span className="text-xs text-muted-foreground">
+            共 {visibleItems.length} 項符合
+          </span>
+        )}
+      </div>
+
       <div className="border rounded-md">
         <Table>
           <TableHeader>
@@ -356,20 +491,23 @@ export function OrderDetailDialog({
               <TableHead className="text-right">已收</TableHead>
               <TableHead className="text-right">單價</TableHead>
               <TableHead className="text-right">總額</TableHead>
+              {canDelete && <TableHead className="w-12 text-right">操作</TableHead>}
             </TableRow>
           </TableHeader>
           {canReorder ? (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={localItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
+              <SortableContext items={visibleItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
                 <TableBody>
-                  {localItems.map((item) => (
+                  {visibleItems.map((item) => (
                     <SortableRow key={item.id} item={item}>
                       {renderItemCells(item)}
                     </SortableRow>
                   ))}
-                  {localItems.length === 0 && (
+                  {visibleItems.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center py-8 text-muted-foreground italic">目前無任何品項</TableCell>
+                      <TableCell colSpan={colSpan} className="text-center py-8 text-muted-foreground italic">
+                        {isFiltering ? '查無符合的品項' : '目前無任何品項'}
+                      </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -377,14 +515,16 @@ export function OrderDetailDialog({
             </DndContext>
           ) : (
             <TableBody>
-              {localItems.map((item) => (
+              {visibleItems.map((item) => (
                 <TableRow key={item.id}>
                   {renderItemCells(item)}
                 </TableRow>
               ))}
-              {localItems.length === 0 && (
+              {visibleItems.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground italic">目前無任何品項</TableCell>
+                  <TableCell colSpan={colSpan} className="text-center py-8 text-muted-foreground italic">
+                    {isFiltering ? '查無符合的品項' : '目前無任何品項'}
+                  </TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -431,7 +571,7 @@ export function OrderDetailDialog({
 
         <div className="text-right space-y-1">
           <p className="text-sm text-muted-foreground">總計金額</p>
-          <p className="text-3xl font-bold text-primary">{formatCurrency(order.total_amount)}</p>
+          <p className="text-3xl font-bold text-primary">{formatCurrency(liveTotal)}</p>
         </div>
       </div>
     </div>

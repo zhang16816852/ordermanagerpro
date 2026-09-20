@@ -277,13 +277,10 @@ export function CopyProductDialog({ open, onOpenChange, product, onCopied }: Cop
         ? generatedVariants
         : (optionsChanged && groupsList.length > 0 ? buildVariants() : []);
 
-      // Copy 的型號語意為「全部變體 × 全部 refs」（非逐變體），故去除 _modelGroup* 後
-      // 以 buildModelRelationsPayload 的「全變體」模式產出，並供 variants 去重與選項連結使用
-      const flatVariantsForRegen = variantsForRegen.map(v => ({
-        ...v,
-        _modelGroupId: undefined,
-        _modelGroupType: undefined,
-      }));
+      // 保留 generateVariantCombos 產出的逐變體 _modelGroupId/_modelGroupType，
+      // 使 buildModelRelationsPayload 走「每變體各自對應」模式（與 VariantBatchCreator 一致），
+      // 避免「全部變體 × 全部選取型號」的錯誤語意。
+      const flatVariantsForRegen = variantsForRegen;
 
       if (flatVariantsForRegen.length > 0) {
         // 重新生成變體：先刪除剛複製的變體（全新、無引用），避免 batch_upsert
@@ -323,34 +320,39 @@ export function CopyProductDialog({ open, onOpenChange, product, onCopied }: Cop
         });
         if (rpcError) throw rpcError;
       } else if (modelsChanged) {
-        // 僅型號群組修改 → 直接替換複製變體的 model relations
+        // 僅型號群組修改（未重新生成變體）→ 依「變體順序 × 選取順序」逐一對應，
+        // 與 generateVariantCombos 的笛卡爾配對一致（選項為外層、型號為內層），
+        // 而非全部變體套用全部型號。
         const { data: newVariants } = await supabase
           .from('product_variants')
           .select('id')
+          .order('sort_order', { ascending: true })
           .eq('product_id', newProductId);
 
         if (newVariants && newVariants.length > 0) {
           const variantIds = newVariants.map(v => v.id);
+          const refs = selectedDeviceRefs;
 
           await supabase.from('entity_model_relations')
             .delete()
             .in('variant_id', variantIds)
             .eq('relation_type', 'include');
 
-          const inserts: any[] = [];
-          const deviceOrder = new Map<string, number>();
-          selectedDeviceRefs.forEach((ref, idx) => deviceOrder.set(ref.id, idx));
-          for (const vId of variantIds) {
-            for (const ref of selectedDeviceRefs) {
+          if (refs.length > 0) {
+            const inserts: any[] = [];
+            const deviceOrder = new Map<string, number>();
+            refs.forEach((ref, idx) => deviceOrder.set(ref.id, idx));
+            variantIds.forEach((vId, i) => {
+              const ref = refs[i % refs.length];
               const row: any = { variant_id: vId, relation_type: 'include', sort_order: deviceOrder.get(ref.id) ?? 0 };
               if (ref.type === 'model') row.model_id = ref.id;
               else row.group_id = ref.id;
               inserts.push(row);
+            });
+            if (inserts.length > 0) {
+              const { error: relErr } = await (supabase.from('entity_model_relations') as any).insert(inserts);
+              if (relErr) throw relErr;
             }
-          }
-          if (inserts.length > 0) {
-            const { error: relErr } = await (supabase.from('entity_model_relations') as any).insert(inserts);
-            if (relErr) throw relErr;
           }
         }
       }
