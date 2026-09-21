@@ -43,7 +43,7 @@ export interface EntryPrefill {
   payout?: { repId?: string; salesNoteId?: string; salesNoteIds?: string[] };
   shipping?: {
     supplierId?: string;
-    orderItemIds?: string[];
+    shipmentIds?: string[];
     periodStart?: string;
     periodEnd?: string;
   };
@@ -71,7 +71,7 @@ export interface BatchPayoutSubmission {
 
 export interface ShippingSettlementSubmission {
   supplierId: string;
-  orderItemIds: string[];
+  shipmentIds: string[];
   periodStart: string;
   periodEnd: string;
   paidDate: string;
@@ -114,10 +114,13 @@ export interface PayoutNote {
 
 export interface ShipItem {
   id: string;
-  orderId: string;
-  orderCode: string;
-  productName: string;
-  qty: number;
-  unitPrice: number;
+  docType?: string;
+  docCode: string;
+  methodTitle: string;
+  trackingCompany?: string;
+  trackingNumber?: string;
+  shippedAt?: string | null;
+  cost: number;
+  fee?: number;
   amount: number;
 }

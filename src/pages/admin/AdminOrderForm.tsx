@@ -6,6 +6,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { OrderInfoCard } from '@/components/order/OrderInfoCard';
 import { OrderItemsPanel } from '@/components/order/OrderItemsPanel';
 import { ProductSelector } from '@/components/order/ProductSelector';
+import { DeliveryCard } from '@/components/shipping/DeliveryCard';
 
 import { useAdminOrderFormController } from './orders/form/useAdminOrderFormController';
 import { useAdminOrderFormHeader, statusLabels } from './orders/form/useAdminOrderFormHeader';
@@ -107,6 +108,21 @@ export default function AdminOrderForm() {
     />
   );
 
+  const renderDeliveryCard = (collapsed: boolean = false) =>
+    c.orderType === 'sales' ? (
+      <DeliveryCard
+        methods={c.deliveryMethods}
+        value={c.deliveryMethodId}
+        onValueChange={c.setDeliveryMethodId}
+        address={c.shippingAddress}
+        onAddressChange={c.setShippingAddress}
+        onApplyStoreAddress={c.applyStoreAddress}
+        activePanel={c.activePanel}
+        onTogglePanel={() => c.setActivePanel(c.activePanel === 'delivery' ? null : 'delivery')}
+        collapsed={collapsed}
+      />
+    ) : null;
+
   const renderOrderItemsPanel = (collapsed: boolean = false) => (
     <OrderItemsPanel
       isEditMode={c.isEditMode}
@@ -163,7 +179,10 @@ export default function AdminOrderForm() {
           <>
             {/* Order items expanded: OrderInfo (top-left, header only) + ProductSelector (top-right, header only) | OrderItems (bottom, full height) */}
             <div className="flex flex-row gap-4 shrink-0">
-              <div className="lg:w-[380px] shrink-0">{renderOrderInfoCard(true)}</div>
+              <div className="flex flex-col gap-4 lg:w-[380px] shrink-0 min-h-0 overflow-auto">
+                {renderOrderInfoCard(true)}
+                {renderDeliveryCard(true)}
+              </div>
               <div className="flex-1 min-w-0">{renderProductSelector(false, true)}</div>
             </div>
             <div className="flex-1 min-h-0 overflow-auto">{renderOrderItemsPanel(false)}</div>
@@ -172,7 +191,10 @@ export default function AdminOrderForm() {
           <>
             {/* Information expanded: OrderInfo (left, full height) | OrderItems (top-right) + ProductSelector (bottom-right) */}
             <div className="flex flex-row gap-4 min-h-0 lg:flex-1">
-              <div className="lg:flex-[5] min-w-0 overflow-auto h-full">{renderOrderInfoCard(false)}</div>
+              <div className="flex flex-col gap-4 lg:flex-[5] min-w-0 overflow-auto h-full">
+                {renderOrderInfoCard(false)}
+                {renderDeliveryCard(true)}
+              </div>
               <div className="flex flex-col gap-4 lg:flex-[5] min-w-0 overflow-hidden">
                 <div className="flex-1 min-h-0 overflow-auto">{renderOrderItemsPanel(false)}</div>
                 <div className="flex-1 min-h-0 overflow-auto">{renderProductSelector(false, false)}</div>
@@ -185,9 +207,24 @@ export default function AdminOrderForm() {
             <div className="flex flex-row gap-4 min-h-0 lg:flex-1">
               <div className="flex flex-col gap-4 lg:flex-[3] min-w-0 overflow-hidden">
                 <div className="shrink-0">{renderOrderInfoCard(true)}</div>
+                <div className="shrink-0">{renderDeliveryCard(true)}</div>
                 <div className="flex-1 min-h-0 overflow-auto">{renderOrderItemsPanel(false)}</div>
               </div>
               <div className="lg:flex-[7] min-w-0 overflow-auto h-full">{renderProductSelector(false, false)}</div>
+            </div>
+          </>
+        ) : c.activePanel === 'delivery' ? (
+          <>
+            {/* Delivery expanded: OrderInfo (top-left, collapsed) + Delivery (left, full height) | OrderItems (top-right) + ProductSelector (bottom-right) */}
+            <div className="flex flex-row gap-4 min-h-0 lg:flex-1">
+              <div className="flex flex-col gap-4 lg:flex-[5] min-w-0 overflow-auto h-full">
+                <div className="shrink-0">{renderOrderInfoCard(true)}</div>
+                {renderDeliveryCard(false)}
+              </div>
+              <div className="flex flex-col gap-4 lg:flex-[5] min-w-0 overflow-hidden">
+                <div className="flex-1 min-h-0 overflow-auto">{renderOrderItemsPanel(false)}</div>
+                <div className="flex-1 min-h-0 overflow-auto">{renderProductSelector(false, false)}</div>
+              </div>
             </div>
           </>
         ) : (
@@ -196,6 +233,7 @@ export default function AdminOrderForm() {
             <div className="flex flex-row gap-4 min-h-0 lg:flex-1">
               <div className="flex flex-col gap-4 lg:flex-[3] min-w-0 overflow-hidden">
                 <div className="shrink-0 max-h-[340px] overflow-auto">{renderOrderInfoCard(false)}</div>
+                <div className="shrink-0 max-h-[320px] overflow-auto">{renderDeliveryCard()}</div>
                 <div className="flex-1 min-h-0 overflow-auto">{renderOrderItemsPanel(false)}</div>
               </div>
               <div className="lg:flex-[7] min-w-0 overflow-auto h-full">{renderProductSelector(false, false)}</div>
@@ -207,6 +245,7 @@ export default function AdminOrderForm() {
       {/* Main area - MOBILE (<lg): order info + order items inline, catalog in right drawer */}
       <div className="lg:hidden flex flex-col gap-4">
         {renderOrderInfoCard(false)}
+        {renderDeliveryCard()}
         {renderOrderItemsPanel(false)}
       </div>
 
@@ -303,6 +342,15 @@ export default function AdminOrderForm() {
         onItemSourceChange={(id, src) => c.setItemSources((prev) => ({ ...prev, [id]: src }))}
         isPending={c.directShipMutation.isPending}
         onConfirm={() => c.directShipMutation.mutate()}
+        deliveryMethodTitle={(() => {
+          const m = c.deliveryMethods?.find((x: any) => x.id === c.deliveryMethodId);
+          return m?.name || null;
+        })()}
+        deliveryAddressSummary={(() => {
+          const a = c.shippingAddress;
+          if (!a || (!a.city && !a.district && !a.address)) return null;
+          return [a.postal_code, a.city, a.district, a.address, a.recipient].filter(Boolean).join(' ');
+        })()}
       />
     </div>
   );

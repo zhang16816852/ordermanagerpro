@@ -52,6 +52,7 @@ export default function StoreOrderList() {
           created_at,
           status,
           notes,
+          shipping_fee,
           order_items (
             id,
             quantity,
@@ -114,8 +115,8 @@ export default function StoreOrderList() {
     return 'waiting';
   };
 
-  const getOrderTotal = (items: OrderItem[]) => {
-    return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+  const getOrderTotal = (items: OrderItem[], shippingFee?: number | null) => {
+    return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0) + (shippingFee || 0);
   };
 
   if (!storeId) {

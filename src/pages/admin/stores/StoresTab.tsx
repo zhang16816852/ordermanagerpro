@@ -20,9 +20,44 @@ import { Label } from '@/components/ui/label';
 import { Plus, Search, Users, Pencil, Store } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { useState, useEffect } from 'react';
+import { useDeliveryMethods, DeliveryMethodPicker } from '@/components/shipping/DeliveryMethodPicker';
+import { ShippingAddressFields, ShippingAddressValue } from '@/components/shipping/ShippingAddressFields';
 import type { StoresController } from './useStoresController';
 
 export function StoresTab({ c }: { c: StoresController }) {
+  const { data: deliveryMethods = [] } = useDeliveryMethods();
+
+  const formatFullAddress = (s: any) => {
+    const parts = [s.postal_code, s.city, s.district, s.address].filter(Boolean);
+    return parts.length > 0 ? parts.join('') : null;
+  };
+  const [address, setAddress] = useState<ShippingAddressValue>(() => {
+    const s = (c.editingStore as any) || {};
+    return {
+      recipient: s.recipient || '',
+      phone: s.phone || '',
+      postal_code: s.postal_code || '',
+      city: s.city || '',
+      district: s.district || '',
+      address: s.address || '',
+    };
+  });
+  const [defaultMethodId, setDefaultMethodId] = useState<string | null>((c.editingStore as any)?.default_delivery_method_id || null);
+
+  // 切換編輯店家時同步地址與預設方式
+  useEffect(() => {
+    const s = (c.editingStore as any) || {};
+    setAddress({
+      recipient: s.recipient || '',
+      phone: s.phone || '',
+      postal_code: s.postal_code || '',
+      city: s.city || '',
+      district: s.district || '',
+      address: s.address || '',
+    });
+    setDefaultMethodId(s.default_delivery_method_id || null);
+  }, [c.editingStore, c.isStoreDialogOpen]);
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -63,13 +98,31 @@ export function StoresTab({ c }: { c: StoresController }) {
                 <Input id="brand" name="brand" defaultValue={(c.editingStore as any)?.brand || ''} placeholder="例：雷神快修" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="address">地址</Label>
-                <Input id="address" name="address" defaultValue={c.editingStore?.address || ''} />
+                <Label>配送地址（收件人/電話/郵區，供配送方式預填）</Label>
+                <ShippingAddressFields
+                  value={address}
+                  onChange={setAddress}
+                  prefix="store-addr"
+                  className="rounded-lg border p-3"
+                />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">電話</Label>
-                <Input id="phone" name="phone" defaultValue={c.editingStore?.phone || ''} />
+                <Label>預設配送方式</Label>
+                <DeliveryMethodPicker
+                  value={defaultMethodId}
+                  onValueChange={setDefaultMethodId}
+                  methods={deliveryMethods}
+                  placeholder="選擇店家預設配送方式"
+                  allowNone
+                />
               </div>
+              <input type="hidden" name="recipient" value={address.recipient} />
+              <input type="hidden" name="phone" value={address.phone} />
+              <input type="hidden" name="street_address" value={address.address} />
+              <input type="hidden" name="postal_code" value={address.postal_code} />
+              <input type="hidden" name="city" value={address.city} />
+              <input type="hidden" name="district" value={address.district} />
+              <input type="hidden" name="default_delivery_method_id" value={defaultMethodId || ''} />
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => { c.setIsStoreDialogOpen(false); c.setEditingStore(null); }}>
                   取消
@@ -123,8 +176,21 @@ export function StoresTab({ c }: { c: StoresController }) {
                       <Badge variant="secondary">{(store as any).brand}</Badge>
                     ) : '-'}
                   </TableCell>
-                  <TableCell className="text-muted-foreground max-w-[200px] truncate">
-                    {store.address || '-'}
+                  <TableCell className="text-muted-foreground max-w-[260px]">
+                    {(() => {
+                      const full = formatFullAddress(store);
+                      return (
+                        <div className="min-w-0">
+                          {(store as any).recipient && (
+                            <div className="text-xs font-medium text-foreground/80">
+                              收件人：{(store as any).recipient}
+                              {store.phone ? ` ・ ${store.phone}` : ''}
+                            </div>
+                          )}
+                          <div className="truncate">{full || '-'}</div>
+                        </div>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell>{store.phone || '-'}</TableCell>
                   <TableCell>
@@ -180,8 +246,13 @@ export function StoresTab({ c }: { c: StoresController }) {
                     {(store as any).brand && <Badge variant="secondary">{(store as any).brand}</Badge>}
                     {store.phone && <span>{store.phone}</span>}
                   </div>
-                  {store.address && (
-                    <p className="text-xs text-muted-foreground truncate">{store.address}</p>
+                  {(store as any).recipient && (
+                    <p className="text-xs text-muted-foreground">
+                      收件人：{(store as any).recipient}
+                    </p>
+                  )}
+                  {formatFullAddress(store) && (
+                    <p className="text-xs text-muted-foreground truncate">{formatFullAddress(store)}</p>
                   )}
                   <Button
                     variant="ghost"

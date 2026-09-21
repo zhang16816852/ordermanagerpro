@@ -21,7 +21,7 @@ interface OrdersTableViewProps {
     onView: (order: Order) => void;
     onEdit: (orderId: string) => void;
     getOrderShipmentStatus: (items: OrderItem[]) => string;
-    getOrderTotal: (items: OrderItem[]) => number;
+    getOrderTotal: (items: OrderItem[], shippingFee?: number | null) => number;
 }
 
 export function OrdersTableView({
@@ -74,7 +74,7 @@ export function OrdersTableView({
                                     </TableCell>
                                     <TableCell>{order.order_items.length}</TableCell>
                                     <TableCell className="text-right font-medium">
-                                        {formatCurrency(getOrderTotal(order.order_items))}
+                                        {formatCurrency(getOrderTotal(order.order_items, order.shipping_fee))}
                                     </TableCell>
                                     <TableCell>
                                         <OrderStatusBadge status={itemStatus} type="shipping" />

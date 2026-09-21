@@ -6,6 +6,8 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { OrderItemRow } from '@/components/order/orderItemsTypes';
 import { useStoreDraft } from '@/store/useOrderDraftStore';
+import { ShippingAddressValue, isEmptyShippingAddress } from '@/components/shipping/ShippingAddressFields';
+import { DeliveryMethodOption } from '@/components/shipping/DeliveryMethodPicker';
 
 export interface OrderFormMutationParams {
   orderId?: string;
@@ -29,6 +31,9 @@ export interface OrderFormMutationParams {
   pendingDeletedIdsRef: { current: string[] };
   priceSyncMap: Record<string, boolean>;
   itemsForSync: OrderItemRow[];
+  deliveryMethodId: string | null;
+  shippingAddress: ShippingAddressValue;
+  deliveryMethods: DeliveryMethodOption[];
   onDirectShipDialogClose: () => void;
 }
 
@@ -58,8 +63,32 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     pendingDeletedIdsRef,
     priceSyncMap,
     itemsForSync,
+    deliveryMethodId,
+    shippingAddress,
+    deliveryMethods,
     onDirectShipDialogClose,
   } = params;
+
+  const getDeliveryDetails = () => {
+    const method = (deliveryMethods || []).find((m) => m.id === deliveryMethodId) || null;
+    return {
+      id: deliveryMethodId || null,
+      title: method?.name || null,
+      code: method?.code || null,
+      address: isEmptyShippingAddress(shippingAddress) ? null : shippingAddress,
+    };
+  };
+
+  // 單據層配送快照（orders/sales_notes 共用欄位）
+  const deliverySnapshot = () => {
+    const d = getDeliveryDetails();
+    return {
+      delivery_method_id: d.id,
+      delivery_method_title: d.title,
+      delivery_method_code: d.code,
+      shipping_address: d.address,
+    };
+  };
 
   const buildItemsPayload = useCallback((currentItems: OrderItemRow[]) =>
     currentItems.map((item, index) => ({
@@ -103,6 +132,12 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         err.reason = result.reason;
         throw err;
       }
+
+      // 配送快照：RPC 不動 delivery 欄位，另以一般 update 寫入
+      const snap = deliverySnapshot();
+      const dw = (supabase.from('orders') as any).update(snap).eq('id', orderId);
+      const snapResult = await dw;
+      if (snapResult.error) throw snapResult.error;
     },
     onSuccess: () => {
       toast.success('訂單已更新');
@@ -127,6 +162,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       const currentNotes = notesRef.current;
       if (currentItems.length === 0) throw new Error('訂單項目是空的');
       if (!storeId) throw new Error('請先選擇店鋪');
+      const snap = deliverySnapshot();
       const { data: newOrder, error: orderError } = await (supabase
         .from('orders') as any)
         .insert({
@@ -137,6 +173,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
           notes: currentNotes.trim() || null,
           consignment_mode: consignmentModeRef.current,
           access_token: crypto.randomUUID(),
+          ...snap,
         })
         .select('id')
         .single();
@@ -193,6 +230,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         sort_order: index + 1,
       }));
 
+      const d = getDeliveryDetails();
       const { data, error } = await supabase.rpc('create_order_with_sales_note', {
         p_store_id: storeId,
         p_created_by: user?.id as string,
@@ -201,6 +239,9 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         p_shipped_at: shippedAt ? new Date(shippedAt).toISOString() : undefined,
         p_warehouse_id: undefined,
         p_consignment_mode: consignmentModeRef.current,
+        p_delivery_method_id: d.id || undefined,
+        p_shipping_fee: undefined,
+        p_shipping_address: d.address || undefined,
       });
       if (error) throw error;
 
@@ -280,6 +321,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         if (src) acc[i.id] = src;
         return acc;
       }, {} as Record<string, string>);
+      const d = getDeliveryDetails();
       const { data, error } = await supabase.rpc('direct_ship_order', {
         p_order_id: orderId,
         p_created_by: user.id,
@@ -288,6 +330,9 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         p_warehouse_id: undefined,
         p_warehouse_map: Object.keys(warehouseMap).length > 0 ? warehouseMap : undefined,
         p_source_map: Object.keys(sourceMap).length > 0 ? sourceMap : undefined,
+        p_delivery_method_id: d.id || undefined,
+        p_shipping_fee: undefined,
+        p_shipping_address: d.address || undefined,
       });
       if (error) throw error;
       return data as any;

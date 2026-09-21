@@ -260,6 +260,7 @@ export function ReferenceViewer({ referenceType, referenceId, open, onOpenChange
         onOpenChange={onOpenChange}
         note={salesNoteQuery.data || null}
         enablePayment={false}
+        parcelEditable
       />
     );
   }
@@ -270,6 +271,7 @@ export function ReferenceViewer({ referenceType, referenceId, open, onOpenChange
         order={orderQuery.data || null}
         open={open}
         onOpenChange={onOpenChange}
+        parcelEditable
       />
     );
   }

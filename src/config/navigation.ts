@@ -40,7 +40,7 @@ export const adminNavItems: NavItem[] = [
   { title: '採購管理', href: '/admin/purchase-orders', icon: Truck },
   { title: '寄賣管理', href: '/admin/consignment', icon: Package },
   { title: '會計管理', href: '/admin/accounting', icon: FileText },
-  { title: '運費月結', href: '/admin/shipping-settlements', icon: Truck },
+  { title: '物流管理', href: '/admin/logistics', icon: Truck },
   { title: '媒合市場', href: '/market', icon: ShoppingBag },
   { title: 'Table 式下單', href: '/admin/order-grid-templates', icon: Layers },
   { title: '操作日誌', href: '/admin/audit-logs', icon: HistoryIcon },

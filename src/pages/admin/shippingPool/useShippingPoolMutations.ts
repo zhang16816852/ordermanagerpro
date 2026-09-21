@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getErrorMessage } from '@/lib/errorMessages';
 import { GroupedByStore } from "./shippingPoolTypes";
+import { ShipDeliveryMap } from "./shippingPoolTypes";
 
 interface UseShippingPoolMutationsParams {
   user: { id: string } | null;
@@ -15,10 +16,38 @@ interface UseShippingPoolMutationsParams {
   warehouseMap: Record<string, string>;
   sourceMap: Record<string, string>;
   consignmentOverrideMap: Record<string, boolean>;
+  deliveryMap: ShipDeliveryMap;
   setSelectedPoolItemIds: (s: Set<string>) => void;
   setSelectedStores: (s: Set<string>) => void;
   setShowShipDialog: (v: boolean) => void;
   setNotes: (v: string) => void;
+}
+
+// 從 deliveryMap 組 p_delivery_overrides（僅含已選店家且有配送方式的包裹）
+export function buildDeliveryOverrides(
+  selectedStores: Set<string>,
+  deliveryMap: ShipDeliveryMap
+): Record<string, { address: any; parcels: Array<{ delivery_method_id: string | null; fee?: number; cost?: number; tracking_company?: string; tracking_number?: string }> }> {
+  const overrides: Record<string, { address: any; parcels: any[] }> = {};
+  selectedStores.forEach((storeId) => {
+    const d = deliveryMap[storeId];
+    if (!d) return;
+    const parcels = (d.parcels || [])
+      .filter((p) => p.delivery_method_id)
+      .map((p) => ({
+        delivery_method_id: p.delivery_method_id,
+        fee: p.fee !== "" ? Number(p.fee) : undefined,
+        cost: p.cost !== "" ? Number(p.cost) : undefined,
+        tracking_company: p.tracking_company || undefined,
+        tracking_number: p.tracking_number || undefined,
+      }));
+    if (parcels.length === 0) return;
+    overrides[storeId] = {
+      address: d.address && d.address.city ? d.address : undefined,
+      parcels,
+    };
+  });
+  return overrides;
 }
 
 export function useShippingPoolMutations({
@@ -31,6 +60,7 @@ export function useShippingPoolMutations({
   warehouseMap,
   sourceMap,
   consignmentOverrideMap,
+  deliveryMap,
   setSelectedPoolItemIds,
   setSelectedStores,
   setShowShipDialog,
@@ -91,6 +121,7 @@ export function useShippingPoolMutations({
         p_warehouse_map: warehouseMap,
         p_source_map: sourceMap,
         p_consignment_override_map: consignmentOverrideMap,
+        p_delivery_overrides: buildDeliveryOverrides(selectedStores, deliveryMap),
       });
 
       if (error) throw error;

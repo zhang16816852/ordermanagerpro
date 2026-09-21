@@ -42,6 +42,18 @@ export interface Order {
     } | null;
     order_items: OrderItem[];
     access_token?: string | null;
+    shipping_fee?: number | null;
+    shipping_cost?: number | null;
+    delivery_method_id?: string | null;
+    delivery_method_title?: string | null;
+    shipping_address?: {
+        recipient?: string | null;
+        phone?: string | null;
+        postal_code?: string | null;
+        city?: string | null;
+        district?: string | null;
+        address?: string | null;
+    } | null;
 }
 
 export interface ShipmentSelection {

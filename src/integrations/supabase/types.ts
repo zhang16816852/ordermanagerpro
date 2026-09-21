@@ -206,6 +206,24 @@ export type Database = {
         }
         Relationships: []
       }
+      app_secrets: {
+        Row: {
+          created_at: string
+          key: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          key: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          key?: string
+          value?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -512,11 +530,18 @@ export type Database = {
           code: string
           created_at: string
           created_by: string | null
+          delivery_method_code: string | null
+          delivery_method_id: string | null
+          delivery_method_title: string | null
           direction: string
           id: string
           note: string | null
           received_at: string | null
           received_by: string | null
+          shipped_at: string | null
+          shipping_address: Json | null
+          shipping_cost: number
+          shipping_fee: number
           source_order_id: string | null
           status: string
           store_id: string | null
@@ -528,11 +553,18 @@ export type Database = {
           code: string
           created_at?: string
           created_by?: string | null
+          delivery_method_code?: string | null
+          delivery_method_id?: string | null
+          delivery_method_title?: string | null
           direction: string
           id?: string
           note?: string | null
           received_at?: string | null
           received_by?: string | null
+          shipped_at?: string | null
+          shipping_address?: Json | null
+          shipping_cost?: number
+          shipping_fee?: number
           source_order_id?: string | null
           status?: string
           store_id?: string | null
@@ -544,11 +576,18 @@ export type Database = {
           code?: string
           created_at?: string
           created_by?: string | null
+          delivery_method_code?: string | null
+          delivery_method_id?: string | null
+          delivery_method_title?: string | null
           direction?: string
           id?: string
           note?: string | null
           received_at?: string | null
           received_by?: string | null
+          shipped_at?: string | null
+          shipping_address?: Json | null
+          shipping_cost?: number
+          shipping_fee?: number
           source_order_id?: string | null
           status?: string
           store_id?: string | null
@@ -561,6 +600,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consignment_orders_delivery_method_id_fkey"
+            columns: ["delivery_method_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_methods"
             referencedColumns: ["id"]
           },
           {
@@ -1001,6 +1047,65 @@ export type Database = {
           version?: string
         }
         Relationships: []
+      }
+      delivery_methods: {
+        Row: {
+          code: string
+          cost: number
+          created_at: string
+          fee_payment: string
+          id: string
+          is_active: boolean
+          is_default: boolean
+          name: string
+          price: number
+          sort_order: number
+          supplier_id: string | null
+          tracking_url_template: string | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          cost?: number
+          created_at?: string
+          fee_payment?: string
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          name: string
+          price?: number
+          sort_order?: number
+          supplier_id?: string | null
+          tracking_url_template?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          cost?: number
+          created_at?: string
+          fee_payment?: string
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          name?: string
+          price?: number
+          sort_order?: number
+          supplier_id?: string | null
+          tracking_url_template?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_methods_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       device_brands: {
         Row: {
@@ -1967,9 +2072,15 @@ export type Database = {
           consignment_mode: boolean
           created_at: string
           created_by: string
+          delivery_method_code: string | null
+          delivery_method_id: string | null
+          delivery_method_title: string | null
           id: string
           notes: string | null
           sales_rep_id: string | null
+          shipping_address: Json | null
+          shipping_cost: number
+          shipping_fee: number
           source_type: Database["public"]["Enums"]["order_source_type"]
           status: Database["public"]["Enums"]["order_status"]
           store_id: string
@@ -1981,9 +2092,15 @@ export type Database = {
           consignment_mode?: boolean
           created_at?: string
           created_by: string
+          delivery_method_code?: string | null
+          delivery_method_id?: string | null
+          delivery_method_title?: string | null
           id?: string
           notes?: string | null
           sales_rep_id?: string | null
+          shipping_address?: Json | null
+          shipping_cost?: number
+          shipping_fee?: number
           source_type?: Database["public"]["Enums"]["order_source_type"]
           status?: Database["public"]["Enums"]["order_status"]
           store_id: string
@@ -1995,15 +2112,28 @@ export type Database = {
           consignment_mode?: boolean
           created_at?: string
           created_by?: string
+          delivery_method_code?: string | null
+          delivery_method_id?: string | null
+          delivery_method_title?: string | null
           id?: string
           notes?: string | null
           sales_rep_id?: string | null
+          shipping_address?: Json | null
+          shipping_cost?: number
+          shipping_fee?: number
           source_type?: Database["public"]["Enums"]["order_source_type"]
           status?: Database["public"]["Enums"]["order_status"]
           store_id?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "orders_delivery_method_id_fkey"
+            columns: ["delivery_method_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_methods"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "orders_store_id_fkey"
             columns: ["store_id"]
@@ -3487,12 +3617,18 @@ export type Database = {
           code: string | null
           created_at: string
           created_by: string
+          delivery_method_code: string | null
+          delivery_method_id: string | null
+          delivery_method_title: string | null
           id: string
           notes: string | null
           payment_status: string
           received_at: string | null
           received_by: string | null
           shipped_at: string | null
+          shipping_address: Json | null
+          shipping_cost: number
+          shipping_fee: number
           status: Database["public"]["Enums"]["sales_note_status"]
           store_id: string
           updated_at: string
@@ -3503,12 +3639,18 @@ export type Database = {
           code?: string | null
           created_at?: string
           created_by: string
+          delivery_method_code?: string | null
+          delivery_method_id?: string | null
+          delivery_method_title?: string | null
           id?: string
           notes?: string | null
           payment_status?: string
           received_at?: string | null
           received_by?: string | null
           shipped_at?: string | null
+          shipping_address?: Json | null
+          shipping_cost?: number
+          shipping_fee?: number
           status?: Database["public"]["Enums"]["sales_note_status"]
           store_id: string
           updated_at?: string
@@ -3519,18 +3661,31 @@ export type Database = {
           code?: string | null
           created_at?: string
           created_by?: string
+          delivery_method_code?: string | null
+          delivery_method_id?: string | null
+          delivery_method_title?: string | null
           id?: string
           notes?: string | null
           payment_status?: string
           received_at?: string | null
           received_by?: string | null
           shipped_at?: string | null
+          shipping_address?: Json | null
+          shipping_cost?: number
+          shipping_fee?: number
           status?: Database["public"]["Enums"]["sales_note_status"]
           store_id?: string
           updated_at?: string
           warehouse_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "sales_notes_delivery_method_id_fkey"
+            columns: ["delivery_method_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_methods"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "sales_notes_store_id_fkey"
             columns: ["store_id"]
@@ -3543,6 +3698,74 @@ export type Database = {
             columns: ["warehouse_id"]
             isOneToOne: false
             referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shipments: {
+        Row: {
+          cost: number
+          created_at: string
+          created_by: string | null
+          delivery_method_code: string | null
+          delivery_method_id: string | null
+          delivery_method_title: string | null
+          doc_id: string
+          doc_type: string
+          fee: number
+          fee_payment: string
+          id: string
+          note: string | null
+          shipped_at: string | null
+          tracking_company: string | null
+          tracking_number: string | null
+          tracking_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          cost?: number
+          created_at?: string
+          created_by?: string | null
+          delivery_method_code?: string | null
+          delivery_method_id?: string | null
+          delivery_method_title?: string | null
+          doc_id: string
+          doc_type: string
+          fee?: number
+          fee_payment?: string
+          id?: string
+          note?: string | null
+          shipped_at?: string | null
+          tracking_company?: string | null
+          tracking_number?: string | null
+          tracking_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cost?: number
+          created_at?: string
+          created_by?: string | null
+          delivery_method_code?: string | null
+          delivery_method_id?: string | null
+          delivery_method_title?: string | null
+          doc_id?: string
+          doc_type?: string
+          fee?: number
+          fee_payment?: string
+          id?: string
+          note?: string | null
+          shipped_at?: string | null
+          tracking_company?: string | null
+          tracking_number?: string | null
+          tracking_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shipments_delivery_method_id_fkey"
+            columns: ["delivery_method_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_methods"
             referencedColumns: ["id"]
           },
         ]
@@ -3907,37 +4130,60 @@ export type Database = {
         Row: {
           address: string | null
           brand: string | null
+          city: string | null
           code: string | null
           created_at: string
+          default_delivery_method_id: string | null
+          district: string | null
           id: string
           name: string
           owner_id: string | null
           phone: string | null
+          postal_code: string | null
+          recipient: string | null
           updated_at: string
         }
         Insert: {
           address?: string | null
           brand?: string | null
+          city?: string | null
           code?: string | null
           created_at?: string
+          default_delivery_method_id?: string | null
+          district?: string | null
           id?: string
           name: string
           owner_id?: string | null
           phone?: string | null
+          postal_code?: string | null
+          recipient?: string | null
           updated_at?: string
         }
         Update: {
           address?: string | null
           brand?: string | null
+          city?: string | null
           code?: string | null
           created_at?: string
+          default_delivery_method_id?: string | null
+          district?: string | null
           id?: string
           name?: string
           owner_id?: string | null
           phone?: string | null
+          postal_code?: string | null
+          recipient?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "stores_default_delivery_method_id_fkey"
+            columns: ["default_delivery_method_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_methods"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       supplier_import_configs: {
         Row: {
@@ -4040,6 +4286,7 @@ export type Database = {
           email: string | null
           id: string
           is_active: boolean
+          is_logistics_company: boolean
           name: string
           notes: string | null
           phone: string | null
@@ -4052,6 +4299,7 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean
+          is_logistics_company?: boolean
           name: string
           notes?: string | null
           phone?: string | null
@@ -4064,6 +4312,7 @@ export type Database = {
           email?: string | null
           id?: string
           is_active?: boolean
+          is_logistics_company?: boolean
           name?: string
           notes?: string | null
           phone?: string | null
@@ -4436,6 +4685,10 @@ export type Database = {
       }
     }
     Functions: {
+      _recompute_doc_shipping: {
+        Args: { p_doc_id: string; p_doc_type: string }
+        Returns: Json
+      }
       accept_invitation: {
         Args: { p_invitation_id: string }
         Returns: undefined
@@ -4549,26 +4802,60 @@ export type Database = {
         }
         Returns: Json
       }
-      create_consignment_shipment_layer: {
-        Args: {
-          p_created_by: string
-          p_order_items: Json
-          p_warehouse_id: string
-        }
-        Returns: undefined
-      }
-      create_order_with_sales_note: {
-        Args: {
-          p_consignment_mode?: boolean
-          p_created_by: string
-          p_items?: Json
-          p_notes?: string
-          p_shipped_at?: string
-          p_store_id: string
-          p_warehouse_id?: string
-        }
-        Returns: Json
-      }
+      create_consignment_shipment_layer:
+        | {
+            Args: {
+              p_created_by: string
+              p_notes?: string
+              p_order_items: Json
+              p_shipped_at?: string
+              p_store_id: string
+              p_warehouse_id?: string
+            }
+            Returns: undefined
+          }
+        | {
+            Args: {
+              p_created_by: string
+              p_delivery_method_id?: string
+              p_notes?: string
+              p_order_items: Json
+              p_shipped_at?: string
+              p_shipping_address?: Json
+              p_shipping_fee?: number
+              p_store_id: string
+              p_warehouse_id?: string
+            }
+            Returns: undefined
+          }
+      create_order_with_sales_note:
+        | {
+            Args: {
+              p_consignment_mode?: boolean
+              p_created_by: string
+              p_items?: Json
+              p_notes?: string
+              p_shipped_at?: string
+              p_store_id: string
+              p_warehouse_id?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_consignment_mode?: boolean
+              p_created_by: string
+              p_delivery_method_id?: string
+              p_items?: Json
+              p_notes?: string
+              p_shipped_at?: string
+              p_shipping_address?: Json
+              p_shipping_fee?: number
+              p_store_id: string
+              p_warehouse_id?: string
+            }
+            Returns: Json
+          }
       deduct_repair_part_stock: {
         Args: {
           p_created_by: string
@@ -4593,19 +4880,36 @@ export type Database = {
         Returns: Json
       }
       delete_sales_note: { Args: { p_sales_note_id: string }; Returns: Json }
+      delete_shipment: { Args: { p_shipment_id: string }; Returns: Json }
       delete_variant_if_safe: { Args: { p_variant_id: string }; Returns: Json }
-      direct_ship_order: {
-        Args: {
-          p_created_by: string
-          p_notes?: string
-          p_order_id: string
-          p_shipped_at?: string
-          p_source_map?: Json
-          p_warehouse_id?: string
-          p_warehouse_map?: Json
-        }
-        Returns: Json
-      }
+      direct_ship_order:
+        | {
+            Args: {
+              p_created_by: string
+              p_notes?: string
+              p_order_id: string
+              p_shipped_at?: string
+              p_source_map?: Json
+              p_warehouse_id?: string
+              p_warehouse_map?: Json
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_created_by: string
+              p_delivery_method_id?: string
+              p_notes?: string
+              p_order_id: string
+              p_shipped_at?: string
+              p_shipping_address?: Json
+              p_shipping_fee?: number
+              p_source_map?: Json
+              p_warehouse_id?: string
+              p_warehouse_map?: Json
+            }
+            Returns: Json
+          }
       duplicate_product_with_variants: {
         Args: { new_name: string; new_sku?: string; target_product_id: string }
         Returns: string
@@ -4711,7 +5015,15 @@ export type Database = {
           name: string
         }[]
       }
+      list_settleable_shipments: {
+        Args: { p_supplier_id: string }
+        Returns: Json
+      }
       migrate_historical_specs_to_v6: { Args: never; Returns: Json }
+      next_consignment_code: {
+        Args: { p_shipped_at: string; p_store_id: string }
+        Returns: string
+      }
       process_purchase_return: {
         Args: {
           p_created_by?: string
@@ -4791,10 +5103,10 @@ export type Database = {
           p_created_by: string
           p_description: string
           p_note: string
-          p_order_item_ids: string[]
           p_paid_date: string
           p_period_end: string
           p_period_start: string
+          p_shipment_ids: string[]
           p_supplier_id: string
         }
         Returns: Json
@@ -4877,19 +5189,54 @@ export type Database = {
         }
         Returns: string
       }
-      ship_from_pool: {
-        Args: {
-          p_consignment_override_map?: Json
-          p_created_by: string
-          p_notes?: string
-          p_shipped_at?: string
-          p_source_map?: Json
-          p_store_ids: string[]
-          p_warehouse_id?: string
-          p_warehouse_map?: Json
-        }
-        Returns: Json
-      }
+      share_token_for_code: { Args: { p_code: string }; Returns: string }
+      ship_from_pool:
+        | {
+            Args: {
+              p_consignment_override_map?: Json
+              p_created_by: string
+              p_notes?: string
+              p_shipped_at?: string
+              p_source_map?: Json
+              p_store_ids: string[]
+              p_warehouse_id?: string
+              p_warehouse_map?: Json
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_consignment_override_map?: Json
+              p_created_by: string
+              p_delivery_method_id?: string
+              p_notes?: string
+              p_shipped_at?: string
+              p_shipping_address?: Json
+              p_shipping_fee?: number
+              p_source_map?: Json
+              p_store_ids: string[]
+              p_warehouse_id?: string
+              p_warehouse_map?: Json
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_consignment_override_map?: Json
+              p_created_by: string
+              p_delivery_method_id?: string
+              p_delivery_overrides?: Json
+              p_notes?: string
+              p_shipped_at?: string
+              p_shipping_address?: Json
+              p_shipping_fee?: number
+              p_source_map?: Json
+              p_store_ids: string[]
+              p_warehouse_id?: string
+              p_warehouse_map?: Json
+            }
+            Returns: Json
+          }
       sync_product_specs_v6: {
         Args: {
           p_category_id: string
@@ -4932,6 +5279,10 @@ export type Database = {
         Args: { p_brand: string; p_products: Json }
         Returns: undefined
       }
+      upsert_product_variant_options_batch: {
+        Args: { p_product_id: string; p_variants: Json }
+        Returns: Json
+      }
       upsert_rep_product_costs: {
         Args: { p_items: Json; p_rep_id: string }
         Returns: Json
@@ -4939,6 +5290,37 @@ export type Database = {
       upsert_repair_checklist_library: {
         Args: { p_category: string; p_item_name: string }
         Returns: undefined
+      }
+      upsert_sales_note_deletion_movement: {
+        Args: {
+          p_created_by?: string
+          p_order_item_id: string
+          p_product_id: string
+          p_quantity: number
+          p_reference_code?: string
+          p_sales_note_id: string
+          p_variant_id: string
+          p_warehouse_id: string
+        }
+        Returns: undefined
+      }
+      upsert_shipment: {
+        Args: {
+          p_cost?: number
+          p_created_by?: string
+          p_delivery_method_id?: string
+          p_doc_id: string
+          p_doc_type: string
+          p_fee?: number
+          p_fee_payment?: string
+          p_note?: string
+          p_shipment_id?: string
+          p_shipped_at?: string
+          p_tracking_company?: string
+          p_tracking_number?: string
+          p_tracking_url?: string
+        }
+        Returns: Json
       }
       upsert_store_products_batch: {
         Args: { p_items: Json }

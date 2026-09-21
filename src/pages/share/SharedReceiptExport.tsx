@@ -84,6 +84,10 @@ interface SharedReceiptProps {
   defaultPaperSize?: "a4" | "middle-cut";
   webShowPrice?: boolean;
   webShowQR?: boolean;
+  /** 運費（單據層 shipping_fee 快照），顯示於總金額上方 */
+  shippingFee?: number | null;
+  /** 配送方式名稱（單據層 delivery_method_title） */
+  deliveryMethodTitle?: string | null;
 }
 
 function HeaderRow({ showPrice }: { showPrice: boolean }) {
@@ -226,6 +230,8 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
     defaultPaperSize = "a4",
     webShowPrice: webShowPriceProp,
     webShowQR: webShowQRProp,
+    shippingFee,
+    deliveryMethodTitle,
   } = props;
 
   const printRef = useRef<HTMLDivElement>(null);
@@ -290,6 +296,8 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
           notes,
           items,
           showPrice,
+          shippingFee,
+          deliveryMethodTitle,
           filename: `${filenamePrefix}_${code || "note"}`,
         });
         toast.success("Excel 匯出成功");
@@ -393,6 +401,8 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
                   showPrice={showPrice}
                   notes={notes}
                   canShowPrice={baseShowPrice}
+                  shippingFee={shippingFee}
+                  deliveryMethodTitle={deliveryMethodTitle}
                 />
               )}
             </ReceiptPage>
@@ -505,13 +515,18 @@ function LastPageSummary({
   showPrice,
   notes,
   canShowPrice,
+  shippingFee,
+  deliveryMethodTitle,
 }: {
   items: ReceiptItem[];
   showPrice: boolean;
   notes?: string;
   canShowPrice: boolean;
+  shippingFee?: number | null;
+  deliveryMethodTitle?: string | null;
 }) {
   const { itemCount, totalQty, totalAmount } = calcReceiptTotals(items);
+  const fee = canShowPrice ? Number(shippingFee ?? 0) : 0;
   return (
     <div className="doc-summary-wrap">
       <div className="doc-summary-notes">
@@ -527,10 +542,22 @@ function LastPageSummary({
           <span>總件數</span>
           <span className="doc-summary-val">{totalQty} 件</span>
         </div>
+        {deliveryMethodTitle && (
+          <div className="doc-summary-row">
+            <span>配送方式</span>
+            <span className="doc-summary-val">{deliveryMethodTitle}</span>
+          </div>
+        )}
+        {canShowPrice && fee > 0 && (
+          <div className="doc-summary-row">
+            <span>運費</span>
+            <span className="doc-summary-val">{showPrice ? formatCurrency(fee) : "—"}</span>
+          </div>
+        )}
         {canShowPrice && (
           <div className="doc-summary-row doc-summary-total">
             <span>總金額</span>
-            <span className="doc-summary-val">{showPrice ? formatCurrency(totalAmount) : "—"}</span>
+            <span className="doc-summary-val">{showPrice ? formatCurrency(totalAmount + fee) : "—"}</span>
           </div>
         )}
       </div>

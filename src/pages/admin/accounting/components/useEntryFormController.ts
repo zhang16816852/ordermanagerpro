@@ -148,7 +148,7 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
   const [shippingSupplierId, setShippingSupplierId] = useState(prefill?.shipping?.supplierId || '');
   const [shippingPeriodStart, setShippingPeriodStart] = useState(prefill?.shipping?.periodStart || '');
   const [shippingPeriodEnd, setShippingPeriodEnd] = useState(prefill?.shipping?.periodEnd || '');
-  const [selectedShipItemIds, setSelectedShipItemIds] = useState<string[]>(prefill?.shipping?.orderItemIds || []);
+  const [selectedShipItemIds, setSelectedShipItemIds] = useState<string[]>(prefill?.shipping?.shipmentIds || []);
 
   const [repairMode, setRepairMode] = useState<RepairAccountingSubType>(prefill?.repair?.subType || 'income_repair');
   const [selectedRepairOrderId, setSelectedRepairOrderId] = useState<string>(prefill?.repair?.repairOrderId || '');
@@ -405,7 +405,7 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
     } else if (isShipping && onShippingSettleSubmit) {
       onShippingSettleSubmit({
         supplierId: shippingSupplierId,
-        orderItemIds: selectedShipItemIds,
+        shipmentIds: selectedShipItemIds,
         periodStart: shippingPeriodStart,
         periodEnd: shippingPeriodEnd,
         paidDate: transactionDate,

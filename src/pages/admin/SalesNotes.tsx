@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useLayoutEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,8 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Search, FileText, CalendarIcon, X, CheckSquare, Download } from "lucide-react";
+import { Search, FileText, CalendarIcon, X, CheckSquare, Download, List, LayoutGrid } from "lucide-react";
 import { SalesNoteListTable } from "@/components/sales/SalesNoteListTable";
+import { StorePicker } from "@/components/ui/StorePicker";
+import { SalesNoteProductView, SalesNoteAggregateItem } from "@/components/sales/SalesNoteProductView";
 import { SalesNoteDetailDialog, SalesNoteDetail } from "@/components/sales/SalesNoteDetailDialog";
 import { toast } from "sonner";
 import { getErrorDetails, getErrorMessage } from '@/lib/errorMessages';
@@ -19,13 +21,29 @@ import { format, addDays } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/formatters";
+import { usePageHeader } from "@/components/layout/PageHeaderContext";
 import type { DateRange } from "react-day-picker";
 
 export default function AdminSalesNotes() {
   const queryClient = useQueryClient();
+  const { setPageHeader } = usePageHeader();
+
+  // 「銷售單管理」標題交由共用 Header 呈現（桌面/手機皆適用），省下頁面內大標題空間
+  useLayoutEffect(() => {
+    setPageHeader({ title: "銷售單管理" });
+    return () => setPageHeader(null);
+  }, [setPageHeader]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get("search") || "");
-  const [storeFilter, setStoreFilter] = useState<string>(searchParams.get("store") || "all");
+  const [viewMode, setViewMode] = useState<"notes" | "product">(() => {
+    const v = searchParams.get("view");
+    return v === "product" ? "product" : "notes";
+  });
+  const [storeFilter, setStoreFilter] = useState<string[]>(() => {
+    const raw = searchParams.get("store");
+    if (!raw || raw === "all") return [];
+    return raw.split(",").filter(Boolean);
+  });
   const [statusFilter, setStatusFilter] = useState<string>(searchParams.get("status") || "all");
   const [repFilter, setRepFilter] = useState<string>(searchParams.get("rep") || "all");
   const [selectedNote, setSelectedNote] = useState<typeof salesNotes[number] | null>(null);
@@ -89,7 +107,7 @@ export default function AdminSalesNotes() {
   });
 
   const { data: salesNotes, isLoading } = useQuery({
-    queryKey: ["admin-sales-notes", storeFilter, statusFilter, repFilter, repAssignedStoreIds.join(','), dateRange?.from, dateRange?.to],
+    queryKey: ["admin-sales-notes", storeFilter.join(','), statusFilter, repFilter, repAssignedStoreIds.join(','), dateRange?.from, dateRange?.to],
     queryFn: async () => {
       let query = (supabase
         .from("sales_notes") as any)
@@ -120,8 +138,8 @@ export default function AdminSalesNotes() {
 
       if (repAssignedStoreIds.length > 0) {
         query = query.in("store_id", repAssignedStoreIds);
-      } else if (storeFilter !== "all") {
-        query = query.eq("store_id", storeFilter);
+      } else if (storeFilter.length > 0) {
+        query = query.in("store_id", storeFilter);
       }
       if (statusFilter !== "all") {
         if (statusFilter === "unreceived") {
@@ -157,13 +175,74 @@ export default function AdminSalesNotes() {
     );
   });
 
-  const unreceivedCount = salesNotes?.filter(n => n.payment_status !== "paid").length || 0;
-  const receivedCount = salesNotes?.filter(n => n.payment_status === "paid").length || 0;
-  const totalAmount = salesNotes?.reduce((sum, note) =>
+  const aggregatedProducts = useMemo<SalesNoteAggregateItem[]>(() => {
+    const map = new Map<string, SalesNoteAggregateItem>();
+    for (const note of salesNotes || []) {
+      for (const item of note.sales_note_items || []) {
+        const oi = item.order_item;
+        if (!oi) continue;
+        const name = oi.product_variant?.name || oi.product?.name || "未知產品";
+        const sku = oi.product?.code || "-";
+        const qty = item.quantity || 0;
+        const unit = oi.unit_price || 0;
+        const key = `${oi.product_id}_${oi.variant_id || "null"}`;
+        let entry = map.get(key);
+        if (!entry) {
+          entry = {
+            productId: oi.product_id,
+            variantId: oi.variant_id ?? null,
+            productName: name,
+            sku,
+            totalQuantity: 0,
+            totalAmount: 0,
+            avgUnitPrice: 0,
+            noteBreakdown: [],
+          };
+          map.set(key, entry);
+        }
+        let breakdown = entry.noteBreakdown.find((b) => b.salesNoteId === note.id);
+        if (!breakdown) {
+          breakdown = {
+            salesNoteId: note.id,
+            salesNoteCode: note.code || note.id.slice(0, 8),
+            storeName: note.store?.name || "-",
+            quantity: 0,
+            amount: 0,
+          };
+          entry.noteBreakdown.push(breakdown);
+        }
+        breakdown.quantity += qty;
+        breakdown.amount += qty * unit;
+        entry.totalQuantity += qty;
+        entry.totalAmount += qty * unit;
+      }
+    }
+    let products = Array.from(map.values());
+    for (const p of products) {
+      p.avgUnitPrice = p.totalQuantity > 0 ? p.totalAmount / p.totalQuantity : 0;
+    }
+    const keyword = search.trim().toLowerCase();
+    if (keyword) {
+      products = products.filter(
+        (p) => p.productName.toLowerCase().includes(keyword) || p.sku.toLowerCase().includes(keyword)
+      );
+    }
+    products.sort((a, b) => b.totalAmount - a.totalAmount);
+    return products;
+  }, [salesNotes, search]);
+
+  const visibleNotes = filteredNotes ?? [];
+
+  const unreceivedCount = visibleNotes.filter(n => n.payment_status !== "paid").length;
+  const receivedCount = visibleNotes.filter(n => n.payment_status === "paid").length;
+  const totalAmount = visibleNotes.reduce((sum, note) =>
     sum + (note.sales_note_items || []).reduce((s, item) =>
       s + (item.quantity * (item.order_item?.unit_price || 0)), 0
     ), 0
-  ) || 0;
+  );
+
+  const productTotalQty = aggregatedProducts.reduce((s, p) => s + p.totalQuantity, 0);
+  const productTotalAmount = aggregatedProducts.reduce((s, p) => s + p.totalAmount, 0);
 
   // 業務佣金彙總（僅業務身分顯示）
   const { isRep, computeOrder: computeRepOrder } = useRepCommission();
@@ -226,6 +305,8 @@ export default function AdminSalesNotes() {
     payment_status: note.payment_status,
     access_token: note.access_token,
     itemCount: note.sales_note_items?.length || 0,
+    totalQty: (note.sales_note_items || []).reduce((s, i: any) => s + (i.quantity || 0), 0),
+    amount: (note.sales_note_items || []).reduce((s, i: any) => s + (i.quantity || 0) * (i.order_item?.unit_price || 0), 0),
     hasReturned: (note.sales_note_items || []).some((i: any) => (i.returned_quantity || 0) > 0),
     created_at: note.created_at,
     shipped_at: note.shipped_at,
@@ -321,47 +402,84 @@ export default function AdminSalesNotes() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">銷售單管理</h1>
-        <p className="text-muted-foreground">管理所有店鋪的銷售單</p>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            銷售單列表
+    <div className="flex flex-col h-[calc(100dvh-6.5rem)] overflow-hidden space-y-4">
+      <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <CardHeader className="shrink-0 px-4 py-3 flex flex-row items-center justify-between gap-2 space-y-0">
+          <CardTitle className="flex items-center gap-2 text-base">
+            {viewMode === "product" ? <LayoutGrid className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+            {viewMode === "product" ? "商品銷售彙總" : "銷售單列表"}
           </CardTitle>
+          <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-lg shrink-0">
+            <Button
+              variant={viewMode === "notes" ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => {
+                setViewMode("notes");
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.delete("view");
+                  return next;
+                }, { replace: true });
+              }}
+            >
+              <List className="h-3.5 w-3.5 mr-1" /> 銷售單
+            </Button>
+            <Button
+              variant={viewMode === "product" ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => {
+                setViewMode("product");
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.set("view", "product");
+                  return next;
+                }, { replace: true });
+              }}
+            >
+              <LayoutGrid className="h-3.5 w-3.5 mr-1" /> 商品加總
+            </Button>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex-1 min-h-0 overflow-hidden flex flex-col px-4 pb-4">
           {/* Summary */}
-          <div className="flex flex-wrap gap-4 mb-4">
-            <div className="flex items-center gap-3 text-sm">
-              <span>全部: <strong>{salesNotes?.length || 0}</strong></span>
-              <span className="text-muted-foreground">|</span>
-              <span className="text-amber-600">未收款: <strong>{unreceivedCount}</strong></span>
-              <span className="text-muted-foreground">|</span>
-              <span className="text-green-600">已收款: <strong>{receivedCount}</strong></span>
-              <span className="text-muted-foreground">|</span>
-               <span>金額總計: <strong>{formatCurrency(totalAmount)}</strong></span>
-              {repSummary && (
-                <>
-                  <span className="text-muted-foreground">|</span>
-                  <span className="text-emerald-600">業務利潤: <strong>{formatCurrency(repSummary.totalProfit)}</strong></span>
-                  <span className="text-muted-foreground">|</span>
-                  <span className="text-amber-600">估佣: <strong>{formatCurrency(repSummary.totalCommission)}</strong></span>
-                </>
-              )}
-            </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 shrink-0 text-xs sm:text-sm leading-4">
+            {viewMode === "product" ? (
+              <>
+                <span>商品: <strong>{aggregatedProducts.length}</strong></span>
+                <span className="text-muted-foreground">|</span>
+                <span>總件數: <strong>{productTotalQty}</strong></span>
+                <span className="text-muted-foreground">|</span>
+                <span>金額總計: <strong>{formatCurrency(productTotalAmount)}</strong></span>
+              </>
+            ) : (
+              <>
+                <span>全部: <strong>{visibleNotes.length}</strong> 張</span>
+                <span className="text-muted-foreground">|</span>
+                <span className="text-amber-600">未收款: <strong>{unreceivedCount}</strong></span>
+                <span className="text-muted-foreground">|</span>
+                <span className="text-green-600">已收款: <strong>{receivedCount}</strong></span>
+                <span className="text-muted-foreground">|</span>
+                <span>金額總計: <strong>{formatCurrency(totalAmount)}</strong></span>
+                {repSummary && (
+                  <>
+                    <span className="text-muted-foreground">|</span>
+                    <span className="text-emerald-600">業務利潤: <strong>{formatCurrency(repSummary.totalProfit)}</strong></span>
+                    <span className="text-muted-foreground">|</span>
+                    <span className="text-amber-600">估佣: <strong>{formatCurrency(repSummary.totalCommission)}</strong></span>
+                  </>
+                )}
+              </>
+            )}
           </div>
 
           {/* Filters */}
-          <div className="flex flex-wrap gap-4 mb-4">
-            <div className="relative flex-1 min-w-[200px]">
+          <div className="flex flex-wrap items-center gap-2 mb-2 shrink-0">
+            <div className="relative flex-1 min-w-[160px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="搜尋銷售單..."
+                placeholder={viewMode === "product" ? "搜尋商品名稱或 SKU..." : "搜尋銷售單..."}
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
@@ -376,27 +494,26 @@ export default function AdminSalesNotes() {
               />
             </div>
 
-            <Select value={storeFilter} onValueChange={(v) => {
-              setStoreFilter(v);
-              setSearchParams((prev) => {
-                const next = new URLSearchParams(prev);
-                if (v && v !== "all") next.set("store", v);
-                else next.delete("store");
-                return next;
-              }, { replace: true });
-            }}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="篩選店鋪" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">所有店鋪</SelectItem>
-                {stores?.map((store) => (
-                  <SelectItem key={store.id} value={store.id}>
-                    {store.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex-1 min-w-[130px]">
+              <StorePicker
+                stores={stores || []}
+                value={storeFilter}
+                multiple
+                onChange={(v) => {
+                  const next = (v as string[]);
+                  setStoreFilter(next);
+                  setSearchParams((prev) => {
+                    const nextParams = new URLSearchParams(prev);
+                    if (next.length > 0) nextParams.set("store", next.join(","));
+                    else nextParams.delete("store");
+                    return nextParams;
+                  }, { replace: true });
+                }}
+                placeholder="選擇店鋪（預設全部）"
+                searchPlaceholder="搜尋店鋪..."
+                disabled={!stores || stores.length === 0}
+              />
+            </div>
 
             <Select value={repFilter} onValueChange={(v) => {
               setRepFilter(v);
@@ -407,7 +524,7 @@ export default function AdminSalesNotes() {
                 return next;
               }, { replace: true });
             }}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="flex-1 min-w-[110px]">
                 <SelectValue placeholder="全部業務" />
               </SelectTrigger>
               <SelectContent>
@@ -426,7 +543,7 @@ export default function AdminSalesNotes() {
                 <Button
                   variant="outline"
                   className={cn(
-                    "w-[260px] justify-start text-left font-normal",
+                    "flex-1 min-w-[150px] justify-start text-left font-normal",
                     !dateRange && "text-muted-foreground"
                   )}
                 >
@@ -488,33 +605,48 @@ export default function AdminSalesNotes() {
           </div>
 
           {/* Status tabs */}
-          <div className="flex gap-1 mb-4">
-            {[
-              { value: "all", label: "全部" },
-              { value: "unreceived", label: "未收款" },
-              { value: "received", label: "已收款" },
-            ].map((tab) => (
-              <Button
-                key={tab.value}
-                variant={statusFilter === tab.value ? "default" : "outline"}
-                size="sm"
-                onClick={() => {
-                  setStatusFilter(tab.value);
-                  setSearchParams((prev) => {
-                    const next = new URLSearchParams(prev);
-                    if (tab.value !== "all") next.set("status", tab.value);
-                    else next.delete("status");
-                    return next;
-                  }, { replace: true });
-                }}
-              >
-                {tab.label}
-              </Button>
-            ))}
+          <div className="flex flex-wrap gap-2 mb-2 shrink-0">
+            <div className="flex gap-1">
+              {[
+                { value: "all", label: "全部" },
+                { value: "unreceived", label: "未收款" },
+                { value: "received", label: "已收款" },
+              ].map((tab) => (
+                <Button
+                  key={tab.value}
+                  variant={statusFilter === tab.value ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 px-3"
+                  onClick={() => {
+                    setStatusFilter(tab.value);
+                    setSearchParams((prev) => {
+                      const next = new URLSearchParams(prev);
+                      if (tab.value !== "all") next.set("status", tab.value);
+                      else next.delete("status");
+                      return next;
+                    }, { replace: true });
+                  }}
+                >
+                  {tab.label}
+                </Button>
+              ))}
+            </div>
           </div>
 
-          {selectedNoteIds.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 mb-3 px-3 py-2 rounded-md border bg-muted/30">
+          {viewMode === "product" && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 text-xs sm:text-sm shrink-0">
+              <div className="flex items-center gap-3">
+                <span>商品數: <strong>{aggregatedProducts.length}</strong></span>
+                <span className="text-muted-foreground">|</span>
+                <span>總件數: <strong>{aggregatedProducts.reduce((s, p) => s + p.totalQuantity, 0)}</strong></span>
+                <span className="text-muted-foreground">|</span>
+                <span>總金額: <strong>{formatCurrency(aggregatedProducts.reduce((s, p) => s + p.totalAmount, 0))}</strong></span>
+              </div>
+            </div>
+          )}
+
+          {viewMode === "notes" && selectedNoteIds.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 mb-2 px-3 py-1.5 rounded-md border bg-muted/30 shrink-0">
               <CheckSquare className="h-4 w-4 text-primary" />
               <span className="text-sm font-medium">
                 已選取 <strong>{selectedNoteIds.length}</strong> 張銷貨單
@@ -523,38 +655,52 @@ export default function AdminSalesNotes() {
               <Button
                 variant="ghost"
                 size="sm"
+                className="h-8"
                 onClick={() => setSelectedNoteIds([])}
               >
                 取消選取
               </Button>
-              <Button size="sm" onClick={exportSelectedNotes}>
+              <Button size="sm" className="h-8" onClick={exportSelectedNotes}>
                 <Download className="h-4 w-4 mr-1.5" />匯出 Excel
               </Button>
             </div>
           )}
 
-          <SalesNoteListTable
-            data={tableData}
-            isLoading={isLoading}
-            onView={(note) => {
-              const fullNote = salesNotes?.find(n => n.id === note.id);
-              setSelectedNote(fullNote);
-            }}
-            onDelete={(id) => {
-              const target = salesNotes?.find(n => n.id === id);
-              if (target?.status === "received") {
-                toast.error("已收貨的銷貨單不可刪除", { description: `單號 ${target.code || id.slice(0, 8)} 已簽收，屬收款憑證不可作廢刪除。` });
-                return;
-              }
-              if (window.confirm("確定要刪除此銷貨單嗎？\n\n注意：刪除後，商品將會回滾至出貨池（變回未出貨狀態）。寄賣收款單（已收貨）不可刪除。")) {
-                deleteMutation.mutate(id);
-              }
-            }}
-            showStoreColumn={true}
-            selectable={true}
-            selectedIds={selectedNoteIds}
-            onSelectionChange={setSelectedNoteIds}
-          />
+          <div className="flex-1 min-h-0 flex flex-col">
+            {viewMode === "notes" ? (
+            <SalesNoteListTable
+              data={tableData}
+              isLoading={isLoading}
+              onView={(note) => {
+                const fullNote = salesNotes?.find(n => n.id === note.id);
+                setSelectedNote(fullNote);
+              }}
+              onDelete={(id) => {
+                const target = salesNotes?.find(n => n.id === id);
+                if (target?.status === "received") {
+                  toast.error("已收貨的銷貨單不可刪除", { description: `單號 ${target.code || id.slice(0, 8)} 已簽收，屬收款憑證不可作廢刪除。` });
+                  return;
+                }
+                if (window.confirm("確定要刪除此銷貨單嗎？\n\n注意：刪除後，商品將會回滾至出貨池（變回未出貨狀態）。寄賣收款單（已收貨）不可刪除。")) {
+                  deleteMutation.mutate(id);
+                }
+              }}
+              showStoreColumn={true}
+              selectable={true}
+              selectedIds={selectedNoteIds}
+              onSelectionChange={setSelectedNoteIds}
+            />
+          ) : (
+            <SalesNoteProductView
+              items={aggregatedProducts}
+              isLoading={isLoading}
+              onViewNote={(noteId) => {
+                const fullNote = salesNotes?.find(n => n.id === noteId);
+                if (fullNote) setSelectedNote(fullNote);
+              }}
+            />
+          )}
+          </div>
         </CardContent>
       </Card>
 
@@ -565,6 +711,7 @@ export default function AdminSalesNotes() {
         enablePayment={true}
         enableReturn={!isRep}
         enableCorrect={!isRep}
+        parcelEditable={!isRep}
       />
     </div>
   );

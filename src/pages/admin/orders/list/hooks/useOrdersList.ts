@@ -153,6 +153,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
           notes,
           store_id,
           consignment_mode,
+          shipping_fee,
           stores (name, code),
           order_items (
             id,

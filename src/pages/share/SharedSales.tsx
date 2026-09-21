@@ -23,6 +23,8 @@ interface SharedSalesData {
     store_name: string;
     notes: string;
     access_token?: string;
+    shipping_fee?: number | null;
+    delivery_method_title?: string | null;
   };
   items: {
     product_name: string;
@@ -130,6 +132,8 @@ export default function SharedSales() {
         qrValue={window.location.href.replace(/[?&]print=true.*/, "")}
         filenamePrefix="銷貨單"
         canViewPrice={showPrice}
+        shippingFee={sales_note.shipping_fee}
+        deliveryMethodTitle={sales_note.delivery_method_title}
         printMode
         webPreview
         defaultPaperSize={printSize}
@@ -184,6 +188,8 @@ export default function SharedSales() {
         qrValue={window.location.href.replace(/[?&]print=true.*/, "")}
         filenamePrefix="銷貨單"
         canViewPrice={showPrice}
+        shippingFee={sales_note.shipping_fee}
+        deliveryMethodTitle={sales_note.delivery_method_title}
         webPreview
         defaultPaperSize={printSize}
       />

@@ -57,7 +57,7 @@ export function EntryShippingFields({ ctl }: { ctl: EntryFormController }) {
             </SelectContent>
           </Select>
           {shippingSuppliers.length === 0 && (
-            <p className="text-xs text-muted-foreground">尚無物流公司（請至「採購管理→供應商」建立，並在商品管理將運費型商品綁定所屬公司）</p>
+            <p className="text-xs text-muted-foreground">尚無物流公司（請至「配送方式」或「採購管理→供應商」建立物流公司，並將配送方式設為月結）</p>
           )}
         </div>
         <div className="space-y-2">
@@ -89,7 +89,7 @@ export function EntryShippingFields({ ctl }: { ctl: EntryFormController }) {
       {shippingSupplierId && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label>選擇月結運費品項（金額由系統計算）</Label>
+            <Label>選擇月結運費包裹（金額以物流成本計，由系統計算）</Label>
             {shipSettleItems.length > 0 && (
               <Button variant="ghost" size="sm" onClick={toggleAllShipItems}>
                 全選 / 取消全選
@@ -101,18 +101,18 @@ export function EntryShippingFields({ ctl }: { ctl: EntryFormController }) {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[40px]"></TableHead>
-                  <TableHead>訂單</TableHead>
-                  <TableHead>運費品項</TableHead>
-                  <TableHead>數量</TableHead>
-                  <TableHead className="text-right">單價</TableHead>
-                  <TableHead className="text-right">金額</TableHead>
+                  <TableHead>單據</TableHead>
+                  <TableHead>配送方式</TableHead>
+                  <TableHead>出貨時間</TableHead>
+                  <TableHead>追蹤號碼</TableHead>
+                  <TableHead className="text-right">成本</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {shipSettleItems.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground py-4">
-                      無可結算的月結運費品項
+                      無可結算的月結運費包裹
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -128,10 +128,10 @@ export function EntryShippingFields({ ctl }: { ctl: EntryFormController }) {
                           onCheckedChange={() => toggleShipItem(item.id)}
                         />
                       </TableCell>
-                      <TableCell className="font-mono text-xs">{item.orderCode}</TableCell>
-                      <TableCell className="text-sm">{item.productName}</TableCell>
-                      <TableCell className="text-sm">×{item.qty}</TableCell>
-                      <TableCell className="text-right text-sm">{formatCurrency(item.unitPrice)}</TableCell>
+                      <TableCell className="font-mono text-xs">{item.docCode}</TableCell>
+                      <TableCell className="text-sm">{item.methodTitle}</TableCell>
+                      <TableCell className="text-xs">{item.shippedAt ? new Date(item.shippedAt).toLocaleDateString() : '—'}</TableCell>
+                      <TableCell className="text-xs">{item.trackingNumber || '—'}</TableCell>
                       <TableCell className="text-right text-sm font-medium">{formatCurrency(item.amount)}</TableCell>
                     </TableRow>
                   ))
@@ -145,7 +145,7 @@ export function EntryShippingFields({ ctl }: { ctl: EntryFormController }) {
       {selectedShipItemIds.length > 0 && (
         <div className="flex items-center gap-2 p-3 rounded-md border bg-background">
           <span className="text-sm text-muted-foreground">
-            已選 {selectedShipItemIds.length} 項運費，結算金額（系統計算）：
+            已選 {selectedShipItemIds.length} 包運費，結算金額（系統計算）：
           </span>
           <span className="font-bold">{formatCurrency(selectedShipTotal)}</span>
         </div>

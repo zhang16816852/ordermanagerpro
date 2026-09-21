@@ -26,6 +26,7 @@ import {
   Share2,
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
+import { ParcelManager } from '@/components/shipping/ParcelManager';
 
 import { ReceiveDialog } from './ReceiveDialog';
 import { ShipDialog } from './ShipDialog';
@@ -161,6 +162,11 @@ export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* 配送 / 包裹 */}
+          <div className="border rounded-md p-4">
+            <ParcelManager docType="consignment_order" docId={order.id} editable={!isSupplier} />
           </div>
 
           {/* 動作區 */}

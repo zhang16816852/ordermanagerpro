@@ -20,6 +20,8 @@ interface SharedConsignmentData {
     store_name?: string;
     supplier_name?: string;
     access_token?: string;
+    shipping_fee?: number | null;
+    delivery_method_title?: string | null;
   };
   items: {
     product_name: string;
@@ -106,6 +108,8 @@ export default function SharedConsignment() {
         qrValue={window.location.href.replace(/[?&]print=true.*/, "")}
         filenamePrefix="寄賣單"
         canViewPrice={showPrice}
+        shippingFee={consignment.shipping_fee}
+        deliveryMethodTitle={consignment.delivery_method_title}
         printMode
         webPreview
         defaultPaperSize={printSize}
@@ -148,6 +152,8 @@ export default function SharedConsignment() {
         qrValue={window.location.href.replace(/[?&]print=true.*/, "")}
         filenamePrefix="寄賣單"
         canViewPrice={showPrice}
+        shippingFee={consignment.shipping_fee}
+        deliveryMethodTitle={consignment.delivery_method_title}
         webPreview
         defaultPaperSize={printSize}
       />

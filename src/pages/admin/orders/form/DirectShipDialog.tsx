@@ -25,6 +25,8 @@ interface DirectShipDialogProps {
   onItemSourceChange: (id: string, src: string) => void;
   isPending: boolean;
   onConfirm: () => void;
+  deliveryMethodTitle?: string | null;
+  deliveryAddressSummary?: string | null;
 }
 
 export function DirectShipDialog({
@@ -42,6 +44,8 @@ export function DirectShipDialog({
   onItemSourceChange,
   isPending,
   onConfirm,
+  deliveryMethodTitle,
+  deliveryAddressSummary,
 }: DirectShipDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -63,6 +67,17 @@ export function DirectShipDialog({
               <div><span className="text-muted-foreground">訂單：</span><span className="font-medium">{order?.code || orderId}</span></div>
               <div><span className="text-muted-foreground">品項數：</span><span className="font-medium">{items.length}</span></div>
               <div><span className="text-muted-foreground">店鋪：</span><span className="font-medium">{displayStoreName}</span></div>
+              {(deliveryMethodTitle || deliveryAddressSummary) && (
+                <div className="pt-1 border-t mt-1">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <span>配送：</span>
+                    <span className="text-foreground">{deliveryMethodTitle || '未選擇'}</span>
+                  </div>
+                  {deliveryAddressSummary && (
+                    <div className="text-muted-foreground">{deliveryAddressSummary}</div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <div>

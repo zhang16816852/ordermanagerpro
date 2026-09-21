@@ -1,3 +1,4 @@
+import { Navigate } from "react-router-dom";
 import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminOrderList from "@/pages/admin/orders/list/OrderListPage";
 import AdminProducts from "@/pages/admin/products/ProductsPage";
@@ -23,7 +24,7 @@ import AdminRepairOrderDetail from "@/pages/admin/repair-orders/detail";
 import AdminReps from "@/pages/admin/Reps";
 import RepCommissionPage from "@/pages/admin/RepCommissionPage";
 import MyCommissionPage from "@/pages/admin/MyCommissionPage";
-import AdminShippingSettlements from "@/pages/admin/shipping-settlements/ShippingSettlementsPage";
+import AdminLogistics from "@/pages/admin/logistics/LogisticsPage";
 
 export const adminRoutes = [
     { path: "/admin", element: <AdminDashboard /> },
@@ -46,7 +47,9 @@ export const adminRoutes = [
     { path: "/admin/shipping-pool", element: <AdminShippingPool /> },
     { path: "/admin/brand-pricing", element: <AdminStorePricing /> },
     { path: "/admin/accounting", element: <AdminAccounting /> },
-    { path: "/admin/shipping-settlements", element: <AdminShippingSettlements /> },
+    { path: "/admin/logistics", element: <AdminLogistics /> },
+    { path: "/admin/shipping-settlements", element: <Navigate to="/admin/logistics?tab=shipping-settlements" replace /> },
+    { path: "/admin/delivery-methods", element: <Navigate to="/admin/logistics?tab=delivery-methods" replace /> },
     { path: "/admin/purchase-orders", element: <AdminPurchaseOrders /> },
     { path: "/admin/consignment", element: <AdminConsignment /> },
     { path: "/admin/audit-logs", element: <AdminAuditLogs /> },

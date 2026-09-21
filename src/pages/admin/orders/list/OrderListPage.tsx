@@ -355,6 +355,7 @@ export default function AdminOrderList() {
         open={!!viewingOrder}
         onOpenChange={(open) => !open && setViewingOrder(null)}
         onDeleteOrder={(id) => handleDeleteOrders([id])}
+        parcelEditable
       />
 
       {/* Convert to PO Dialog */}

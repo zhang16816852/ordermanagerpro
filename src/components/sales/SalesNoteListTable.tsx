@@ -2,13 +2,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
-import { zhTW } from "date-fns/locale";
 import { SalesNoteStatusBadge } from "./SalesNoteStatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { Json } from "@/integrations/supabase/types";
-import { Eye, Trash2, Copy, Calendar, Package, Store, CheckCircle2, Clock } from "lucide-react";
+import { formatCurrency } from "@/lib/formatters";
+import { Eye, Trash2, Copy, Package, Store, CheckCircle2, Clock } from "lucide-react";
 interface SalesNoteSummary {
     id: string;
     code?: string;
@@ -17,6 +17,8 @@ interface SalesNoteSummary {
     status: string;
     payment_status?: string;
     itemCount: number;
+    totalQty?: number;
+    amount?: number;
     hasReturned?: boolean;
     access_token?: string | null;
     created_at: string;
@@ -96,7 +98,7 @@ export function SalesNoteListTable({
                                 {showStoreColumn && <TableHead>店鋪</TableHead>}
                                 <TableHead>狀態</TableHead>
                                 <TableHead>項目數</TableHead>
-                                <TableHead>建立時間</TableHead>
+                                <TableHead>出貨 / 收貨時間</TableHead>
                                 <TableHead>操作</TableHead>
                                 <TableHead className="w-12"></TableHead>
                             </TableRow>
@@ -135,10 +137,10 @@ export function SalesNoteListTable({
     }
 
     return (
-        <div className="w-full">
+        <div className="w-full flex-1 min-h-0 flex flex-col">
             {/* --- 電腦版：表格佈局 (md 以上顯示) --- */}
-            <div className="hidden md:block rounded-md border bg-card shadow-sm overflow-hidden">
-                <Table>
+            <div className="hidden md:flex flex-col flex-1 min-h-0 rounded-md border bg-card shadow-sm overflow-hidden">
+                <Table containerClassName="flex-1">
                     <TableHeader className="bg-muted/50">
                         <TableRow>
                             {selectable && (
@@ -153,9 +155,9 @@ export function SalesNoteListTable({
                             <TableHead className="w-[140px]">銷貨單編號</TableHead>
                             {showStoreColumn && <TableHead>店鋪</TableHead>}
                             <TableHead>狀態</TableHead>
-                            <TableHead className="text-right">項目數</TableHead>
+                            <TableHead className="text-right">項目數（件數）</TableHead>
+                            <TableHead className="text-right">金額</TableHead>
                             <TableHead>出貨 / 收貨時間</TableHead>
-                            <TableHead>建立時間</TableHead>
                             <TableHead>操作</TableHead>
                             <TableHead className="w-12"></TableHead>
                         </TableRow>
@@ -193,7 +195,11 @@ export function SalesNoteListTable({
                                         )}
                                     </div>
                                 </TableCell>
-                                <TableCell className="text-right">{note.itemCount}</TableCell>
+                                <TableCell className="text-right">
+                                    <div>{note.itemCount} 項</div>
+                                    {note.totalQty ? <div className="text-xs text-muted-foreground">共 {note.totalQty} 件</div> : null}
+                                </TableCell>
+                                <TableCell className="text-right font-semibold">{formatCurrency(note.amount || 0)}</TableCell>
                                 <TableCell className="text-xs">
                                     {note.received_at ? (
                                         <span className="text-green-600 font-medium flex items-center gap-1">
@@ -242,7 +248,7 @@ export function SalesNoteListTable({
             </div>
 
             {/* --- 手機版：卡片佈局 (md 以下顯示) --- */}
-            <div className="grid grid-cols-1 gap-4 md:hidden">
+            <div className="grid grid-cols-1 gap-4 md:hidden flex-1 min-h-0 overflow-y-auto content-start py-1">
                 {data.map((note) => (
                     <div key={note.id} className={`bg-card border rounded-xl p-4 shadow-sm space-y-4 ${note.status === "received" ? "border-green-200 bg-green-50/30" : ""}`}>
                         {/* 頂部：狀態與編號 */}
@@ -302,11 +308,10 @@ export function SalesNoteListTable({
                             )}
                             <div className="flex items-center gap-2">
                                 <Package className="h-4 w-4 text-muted-foreground" />
-                                <span>項目數: <span className="font-semibold">{note.itemCount}</span></span>
+                                <span>項目數: <span className="font-semibold">{note.itemCount}</span> / <span className="font-semibold">{note.totalQty || 0}</span>件</span>
                             </div>
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <Calendar className="h-4 w-4" />
-                                {format(new Date(note.created_at), "MM/dd HH:mm")}
+                            <div className="flex items-center justify-end gap-2 font-semibold">
+                                金額: {formatCurrency(note.amount || 0)}
                             </div>
                         </div>
 

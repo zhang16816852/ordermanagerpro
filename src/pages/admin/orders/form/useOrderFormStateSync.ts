@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { OrderItemRow } from '@/components/order/orderItemsTypes';
+import { ShippingAddressValue, isEmptyShippingAddress } from '@/components/shipping/ShippingAddressFields';
 
 interface OrderFormStateSyncParams {
   isEditMode: boolean;
@@ -14,6 +15,8 @@ interface OrderFormStateSyncParams {
   setItems: React.Dispatch<React.SetStateAction<OrderItemRow[]>>;
   setPendingDeletedIds: React.Dispatch<React.SetStateAction<string[]>>;
   setPriceSyncMap: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  setDeliveryMethodId: React.Dispatch<React.SetStateAction<string | null>>;
+  setShippingAddress: React.Dispatch<React.SetStateAction<ShippingAddressValue>>;
 }
 
 export function useOrderFormStateSync(params: OrderFormStateSyncParams) {
@@ -30,6 +33,8 @@ export function useOrderFormStateSync(params: OrderFormStateSyncParams) {
     setItems,
     setPendingDeletedIds,
     setPriceSyncMap,
+    setDeliveryMethodId,
+    setShippingAddress,
   } = params;
 
   // Refs to avoid stale closures in mutations
@@ -52,6 +57,17 @@ export function useOrderFormStateSync(params: OrderFormStateSyncParams) {
     skipNextDraftSyncRef.current = true;
     setNotes(order.notes || '');
     setPendingDeletedIds([]);
+    setDeliveryMethodId(order.delivery_method_id || null);
+    const sa = order.shipping_address;
+    const address: ShippingAddressValue = {
+      recipient: typeof sa?.recipient === 'string' ? sa.recipient : '',
+      phone: typeof sa?.phone === 'string' ? sa.phone : '',
+      postal_code: typeof sa?.postal_code === 'string' ? sa.postal_code : '',
+      city: typeof sa?.city === 'string' ? sa.city : '',
+      district: typeof sa?.district === 'string' ? sa.district : '',
+      address: typeof sa?.address === 'string' ? sa.address : '',
+    };
+    setShippingAddress(address);
     setItems(order.order_items.map((item: any) => ({
       id: item.id,
       productId: item.product_id,

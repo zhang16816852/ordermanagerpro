@@ -32,7 +32,7 @@ export function useOrderFormQueries({
         .from('orders') as any)
         .select(`
           *,
-          stores (name, code, brand),
+          stores (name, code, brand, postal_code, city, district, address, recipient),
           order_items (
             id,
             product_id,
@@ -63,7 +63,7 @@ export function useOrderFormQueries({
       if (!storeId) return null;
       const { data, error } = await (supabase
         .from('stores') as any)
-        .select('id, name, code, brand')
+        .select('id, name, code, brand, postal_code, city, district, address, recipient')
         .eq('id', storeId)
         .single();
       if (error) throw error;

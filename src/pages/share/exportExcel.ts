@@ -17,6 +17,8 @@ interface ExportDocExcelOptions {
   items: ExportExcelItem[];
   showPrice: boolean;
   filename: string;
+  shippingFee?: number | null;
+  deliveryMethodTitle?: string | null;
 }
 
 export async function exportDocExcel(opts: ExportDocExcelOptions): Promise<void> {
@@ -51,9 +53,16 @@ export async function exportDocExcel(opts: ExportDocExcelOptions): Promise<void>
       (sum, i) => sum + Number(i.quantity || 0) * Number(i.unit_price ?? 0),
       0,
     );
+    const fee = Number(opts.shippingFee ?? 0);
     rows.push(["品項數", `${itemCount} 項`]);
     rows.push(["總件數", `${totalQty} 件`]);
-    rows.push(["總金額", totalAmount]);
+    if (opts.deliveryMethodTitle) {
+      rows.push(["配送方式", opts.deliveryMethodTitle]);
+    }
+    if (fee > 0) {
+      rows.push(["運費", fee]);
+    }
+    rows.push(["總金額", totalAmount + fee]);
   }
 
   if (opts.notes && opts.notes.trim()) {

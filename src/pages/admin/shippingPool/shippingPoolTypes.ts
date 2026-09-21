@@ -36,3 +36,37 @@ export const getDisplayName = (item: ShippingPoolItem) => {
   if (variant) return variant;
   return product || '';
 };
+
+// ---- 出貨配送（Phase C-4）----
+// 每家店（＝每張銷貨單）共享一份收件地址，可拆多個包裹
+export interface ShipParcelDraft {
+  delivery_method_id: string | null;
+  fee: string;
+  cost: string;
+  tracking_company: string;
+  tracking_number: string;
+}
+
+export interface ShipDeliveryState {
+  address: {
+    recipient: string;
+    phone: string;
+    postal_code: string;
+    city: string;
+    district: string;
+    address: string;
+  };
+  parcels: ShipParcelDraft[];
+}
+
+export type ShipDeliveryMap = Record<string, ShipDeliveryState>;
+
+export const EMPTY_SHIP_ADDRESS = { recipient: "", phone: "", postal_code: "", city: "", district: "", address: "" };
+
+export const makeEmptyParcel = (methodId: string | null = null): ShipParcelDraft => ({
+  delivery_method_id: methodId,
+  fee: "",
+  cost: "",
+  tracking_company: "",
+  tracking_number: "",
+});

@@ -328,15 +328,62 @@
 - payload 新欄位 `temp_key`/`parent_temp_key`（前端 queue 產生，`T...` 格式），insert 時寫入 `order_items.temp_key/parent_temp_key`；之後第二輪 pass 依 `parent_temp_key` → `temp_key` 把父子行對應到 `parent_order_item_id`（UPDATE order_items SET parent_order_item_id）。
 - `unit_cost`/`shipping_payment` 一併隨 RPC payload 寫入。
 
-### 9.6 運費月結帳本 + 會計連動（2026-09-07 依物流公司＝採購商彙總）
-- `products.supplier_id`（UUID NULL，FK→suppliers ON DELETE SET NULL，索引僅非空）：運費型商品的所屬物流公司（採購商）。商品表單於 `item_type='shipping'` 顯示必填下拉（採購商 active 清單）。
+### 9.6 運費月結帳本 + 會計連動（2026-09-07 依物流公司＝採購商彙總；**9.6 前半已由「物流系統重構」10.x 取代**）
+- ⚠️ **以下 `register_shipping_settlement` 舊描述（以 order_items/偽商品彙總）已被 10.6 的 shipments.cost 重寫取代**：第 2 參數語意為 `p_shipment_ids`、以 `SUM(shipments.cost)` 結帳、`reference_type='shipment'` 防重複、RETURNS `{period_id, entry_id, total_amount, shipment_count}`。
+- `products.supplier_id`（UUID NULL，FK→suppliers ON DELETE SET NULL，索引僅非空）：運費型商品的所屬物流公司（採購商）。商品表單於 `item_type='shipping'` 顯示必填下拉（採購商 active 清單）。**（新模型下物流公司用 `suppliers.is_logistics_company` 標記，配送方式在 `delivery_methods` 建立）**
 - 表 `shipping_settlement_periods`：`supplier_id`（→suppliers）、`period_start/period_end`（range CHECK）、`total_amount`、`is_settled`、`settled_at`、`entry_id`(→accounting_entries, ON DELETE SET NULL)、`note`、`created_by`。**唯一鍵＝`(supplier_id, period_start, period_end)`**（`WHERE supplier_id IS NOT NULL` 部分唯一）；`carrier_product_id` 保留為 nullable 相容欄位（新結算一律 NULL，改用 supplier_id）。RLS：authenticated 讀、admin 管理。
 - RPC（SECURITY DEFINER）：
-  - `register_shipping_settlement(p_supplier_id, p_order_item_ids UUID[], p_period_start DATE, p_period_end DATE, p_paid_date DATE, p_account_id UUID, p_category_id UUID, p_description TEXT, p_note TEXT, p_created_by UUID)`：取 `order_items.shipping_payment='monthly'` 且其所屬產品 `products.supplier_id=p_supplier_id` 的品項（join orders＋products 驗證每家、依訂單彙總 quantity×unit_price），**排除已被該物流公司任何 settled 期別結過帳的訂單**（`accounting_entry_references r JOIN shipping_settlement_periods sp ON sp.entry_id=r.entry_id AND r.reference_type='order' AND r.reference_id=item.order_id AND sp.supplier_id=p_supplier_id` EXISTS）；同訂單多品項彙總一筆 `accounting_entry_references`；寫一筆母支出分錄（type='expense'、amount=彙總、連同 references）＋ period 列（is_settled=true、settled_at、entry_id）；扣帳戶餘額。RETURNS `{period_id, entry_id, total_amount, order_count}`。重複：以 (supplier_id, period) 部分唯一避免同區間重複。
+  - `register_shipping_settlement(p_supplier_id, p_shipment_ids UUID[], p_period_start DATE, p_period_end DATE, p_paid_date DATE, p_account_id UUID, p_category_id UUID, p_description TEXT, p_note TEXT, p_created_by UUID)`：驗證每包屬該物流公司之配送方式（join `delivery_methods`）、`fee_payment='monthly'`、未被其他已結算期間涵蓋；總額＝`SUM(shipments.cost)`（結給物流公司）；寫一筆母支出分錄（reference_type='shipping_settlement'、連動 period）+ 每包一筆 `accounting_entry_references`（reference_type='shipment'）；扣帳戶餘額。RETURNS `{period_id, entry_id, total_amount, shipment_count}`。
   - `revoke_shipping_settlement(p_period_id)`：刪除對應 `accounting_entries` 分錄（其 references 與 period 因 ON DELETE CASCADE / entry_id 鏈結一併清除），並依 entry 回衝帳戶餘額（expense 分錄 +amount）。僅 admin。
-- 前端：`useShippingSettlement`（`ShippingSettlementSubmission={supplierId, orderItemIds, periodStart, periodEnd, paidDate, accountId, categoryId?, description?, note?}`，`settleMutation`/`revokeMutation`）；EntryForm「運費結帳」Tab＝物流公司（採購商）下拉（join 含運費型商品）＋期間起訖＋月結品項複選（附「運費品項」欄，金額系統計算），`onShippingSettleSubmit` 接線到 AccountingPage 與 `ShippingSettlementsPage`（`/admin/shipping-settlements`，結算紀錄表顯示物流公司名）。
+- 前端（C-6 更新後）：`useShippingSettlement`（`ShippingSettlementSubmission={supplierId, shipmentIds[], periodStart, periodEnd, paidDate, accountId, categoryId?, description?, note?}`）；EntryForm「運費結帳」Tab＝物流公司（`suppliers.is_logistics_company=true`）下拉＋期間起訖＋**月結包裹複選**（`list_settleable_shipments` RPC，欄位：單據 code/方式/出貨日/追蹤/成本，金額系統計算），`onShippingSettleSubmit` 接線到 AccountingPage 與 `ShippingSettlementsPage`（`/admin/shipping-settlements`，refs 查詢 `reference_type='shipment'`、code 依 shipments.doc_type join 單據，顯示「涵蓋包裹」）。
 
 ### 9.7 佣金批次發放改走 EntryDialog + 成本快照顯示
 - `register_batch_rep_commission_payout(p_rep_id, p_sales_note_ids UUID[], p_paid_date DATE, p_account_id UUID, p_category_id UUID, p_description TEXT, p_created_by UUID)`：以**關聯單據（母子單）**方式一次寫一筆母支出分錄（`accounting_entry_references` 逐筆 sales_note）＋多筆 `rep_commission_payouts`；金額一律後端重算（見 9.4），不可覆蓋。RETURNS `{entry_id, total_amount, count}`。
 - 前端：`useCommissionPayout` 新增 `bulkRegisterPayout`（`BatchRegisterPayoutPayload = {repId, salesNoteIds[], paidDate, accountId, categoryId?, description?}`）。EntryForm「佣金發放」改**複選**（全選 / 已選 N 筆＋合計，單筆→`onPayoutSubmit`、多筆→`onBatchPayoutSubmit`）。`EntryDialog` proxy 新 props。`RepCommissionPage` 批次按鈕改開 EntryDialog（`prefill.payout = {repId, salesNoteIds}`）。佣金明細頁（RepCommissionPage / useRepCommission）成本顯示優先取 `order_items.unit_cost` 快照（>0 時），其次 rep_product_costs、再其次進貨成本。
 - `entry_id` FK 關係：`rep_commission_payouts.entry_id` / `shipping_settlement_periods.entry_id`（後者 ON DELETE SET NULL）→ `accounting_entries`。
+
+## 10. 物流系統重構（Phase A 已套用，2026-09-21）
+
+### 10.1 設計原則
+- **運費不再用 `products.item_type='shipping'` 偽商品**；改為配送方式獨立資料表 `delivery_methods` + 包裹表 `shipments`。
+- **包裹＝運費唯一收支單位**：`fee`（客人實收）與 `cost`（物流成本）分離，可不同（成本可高於實收＝倒貼、0＝免運）。
+- **收件地址＝快照**：單據 `shipping_address jsonb` 預填自 stores，建立後手動改、**不自動回填**。
+- 共享為快照的還原原則：`delivery_method_id/title/code` 亦是建立時快照（避免方式改名/刪除影響歷史單）。
+
+### 10.2 表 `delivery_methods`
+- 欄位：`code`(UNIQUE), `name`, `type`(`delivery`|`logistics`|`pickup`, CHECK), `supplier_id`(→suppliers, ON DELETE SET NULL), `price`(客人實收), `cost`(物流成本，≠price), `fee_payment`(`one_time`|`monthly`), `tracking_url_template`, `is_default`, `is_active`, `sort_order`, `created_at/updated_at`。
+- CHECK：`type <> 'logistics' OR supplier_id IS NOT NULL`（物流必綁供應商）。
+- RLS：authenticated SELECT true（`authenticated_read_delivery_methods`）、admin ALL（`admins_manage_delivery_methods`）。
+- isolated updated_at trigger：`trg_delivery_methods_updated_at`（共用 `public.trgfn_set_updated_at()`，本 migration 新增，注意勿與其他表同名衝突）。
+
+### 10.3 表 `shipments`
+- 欄位：`doc_type`(`order`|`sales_note`|`consignment_order`, CHECK) + `doc_id`(多型，無 FK)，`delivery_method_id`(→delivery_methods)、`delivery_method_title/code`(快照)，`fee`/`cost`(每包)，`fee_payment`，`tracking_company/number/url`，`shipped_at`，`note`，`created_by`，`created_at/updated_at`。
+- 索引 `idx_shipments_doc(doc_type, doc_id)`。
+- RLS: 同 delivery_methods 樣式。
+- 單據層 `shipping_fee/shipping_cost` 為 `SUM(shipments.fee/cost)` 的快照，由 RPC 寫入後自動重算（Phase B）。
+
+### 10.4 單據層欄位（orders / sales_notes / consignment_orders）
+- 三者皆新增：`delivery_method_id`、`delivery_method_title/code`（快照）、`shipping_fee`(NUMERIC NOT NULL DEFAULT 0)、`shipping_cost`(NUMERIC DEFAULT 0)、`shipping_address`(JSONB，`{recipient, phone, postal_code, city, district, address}`)。
+- `stores` 新增：`default_delivery_method_id`、`postal_code/city/district`、`recipient`（收件人姓名，migration `20260921000008`）。
+- `suppliers.is_logistics_company`（BOOL NOT NULL DEFAULT false）：物流公司身分牌。
+
+### 10.5 Seed 與既有資料回填
+- seed `DELIVERY_DEFAULT`（「送貨」，type=delivery, price/cost 0, is_default=true, sort_order=1）——既有無運費單據預設補此方式。
+- 12 個運費變體（POST-SC-5KG 等，產品「郵局運費」）→ 12 筆 logistics 方法（code=SKU、price=cost=變體批發價），原 shipping 產品 `is_hidden=true`；自動建「郵局」物流供應商（`is_logistics_company=true`）。
+- ⚠️ 教訓：首版 DO loop **逐變體**建供應商造成 12 間重複「郵局」；`20260921000002` 整併為 1 間並刪除孤兒。**重跑時整產品共用一間供應商**（以產品為 outer loop、變體為 inner）。
+- 既有 97 訂單 / 93 銷貨單 / 2 寄賣單補「送貨」方式＋地址自門市快照（scalar subquery 抓 stores，勿在 `UPDATE...FROM` 的 JOIN 內引用目標表）。
+
+### 10.6 Phase B（✅ DB 層已套用，migration `20260921000003~06`）
+- `upsert_shipment`/`delete_shipment`/`_recompute_doc_shipping`（migration 3，見 10.7）：寫包裹後自動重算單據 shipping_fee/cost 並補方法快照。
+- 四支出貨 RPC 尾端新增 `p_delivery_method_id/p_shipping_fee/p_shipping_address`（migration 4，舊簽名以 OVERLOAD 保留）：`create_consignment_shipment_layer`(9)、`create_order_with_sales_note`(10)、`direct_ship_order`(10)、`ship_from_pool`(11)。寄賣分支轉 layer（每寄賣單 1 包）、一般分支每銷貨單 1 包＋`upsert_shipment`；寫單據層快照與 shipping_address（`COALESCE` 保留既有值）；未傳方式完全維持舊行為。
+- `register_shipping_settlement` 重寫（migration 5，同 signature 需先 DROP 再 CREATE）：`p_order_item_ids` → `p_shipment_ids`，以 `SUM(shipments.cost)` 結給物流公司、join `delivery_methods` 驗證 supplier、reference_type='shipment' 防重複結算。RETURNS `{period_id, entry_id, total_amount, shipment_count}`。
+- 三分享 RPC 回傳單據層 delivery 快照＋`shipments[]`（migration 5）。⚠️ `shipments` 欄位為 `delivery_method_id/title/code` 三欄分存；首版誤用 jsonb `delivery_method` 於執行時 42703，migration 6 修正。日後一律用三欄。
+- **`ship_from_pool` 動態包裹列（migration `20260921000006`，Phase C-4，已套用）**：新增第 12 參數 `p_delivery_overrides jsonb DEFAULT NULL`（舊 9/11 參數版以 OVERLOAD 保留）——`{ "<store_id>": { "address": {...}, "parcels": [{ delivery_method_id, fee, cost, tracking_company, tracking_number, tracking_url, note }] } }`。有 override 店家：同一店家（＝1 張銷貨單）**拆多包共享地址**（shipping_address 僅寫一次）＋逐包 `upsert_shipment`；包裹 `delivery_method_id IS NULL`（未選方式）跳過；純寄賣店家（無銷貨單、走 `create_consignment_shipment_layer`）僅取首包的 method/fee/address 帶入（寄賣層維持 1 包）。無 override 店家維持舊行為（全局 `p_delivery_method_id/fee/address`→1 包）。
+- **`list_settleable_shipments(p_supplier_id) RETURNS jsonb`（migration `20260921000007`，Phase C-6，已套用）**：SECURITY DEFINER admin 守門；列出該物流公司（`suppliers.is_logistics_company`）**未結算**月結包裹——`shipments.fee_payment='monthly'` 且該方法所屬配送方式綁定該物流商（`delivery_methods.supplier_id`）且無任何已結算期間涵蓋（`accounting_entry_references` join `shipping_settlement_periods`）。回傳欄位 `id/doc_type/doc_id/doc_code/method_id/method_title/method_code/fee/cost/fee_payment/tracking_company/tracking_number/tracking_url/shipped_at/note`，`doc_code` 依 doc_type join orders/sales_notes/consignment_orders 取 code。
+- Phase C（✅ C-1~C-6 全部完成）：`/admin/delivery-methods` 後台管理、配送卡片、ShipDialog 動態包裹列、詳情包裹管理（共用 `useShipments`/`useShipmentMutations`/`ParcelManager`，包裹 CRUD 走 `upsert_shipment`/`delete_shipment` RPC）、Stores 地址/預設方式（`StoresTab` 配送地址＋`DeliveryMethodPicker` 寫 `postal_code/city/district/default_delivery_method_id`）、運費結帳轉 shipments.cost（`useEntryShippingQueries` 改呼叫 `list_settleable_shipments`、`ShippingSettlementSubmission.shipmentIds`、`ShippingSettlementsPage` refs 查詢改 `reference_type='shipment'`）。
+- Phase D（✅ 全部完成，2026-09-21）：門市結帳選方式＋套用店家預設（`CheckoutForm` 以 `["store-info", storeId]` 讀 stores 的 `default_delivery_method_id` 並首次載入套用；`useCreateOrder` 帶 `deliveryMethod/shippingAddress`，`orders.insert` 寫 `delivery_method_id/title/code`＋`shipping_fee`（＝method.price）＋`shipping_address`（空值存 null）；return 增 `shippingFee/grandTotal`）；分享/列印/匯出總額含運費（`getOrderTotal(items, shippingFee?)`、`SharedReceiptExport`/`exportDocExcel` 秀「配送方式＋運費＋總金額含運」）；月結 UI 以成本（C-6 已含）。
+
+### 10.7 包裹 RPC（migration `20260921000003`）
+- `public._recompute_doc_shipping(p_doc_type text, p_doc_id uuid) RETURNS jsonb`：內部 helper，SUM shipments.fee/cost 回寫單據層（orders/sales_notes/consignment_orders）並於單據方法快照為 NULL 時補第一包快照；REVOKE anon/authenticated，僅 postgres。⚠️ `min(uuid)` 不存在，取最早包裹用 `ORDER BY created_at, id LIMIT 1`。
+- `public.upsert_shipment(p_doc_type, p_doc_id, p_delivery_method_id DEFAULT NULL, p_fee, p_cost, p_fee_payment DEFAULT 'one_time', p_tracking_company, p_tracking_number, p_tracking_url, p_shipped_at, p_note, p_created_by, p_shipment_id DEFAULT NULL) RETURNS jsonb`：SECURITY DEFINER、admin 守門；方法快照（title/code）＋fee/cost 預設取方法 price/cost；INSERT 或 UPDATE（`p_shipment_id` 時需同 doc 匹配）；寫完自動 `_recompute_doc_shipping`。
+- `public.delete_shipment(p_shipment_id) RETURNS jsonb`：admin 守門；刪包裹後重算。

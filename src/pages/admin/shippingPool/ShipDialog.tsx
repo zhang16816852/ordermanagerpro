@@ -2,13 +2,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { Send } from "lucide-react";
+import { Send, PackagePlus } from "lucide-react";
 import { formatCurrency } from '@/lib/formatters';
-import { GroupedByStore, getDisplayName } from "./shippingPoolTypes";
+import { GroupedByStore, getDisplayName, ShipDeliveryState, ShipParcelDraft, EMPTY_SHIP_ADDRESS } from "./shippingPoolTypes";
+import { DeliveryMethodOption, DeliveryMethodPicker } from "@/components/shipping/DeliveryMethodPicker";
+import { ShippingAddressFields } from "@/components/shipping/ShippingAddressFields";
+import { StoreWithAddress } from "./useShipDelivery";
 
 interface ShipDialogProps {
   open: boolean;
@@ -28,6 +32,14 @@ interface ShipDialogProps {
   onNotesChange: (value: string) => void;
   isPending: boolean;
   onConfirm: () => void;
+  // 配送（Phase C-4）
+  deliveryMethods: DeliveryMethodOption[];
+  deliveryMap: Record<string, ShipDeliveryState>;
+  onSetStoreAddress: (storeId: string, address: ShipDeliveryState["address"]) => void;
+  onApplyStoreAddress: (storeId: string, store?: StoreWithAddress) => void;
+  onSetParcelCount: (storeId: string, count: number) => void;
+  onUpdateParcel: (storeId: string, index: number, patch: Partial<ShipParcelDraft>) => void;
+  storesById: Record<string, StoreWithAddress>;
 }
 
 export function ShipDialog({
@@ -48,10 +60,19 @@ export function ShipDialog({
   onNotesChange,
   isPending,
   onConfirm,
+  deliveryMethods,
+  deliveryMap,
+  onSetStoreAddress,
+  onApplyStoreAddress,
+  onSetParcelCount,
+  onUpdateParcel,
+  storesById,
 }: ShipDialogProps) {
+  const selectedGroups = groups.filter(g => selectedStores.has(g.storeId));
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col p-0">
+      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col p-0">
         <DialogHeader className="p-6 pb-2">
           <DialogTitle className="flex items-center gap-2">
             <Send className="h-5 w-5" />
@@ -78,10 +99,13 @@ export function ShipDialog({
               </div>
             </div>
           </div>
-          {groups.filter(g => selectedStores.has(g.storeId)).map(group => {
+          {selectedGroups.map(group => {
             const groupTotal = group.items.reduce((sum, item) => sum + item.quantity * (item.order_item?.unit_price || 0), 0);
+            const delivery = deliveryMap[group.storeId];
+            const parcels: ShipParcelDraft[] = delivery?.parcels || [{ delivery_method_id: null, fee: "", cost: "", tracking_company: "", tracking_number: "" }];
+            const store = storesById[group.storeId];
             return (
-              <div key={group.storeId} className="space-y-2 border rounded p-3">
+              <div key={group.storeId} className="space-y-3 border rounded p-3">
                 <div className="flex items-center justify-between border-b pb-1">
                   <h3 className="font-bold text-primary">{group.storeName}</h3>
                   <Badge variant="outline">{group.items.length} 項 / {group.totalQuantity} 件</Badge>
@@ -154,6 +178,105 @@ export function ShipDialog({
                 </Table>
                 <div className="text-right text-sm font-bold">
                   合計：{formatCurrency(groupTotal)}
+                </div>
+
+                {/* 配送設定（每店家 1 組地址，可拆多包裹） */}
+                <div className="rounded-lg border bg-card p-3 space-y-3">
+                  <div className="flex items-center gap-2 font-semibold text-sm">
+                    <PackagePlus className="h-4 w-4" />
+                    配送方式（{group.storeName}）
+                  </div>
+                  <div className="grid sm:grid-cols-[1fr_auto] gap-3">
+                    <ShippingAddressFields
+                      value={delivery?.address || EMPTY_SHIP_ADDRESS}
+                      onChange={(addr) => onSetStoreAddress(group.storeId, addr)}
+                      prefix={`ship-${group.storeId}`}
+                    />
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">套用店家地址</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => onApplyStoreAddress(group.storeId, store)}
+                      >
+                        套用店家最新地址
+                      </Button>
+                      <Label className="text-xs text-muted-foreground">寄送件數（包裹數）</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={parcels.length}
+                        onChange={(e) => onSetParcelCount(group.storeId, parseInt(e.target.value || "1", 10))}
+                      />
+                    </div>
+                  </div>
+                  <Table>
+                    <TableHeader className="bg-muted/30">
+                      <TableRow>
+                        <TableHead className="w-8">#</TableHead>
+                        <TableHead>配送方式</TableHead>
+                        <TableHead className="w-28">實收金額</TableHead>
+                        <TableHead className="w-28">成本金額</TableHead>
+                        <TableHead className="w-32">追蹤公司</TableHead>
+                        <TableHead className="w-40">追蹤號碼</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {parcels.map((parcel, idx) => {
+                        const method = deliveryMethods.find(m => m.id === parcel.delivery_method_id);
+                        return (
+                          <TableRow key={idx}>
+                            <TableCell className="text-muted-foreground text-sm">{idx + 1}</TableCell>
+                            <TableCell>
+                              <DeliveryMethodPicker
+                                value={parcel.delivery_method_id}
+                                onValueChange={(v) => onUpdateParcel(group.storeId, idx, { delivery_method_id: v })}
+                                methods={deliveryMethods}
+                                allowNone
+                                className="w-full"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                step="any"
+                                min={0}
+                                value={parcel.fee}
+                                placeholder={method ? String(method.price ?? 0) : "0"}
+                                onChange={(e) => onUpdateParcel(group.storeId, idx, { fee: e.target.value })}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                step="any"
+                                min={0}
+                                value={parcel.cost}
+                                placeholder={method ? String(method.cost ?? 0) : "0"}
+                                onChange={(e) => onUpdateParcel(group.storeId, idx, { cost: e.target.value })}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                value={parcel.tracking_company}
+                                placeholder="如：黑貓"
+                                onChange={(e) => onUpdateParcel(group.storeId, idx, { tracking_company: e.target.value })}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                value={parcel.tracking_number}
+                                placeholder="物流單號"
+                                onChange={(e) => onUpdateParcel(group.storeId, idx, { tracking_number: e.target.value })}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
             );

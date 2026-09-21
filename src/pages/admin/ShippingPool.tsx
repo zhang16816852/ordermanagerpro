@@ -18,6 +18,7 @@ import { ShippingPoolMobileFooters } from "./shippingPool/ShippingPoolMobileFoot
 import { usePoolStock } from "./shippingPool/usePoolStock";
 import { useShippingPoolSource } from "./shippingPool/useShippingPoolSource";
 import { useShippingPoolMutations } from "./shippingPool/useShippingPoolMutations";
+import { useShipDelivery, StoreWithAddress } from "./shippingPool/useShipDelivery";
 import { GroupedByStore, PoolSortDir, PoolSortField, ShippingPoolItem } from "./shippingPool/shippingPoolTypes";
 
 export default function AdminShippingPool() {
@@ -47,11 +48,34 @@ export default function AdminShippingPool() {
   const { data: stores } = useQuery({
     queryKey: ["admin-stores"],
     queryFn: async () => {
-      const { data, error } = await (supabase.from("stores") as any).select("id, name, code");
+      const { data, error } = await (supabase.from("stores") as any).select("id, name, code, phone, recipient, postal_code, city, district, address");
       if (error) throw error;
-      return data;
+      return data as StoreWithAddress[];
     },
   });
+
+  const storesById = useMemo(() => {
+    const map: Record<string, StoreWithAddress> = {};
+    (stores || []).forEach((s) => { map[s.id] = s; });
+    return map;
+  }, [stores]);
+
+  const {
+    deliveryMethods,
+    deliveryMap,
+    ensureStores,
+    resetStores,
+    setStoreAddress,
+    applyStoreAddressFromStores,
+    setParcelCount,
+    updateParcel,
+  } = useShipDelivery();
+
+  // 出貨對話框開啟時確保所有選取店家都有配送 state
+  const handleOpenShipDialog = () => {
+    ensureStores(Array.from(selectedStores));
+    setShowShipDialog(true);
+  };
 
   // 獲取出貨池項目
   const { data: shippingPoolItems, isLoading } = useQuery({
@@ -248,6 +272,7 @@ export default function AdminShippingPool() {
     warehouseMap,
     sourceMap,
     consignmentOverrideMap,
+    deliveryMap,
     setSelectedPoolItemIds,
     setSelectedStores,
     setShowShipDialog,
@@ -313,7 +338,7 @@ export default function AdminShippingPool() {
                 回滾成訂單 ({selectedPoolItemIds.size})
               </Button>
               <Button
-                onClick={() => setShowShipDialog(true)}
+                onClick={handleOpenShipDialog}
                 disabled={selectedStores.size === 0}
                 className="hidden md:flex"
               >
@@ -355,6 +380,7 @@ export default function AdminShippingPool() {
           if (open) {
             setWarehouseMap({});
             setSourceMap({});
+            ensureStores(Array.from(selectedStores));
           }
         }}
         summary={summary}
@@ -372,6 +398,13 @@ export default function AdminShippingPool() {
         onNotesChange={setNotes}
         isPending={shipMutation.isPending}
         onConfirm={() => shipMutation.mutate()}
+        deliveryMethods={deliveryMethods}
+        deliveryMap={deliveryMap}
+        onSetStoreAddress={setStoreAddress}
+        onApplyStoreAddress={applyStoreAddressFromStores}
+        onSetParcelCount={setParcelCount}
+        onUpdateParcel={updateParcel}
+        storesById={storesById}
       />
 
       <ShippingPoolMobileFooters
@@ -381,7 +414,7 @@ export default function AdminShippingPool() {
         storeCount={summary.storeCount}
         totalQuantity={summary.totalQuantity}
         isShipPending={shipMutation.isPending}
-        onOpenShipDialog={() => setShowShipDialog(true)}
+        onOpenShipDialog={handleOpenShipDialog}
       />
     </div>
   );

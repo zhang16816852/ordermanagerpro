@@ -156,7 +156,7 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
           cmp = a.order_items.length - b.order_items.length;
           break;
         case 'total_amount':
-          cmp = getOrderTotal(a.order_items) - getOrderTotal(b.order_items);
+          cmp = getOrderTotal(a.order_items, a.shipping_fee) - getOrderTotal(b.order_items, b.shipping_fee);
           break;
         default:
           cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();

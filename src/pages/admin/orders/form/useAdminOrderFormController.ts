@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useStoreProductCache } from '@/hooks/useProductCache';
@@ -7,6 +7,8 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { OrderItemRow } from '@/components/order/orderItemsTypes';
 import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
+import { useDeliveryMethods } from '@/components/shipping/DeliveryMethodPicker';
+import { ShippingAddressValue, isEmptyShippingAddress } from '@/components/shipping/ShippingAddressFields';
 
 import { useOrderFormQueries } from './useOrderFormQueries';
 import { useCatalogFilters } from './useCatalogFilters';
@@ -77,9 +79,15 @@ export function useAdminOrderFormController() {
   const [itemWarehouses, setItemWarehouses] = useState<Record<string, string>>({});
   const [itemSources, setItemSources] = useState<Record<string, string>>({});
   const [consignmentMode, setConsignmentMode] = useState(false);
+  const [deliveryMethodId, setDeliveryMethodId] = useState<string | null>(null);
+  const [shippingAddress, setShippingAddress] = useState<ShippingAddressValue>({
+    recipient: '', phone: '', postal_code: '', city: '', district: '', address: '',
+  });
+
+  const { data: deliveryMethods = [] } = useDeliveryMethods();
 
   // Product browsing state
-  const [activePanel, setActivePanel] = useState<'information' | 'items' | 'products' | null>(null);
+  const [activePanel, setActivePanel] = useState<'information' | 'delivery' | 'items' | 'products' | null>(null);
   const [mobileCatalogOpen, setMobileCatalogOpen] = useState(false);
   const [desktopCatalogOpen, setDesktopCatalogOpen] = useState(true);
   const [productSearch, setProductSearch] = useState('');
@@ -166,7 +174,41 @@ export function useAdminOrderFormController() {
     setItems,
     setPendingDeletedIds,
     setPriceSyncMap,
+    setDeliveryMethodId,
+    setShippingAddress,
   });
+
+  // 新建訂單：套用店家最新地址（名稱/電話由操作者填寫）
+  const applyStoreAddress = useCallback(() => {
+    const store = isEditMode ? (order as any)?.stores : storeInfo;
+    if (!store) return;
+    setShippingAddress({
+      recipient: shippingAddress.recipient,
+      phone: shippingAddress.phone,
+      postal_code: store.postal_code || '',
+      city: store.city || '',
+      district: store.district || '',
+      address: store.address || '',
+    });
+  }, [isEditMode, order, storeInfo, shippingAddress.recipient, shippingAddress.phone]);
+
+  // 店家變更時若地址欄全空則預填店家最新地址（僅預填一次，避免覆寫手動修改）
+  const appliedStoreAddressKeyRef = useRef<string>('');
+  useEffect(() => {
+    const store = isEditMode ? (order as any)?.stores : storeInfo;
+    const storeIdToUse = isEditMode ? (order as any)?.store_id : selectedStoreId;
+    if (!store || !storeIdToUse) return;
+    if (appliedStoreAddressKeyRef.current === storeIdToUse) return;
+    appliedStoreAddressKeyRef.current = storeIdToUse;
+    setShippingAddress((prev) => (isEmptyShippingAddress(prev) ? {
+      recipient: prev.recipient,
+      phone: prev.phone,
+      postal_code: store.postal_code || '',
+      city: store.city || '',
+      district: store.district || '',
+      address: store.address || '',
+    } : prev));
+  }, [isEditMode, order, storeInfo, selectedStoreId]);
 
   // Handlers
   const handleQuantityChange = useCallback((index: number, value: number) => {
@@ -295,6 +337,9 @@ export function useAdminOrderFormController() {
     pendingDeletedIdsRef,
     priceSyncMap,
     itemsForSync: items,
+    deliveryMethodId,
+    shippingAddress,
+    deliveryMethods,
     onDirectShipDialogClose: () => setDirectShipDialogOpen(false),
   });
 
@@ -367,6 +412,12 @@ export function useAdminOrderFormController() {
     setItemSources,
     consignmentMode,
     setConsignmentMode,
+    deliveryMethodId,
+    setDeliveryMethodId,
+    shippingAddress,
+    setShippingAddress,
+    deliveryMethods,
+    applyStoreAddress,
     activePanel,
     setActivePanel,
     mobileCatalogOpen,

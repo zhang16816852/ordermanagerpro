@@ -63,8 +63,8 @@ export function OrderTableView({
     return 'waiting';
   };
 
-  const getOrderTotal = (items: OrderItem[]) => {
-    return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+  const getOrderTotal = (items: OrderItem[], shippingFee?: number | null) => {
+    return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0) + (shippingFee || 0);
   };
 
   const getSourceLabel = (sourceType: string) => {
@@ -179,7 +179,7 @@ export function OrderTableView({
                       ({order.order_items.reduce((sum, i) => sum + i.quantity, 0)})
                     </span>
                   </TableCell>
-                  <TableCell className="text-right font-bold">{formatCurrency(getOrderTotal(order.order_items))}</TableCell>
+                  <TableCell className="text-right font-bold">{formatCurrency(getOrderTotal(order.order_items, order.shipping_fee))}</TableCell>
                   {commissionByOrder && (() => {
                     const c = commissionByOrder.get(order.id);
                     return (

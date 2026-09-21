@@ -20,6 +20,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { SharedReceiptExport } from "@/pages/share/SharedReceiptExport";
 import { EntryDialog } from "@/pages/admin/accounting/components/EntryDialog";
 import { AccountingEntry, AccountingEntryReference, Account, AccountingCategory } from "@/pages/admin/accounting/types";
+import { ParcelManager } from "@/components/shipping/ParcelManager";
 
 export interface SalesNoteItem {
     id: string;
@@ -48,6 +49,19 @@ export interface SalesNoteDetail {
     notes?: string | null;
     access_token?: string | null;
     items: SalesNoteItem[];
+    shipping_fee?: number | null;
+    shipping_cost?: number | null;
+    delivery_method_id?: string | null;
+    delivery_method_title?: string | null;
+    delivery_method_code?: string | null;
+    shipping_address?: {
+        recipient?: string | null;
+        phone?: string | null;
+        postal_code?: string | null;
+        city?: string | null;
+        district?: string | null;
+        address?: string | null;
+    } | null;
 }
 
 interface SalesNoteDetailDialogProps {
@@ -60,6 +74,7 @@ interface SalesNoteDetailDialogProps {
     showSku?: boolean;
     enableReturn?: boolean;
     enableCorrect?: boolean;
+    parcelEditable?: boolean;
 }
 
 export function SalesNoteDetailDialog({
@@ -71,7 +86,8 @@ export function SalesNoteDetailDialog({
     enablePayment = false,
     showSku = true,
     enableReturn = false,
-    enableCorrect = false
+    enableCorrect = false,
+    parcelEditable = false
 }: SalesNoteDetailDialogProps) {
     const { user } = useAuth();
     const queryClient = useQueryClient();
@@ -91,7 +107,7 @@ export function SalesNoteDetailDialog({
         });
     }, [note?.items]);
 
-    const totalAmount = note ? note.items.reduce((sum, item) => sum + (item.quantity * (item.unitPrice || 0)), 0) : 0;
+    const totalAmount = note ? note.items.reduce((sum, item) => sum + (item.quantity * (item.unitPrice || 0)), (note.shipping_fee ?? 0)) : 0;
 
     // --- Queries for EntryDialog ---
     const { data: accounts = [] } = useQuery({
@@ -426,6 +442,13 @@ export function SalesNoteDetailDialog({
                             ))}
                         </div>
                     </div>
+
+                    {/* 配送 / 包裹 */}
+                    {(note.delivery_method_title || (note.shipping_fee ?? 0) > 0 || parcelEditable) && (
+                        <div className="rounded-lg border p-4 bg-muted/30">
+                            <ParcelManager docType="sales_note" docId={note.id} editable={parcelEditable} />
+                        </div>
+                    )}
 
                     {totalAmount > 0 && (
                         <div className="flex justify-end items-baseline gap-2 pt-2">

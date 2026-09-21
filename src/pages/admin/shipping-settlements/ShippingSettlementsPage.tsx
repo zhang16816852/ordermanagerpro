@@ -31,7 +31,7 @@ interface SettlementPeriod {
   } | null;
 }
 
-export default function ShippingSettlementsPage() {
+export default function ShippingSettlementsPage({ embedded = false }: { embedded?: boolean }) {
   const { settleMutation, revokeMutation } = useShippingSettlement();
   const [settleDialogOpen, setSettleDialogOpen] = useState(false);
 
@@ -79,7 +79,7 @@ export default function ShippingSettlementsPage() {
         const { data: refs, error: refsErr } = await (supabase as any)
           .from('accounting_entry_references')
           .select('entry_id, reference_id, amount_applied')
-          .eq('reference_type', 'order')
+          .eq('reference_type', 'shipment')
           .in('entry_id', entryIds);
         if (refsErr) throw refsErr;
         refsMap = ((refs as any[]) || []).reduce((acc, r) => {
@@ -88,21 +88,29 @@ export default function ShippingSettlementsPage() {
         }, {} as Record<string, { reference_id: string }[]>);
       }
 
-      const orderIds = Object.values(refsMap).flat().map(r => r.reference_id);
+      const shipmentIds = Object.values(refsMap).flat().map(r => r.reference_id);
       let codeMap: Record<string, string> = {};
-      if (orderIds.length > 0) {
-        const { data: orders, error: ordersErr } = await (supabase as any)
-          .from('orders')
-          .select('id, code')
-          .in('id', orderIds);
-        if (ordersErr) throw ordersErr;
-        codeMap = ((orders as any[]) || []).reduce((acc, o) => { acc[o.id] = o.code || o.id.slice(0, 8); return acc; }, {} as Record<string, string>);
+      if (shipmentIds.length > 0) {
+        const { data: shipments, error: shipmentsErr } = await (supabase as any)
+          .from('shipments')
+          .select('id, doc_type, doc_id, delivery_method_code, delivery_method_title')
+          .in('id', shipmentIds);
+        if (shipmentsErr) throw shipmentsErr;
+        const docs = ((shipments as any[]) || []).filter(s => s.doc_id);
+        const allDocs: any[] = [];
+        for (const [table, type] of [['orders', 'order'], ['sales_notes', 'sales_note'], ['consignment_orders', 'consignment_order']] as const) {
+          const ids = docs.filter(s => s.doc_type === type).map(s => s.doc_id);
+          if (ids.length === 0) continue;
+          const { data } = await (supabase as any).from(table).select('id, code').in('id', ids);
+          allDocs.push(...((data as any[]) || []));
+        }
+        codeMap = allDocs.reduce((acc, d) => { acc[d.id] = d.code || d.id.slice(0, 8); return acc; }, {} as Record<string, string>);
       }
 
       return rows.map(r => ({
         ...r,
-        orderRefs: (refsMap[r.entry_id] || []) as { reference_id: string }[],
-        orderCodes: ((refsMap[r.entry_id] || []) as { reference_id: string }[]).map(ref => codeMap[ref.reference_id] || ref.reference_id.slice(0, 8)),
+        shipmentRefs: (refsMap[r.entry_id] || []) as { reference_id: string }[],
+        shipmentCodes: ((refsMap[r.entry_id] || []) as { reference_id: string }[]).map(ref => codeMap[ref.reference_id] || ref.reference_id.slice(0, 8)),
       }));
     },
   });
@@ -110,7 +118,7 @@ export default function ShippingSettlementsPage() {
   const summary = useMemo(() => {
     const settledCount = periods.filter(p => p.is_settled).length;
     const totalAmount = periods.filter(p => p.is_settled).reduce((s, p) => s + Number(p.entry?.amount || 0), 0);
-    const orderCount = periods.reduce((s, p) => s + (p.orderRefs?.length || 0), 0);
+    const orderCount = periods.reduce((s, p) => s + (p.shipmentRefs?.length || 0), 0);
     return { settledCount, totalAmount, orderCount };
   }, [periods]);
 
@@ -123,16 +131,24 @@ export default function ShippingSettlementsPage() {
 
   return (
     <div className="space-y-6 pb-10">
-      <PageHeader
-        title="運費月結結算"
-        subtitle="將月結運費出貨品項彙總開立支出分錄（連動會計模組）"
-        icon={<Truck className="h-5 w-5 text-orange-500" />}
-        actions={
+      {embedded ? (
+        <div className="flex justify-end">
           <Button size="sm" onClick={() => setSettleDialogOpen(true)}>
             <PlusCircle className="h-4 w-4 mr-1" /> 運費結帳
           </Button>
-        }
-      />
+        </div>
+      ) : (
+        <PageHeader
+          title="運費月結結算"
+          subtitle="將月結配送包裹彙總開立支出分錄（以物流成本結算，連動會計模組）"
+          icon={<Truck className="h-5 w-5 text-orange-500" />}
+          actions={
+            <Button size="sm" onClick={() => setSettleDialogOpen(true)}>
+              <PlusCircle className="h-4 w-4 mr-1" /> 運費結帳
+            </Button>
+          }
+        />
+      )}
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
@@ -146,9 +162,9 @@ export default function ShippingSettlementsPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-              <Truck className="h-4 w-4" /> 涵蓋訂單
+              <Truck className="h-4 w-4" /> 涵蓋包裹
             </div>
-            <div className="text-2xl font-bold">{summary.orderCount} 單</div>
+            <div className="text-2xl font-bold">{summary.orderCount} 包</div>
           </CardContent>
         </Card>
         <Card>
@@ -170,7 +186,7 @@ export default function ShippingSettlementsPage() {
             <p className="text-center text-muted-foreground py-8">載入中...</p>
           ) : periods.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">
-              尚無結算紀錄。請先建立「運費」型商品並設定訂單品項為「月結」，再由「運費結帳」開立。
+              尚無結算紀錄。請先將配送方式設為「月結」並於出貨時建立包裹（運費以成本結算），再於「運費結帳」開立。
             </p>
           ) : (
             <div className="overflow-auto border rounded-md">
@@ -181,7 +197,7 @@ export default function ShippingSettlementsPage() {
                     <TableHead>結算期間</TableHead>
                     <TableHead>付款日期</TableHead>
                     <TableHead>帳戶</TableHead>
-                    <TableHead>涵蓋訂單</TableHead>
+                    <TableHead>涵蓋包裹</TableHead>
                     <TableHead className="text-right">金額</TableHead>
                     <TableHead className="text-right">操作</TableHead>
                   </TableRow>
@@ -200,8 +216,8 @@ export default function ShippingSettlementsPage() {
                       </TableCell>
                       <TableCell className="text-sm">{p.entry?.account?.name || '—'}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {p.orderCodes?.length > 0
-                          ? <span className="font-mono text-xs">{p.orderCodes.slice(0, 4).join('、')}{p.orderCodes.length > 4 ? ` 等 ${p.orderCodes.length} 單` : ''}</span>
+                        {p.shipmentCodes?.length > 0
+                          ? <span className="font-mono text-xs">{p.shipmentCodes.slice(0, 4).join('、')}{p.shipmentCodes.length > 4 ? ` 等 ${p.shipmentCodes.length} 包` : ''}</span>
                           : <span className="text-xs">—</span>}
                       </TableCell>
                       <TableCell className="text-right">{(p.entry?.amount ?? 0) !== 0 ? formatCurrency(p.entry?.amount || 0) : '—'}</TableCell>

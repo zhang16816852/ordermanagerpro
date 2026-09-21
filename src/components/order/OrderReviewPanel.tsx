@@ -7,7 +7,7 @@ import {
   arrayMove, SortableContext, useSortable, verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Truck, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +23,12 @@ import {
 } from "@/components/ui/select";
 import type { OrderDraftItem } from "@/store/useOrderDraftStore";
 import { formatCurrency } from "@/lib/formatters";
+import { DeliveryCard } from "@/components/shipping/DeliveryCard";
+import type { DeliveryMethodOption } from "@/components/shipping/DeliveryMethodPicker";
+import {
+  ShippingAddressValue,
+  isEmptyShippingAddress,
+} from "@/components/shipping/ShippingAddressFields";
 
 interface OrderReviewPanelProps {
   storeId: string;
@@ -42,6 +48,13 @@ interface OrderReviewPanelProps {
   onPriceSyncMapChange: (map: Record<string, boolean>) => void;
   onSubmit: (mode: "pending" | "shipped_with_sales_note") => void;
   isSubmitting: boolean;
+  deliveryMethods?: DeliveryMethodOption[];
+  deliveryMethodId?: string | null;
+  onDeliveryMethodChange?: (id: string | null) => void;
+  shippingAddress?: ShippingAddressValue;
+  onShippingAddressChange?: (v: ShippingAddressValue) => void;
+  onApplyStoreAddress?: () => void;
+  deliveryFee?: number;
 }
 
 function SortableRow({
@@ -176,7 +189,16 @@ export default function OrderReviewPanel({
   onPriceSyncMapChange,
   onSubmit,
   isSubmitting,
+  deliveryMethods,
+  deliveryMethodId,
+  onDeliveryMethodChange,
+  shippingAddress,
+  onShippingAddressChange,
+  onApplyStoreAddress,
+  deliveryFee = 0,
 }: OrderReviewPanelProps) {
+
+  const [deliveryEditOpen, setDeliveryEditOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -193,6 +215,18 @@ export default function OrderReviewPanel({
     () => items.reduce((sum, i) => sum + i.quantity, 0),
     [items]
   );
+
+  const deliveryMethodName = useMemo(
+    () => (deliveryMethods || []).find((m) => m.id === deliveryMethodId)?.name || "",
+    [deliveryMethods, deliveryMethodId]
+  );
+
+  const addressSummary = useMemo(() => {
+    if (isEmptyShippingAddress(shippingAddress)) return "";
+    const v = shippingAddress!;
+    const loc = [v.postal_code, v.city, v.district, v.address].filter(Boolean).join(" ");
+    return [v.recipient, v.phone, loc].filter(Boolean).join(" · ");
+  }, [shippingAddress]);
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
@@ -392,6 +426,44 @@ export default function OrderReviewPanel({
         />
       </div>
 
+      {(deliveryMethods || []).length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <Truck className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <div className="text-sm font-medium truncate">
+                  配送：{deliveryMethodName || "未選擇配送方式"}
+                </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {addressSummary || "尚未設定收件地址"}
+                </div>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => setDeliveryEditOpen((v) => !v)}
+            >
+              <Pencil className="h-3.5 w-3.5 mr-1" />
+              {deliveryEditOpen ? "收合" : "編輯"}
+            </Button>
+          </div>
+          {deliveryEditOpen && (
+            <DeliveryCard
+              methods={deliveryMethods || []}
+              value={deliveryMethodId ?? null}
+              onValueChange={(id) => onDeliveryMethodChange?.(id)}
+              address={shippingAddress || { recipient: "", phone: "", postal_code: "", city: "", district: "", address: "" }}
+              onAddressChange={(v) => onShippingAddressChange?.(v)}
+              onApplyStoreAddress={() => onApplyStoreAddress?.()}
+            />
+          )}
+        </div>
+      )}
+
       {onConsignmentModeChange && (
         <div className="flex items-center justify-between rounded-lg border p-3">
           <div className="space-y-0.5">
@@ -404,9 +476,19 @@ export default function OrderReviewPanel({
         </div>
       )}
 
-      <div className="flex items-center justify-between text-lg font-bold border-t pt-4">
-        <span>總計 <span className="text-base font-normal text-muted-foreground">（{totalQuantity} 件）</span></span>
-        <span>{formatCurrency(totalAmount)}</span>
+      <div className="space-y-1.5 border-t pt-4">
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>商品金額</span>
+          <span>{formatCurrency(totalAmount)}</span>
+        </div>
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>運費</span>
+          <span>{formatCurrency(deliveryFee)}</span>
+        </div>
+        <div className="flex items-center justify-between text-lg font-bold">
+          <span>總計 <span className="text-base font-normal text-muted-foreground">（{totalQuantity} 件）</span></span>
+          <span>{formatCurrency(totalAmount + deliveryFee)}</span>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">

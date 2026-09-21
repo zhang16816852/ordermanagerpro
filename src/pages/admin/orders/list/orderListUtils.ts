@@ -16,8 +16,9 @@ export const getOrderShipmentStatus = (items: OrderItem[]) => {
   return 'waiting';
 };
 
-export const getOrderTotal = (items: OrderItem[]) => {
-  return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+export const getOrderTotal = (items: OrderItem[], shippingFee?: number | null) => {
+  const itemTotal = items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+  return itemTotal + (shippingFee || 0);
 };
 
 export const getAggregateItemKey = (productId: string, variantId: string | null) =>

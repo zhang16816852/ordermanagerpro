@@ -120,8 +120,13 @@ export function useStoresController() {
       name: formData.get('name') as string,
       code: (formData.get('code') as string) || null,
       brand: (formData.get('brand') as string) || null,
-      address: (formData.get('address') as string) || null,
+      address: (formData.get('street_address') as string) || (formData.get('address') as string) || null,
       phone: (formData.get('phone') as string) || null,
+      recipient: (formData.get('recipient') as string) || null,
+      postal_code: (formData.get('postal_code') as string) || null,
+      city: (formData.get('city') as string) || null,
+      district: (formData.get('district') as string) || null,
+      default_delivery_method_id: (formData.get('default_delivery_method_id') as string) || null,
     };
     if (editingStore) {
       updateStoreMutation.mutate({ id: editingStore.id, ...data });

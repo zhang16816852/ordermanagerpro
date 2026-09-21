@@ -4,7 +4,7 @@ import { OrderItemsTable } from '@/components/order/OrderItemsTable';
 import { OrderItemRow } from '@/components/order/orderItemsTypes';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
-export type PanelState = 'information' | 'items' | 'products' | null;
+export type PanelState = 'information' | 'delivery' | 'items' | 'products' | null;
 
 interface OrderItemsPanelProps {
   isEditMode: boolean;

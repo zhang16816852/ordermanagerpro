@@ -18,7 +18,7 @@ interface OrdersCardViewProps {
     statusTab?: string;
     consignmentBySourceOrder?: Map<string, any>;
     getOrderShipmentStatus: (items: OrderItem[]) => string;
-    getOrderTotal: (items: OrderItem[]) => number;
+    getOrderTotal: (items: OrderItem[], shippingFee?: number | null) => number;
     commissionByOrder?: Map<string, { totalProfit: number; totalCommission: number }>;
 }
 
@@ -106,7 +106,7 @@ export function OrdersCardView({
                                 {/* 底部：金額 */}
                                 <div className="flex justify-between items-center">
                                     <span className="text-xs text-muted-foreground">訂單金額</span>
-                                    <span className="text-lg font-bold text-primary">{formatCurrency(getOrderTotal(order.order_items))}</span>
+                                    <span className="text-lg font-bold text-primary">{formatCurrency(getOrderTotal(order.order_items, order.shipping_fee))}</span>
                                 </div>
                                 {commissionByOrder && (() => {
                                     const c = commissionByOrder.get(order.id);

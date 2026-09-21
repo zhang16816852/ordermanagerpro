@@ -4,6 +4,11 @@ import { toast } from "sonner";
 import { getErrorMessage } from '@/lib/errorMessages';
 import { useStoreDraft } from "@/store/useOrderDraftStore";
 import type { OrderDraftItem } from "@/store/useOrderDraftStore";
+import type { DeliveryMethodOption } from "@/components/shipping/DeliveryMethodPicker";
+import {
+  ShippingAddressValue,
+  isEmptyShippingAddress,
+} from "@/components/shipping/ShippingAddressFields";
 
 interface UseCreateOrderParams {
   storeId: string;
@@ -12,6 +17,8 @@ interface UseCreateOrderParams {
   queryKeyToInvalidate?: string[];
   customItems?: OrderDraftItem[];
   customNotes?: string;
+  deliveryMethod?: DeliveryMethodOption | null;
+  shippingAddress?: ShippingAddressValue | null;
   onSuccess?: (order: { id: string; code?: string | null; access_token: string }) => void;
   onSettled?: () => void;
 }
@@ -23,6 +30,8 @@ export function useCreateOrder({
   queryKeyToInvalidate,
   customItems,
   customNotes,
+  deliveryMethod,
+  shippingAddress,
   onSuccess,
   onSettled,
 }: UseCreateOrderParams) {
@@ -30,6 +39,7 @@ export function useCreateOrder({
   const { items: draftItems, notes: draftNotes, totalAmount, updateNotes, clearDraft } = useStoreDraft(storeId);
   const items = customItems ?? draftItems;
   const notes = customNotes ?? draftNotes;
+  const shippingFee = deliveryMethod?.price ?? 0;
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -44,6 +54,13 @@ export function useCreateOrder({
           notes: notes.trim() || null,
           source_type: sourceType,
           access_token: crypto.randomUUID(),
+          delivery_method_id: deliveryMethod?.id ?? null,
+          delivery_method_title: deliveryMethod?.name ?? null,
+          delivery_method_code: deliveryMethod?.code ?? null,
+          shipping_fee: deliveryMethod?.price ?? null,
+          shipping_address: isEmptyShippingAddress(shippingAddress)
+            ? null
+            : shippingAddress,
         })
         .select()
         .single();
@@ -91,6 +108,8 @@ export function useCreateOrder({
     createOrder: mutation.mutate,
     isPending: mutation.isPending,
     totalAmount,
+    shippingFee,
+    grandTotal: totalAmount + (deliveryMethod?.price ?? 0),
     items,
     notes,
     updateNotes,

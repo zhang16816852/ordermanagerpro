@@ -17,6 +17,8 @@ interface SharedOrderData {
     status: string;
     store_name: string;
     notes: string;
+    shipping_fee?: number | null;
+    delivery_method_title?: string | null;
   };
   items: {
     product_name: string;
@@ -100,6 +102,8 @@ export default function SharedOrder() {
         qrValue={window.location.href.replace(/[?&]print=true.*/, "")}
         filenamePrefix="訂單"
         canViewPrice={canViewPrice}
+        shippingFee={order.shipping_fee}
+        deliveryMethodTitle={order.delivery_method_title}
         printMode
         webPreview
         defaultPaperSize={printSize}
@@ -141,6 +145,8 @@ export default function SharedOrder() {
         qrValue={window.location.href.replace(/[?&]print=true.*/, "")}
         filenamePrefix="訂單"
         canViewPrice={canViewPrice}
+        shippingFee={order.shipping_fee}
+        deliveryMethodTitle={order.delivery_method_title}
         webPreview
         defaultPaperSize={printSize}
       />

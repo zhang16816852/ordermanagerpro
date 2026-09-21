@@ -17,15 +17,17 @@ import { Check, Share2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/formatters';
 import { useRepCommission } from '@/hooks/useRepCommission';
+import { ParcelManager } from '@/components/shipping/ParcelManager';
 
 interface OrderDetailDialogProps {
     order: Order | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onDeleteOrder?: (orderId: string) => void;
+    parcelEditable?: boolean;
 }
 
-export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder }: OrderDetailDialogProps) {
+export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, parcelEditable = false }: OrderDetailDialogProps) {
     const [isCopied, setIsCopied] = useState(false);
     const { isRep, computeOrder } = useRepCommission();
 
@@ -39,7 +41,7 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder }: 
     const getTotalAmount = () =>
         order.order_items.reduce(
             (sum, item) => sum + item.quantity * item.unit_price,
-            0
+            (order.shipping_fee ?? 0)
         );
 
     const repSummary = isRep
@@ -114,6 +116,19 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder }: 
 
                     {/* Order Items - Mobile Cards */}
                     <OrderDetailItemsCards items={sortedOrderItems} />
+
+                    {/* Shipping / Parcels */}
+                    <div className="border-t pt-2 mt-1 space-y-2">
+                        {(order.delivery_method_title || (order.shipping_fee ?? 0) > 0) && (
+                            <div className="flex items-center justify-between text-sm">
+                                <span className="text-muted-foreground">
+                                    配送：{order.delivery_method_title || '未指定'}
+                                </span>
+                                <span>運費：{formatCurrency(order.shipping_fee ?? 0)}</span>
+                            </div>
+                        )}
+                        <ParcelManager docType="order" docId={order.id} editable={parcelEditable} />
+                    </div>
 
                     {/* Total Amount */}
                     <div className="flex justify-end text-lg font-semibold text-primary">

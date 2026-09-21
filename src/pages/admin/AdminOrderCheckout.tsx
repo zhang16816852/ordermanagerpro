@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +12,13 @@ import { toast } from "sonner";
 import { getErrorMessage } from '@/lib/errorMessages';
 import { format } from 'date-fns';
 import type { OrderDraftItem } from "@/store/useOrderDraftStore";
+import {
+  useDeliveryMethods,
+} from "@/components/shipping/DeliveryMethodPicker";
+import {
+  isEmptyShippingAddress,
+  type ShippingAddressValue,
+} from "@/components/shipping/ShippingAddressFields";
 
 export default function AdminOrderCheckout() {
   const [searchParams] = useSearchParams();
@@ -25,7 +32,9 @@ export default function AdminOrderCheckout() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("stores")
-        .select("id, name, code, brand")
+        .select(
+          "id, name, code, brand, postal_code, city, district, address, phone, recipient, default_delivery_method_id"
+        )
         .eq("id", storeId)
         .single();
       if (error) throw error;
@@ -33,6 +42,47 @@ export default function AdminOrderCheckout() {
     },
     enabled: !!storeId,
   });
+
+  const { data: deliveryMethods = [] } = useDeliveryMethods();
+  const [deliveryMethodId, setDeliveryMethodId] = useState<string | null>(null);
+  const [shippingAddress, setShippingAddress] = useState<ShippingAddressValue>({
+    recipient: "",
+    phone: "",
+    postal_code: "",
+    city: "",
+    district: "",
+    address: "",
+  });
+  const appliedStoreDeliveryRef = useRef(false);
+
+  const applyStoreAddress = useCallback(() => {
+    if (!store) return;
+    setShippingAddress({
+      recipient: store.recipient || store.name || "",
+      phone: store.phone || "",
+      postal_code: store.postal_code || "",
+      city: store.city || "",
+      district: store.district || "",
+      address: store.address || "",
+    });
+  }, [store]);
+
+  // 首次載入：套用店家預設配送方式＋店家最新地址
+  useEffect(() => {
+    if (!store || appliedStoreDeliveryRef.current) return;
+    appliedStoreDeliveryRef.current = true;
+    if (!deliveryMethodId && store.default_delivery_method_id) {
+      setDeliveryMethodId(store.default_delivery_method_id);
+    }
+    if (isEmptyShippingAddress(shippingAddress)) {
+      applyStoreAddress();
+    }
+  }, [store, deliveryMethodId, shippingAddress, applyStoreAddress]);
+
+  const deliveryMethod = useMemo(
+    () => (deliveryMethods || []).find((m) => m.id === deliveryMethodId) || null,
+    [deliveryMethods, deliveryMethodId]
+  );
 
   const {
     items: draftItems,
@@ -92,6 +142,8 @@ export default function AdminOrderCheckout() {
     sourceType: "admin_proxy",
     customItems: items,
     customNotes: notes,
+    deliveryMethod,
+    shippingAddress,
     queryKeyToInvalidate: ["admin-orders"],
     onSuccess: () => {
       clearDraft();
@@ -156,6 +208,9 @@ export default function AdminOrderCheckout() {
           p_shipped_at: shippedAt ? new Date(shippedAt).toISOString() : undefined,
           p_warehouse_id: undefined,
           p_consignment_mode: consignmentMode,
+          p_delivery_method_id: deliveryMethodId || undefined,
+          p_shipping_fee: deliveryMethod ? deliveryMethod.price : undefined,
+          p_shipping_address: isEmptyShippingAddress(shippingAddress) ? null : shippingAddress,
         });
 
         if (error) throw error;
@@ -183,7 +238,7 @@ export default function AdminOrderCheckout() {
         setIsPendingMode2(false);
       }
     },
-    [items, notes, storeId, user, navigate, clearDraft, createPendingOrder, syncPrices, itemWarehouses, itemSources, getItemWarehouse, shippedAt, consignmentMode]
+    [items, notes, storeId, user, navigate, clearDraft, createPendingOrder, syncPrices, itemWarehouses, itemSources, getItemWarehouse, shippedAt, consignmentMode, deliveryMethod, deliveryMethodId, shippingAddress]
   );
 
   if (!storeId) {
@@ -212,6 +267,13 @@ export default function AdminOrderCheckout() {
         onItemsChange={handleItemsChange}
         onNotesChange={syncNotes}
         onPriceSyncMapChange={syncPriceSyncMap}
+        deliveryMethods={deliveryMethods}
+        deliveryMethodId={deliveryMethodId}
+        onDeliveryMethodChange={setDeliveryMethodId}
+        shippingAddress={shippingAddress}
+        onShippingAddressChange={setShippingAddress}
+        onApplyStoreAddress={applyStoreAddress}
+        deliveryFee={deliveryMethod?.price ?? 0}
         onSubmit={handleSubmit}
         isSubmitting={isSubmitting}
       />

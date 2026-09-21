@@ -25,6 +25,7 @@ App 掛載 → CacheService.init() 完成前顯示「載入中...」
 | `shared.tsx` | `/auth`、`/invite/:token`、`/share/order/:orderId`、`/share/sale/:salesNoteId`、`*`（404） | 無（公開） |
 
 - `ProtectedRoute`（src/components/ProtectedRoute.tsx）+ `AppLayout`（src/components/layout/AppLayout.tsx）
+- **物流管理統包頁（2026-09-21）**：`/admin/logistics`＝`src/pages/admin/logistics/LogisticsPage.tsx`，側欄單一入口「物流管理」取代原「運費月結／配送方式」兩項。頁面自持 `PageHeader`（物流管理）＋`Tabs` 嵌入兩子頁（`?tab=delivery-methods|shipping-settlements` URL 路由）。`DeliveryMethodsPage`／`ShippingSettlementsPage` 新增 `embedded?: boolean`（embedded 時隱藏各自 PageHeader、action 按鈕改置頂右側 inline row，避免雙標題）；舊路由 `/admin/delivery-methods`、`/admin/shipping-settlements` 改 `<Navigate>` redirect。共用配送地址組件 `ShippingAddressFields` 縣市/鄉鎮市區改 `SearchableSelect`（`src/utils/taiwanAddress.ts`，鄉鎮 subLabel 顯示郵遞區號、無縣市時 disabled）
 - 注意：`store.tsx` 中 `StoreRepairOrderEdit` 與 `StoreRepairOrderNew` 都 import 自 `repair-orders/new`（共用同一元件）
 - **維修店家端/接案人分離（2026-09-05）**：店家端`store/repair-orders/*`（收件→派發接案人→`ready` 交還客戶）與接案人工作台 `admin/repair-orders/RepairOrdersPage.tsx`（待接案/我處理中，`pending` 單「接單」＝`assigned_to=自己`＋`diagnosing`）流程分離。接案人清單來自 RPC `list_repair_contractors()`（`useRepairTechnicians`），店家端 `new.tsx` 以 `__open__` 哨兵值代表「開放待接案（不指定）」；類型 helper 在 `src/types/repair.ts`（`isRepairOrderAcceptable`／`isRepairOrderWorking`／`isRepairOrderClosed` 等）。
 - **維修單人員 email 解析改走 RPC map（2026-09-07）**：`auth.users` 為跨 schema 表，PostgREST 不支援其 embed（400 PGRST200），故 `useRepairOrders.ts` 的 list/detail query **移除 `assigned_tech:assigned_to(...)` 與 `changed_by_user:changed_by(...)` embed**；改以 `useRepairAssigneeMap()`（RPC `repair_assignee_emails()`）取得 `id → {email, full_name}` 地圖，於 `RepairOrdersPage`、admin/store `detail`、store `index`（含 workshop 重用頁）以 `assignees[order.assigned_to]?.email` 解析。
@@ -86,7 +87,7 @@ App 掛載 → CacheService.init() 完成前顯示「載入中...」
 | `useBrandSeriesCache.ts` | 品牌系列快取 |
 | `useDeviceModels.ts` | 型號 |
 | `useCategorySpecs.ts` / `useDictionaryCache.ts` | 分類規格/字典 |
-| `useCreateOrder.ts` | 建立訂單 mutation（insert orders → order_items） |
+| `useCreateOrder.ts` | 建立訂單 mutation（insert orders → order_items）；Phase D 支援 optional `deliveryMethod/shippingAddress` 快照（`delivery_method_id/title/code`＋`shipping_fee`＝method.price＋`shipping_address`），return 含 `shippingFee/grandTotal` |
 | `useRepairOrders.ts` | 維修單 CRUD |
 | `useSupabaseAction.ts` | 通用 supabase action（含錯誤訊息） |
 | `useBrands.ts`、`useProductColors.ts`、`useProductSearch.ts`、`useNotifications.ts`、`useTableTemplates.ts` | 各自領域資料 |
@@ -103,7 +104,7 @@ App 掛載 → CacheService.init() 完成前顯示「載入中...」
 ## 7. 訂單資料流（門市端）
 
 - **列表**：`StoreOrderList.tsx` 用 React Query 直接查 Supabase（非走快取）：orders + order_items + products/product_variants，依 status tab 過濾
-- **建立**：`useCreateOrder` → insert `orders` → insert `order_items`
+- **建立**：`useCreateOrder` → insert `orders`（Phase D：門市結帳先套用店家預設配送方式，快照 `delivery_method_id/title/code`＋`shipping_fee`＝method.price＋`shipping_address`）→ insert `order_items`；總額＝商品金額＋運費（`grandTotal`）
 - **編輯**：`StoreOrderEdit.tsx`（讀取單筆 + 更新）
 - **後台下單即出貨**：`create_order_with_sales_note` RPC（DB 端一次完成 order + sales_note + inventory movement）
 - **出貨池**：`ShippingPool.tsx` 用 `ship_from_pool` RPC 依門市批次出貨；另用 `remove_items_from_shipping_pool` RPC（2026-09-03）批次將選取品項「回滾成訂單（移出出貨池）」——品項級 checkbox 選取（每店家表頭全選＋列 checkbox＋`Undo2` 批次按鈕，行動端亦有 footer），取代原本逐筆 `DELETE`（效能優化、一次寫入）
