@@ -4,6 +4,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/formatters";
 
+export type DeliveryType = "delivery" | "logistics" | "pickup";
+
+export const DELIVERY_TYPES: DeliveryType[] = ["delivery", "logistics", "pickup"];
+
 export interface DeliveryMethodOption {
   id: string;
   code: string;
@@ -25,10 +29,19 @@ const TYPE_LABEL: Record<string, string> = {
   pickup: "自取",
 };
 
+// 方法 → 類型（名稱相容；由方法型別決定配送類型）
+export function deliveryTypeOfMethod(method?: DeliveryMethodOption | null): DeliveryType | null {
+  if (!method) return null;
+  if (method.type === "delivery" || method.type === "logistics" || method.type === "pickup") {
+    return method.type;
+  }
+  return null;
+}
+
 // 全站共用：取得啟用中的配送方式（依 is_default → sort_order 排序）
-export function useDeliveryMethods(options?: { includeInactive?: boolean }) {
+export function useDeliveryMethods(options?: { includeInactive?: boolean; type?: DeliveryType }) {
   return useQuery({
-    queryKey: ["delivery-methods"],
+    queryKey: ["delivery-methods", options?.includeInactive ? "all" : "active", options?.type || "all"],
     queryFn: async () => {
       let q = (supabase as any)
         .from("delivery_methods")
@@ -36,6 +49,9 @@ export function useDeliveryMethods(options?: { includeInactive?: boolean }) {
         .order("sort_order", { ascending: true });
       if (!options?.includeInactive) {
         q = q.eq("is_active", true);
+      }
+      if (options?.type) {
+        q = q.eq("type", options.type);
       }
       const { data, error } = await q;
       if (error) throw error;
@@ -99,3 +115,58 @@ export function getMethodPrice(methods: DeliveryMethodOption[] | undefined, id: 
   const m = methods.find((x) => x.id === id);
   return m ? m.price : null;
 }
+
+interface DeliveryTypePickerProps {
+  value: DeliveryType | null;
+  onValueChange: (value: DeliveryType | null) => void;
+  disabled?: boolean;
+  className?: string;
+  allowNone?: boolean;
+}
+
+// 配送類型選擇（送貨/物流/自取）——訂單層只存類型
+export function DeliveryTypePicker({
+  value,
+  onValueChange,
+  disabled,
+  className,
+  allowNone = false,
+}: DeliveryTypePickerProps) {
+  return (
+    <div className={cn("flex rounded-lg border bg-muted/50 p-1", className)}>
+      {allowNone && (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onValueChange(null)}
+          className={cn(
+            "flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+            value === null
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+            disabled && "opacity-50",
+          )}
+        >
+          未設定
+        </button>
+      )}
+      {DELIVERY_TYPES.map((t) => (
+        <button
+          key={t}
+          type="button"
+          disabled={disabled}
+          onClick={() => onValueChange(t)}
+          className={cn(
+            "flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+            value === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+            disabled && "opacity-50",
+          )}
+        >
+          {TYPE_LABEL[t] || t}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export { TYPE_LABEL };

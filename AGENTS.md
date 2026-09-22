@@ -2,6 +2,80 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（配送 Quick Ship Dialog 共用化：兩支 DirectShipDialog 合併，2026-09-22）
+
+- **共用元件 `src/components/orders/DirectShipDialog.tsx`（新）**：合併「後台訂單列表批次直接出貨」與「AdminOrderForm 直接出貨」兩支原本重複的 Dialog。統一以 `DirectShipOrderContext[]` 描述每一筆目標訂單（`id/code/storeName/consignmentMode/deliveryType/deliveryMethodId/deliveryMethodTitle/defaultDeliveryMethodId/items[{id,productId,variantId,name,quantity}]`），並以受控 `ShippingDeliveryValue`（`deliveryType/deliveryMethodId/trackingCompany/trackingNumber/trackingUrl`）＋`ShippingDeliveryFields` 呈現配送欄位。**開啟時繼承第一筆訂單**：其 `delivery_type` → 店家 `default_delivery_method_id` 的方法型別（`deliveryTypeOfMethod`）→ 預設 `'delivery'`；物流方式沿用訂單既有 `delivery_method_id`，未有則帶入店家預設方式。`onConfirm(delivery, orderIds)` 僅在 `logistics` 型別才附帶 `deliveryMethodId`/追蹤三欄。`allConsignment` 由 `orders` 內部推導（寄賣全部時標題「寄賣出貨」、一般「直接轉銷貨單」並以 `onItemSourceChange` 是否存在切換「寄賣訂單顯示品項列／顯示資訊提示」——列表模式要選倉、表單模式不扣自有庫存）。
+- **兩呼叫端改薄 adapter**：列表批次 `OrderListDialogs.tsx`（props 維持原形，內部把 `Order[]`＋`selectedOrderIds` 映射成 contexts 並委派共用元件，移除 `allSelectedConsignment` prop）、表單 `src/pages/admin/orders/form/DirectShipDialog.tsx`（維持原 props 形狀、`re-export type DirectShipDelivery`）。`useOrderListMutations` 的 `directShipMutation` 改收 `{ orderIds, notes, delivery? }` 並對 `direct_ship_order` 傳 `p_delivery_type`（僅 logistics 附 `p_delivery_method_id/p_tracking_company/p_tracking_number/p_tracking_url`）。`useOrdersList` select 補 `delivery_type/delivery_method_id/delivery_method_title`＋`stores.default_delivery_method_id`；`types/order.ts` `Order` 補 `delivery_type?`、`stores.default_delivery_method_id?`。
+- **驗證**：`npm run typecheck` 0 errors、`npm run lint` 0 errors（70 warnings 皆既有＋共用元件 react-refresh）、`npm run build` 通過。死碼 `AdminOrderCheckout.tsx`/`OrderComposer.tsx`、`/admin/orders/new` route、「代訂訂單」按鈕於前次變更時移除。
+
+## 近期變更（配送類型優先：訂單只存類型，物流才建包裹，2026-09-22）
+
+- **目的**：配送流程改「先選類型」——`delivery`（送貨，帶預設送貨方式快照、**不建包裹**）／`logistics`（物流，自動建 1 個包裹＝方式/費用/成本/追蹤）／`pickup`（自取，不寫配送方式）。物流細項（方式/價格/追蹤）**只屬銷售單／寄賣單層**，訂單層只存 `delivery_type`。
+- **後端（migration `20260922000001_delivery_type_first.sql` 已套用遠端並驗證）**：
+  - `orders`/`sales_notes`/`consignment_orders` 新增 **`delivery_type text`**（nullable）；既有資料以既有 `delivery_method_id` join `delivery_methods.type` 回填（無方法→`'delivery'`），**回填結果 0 NULL**（全部既有單皆有方法快照＝delivery 或 logistics）。
+  - **4 支 RPC 單一簽名收斂（tail 加 `p_delivery_type text DEFAULT NULL`，先 DROP 舊精確簽名再 CREATE，避免 PGRST203 overload）**：`create_consignment_shipment_layer`(14)、`create_order_with_sales_note`(15)、`direct_ship_order`(15)、`ship_from_pool`(17，尾參數順序 `…p_delivery_overrides, p_delivery_type, p_shipping_cost, p_tracking_company, p_tracking_number, p_tracking_url`)。
+  - 行為：`v_delivery_type = COALESCE(p_delivery_type, 方法.type, 'delivery')`；`logistics`＋有方法 → `upsert_shipment` 建 **1 包**（fee/cost=方法值、tracking）＋寫銷售單/寄賣單方法快照；`delivery` → 套用預設送貨方式快照（`is_default AND type='delivery'`，不建包裹）；`pickup` → 只寫類型。`ship_from_pool` 每店家 override（`p_delivery_overrides`）可帶 `delivery_type`（優先於全局，L790）；override 有 parcels 時仍逐包裹。
+- **前端**：
+  - `src/components/shipping/DeliveryMethodPicker.tsx` 新增 `DeliveryType`（`'delivery'|'logistics'|'pickup'`）、`DELIVERY_TYPES`、`TYPE_LABEL`、`DeliveryTypePicker`（三段選單）、`deliveryTypeOfMethod(method)`；`useDeliveryMethods` 加 `type?` 過濾。
+  - 新增 `src/components/shipping/DeliveryTypeCard.tsx`（type-only 卡片）；`AdminOrderForm` 的 renderDeliveryCard 改 type-only，方法/包裹全交由出貨 RPC 產生。
+  - `useAdminOrderFormController`：`deliveryMethodId`/`shippingAddress`/`deliveryMethods` state 全移除，改 **`deliveryType`/`setDeliveryType`**（型別驅動）；`useOrderFormStateSync` 由 `order.delivery_type` 還原；`useOrderFormMutations` 新增匯出 `DirectShipDelivery` 型別、createPending 只插 `delivery_type`、update 只寫 `delivery_type`、`create_order_with_sales_note` 只傳 `p_delivery_type`、`directShipMutation` 改收 `delivery?: DirectShipDelivery`（logistics 時附 `p_delivery_method_id`＋`p_tracking_*`）。
+  - `DirectShipDialog.tsx` 整支重寫為自含 form 版：型別三段選單＋物流方法選取（`useDeliveryMethods({includeInactive:true})`）＋追蹤欄＋自動建 1 包說明；物流未選方法時禁用確認鈕並提示；`onConfirm(delivery)` 呼叫 controller。
+  - **ShippingPool**（`src/pages/admin/shippingPool/`）：`ShipDeliveryState` 加 `delivery_type`；`useShipDelivery` 新增 `setStoreType`、預設 `'delivery'`、移除 `defaultMethodId`（方法改由 RPC 伺服器端解析）；`ShipDialog` 每店家顯示 `DeliveryTypePicker`（logistics 才展開地址＋包裹列），groupTotal **含包裹費**（`商品小計＋運費＝總計`）；`buildDeliveryOverrides` 每店家帶 `delivery_type`（不再要求 parcels 非空才寫 override，delivery/pickup 也帶類型）。
+  - **ParcelManager dirty 修復**：`dirty = editable && (original ? fromDraft(original,d) : hasContent)`——新增空包只要任一欄位有內容即可顯示「儲存」。
+- **驗證**：`npm run typecheck` 0 errors、`npm run lint` 0 errors（69 warnings 皆既有＋DeliveryMethodPicker 共用模組 react-refresh）、`npm run build` 通過；types.ts 已重新產生（UTF-8 no BOM）。
+
+## 近期變更（修復 typecheck no-op＋清除 9 個既有型別錯誤，2026-09-21）
+
+- **根因**：`package.json` 的 `typecheck` 為 `tsc --noEmit`，但根 `tsconfig.json` 是 solution-style（`"files": []` ＋ `references`）——非 `-b` 的 `tsc` 不遍歷 references，**不檢查任何檔案、永遠 0 errors**（LSP 才是真實來源）。
+- **修正**：`typecheck` 改為 `tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json`；並清掉揭露的 9 個既有錯誤（`src/` 全數 0 errors）：
+  - `ShippingAddressValue` 由 `interface` 改 `type`（取得隱式 index signature，修 `useOrderFormMutations.ts` 244/335、`AdminOrderCheckout.tsx` 213 的 `ShippingAddressValue→Json` 不相容）。
+  - `useOrderListMutations.ts` 138：`convert_order_to_consignment_draft` 的 `Json` 回傳改以 `data as { ok?: boolean } | null` 讀取。
+  - `VariantModelMatrixModelsTab.tsx`：`filteredModels` 型別由 `DeviceModel[]`（`@/types/device-models`）改為 `DeviceModelOption[]`（`@/hooks/useDeviceModels`，實際來源）。
+  - `DeviceModelDialog.tsx` 49/56：新增 `asSpecs(v)`（`unknown → Record<string, unknown>`）取代直接 spread `Json`。
+  - `DeviceModelManager.tsx` 459/474：`@/types/device-models` 的 `FullDeviceModel*` 與 `pages/admin/products/hooks/useDeviceModels.ts` 的 `DeviceModel*` 改用 **`Omit<Row,'specifications'>`** 覆寫 `specifications?: Record<string, any> | null`，消除 `Json & Record` 交集造成的來源/目標不相容。
+- **驗證**：`npm run typecheck` 0 errors、`npm run lint` 0 errors（66 warnings 皆既有）、`npm run build` 通過。
+
+## 近期變更（三種單據批次匯入：訂單/銷貨/寄賣，2026-09-22）
+
+- **目的**：供系統遷移回填既有資料。後台訂單/銷貨/寄賣三頁各新增「匯入」按鈕，共用 `DocImportDialog`，支援 Excel/CSV 上傳或「貼上內容」、下載範本、逐群組預覽驗證、錯誤群組隔離、匯入結果明細（實際單號）。
+- **後端（migration `20260921000012_doc_import_batch_rpcs.sql` 已套用遠端）**：三支 batch RPC（SECURITY DEFINER、僅 admin、逐群組子交易隔離、回傳 `{total, success, results[], errors[]}`）＋共用 resolver helper：
+  - `import_orders_batch`：群組＝`{store_code, order_code?, order_date?, status?('pending'|'processing'), notes?, items:[{sku,name?,quantity,unit_price?,unit_cost?}]}`；`pending` 不產號（order_code 可留空，由 trigger 產號）、`processing` 交由 trigger 產 OD 單號；每群組建立 orders＋order_items（含 sort_order）。
+  - `import_sales_notes_batch`：群組自附 `sales_code`（自帶單號）；自動建立 admin_proxy/shipped 來源訂單＋shipped 銷貨單＋自有倉 `sales_shipment` movement `-qty`（trigger 同步庫存與帶出 `order_items.unit_price`）；銷貨單號由 trigger 依店家+出貨日產 `SL{YYMM}{店碼}{流水}`。
+  - `import_consignment_batch`：群組＝`{direction('send_to_store'|'receive_from_supplier', 支援中文別名), store_code | supplier_code, consignment_code?, order_code?, shipped_date?, status?('draft'|'active'), notes?, items[]}`；**自帶 code 走「INSERT draft（trigger 會覆寫成 CS-DRAFT-...)→UPDATE status='active' 且 code=自訂值」路徑保留自訂碼**；`send_to_store`＋active 會建立來源訂單（`source_type='consignment'`、shipped、品項同步回填 order_item_id）＋`consignment_out_shipment` `-qty`；`receive_from_supplier`＋active 寫 `consignment_in_receipt` `+qty`（供應商倉）；draft 不寫 movement、不建來源訂單。
+  - 共用 resolver：`import_resolve_item`（sku→products.product_variants 或 name→products）、`import_resolve_store`（stores.code）、`import_resolve_supplier`（**`suppliers` 沒有 code 欄，僅以 `name` 比對**）。
+  - ⚠️ Admin guard 實測：`has_role(auth.uid(),'admin')` 對 NULL uid 回傳 **FALSE**，MCP/無 JWT 直接呼叫會被擋（`僅管理員可匯入...`）；SQL 測試需先 `SELECT set_config('request.jwt.claims','{"sub":"<admin-user-id>","role":"authenticated"}', true);`。子交易隔離＝某群組錯誤（找不到商品/店家）只回該群組 `errors[]`，不影響其他群組。
+- **前端（零新增依賴）**：`src/utils/docImport.ts`（共用解析/驗證：中英欄位別名、normalizeDate、Excel/CSV/貼上解析、`rowsToImportGroups` 依單號欄分組、逐群組驗證、`importGroupPayload` 組 RPC payload、`downloadImportTemplate`、`IMPORT_RPC_NAMES`/`IMPORT_QUERY_KEYS`）＋`src/components/orders/DocImportDialog.tsx`（上傳/貼上分頁、預覽表格、群組錯誤高亮、結果面板、成功後 invalidate queryKey）。三頁接線：`OrderListPage`（OrderListHeader 匯入按鈕，僅 admin）、`SalesNotes`（CardHeader 匯入按鈕，僅 `!isRep`）、`ConsignmentPage`（標題列匯入按鈕）。
+- **驗證**：`npx tsc --noEmit -p tsconfig.app.json` 僅既有 4 個錯誤（DeviceModelDialog/Manager，非本次改動）；`npm run lint` 0 errors（66 warnings 皆既有）；`npm run build` 通過。後端三支 RPC 已於 BEGIN…ROLLBACK 實測通過。
+
+## 近期變更（供應商編輯＋物流公司身分指派 UI，2026-09-21）
+
+- **背景**：`suppliers.is_logistics_company` 是**身分牌**（同一供應商可同時是採購供應商＋物流公司）；配送方式 `type='logistics'` 綁定此類供應商、運費月結 `list_settleable_shipments(p_supplier_id)` 亦以此篩選。但先前**無任何 UI** 可設定（`SupplierForm` 只能新增、無此欄位、無編輯；前端 `Supplier` 型別亦缺此欄）。
+- **前端**：`purchase-orders/types.ts` 的 `Supplier` 補 `is_logistics_company: boolean`；`usePurchaseOrders` 新增 `updateSupplierMutation`（update by id，成功 invalidate `['suppliers']`／`['delivery-methods-logistics-suppliers']`／`['shipping-suppliers']`；`createSupplierMutation` 亦補後兩者）；`SupplierForm` 新增 `initial?` prop 支援編輯（含「物流公司」Checkbox，按鈕依 `initial?.id` 顯示「儲存」/「新增」）；`SupplierTab` 新增 `onEdit` prop＋每卡「編輯」按鈕＋`is_logistics_company` 時顯示「物流」徽章；`PurchaseOrdersPage` 新增 `editingSupplier` state＋編輯 Dialog（`key={editingSupplier.id}` 確保換單重掛載）。
+- **驗證**：`npm run lint` 0 errors（66 warnings 皆既有）、`npm run build` 通過；`npm run typecheck` 0 errors（typecheck script 已修復，見上方）。
+
+## 近期變更（配送參數 RPC 收斂單一簽名，根治 PGRST203，2026-09-21）
+
+- **根因**：Phase B/C 加配送參數時用 `CREATE OR REPLACE FUNCTION`，但**新簽名（尾端增參數）與舊簽名不同 → Postgres 不覆寫、而是「新舊 overload 並存」**。PostgREST 以具名參數解析時，只要請求參數集合是多個 overload 的子集（前端 `undefined` 會被 supabase-js 丟掉，如未選配送方式/未填出貨時間）就無法選出唯一函數 → **PGRST203「Could not choose the best candidate function」**（報錯「很多轉去銷售單」的元兇：後台訂單列表批次「轉銷貨單」`direct_ship_order` 只傳 6 具名參數、恆歧義；`create_order_with_sales_note` 少傳配送參數時同樣歧義）。同型前例：`correct_sales_note` 原 5 參數版已於 `20260911000009` DROP。
+- **修正（migration `20260921000011_collapse_overloaded_rpcs.sql` 已套用遠端）**：每個函數名**只保留「最長、尾參數含 DEFAULT」的簽名（語意超集）**，DROP 其餘短版——共 8 個：`create_consignment_shipment_layer`(保留9)、`create_order_with_sales_note`(10)、`direct_ship_order`(10)、`ship_from_pool`(12)、`adjust_inventory`(4)、`receive_purchase_items`(2)、`bump_data_version`(2)、`compare_product_row`(保留3，4 參數版為純相容 wrapper)。**前端零改動**。
+- ⚠️ **教訓（避免重蹈）**：凡 RPC 要「尾端加 DEFAULT 參數」，**不可**與舊短簽名並存（會成為 overload）；應直接 DROP 重建單一新簽名（`DROP FUNCTION` 後 `CREATE OR REPLACE` 尾參數全預設），或新開 migration 收斂。
+- **驗證（遠端）**：`pg_proc` 8 函數名皆單一簽名、authenticated GRANT 皆在；`BEGIN…ROLLBACK` 內以 6 具名參數呼叫 `direct_ship_order` 正常解析並建銷貨單（SL2609GCPA0010005，回滾後無殘留）。
+- **types.ts 已重新產生**（`npm run supabase:types`，此檔 Windows 產出 UTF-16LE+BOM 已確認轉回 UTF-8 no BOM 成功）；`npm run typecheck` 0 errors、`npm run lint` 0 errors（66 warnings 皆既有）。
+
+## 近期變更（寄賣單號改遞補制，2026-09-21）
+
+- **根因**：`next_consignment_code`（migration `20260916000003`）以 `system_sequences` 的**新 key `consignment_{YYMM}_{store_id}`** 累加產號。店家既有單號（如 SMALLP001 的 `CS2609SMALLP0010001/0002`，屬舊 key 世代）**未回填這組新 key** → 店家首次產號又從 1 起，生成 `…0001`（與既有單撞號、`consignment_orders.code` 有 UNIQUE → 23505）。
+- **修正（migration `20260921000010_consignment_code_reuse_gaps.sql` 已套用遠端）**：`next_consignment_code` 改為**遞補制**（與銷貨單一致）——以既有 `consignment_orders.code` 為唯一真值，找「該店家該月份」**第一個空缺號碼**（`store_id IS NOT DISTINCT FROM` 分群，receive_from_supplier 共用 'SP'），`pg_advisory_xact_lock(hashtext(v_seq_key))` 防並行；不再依賴 `system_sequences`（舊 consignment_* 序列 key 成孤立、無害）。驗證：SMALLP001 → `CS2609SMALLP0010003`、全新店家 → `CS2609{店碼}0001`、SP → `CS2609SP0001`。
+- ⚠️ **共享已知風險**：因改遞補制，刪單後重用空缺號碼 + 決定性分享 token（`share_token_for_code`）⇒ 持舊單決定性連結者會看到新單（同 sales_notes 的已知權衡，見下方「決定性分享 token」段落）。
+
+## 近期變更（地址自動分欄＋郵區反查＋店家營業地址＋AdminOrderForm 預設配送方式，2026-09-21）
+
+- **`ShippingAddressFields` 新增「完整地址（自動分欄）」欄＋郵遞區號可編輯失焦反查**（`src/components/shipping/ShippingAddressFields.tsx`）：頂部新增全寬「完整地址」輸入（例：`640雲林縣斗六市鎮南里中山路286-3號`，郵區可省略），**失焦**時以 `parseTaiwanAddressText` 解析，僅覆寫非空欄位（postal/city/district/address）並將欄位內容更新為 `formatAddress(...)` 規範化結果。該欄為元件內部 `useState`（不綁 `value`），**單向鏈避免循環**：local→parent 只在 blur 寫回、parent→local 只經 effect（deps 用 `vPostal/vCity/vDistrict/vAddress` primitive 值，非 `v` 物件 identity）。郵遞區號欄移除 `readOnly`（恆可編輯），`onBlur` 以 `getCityDistrictOfPostal` 反查並 `patch({city,district})`（查不到不動）。新增 `hideContact` prop（隱藏收件人/電話，供營業地址用）。全站使用者（DeliveryCard/CheckoutForm/AdminOrderCheckout/AdminOrderForm/ShipDialog/StoresTab）一次生效。
+- **`taiwanAddress.ts` 新增層級反查工具**（`src/utils/taiwanAddress.ts`）：`cityOfDistrict(district)`（鄉鎮→所屬縣市，如 斗六市→雲林縣；跨縣市同名如「東區」取首筆）、`getCityDistrictOfPostal(postal)`（郵區前 3 碼→縣市/鄉鎮）；`parseTaiwanAddressText` 改用它並新增「無郵區、只有鄉鎮 → 反查縣市」分支（**郵遞區號非必填**，採「縣市→鄉鎮→剩餘」層級拆分）。
+- **店家營業地址（migration `20260921000009_stores_business_address.sql` 已套用遠端）**：`stores` 新增 `business_address/business_city/business_district/business_postal_code`（與配送/收件地址 `address/city/district/postal_code/recipient/phone` 分開）；回填既有店家＝原配送地址快照。`StoresTab` 對話框新增「營業地址」欄位組（`ShippingAddressFields hideContact prefix="store-biz-addr"`）＋勾選「**收件地址同營業地址（自動複製地址欄）**」（勾選時 effect 將營業地址 postal/city/district/address 複製到配送地址，收件人/電話保留；營業地址變更時同步）；hidden inputs 補 `business_*`，`useStoresController.handleStoreSubmit` 讀取寫入；列表（桌機/行動）於營業地址與配送地址不同時多顯示一行「營業：…」。
+- **AdminOrderForm 預設配送方式修復**：`useOrderFormQueries` 的 order.stores embed 與 storeInfo select 補 `default_delivery_method_id`；`useAdminOrderFormController` 既有 per-store effect（`appliedStoreAddressKeyRef` 每家一次）內加 `setDeliveryMethodId(prev => prev || store.default_delivery_method_id || null)`（functional 更新，edit mode 仍由 `useOrderFormStateSync` 以 `order.delivery_method_id` 優先；effect deps 不含 shippingAddress → 地址分欄 blur 不重跑，無循環）。
+- **types.ts 已重新產生**（`npm run supabase:types`，含 stores.business_*）。
+- **驗證**：`npx tsc --noEmit` 0 errors、`npm run lint` 0 errors（66 warnings 皆既有）、`npm run build` 通過。
+
 ## 近期變更（物流管理統包頁＋地址組件優化＋店家收件人，2026-09-21）
 
 - **物流管理統包頁（`src/pages/admin/logistics/LogisticsPage.tsx`，路由 `/admin/logistics` 已註冊＋側欄「物流管理」取代原「運費月結/配送方式」兩項）**：「配送方式」與「運費月結」統一為單頁，`?tab=delivery-methods|shipping-settlements` URL 路由（預設 delivery-methods）。`LogisticsPage` 自持 PageHeader（物流管理），下方 `Tabs` 嵌入兩子頁；`DeliveryMethodsPage`／`ShippingSettlementsPage` 新增 optional `embedded` prop（embedded 時隱藏各自 PageHeader、僅右上角保留動作按鈕列——「新增送貨/物流/自取」三顆／「運費結帳」一顆，避免雙標題）。舊路由 `/admin/delivery-methods`、`/admin/shipping-settlements` 改 `<Navigate>` redirect 到 `/admin/logistics?tab=...`（`src/routes/admin.tsx`，新增 `Navigate` import）。
@@ -71,7 +145,7 @@
 - **Phase A（✅ DB/schema/回填）**：見上。
 - **Phase B（✅ DB 層，migration `20260921000003~06`）**：
   - `upsert_shipment`/`delete_shipment`＋`_recompute_doc_shipping`（內部 helper，寫包裹後自動 SUM fee/cost 回寫單據層並補方法快照，REVOKE 僅 postgres）。
-  - 四支出貨 RPC 新增 `p_delivery_method_id/p_shipping_fee/p_shipping_address`（**尾端 DEFAULT，舊簽名保留，前端零改動仍可呼叫**）：`create_consignment_shipment_layer`(9)+`create_order_with_sales_note`(10)+`direct_ship_order`(10)+`ship_from_pool`(11)。寄賣分支轉 layer（每寄賣單 1 包）、一般分支每銷貨單 1 包＋$upsert_shipment；傳入時回寫單據層快照與 shipping_address（`COALESCE` 保留既有值）；未傳方式完全維持舊行為。**Phase C-4（migration `20260921000006`）另給 `ship_from_pool` 加了 12 參數版 `p_delivery_overrides jsonb DEFAULT NULL`**（per-store parcels，見上方 Phase C-4）。
+  - 四支出貨 RPC 新增 `p_delivery_method_id/p_shipping_fee/p_shipping_address`（尾端 DEFAULT）並**於 `20260921000011` 收斂為單一最長簽名**（⚠️ 勿與舊短簽名並存，會造成 PostgREST PGRST203，詳見上方「配送參數 RPC 收斂單一簽名」）：`create_consignment_shipment_layer`(9)+`create_order_with_sales_note`(10)+`direct_ship_order`(10)+`ship_from_pool`(11→12，Phase C-4 再加 `p_delivery_overrides`)。寄賣分支轉 layer（每寄賣單 1 包）、一般分支每銷貨單 1 包＋$upsert_shipment；傳入時回寫單據層快照與 shipping_address（`COALESCE` 保留既有值）；未傳方式完全維持舊行為。**Phase C-4（migration `20260921000006`）另給 `ship_from_pool` 加了 12 參數版 `p_delivery_overrides jsonb DEFAULT NULL`**（per-store parcels，見上方 Phase C-4）。
   - `register_shipping_settlement` 重寫：`p_order_item_ids` 語意改為 **`p_shipment_ids`（包裹 id）**，以 `SUM(shipments.cost)` 結給物流公司、join `delivery_methods` 驗證 supplier、reference_type='shipment' 防重複結算；**前端已於 Phase C-6 跟上（送 shipmentIds）**。
   - 三分享 RPC 回傳單據層 `delivery_method_id/title/code/shipping_fee/shipping_cost/shipping_address`＋`shipments[]`（每包 id/delivery_method 快照/fee/cost/fee_payment/tracking/shipped_at/note）。
   - ⚠️ 教訓：**`shipments` 表實際欄位是 `delivery_method_id/title/code` 三欄分存（連同迁移 3 一致），不是 jsonb `delivery_method` 快照**。分享 RPC 與月結 RPC 首版誤用 `sh.delivery_method->>'id'`，執行時才 42703；已以 `20260921000006_fix_delivery_method_columns` 修正。日後讀取包裹方式一律用 `delivery_method_id/title/code` 欄位。
@@ -115,9 +189,9 @@
 ## 近期變更（決定性分享 token + 寄賣單號碼依 shipped_at，2026-09-16）
 
 - **決定性分享 token（migration `20260916000002_share_token_deterministic.sql`，已套用遠端）**：`sales_notes`＋`consignment_orders` 的分享 `access_token` 改為「由單號 code 決定性推導」——新表 `public.app_secrets`（key/value，RLS 僅 admin policy `app_secrets_admin_all`）＋seed `share_token_v1`（`encode(gen_random_bytes(32),'hex')`）；新 RPC **`share_token_for_code(p_code TEXT) RETURNS UUID`**（SECURITY DEFINER，`SET search_path = public`，revoke public/anon、grant authenticated）＝ `extensions.hmac(p_code::bytea, secret::bytea, 'sha256')` 前 16 bytes 組 UUID 8-4-4-4-12（⚠️ 需 schema-qualify `extensions.hmac`，pgcrypto 在 extensions schema，`search_path=public` 下裸 hmac 會 42883）。**驗證改 OR 條件**：(storage `access_token = p_token::UUID` **或** `share_token_for_code(code) = p_token::UUID`)——不回填既有資料、不覆寫 stored token，RPC 預生成的隨機回傳 token 仍有效、舊 QR 不失效；「刪除單號重用」時舊決定性連結會指到新單（使用者已知悉接受，見下方已知風險）。`get_shared_sales_note_details`／`get_shared_consignment_details`（SECURITY DEFINER）重發改用此 OR 驗證，前者 items 改依 `COALESCE(sni.sort_order,0), oi.sort_order, oi.created_at` 排序、後者回傳新增 `shipped_at`；`orders` 維持隨機永久 token 不動。pgcrypto 亦由本 migration `CREATE EXTENSION IF NOT EXISTS`。
-- **寄賣單號碼改依出貨時間（migration `20260916000003_consignment_code_by_shipped_at.sql`，已套用遠端）**：`consignment_orders` 新增 **`shipped_at TIMESTAMPTZ`**；新 RPC **`next_consignment_code(p_shipped_at, p_store_id)`**（SECURITY DEFINER）產 **`CS{YYMM}{店碼}{0001}`**（YYMM 看出貨月份，fallback created_at/NOW；店碼取 `stores.code`，receive_from_supplier 或無碼時 fallback `'SP'`；流水 4 位，`system_sequences` key `consignment_{YYMM}_{store_id|SP}` 逐月逐店累加）。`trgfn_generate_consignment_code` 改 **BEFORE INSERT OR UPDATE OF status**：INSERT draft → 暫存碼 `CS-DRAFT-{id 前 8 碼}`（唯一性依 uuid 前 8 hex，且 BEFORE trigger 看得到 default 已套用產生的 id）；INSERT 非 draft → 正式碼；UPDATE draft→active 且 code 為 `CS-DRAFT-%`/NULL → 換正式碼（月份看 shipped_at）。
+- **寄賣單號碼改依出貨時間（migration `20260916000003_consignment_code_by_shipped_at.sql`，已套用遠端；產號於 `20260921000010` 改遞補制）**：`consignment_orders` 新增 **`shipped_at TIMESTAMPTZ`**；新 RPC **`next_consignment_code(p_shipped_at, p_store_id)`**（SECURITY DEFINER）產 **`CS{YYMM}{店碼}{0001}`**（YYMM 看出貨月份，fallback created_at/NOW；店碼取 `stores.code`，receive_from_supplier 或無碼時 fallback `'SP'`；流水 4 位）。⚠️ **流水採遞補制**（`20260921000010`）：以既有 `consignment_orders.code` 找「該店家該月份第一個空缺號碼」（同銷貨單），不再依賴 `system_sequences`。`trgfn_generate_consignment_code` 改 **BEFORE INSERT OR UPDATE OF status**：INSERT draft → 暫存碼 `CS-DRAFT-{id 前 8 碼}`（唯一性依 uuid 前 8 hex，且 BEFORE trigger 看得到 default 已套用產生的 id）；INSERT 非 draft → 正式碼；UPDATE draft→active 且 code 為 `CS-DRAFT-%`/NULL → 換正式碼（月份看 shipped_at）。
 - **`create_consignment_shipment_layer` 改 canonical 6 參數**（drop 舊 3 參數 `(jsonb,uuid,uuid)`）：`(p_store_id uuid, p_created_by uuid, p_order_items jsonb, p_shipped_at timestamptz DEFAULT NULL, p_notes text DEFAULT NULL, p_warehouse_id uuid DEFAULT NULL)`——INSERT 帶 `shipped_at`、既有 draft 轉 active UPDATE 也帶；倉庫 fallback `COALESCE(p_warehouse_id,(SELECT id FROM warehouses WHERE code='own'))`。**三支呼叫端全部重發並串 `p_shipped_at`**：`ship_from_pool`（8 參數，保留遠端 audit_logs／整池 DELETE／ANY()-in 回滾／FOREACH 收斂 body，僅 layer call 改 5 參數 `(v_store_id,p_created_by,v_consignment_items,v_shipped_at,p_notes)`）、`direct_ship_order`（7 參數，consignment 分支 call 6 參數＋warehouse）、`create_order_with_sales_note`（7 參數，consignment 分支 call 6 參數）。`create_consignment_shipment` 重發：落地 `shipped_at=COALESCE(p_shipped_at,NOW())`＋activation UPDATE 帶上＋回傳加 `'code'`（修復原 `p_shipped_at` dead param、且補全「下單即出貨／出貨池」路徑的寄賣碼月份正確）。前端零改動（useConsignment 仍傳 `p_shipped_at: null`、分享按鈕用 stored token）。
-- ⚠️ **已知風險（不法規避）**：`sales_notes` code 採遞補制（`generate_sequential_code` NOT EXISTS 重用空缺序號）＋決定性 token ⇒ 刪掉一單再產生同號新單時，**持舊單決定性分享連結者會看到新單**（隨機 stored token 連結不受影響）。寄賣碼為累加制無此問題。使用者已於 2026-09-16 拍板接受此權衡；若日後不可接受，需改 sales_notes 為累加制或於決定性 token 中混入建立時間。
+- ⚠️ **已知風險（不法規避，2026-09-21 更新：寄賣單亦改遞補制）**：`sales_notes` code 採遞補制（`generate_sequential_code` NOT EXISTS 重用空缺序號）＋決定性 token ⇒ 刪掉一單再產生同號新單時，**持舊單決定性分享連結者會看到新單**（隨機 stored token 連結不受影響）。**2026-09-21 起 `consignment_orders` code 亦改遞補制**（`next_consignment_code`，見上方「寄賣單號改遞補制」段落），與 sales_notes 共享相同風險。使用者已於 2026-09-16 拍板接受此權衡（銷貨單）；若日後不可接受，需改回累加制或於決定性 token 中混入建立時間。
 
 ## 近期變更（銷貨單刪除 23505 修復，2026-09-16）
 
@@ -172,7 +246,7 @@
 npm run dev          # 開發伺服器
 npm run build        # 建置
 npm run lint         # ESLint
-npm run typecheck    # tsc --noEmit
+npm run typecheck    # tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json
 npm run supabase:types  # 從 Supabase 重新產生 src/integrations/supabase/types.ts
 ```
 
@@ -303,6 +377,8 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 **向後相容 VIEW 復原（2026-09-09）**：遠端資料庫缺少 `device_model_links`／`device_model_group_links`／`device_model_exclusions`／`product_effective_models_base` 這 4 個由 `20260602213529_consolidate_entity_model_relations.sql` 定義的 VIEW（該 migration 未記入遠端）；`sync_storefront_items` 執行時參考到缺漏的 VIEW 會 42P01，導致新增/編輯變體失敗。已以 migration `20260909000000_recreate_device_model_link_views.sql` 重建（CREATE OR REPLACE VIEW，冪等），`entity_model_relations` 實表與前端邏輯不受影響。若日後又出現 `relation "public.device_model_links" does not exist`，先確認這 4 個 VIEW 是否存在。
 
 **10 張表 RLS 未啟用**（任何人持 anon key 可直接讀寫）：`categories`、`specification_definitions`、`category_spec_links`、`category_hierarchy`、`product_category_links`、`data_change_logs`、`data_snapshots`、`storefront_items`、`table_templates`、`table_template_variants`。修復前需先補對應 policies。
+
+**✅ `npm run typecheck` no-op 已修復（2026-09-21）**：根 `tsconfig.json` 為 solution-style（`"files": []` ＋ `references`），舊 script `tsc --noEmit`（非 `-b`）不遍歷 references → **不檢查任何檔案、永遠 0 errors**。已於 `package.json` 改為 **`tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json`**，並清掉當時揭露的 **9 個既有型別錯誤**（`ShippingAddressValue` interface→type 取得隱式 index signature 修 `Json` 不相容；`DeviceModelOption[]` 取代 `DeviceModel[]`；`specifications` 用 `Omit<Row,'specifications'>` 覆寫避免 `Json` 交集；`Json` RPC 回傳加 `{ ok?: boolean }` cast）。現 `npm run typecheck` 0 errors、`npm run lint` 0 errors / 66 warnings、`npm run build` 通過。
 
 ## 近期變更（銷貨單收款狀態 + 會計模組）
 

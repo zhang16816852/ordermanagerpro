@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Order } from '@/types/order';
+import { DirectShipDelivery } from '@/components/orders/DirectShipDialog';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 
@@ -21,7 +22,7 @@ export interface UseOrderListMutationsParams {
 }
 
 export interface UseOrderListMutationsResult {
-  directShipMutation: ReturnType<typeof useMutation<any, any, { orderIds: string[]; notes: string }>>;
+  directShipMutation: ReturnType<typeof useMutation<any, any, { orderIds: string[]; notes: string; delivery?: DirectShipDelivery }>>;
   deleteOrderMutation: ReturnType<typeof useMutation<any, any, string[]>>;
   convertToConsignmentMutation: ReturnType<typeof useMutation<any, any, string[]>>;
   unlinkOrdersMutation: ReturnType<typeof useMutation<any, any, string[]>>;
@@ -36,8 +37,8 @@ export function useOrderListMutations(params: UseOrderListMutationsParams): UseO
 
   const directShipMutation = useMutation({
     mutationFn: async ({
-      orderIds, notes,
-    }: { orderIds: string[]; notes: string }) => {
+      orderIds, notes, delivery,
+    }: { orderIds: string[]; notes: string; delivery?: DirectShipDelivery }) => {
       if (!user) throw new Error('未登入');
       const results: any[] = [];
       for (const orderId of orderIds) {
@@ -56,6 +57,11 @@ export function useOrderListMutations(params: UseOrderListMutationsParams): UseO
           p_shipped_at: directShipAt ? new Date(directShipAt).toISOString() : undefined,
           p_warehouse_id: undefined,
           p_warehouse_map: warehouseMap as any,
+          p_delivery_type: delivery?.deliveryType || undefined,
+          p_delivery_method_id: delivery?.deliveryType === 'logistics' ? delivery.deliveryMethodId || undefined : undefined,
+          p_tracking_company: delivery?.deliveryType === 'logistics' ? delivery.trackingCompany || undefined : undefined,
+          p_tracking_number: delivery?.deliveryType === 'logistics' ? delivery.trackingNumber || undefined : undefined,
+          p_tracking_url: delivery?.deliveryType === 'logistics' ? delivery.trackingUrl || undefined : undefined,
         });
         if (error) throw error;
         results.push(data as any);
@@ -135,7 +141,8 @@ export function useOrderListMutations(params: UseOrderListMutationsParams): UseO
           failed.push(orderId);
           continue;
         }
-        if (data?.ok === false) failed.push(orderId);
+        const result = data as { ok?: boolean } | null;
+        if (result?.ok === false) failed.push(orderId);
       }
       if (failed.length > 0) {
         throw new Error(`有 ${failed.length} 個訂單無法轉寄賣，可能是非 pending 或已無未出貨品項`);

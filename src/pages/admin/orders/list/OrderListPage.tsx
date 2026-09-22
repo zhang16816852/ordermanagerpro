@@ -1,5 +1,7 @@
 import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { OrderDetailDialog } from '@/components/order/OrderDetailDialog';
+import { DocImportDialog } from '@/components/orders/DocImportDialog';
 import { OrdersCardView } from '@/components/order/OrdersCardView';
 import { ItemsCardView } from '@/components/order/ItemsCardView';
 import { OrderTableView } from './components/OrderTableView';
@@ -17,6 +19,7 @@ import { useOrderListPageController } from './useOrderListPageController';
 export default function AdminOrderList() {
   const navigate = useNavigate();
   const c = useOrderListPageController();
+  const [importOrdersOpen, setImportOrdersOpen] = useState(false);
 
   const {
     statusTab,
@@ -129,6 +132,7 @@ export default function AdminOrderList() {
         onExportCSV={c.handleExportOrdersCSV}
         syncPending={syncOrdersMutation.isPending}
         onSync={() => syncOrdersMutation.mutate()}
+        onImportOrders={() => setImportOrdersOpen(true)}
       />
 
       <div className="flex-1 min-h-0 flex flex-col pt-2">
@@ -322,7 +326,6 @@ export default function AdminOrderList() {
         }}
         orders={orders}
         selectedOrderIds={selectedOrderIds}
-        allSelectedConsignment={allSelectedConsignment}
         directShipAt={directShipAt}
         onDirectShipAtChange={setDirectShipAt}
         directShipNotes={directShipNotes}
@@ -330,7 +333,7 @@ export default function AdminOrderList() {
         getItemWarehouse={getItemWarehouse}
         onItemWarehouseChange={(itemId, w) => setItemWarehouses(prev => ({ ...prev, [itemId]: w }))}
         isPending={directShipMutation.isPending}
-        onConfirm={() => directShipMutation.mutate({ orderIds: Array.from(selectedOrderIds), notes: directShipNotes })}
+        onConfirm={(delivery) => directShipMutation.mutate({ orderIds: Array.from(selectedOrderIds), notes: directShipNotes, delivery })}
       />
 
       {/* Reverse Consignment Shipment Dialog */}
@@ -368,6 +371,13 @@ export default function AdminOrderList() {
           setSelectedOrderIds(new Set());
           setConvertToPOOpen(false);
         }}
+      />
+
+      {/* Import Orders Dialog */}
+      <DocImportDialog
+        kind="orders"
+        open={importOrdersOpen}
+        onOpenChange={setImportOrdersOpen}
       />
     </div>
   );

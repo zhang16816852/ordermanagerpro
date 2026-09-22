@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Plus, Package, FileText, ClipboardList, PlusCircle } from 'lucide-react';
+import { Package, FileText, ClipboardList, PlusCircle, FileUp } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { OrderFilters } from './OrderFilters';
 import type {
@@ -34,6 +34,7 @@ interface OrderListHeaderProps {
   onExportCSV: () => void;
   syncPending: boolean;
   onSync: () => void;
+  onImportOrders?: () => void;
 }
 
 export function OrderListHeader({
@@ -61,6 +62,7 @@ export function OrderListHeader({
   onExportCSV,
   syncPending,
   onSync,
+  onImportOrders,
 }: OrderListHeaderProps) {
   const navigate = useNavigate();
 
@@ -75,14 +77,14 @@ export function OrderListHeader({
             <Button onClick={() => navigate('/admin/orders/checkout')} size="sm" variant="outline">
               <PlusCircle className="mr-2 h-4 w-4" /> 建立新單據
             </Button>
-            {!isRep && (
-              <Button onClick={() => navigate('/admin/orders/new')} size="sm">
-                <Plus className="mr-2 h-4 w-4" /> 代訂訂單
-              </Button>
-            )}
             <Button onClick={onExportCSV} variant="outline" size="sm">
               <FileText className="mr-2 h-4 w-4" /> 匯出 CSV
             </Button>
+            {!isRep && onImportOrders && (
+              <Button onClick={onImportOrders} variant="outline" size="sm">
+                <FileUp className="mr-2 h-4 w-4" /> 匯入
+              </Button>
+            )}
             <Button onClick={onSync} variant="outline" size="sm" disabled={syncPending}>
               <Package className="mr-2 h-4 w-4" /> 同步舊訂單狀態
             </Button>

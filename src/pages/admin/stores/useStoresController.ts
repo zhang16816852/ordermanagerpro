@@ -126,6 +126,10 @@ export function useStoresController() {
       postal_code: (formData.get('postal_code') as string) || null,
       city: (formData.get('city') as string) || null,
       district: (formData.get('district') as string) || null,
+      business_address: (formData.get('business_address') as string) || null,
+      business_postal_code: (formData.get('business_postal_code') as string) || null,
+      business_city: (formData.get('business_city') as string) || null,
+      business_district: (formData.get('business_district') as string) || null,
       default_delivery_method_id: (formData.get('default_delivery_method_id') as string) || null,
     };
     if (editingStore) {

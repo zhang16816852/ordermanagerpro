@@ -23,15 +23,16 @@ interface UseShippingPoolMutationsParams {
   setNotes: (v: string) => void;
 }
 
-// 從 deliveryMap 組 p_delivery_overrides（僅含已選店家且有配送方式的包裹）
+// 從 deliveryMap 組 p_delivery_overrides（依每店家類型優先規則）
+// delivery_type 優先（L790）；無 override 的店家回退全局 p_delivery_type
 export function buildDeliveryOverrides(
   selectedStores: Set<string>,
   deliveryMap: ShipDeliveryMap
-): Record<string, { address: any; parcels: Array<{ delivery_method_id: string | null; fee?: number; cost?: number; tracking_company?: string; tracking_number?: string }> }> {
-  const overrides: Record<string, { address: any; parcels: any[] }> = {};
+): Record<string, { delivery_type: string; address: any; parcels: Array<{ delivery_method_id: string | null; fee?: number; cost?: number; tracking_company?: string; tracking_number?: string }> }> {
+  const overrides: Record<string, { delivery_type: string; address: any; parcels: any[] }> = {};
   selectedStores.forEach((storeId) => {
     const d = deliveryMap[storeId];
-    if (!d) return;
+    if (!d || !d.delivery_type) return;
     const parcels = (d.parcels || [])
       .filter((p) => p.delivery_method_id)
       .map((p) => ({
@@ -41,8 +42,8 @@ export function buildDeliveryOverrides(
         tracking_company: p.tracking_company || undefined,
         tracking_number: p.tracking_number || undefined,
       }));
-    if (parcels.length === 0) return;
     overrides[storeId] = {
+      delivery_type: d.delivery_type,
       address: d.address && d.address.city ? d.address : undefined,
       parcels,
     };

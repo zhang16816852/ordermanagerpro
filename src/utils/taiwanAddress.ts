@@ -182,6 +182,30 @@ export function getPostalOf(city: string, district: string): string | null {
   return POSTAL[cityKey][districtKey] ?? null
 }
 
+// 鄉鎮市區 → 所屬縣市（層級反查；跨縣市同名如「東區」取首筆）
+export function cityOfDistrict(district: string): string | null {
+  if (!district) return null
+  const districtKey = DISTRICT_ALIASES[district] || district
+  for (const [city, districts] of Object.entries(POSTAL)) {
+    if (districtKey in districts) return city
+  }
+  return null
+}
+
+// 郵遞區號（前 3 碼）→ 縣市/鄉鎮市區（層級反查）
+export function getCityDistrictOfPostal(postal: string): { city: string; district: string } | null {
+  if (!postal) return null
+  const match = postal.match(/^\d{3}/)
+  if (!match) return null
+  const code = match[0]
+  for (const [city, districts] of Object.entries(POSTAL)) {
+    for (const [district, p] of Object.entries(districts)) {
+      if (p === code) return { city, district }
+    }
+  }
+  return null
+}
+
 export function cityFromFullText(text: string): string | null {
   if (!text) return null
   for (const city of TAIWAN_CITIES) {
@@ -221,7 +245,7 @@ export function postalFromFullText(text: string): string | null {
   return null
 }
 
-// 整串地址 → 分段（供表單預填）
+// 整串地址 → 分段（供表單預填）；郵遞區號不一定存在，採「縣市→鄉鎮→剩餘」層級拆分
 export function parseTaiwanAddressText(text: string): Partial<TaiwanAddressParts> {
   if (!text) return {}
   const cleaned = text.trim()
@@ -231,15 +255,16 @@ export function parseTaiwanAddressText(text: string): Partial<TaiwanAddressParts
 
   // 若給定 postal 但無 city/district，嘗試反查
   if (postal_code && (!city || !district)) {
-    for (const [c, districts] of Object.entries(POSTAL)) {
-      for (const [d, p] of Object.entries(districts)) {
-        if (p === postal_code) {
-          if (!city) city = c
-          if (!district) district = d
-          break
-        }
-      }
+    const loc = getCityDistrictOfPostal(postal_code)
+    if (loc) {
+      if (!city) city = loc.city
+      if (!district) district = loc.district
     }
+  }
+
+  // 無郵區、只有鄉鎮（如「斗六市…」）→ 從鄉鎮反查縣市
+  if (!city && district) {
+    city = cityOfDistrict(district) || ''
   }
 
   let address = cleaned

@@ -39,9 +39,11 @@ export interface Order {
     stores?: {
         name: string;
         code: string | null;
+        default_delivery_method_id?: string | null;
     } | null;
     order_items: OrderItem[];
     access_token?: string | null;
+    delivery_type?: string | null;
     shipping_fee?: number | null;
     shipping_cost?: number | null;
     delivery_method_id?: string | null;

@@ -6,7 +6,7 @@ import { ReceivingTab } from './components/ReceivingTab';
 import { OrderForm } from './components/OrderForm';
 import { SupplierForm } from './components/SupplierForm';
 import { PurchaseOrderDetailDialog } from './components/PurchaseOrderDetailDialog';
-import { PurchaseOrder } from './types';
+import { PurchaseOrder, Supplier } from './types';
 import { usePurchaseOrders, PurchaseOrderFilters } from './hooks/usePurchaseOrders';
 import { Button } from '@/components/ui/button';
 import {
@@ -39,6 +39,7 @@ export default function AdminPurchaseOrders() {
   const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null);
   const [createOrderOpen, setCreateOrderOpen] = useState(false);
   const [createSupplierOpen, setCreateSupplierOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
 
   const [filters, setFilters] = useState<PurchaseOrderFilters>({
     supplierId: searchParams.get('supplier') || undefined,
@@ -87,6 +88,7 @@ export default function AdminPurchaseOrders() {
     updateOrderMutation,
     deleteOrderMutation,
     createSupplierMutation,
+    updateSupplierMutation,
     addItemMutation,
     updateItemMutation,
     deleteItemMutation,
@@ -263,6 +265,7 @@ export default function AdminPurchaseOrders() {
           <SupplierTab
             suppliers={suppliers}
             onAdd={() => setCreateSupplierOpen(true)}
+            onEdit={setEditingSupplier}
             isLoading={isLoadingSuppliers}
           />
         </TabsContent>
@@ -319,6 +322,30 @@ export default function AdminPurchaseOrders() {
               });
             }}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Supplier Dialog */}
+      <Dialog open={!!editingSupplier} onOpenChange={(open) => { if (!open) setEditingSupplier(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>編輯供應商</DialogTitle>
+            <DialogDescription>
+              修改供應商聯絡資訊；勾選「物流公司」可讓此供應商作為配送方式綁定的物流商。
+            </DialogDescription>
+          </DialogHeader>
+          {editingSupplier && (
+            <SupplierForm
+              key={editingSupplier.id}
+              initial={editingSupplier}
+              isLoading={updateSupplierMutation.isPending}
+              onSubmit={(data) => {
+                updateSupplierMutation.mutate({ id: editingSupplier.id, ...data }, {
+                  onSuccess: () => setEditingSupplier(null)
+                });
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
 

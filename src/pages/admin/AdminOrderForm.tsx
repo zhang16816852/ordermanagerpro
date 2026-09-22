@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { OrderInfoCard } from '@/components/order/OrderInfoCard';
 import { OrderItemsPanel } from '@/components/order/OrderItemsPanel';
 import { ProductSelector } from '@/components/order/ProductSelector';
-import { DeliveryCard } from '@/components/shipping/DeliveryCard';
+import { DeliveryTypeCard } from '@/components/shipping/DeliveryTypeCard';
 
 import { useAdminOrderFormController } from './orders/form/useAdminOrderFormController';
 import { useAdminOrderFormHeader, statusLabels } from './orders/form/useAdminOrderFormHeader';
@@ -110,13 +110,9 @@ export default function AdminOrderForm() {
 
   const renderDeliveryCard = (collapsed: boolean = false) =>
     c.orderType === 'sales' ? (
-      <DeliveryCard
-        methods={c.deliveryMethods}
-        value={c.deliveryMethodId}
-        onValueChange={c.setDeliveryMethodId}
-        address={c.shippingAddress}
-        onAddressChange={c.setShippingAddress}
-        onApplyStoreAddress={c.applyStoreAddress}
+      <DeliveryTypeCard
+        value={c.deliveryType}
+        onValueChange={c.setDeliveryType}
         activePanel={c.activePanel}
         onTogglePanel={() => c.setActivePanel(c.activePanel === 'delivery' ? null : 'delivery')}
         collapsed={collapsed}
@@ -279,11 +275,6 @@ export default function AdminOrderForm() {
 
       {/* Actions */}
       <div className="flex justify-end gap-3">
-        {c.orderType === 'sales' && (
-          <Button variant="outline" onClick={c.syncPrices} disabled={c.isSubmitting}>
-            <Save className="mr-2 h-4 w-4" />同步價格
-          </Button>
-        )}
         {c.isEditMode ? (
           <>
             {c.order?.status === 'processing' && !c.isRep && (
@@ -341,16 +332,7 @@ export default function AdminOrderForm() {
         itemSources={c.itemSources}
         onItemSourceChange={(id, src) => c.setItemSources((prev) => ({ ...prev, [id]: src }))}
         isPending={c.directShipMutation.isPending}
-        onConfirm={() => c.directShipMutation.mutate()}
-        deliveryMethodTitle={(() => {
-          const m = c.deliveryMethods?.find((x: any) => x.id === c.deliveryMethodId);
-          return m?.name || null;
-        })()}
-        deliveryAddressSummary={(() => {
-          const a = c.shippingAddress;
-          if (!a || (!a.city && !a.district && !a.address)) return null;
-          return [a.postal_code, a.city, a.district, a.address, a.recipient].filter(Boolean).join(' ');
-        })()}
+        onConfirm={(delivery) => c.directShipMutation.mutate(delivery)}
       />
     </div>
   );

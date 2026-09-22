@@ -1,11 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Plus, User, Phone, Mail, MapPin, FileEdit, Download } from 'lucide-react';
+import { Plus, User, Phone, Mail, MapPin, FileEdit, Download, Pencil, Truck } from 'lucide-react';
 import { Supplier } from '../types';
 
 interface SupplierTabProps {
   suppliers: Supplier[];
   onAdd: () => void;
+  onEdit: (supplier: Supplier) => void;
   isLoading: boolean;
 }
 
@@ -17,6 +19,7 @@ import { useSupplierMappings } from '../hooks/useSupplierMappings';
 export function SupplierTab({
   suppliers,
   onAdd,
+  onEdit,
   isLoading
 }: SupplierTabProps) {
   const [mappingSupplier, setMappingSupplier] = useState<Supplier | null>(null);
@@ -36,7 +39,17 @@ export function SupplierTab({
           <Card key={supplier.id} className="group hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-lg font-bold">{supplier.name}</CardTitle>
+              {supplier.is_logistics_company && (
+                <Badge variant="secondary" className="ml-2 shrink-0 gap-1">
+                  <Truck className="h-3 w-3" aria-hidden="true" />
+                  物流
+                </Badge>
+              )}
               <div className="flex gap-1 ml-auto">
+                <Button variant="outline" size="sm" onClick={() => onEdit(supplier)}>
+                  <Pencil className="h-4 w-4 mr-2" aria-hidden="true" />
+                  編輯
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => setMappingSupplier(supplier)}>
                   <FileEdit className="h-4 w-4 mr-2" aria-hidden="true" />
                   對照設定

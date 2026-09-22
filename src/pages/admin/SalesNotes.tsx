@@ -4,13 +4,14 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useRepCommission } from "@/hooks/useRepCommission";
+import { DocImportDialog } from "@/components/orders/DocImportDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Search, FileText, CalendarIcon, X, CheckSquare, Download, List, LayoutGrid } from "lucide-react";
+import { Search, FileText, CalendarIcon, X, CheckSquare, Download, List, LayoutGrid, FileUp } from "lucide-react";
 import { SalesNoteListTable } from "@/components/sales/SalesNoteListTable";
 import { StorePicker } from "@/components/ui/StorePicker";
 import { SalesNoteProductView, SalesNoteAggregateItem } from "@/components/sales/SalesNoteProductView";
@@ -48,6 +49,7 @@ export default function AdminSalesNotes() {
   const [repFilter, setRepFilter] = useState<string>(searchParams.get("rep") || "all");
   const [selectedNote, setSelectedNote] = useState<typeof salesNotes[number] | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
+  const [importOpen, setImportOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const from = searchParams.get("from");
     const to = searchParams.get("to");
@@ -409,37 +411,44 @@ export default function AdminSalesNotes() {
             {viewMode === "product" ? <LayoutGrid className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
             {viewMode === "product" ? "商品銷售彙總" : "銷售單列表"}
           </CardTitle>
-          <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-lg shrink-0">
-            <Button
-              variant={viewMode === "notes" ? "default" : "ghost"}
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => {
-                setViewMode("notes");
-                setSearchParams((prev) => {
-                  const next = new URLSearchParams(prev);
-                  next.delete("view");
-                  return next;
-                }, { replace: true });
-              }}
-            >
-              <List className="h-3.5 w-3.5 mr-1" /> 銷售單
-            </Button>
-            <Button
-              variant={viewMode === "product" ? "default" : "ghost"}
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => {
-                setViewMode("product");
-                setSearchParams((prev) => {
-                  const next = new URLSearchParams(prev);
-                  next.set("view", "product");
-                  return next;
-                }, { replace: true });
-              }}
-            >
-              <LayoutGrid className="h-3.5 w-3.5 mr-1" /> 商品加總
-            </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            {!isRep && (
+              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => setImportOpen(true)}>
+                <FileUp className="h-3.5 w-3.5 mr-1" /> 匯入
+              </Button>
+            )}
+            <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-lg">
+              <Button
+                variant={viewMode === "notes" ? "default" : "ghost"}
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  setViewMode("notes");
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    next.delete("view");
+                    return next;
+                  }, { replace: true });
+                }}
+              >
+                <List className="h-3.5 w-3.5 mr-1" /> 銷售單
+              </Button>
+              <Button
+                variant={viewMode === "product" ? "default" : "ghost"}
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  setViewMode("product");
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    next.set("view", "product");
+                    return next;
+                  }, { replace: true });
+                }}
+              >
+                <LayoutGrid className="h-3.5 w-3.5 mr-1" /> 商品加總
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="flex-1 min-h-0 overflow-hidden flex flex-col px-4 pb-4">
@@ -712,6 +721,12 @@ export default function AdminSalesNotes() {
         enableReturn={!isRep}
         enableCorrect={!isRep}
         parcelEditable={!isRep}
+      />
+
+      <DocImportDialog
+        kind="sales"
+        open={importOpen}
+        onOpenChange={setImportOpen}
       />
     </div>
   );

@@ -6,8 +6,15 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { OrderItemRow } from '@/components/order/orderItemsTypes';
 import { useStoreDraft } from '@/store/useOrderDraftStore';
-import { ShippingAddressValue, isEmptyShippingAddress } from '@/components/shipping/ShippingAddressFields';
-import { DeliveryMethodOption } from '@/components/shipping/DeliveryMethodPicker';
+import { DeliveryType } from '@/components/shipping/DeliveryMethodPicker';
+
+export interface DirectShipDelivery {
+  deliveryType: DeliveryType | null;
+  deliveryMethodId: string | null;
+  trackingCompany: string | null;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+}
 
 export interface OrderFormMutationParams {
   orderId?: string;
@@ -31,9 +38,7 @@ export interface OrderFormMutationParams {
   pendingDeletedIdsRef: { current: string[] };
   priceSyncMap: Record<string, boolean>;
   itemsForSync: OrderItemRow[];
-  deliveryMethodId: string | null;
-  shippingAddress: ShippingAddressValue;
-  deliveryMethods: DeliveryMethodOption[];
+  getDeliveryType: () => DeliveryType | null;
   onDirectShipDialogClose: () => void;
 }
 
@@ -63,32 +68,9 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     pendingDeletedIdsRef,
     priceSyncMap,
     itemsForSync,
-    deliveryMethodId,
-    shippingAddress,
-    deliveryMethods,
+    getDeliveryType,
     onDirectShipDialogClose,
   } = params;
-
-  const getDeliveryDetails = () => {
-    const method = (deliveryMethods || []).find((m) => m.id === deliveryMethodId) || null;
-    return {
-      id: deliveryMethodId || null,
-      title: method?.name || null,
-      code: method?.code || null,
-      address: isEmptyShippingAddress(shippingAddress) ? null : shippingAddress,
-    };
-  };
-
-  // 單據層配送快照（orders/sales_notes 共用欄位）
-  const deliverySnapshot = () => {
-    const d = getDeliveryDetails();
-    return {
-      delivery_method_id: d.id,
-      delivery_method_title: d.title,
-      delivery_method_code: d.code,
-      shipping_address: d.address,
-    };
-  };
 
   const buildItemsPayload = useCallback((currentItems: OrderItemRow[]) =>
     currentItems.map((item, index) => ({
@@ -104,6 +86,40 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       parent_temp_key: item.parentTempKey ?? undefined,
       sort_order: index + 1,
     })), []);
+
+  // 同步勾選品項的價格到品牌：auto 時（儲存送出自動執行）不顯示「無品牌/無勾選」提示
+  const syncPrices = useCallback(async (opts?: { auto?: boolean }) => {
+    const brand = isEditMode ? order?.stores?.brand : storeInfo?.brand;
+    if (!brand) {
+      if (!opts?.auto) toast.info('無法同步：無品牌資訊');
+      return;
+    }
+
+    const itemsToSync = itemsForSync
+      .filter((i) => priceSyncMap[i.id])
+      .map((i) => ({
+        product_id: i.productId,
+        variant_id: i.variantId || null,
+        wholesale_price: i.unitPrice,
+      }));
+
+    if (itemsToSync.length === 0) {
+      if (!opts?.auto) toast.info('未選取任何需同步的品項');
+      return;
+    }
+
+    const { error } = await supabase.rpc('upsert_brand_product_prices', {
+      p_brand: brand,
+      p_products: itemsToSync,
+    });
+
+    if (error) {
+      console.error('同步價格失敗:', error);
+      toast.error('部分價格同步失敗，請至品牌價格管理頁面檢查');
+    } else {
+      toast.success('價格已同步');
+    }
+  }, [itemsForSync, priceSyncMap, order, storeInfo, isEditMode]);
 
   const [isPendingMode2, setIsPendingMode2] = useState(false);
 
@@ -133,11 +149,14 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         throw err;
       }
 
-      // 配送快照：RPC 不動 delivery 欄位，另以一般 update 寫入
-      const snap = deliverySnapshot();
-      const dw = (supabase.from('orders') as any).update(snap).eq('id', orderId);
+      // 配送類型：RPC 不動 delivery 欄位，另以一般 update 寫入
+      const deliveryTypeVal = getDeliveryType();
+      const dw = (supabase.from('orders') as any).update({ delivery_type: deliveryTypeVal || null }).eq('id', orderId);
       const snapResult = await dw;
       if (snapResult.error) throw snapResult.error;
+
+      // 勾選「同步價格」的品項，儲存送出時自動同步到品牌價
+      await syncPrices({ auto: true });
     },
     onSuccess: () => {
       toast.success('訂單已更新');
@@ -162,7 +181,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       const currentNotes = notesRef.current;
       if (currentItems.length === 0) throw new Error('訂單項目是空的');
       if (!storeId) throw new Error('請先選擇店鋪');
-      const snap = deliverySnapshot();
+      const deliveryTypeVal = getDeliveryType();
       const { data: newOrder, error: orderError } = await (supabase
         .from('orders') as any)
         .insert({
@@ -173,7 +192,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
           notes: currentNotes.trim() || null,
           consignment_mode: consignmentModeRef.current,
           access_token: crypto.randomUUID(),
-          ...snap,
+          delivery_type: deliveryTypeVal || null,
         })
         .select('id')
         .single();
@@ -194,6 +213,9 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
 
       const { error: itemsError } = await (supabase.from('order_items') as any).insert(orderItems);
       if (itemsError) throw itemsError;
+
+      // 勾選「同步價格」的品項，儲存送出時自動同步到品牌價
+      await syncPrices({ auto: true });
       return newOrder;
     },
     onSuccess: () => {
@@ -230,7 +252,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         sort_order: index + 1,
       }));
 
-      const d = getDeliveryDetails();
+      const d = getDeliveryType();
       const { data, error } = await supabase.rpc('create_order_with_sales_note', {
         p_store_id: storeId,
         p_created_by: user?.id as string,
@@ -239,9 +261,10 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         p_shipped_at: shippedAt ? new Date(shippedAt).toISOString() : undefined,
         p_warehouse_id: undefined,
         p_consignment_mode: consignmentModeRef.current,
-        p_delivery_method_id: d.id || undefined,
+        p_delivery_method_id: undefined,
         p_shipping_fee: undefined,
-        p_shipping_address: d.address || undefined,
+        p_shipping_address: undefined,
+        p_delivery_type: d || undefined,
       });
       if (error) throw error;
 
@@ -261,6 +284,9 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         });
       }
 
+      // 勾選「同步價格」的品項，儲存送出時自動同步到品牌價
+      await syncPrices({ auto: true });
+
       draft.clearDraft();
       navigate('/admin/orders');
     } catch (err) {
@@ -268,7 +294,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     } finally {
       setIsPendingMode2(false);
     }
-  }, [isEditMode, storeId, user, navigate, draft, itemSources, getItemWarehouse, shippedAt]);
+  }, [isEditMode, storeId, user, navigate, draft, itemSources, getItemWarehouse, syncPrices, shippedAt]);
 
   // Status toggle (edit mode only)
   const toggleStatusMutation = useMutation({
@@ -287,7 +313,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
 
   // Direct ship: turn processing order into sales note
   const directShipMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (delivery?: DirectShipDelivery) => {
       if (!user || !orderId) throw new Error('訂單不存在');
       const currentItems = itemsRef.current;
       const currentNotes = notesRef.current;
@@ -311,6 +337,9 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         throw err;
       }
 
+      // 勾選「同步價格」的品項，儲存送出時自動同步到品牌價
+      await syncPrices({ auto: true });
+
       const warehouseMap = currentItems.reduce((acc, i) => {
         const wh = getItemWarehouse(i.id);
         if (wh) acc[i.id] = wh;
@@ -321,7 +350,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         if (src) acc[i.id] = src;
         return acc;
       }, {} as Record<string, string>);
-      const d = getDeliveryDetails();
+      const loader = delivery || { deliveryType: getDeliveryType(), deliveryMethodId: null, trackingCompany: null, trackingNumber: null, trackingUrl: null };
       const { data, error } = await supabase.rpc('direct_ship_order', {
         p_order_id: orderId,
         p_created_by: user.id,
@@ -330,9 +359,14 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         p_warehouse_id: undefined,
         p_warehouse_map: Object.keys(warehouseMap).length > 0 ? warehouseMap : undefined,
         p_source_map: Object.keys(sourceMap).length > 0 ? sourceMap : undefined,
-        p_delivery_method_id: d.id || undefined,
+        p_delivery_method_id: loader?.deliveryMethodId || undefined,
         p_shipping_fee: undefined,
-        p_shipping_address: d.address || undefined,
+        p_shipping_address: undefined,
+        p_delivery_type: loader?.deliveryType || undefined,
+        p_shipping_cost: undefined,
+        p_tracking_company: loader?.trackingCompany || undefined,
+        p_tracking_number: loader?.trackingNumber || undefined,
+        p_tracking_url: loader?.trackingUrl || undefined,
       });
       if (error) throw error;
       return data as any;
@@ -497,39 +531,6 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     onError: (error: Error) => toast.error(getErrorMessage(error, '建立寄賣出貨單失敗')),
   });
 
-  const syncPrices = useCallback(async () => {
-    const brand = isEditMode ? order?.stores?.brand : storeInfo?.brand;
-    if (!brand) {
-      toast.info('無法同步：無品牌資訊');
-      return;
-    }
-
-    const itemsToSync = itemsForSync
-      .filter((i) => priceSyncMap[i.id])
-      .map((i) => ({
-        product_id: i.productId,
-        variant_id: i.variantId || null,
-        wholesale_price: i.unitPrice,
-      }));
-
-    if (itemsToSync.length === 0) {
-      toast.info('未選取任何需同步的品項');
-      return;
-    }
-
-    const { error } = await supabase.rpc('upsert_brand_product_prices', {
-      p_brand: brand,
-      p_products: itemsToSync,
-    });
-
-    if (error) {
-      console.error('同步價格失敗:', error);
-      toast.error('部分價格同步失敗，請至品牌價格管理頁面檢查');
-    } else {
-      toast.success('價格已同步');
-    }
-  }, [itemsForSync, priceSyncMap, order, storeId, storeInfo, isEditMode]);
-
   const isSubmitting = updateOrderMutation.isPending || createPendingMutation.isPending || isPendingMode2 || directShipMutation.isPending || createPurchaseOrderMutation.isPending || createConsignmentReceiveMutation.isPending || createConsignmentSendMutation.isPending;
 
   return {
@@ -541,7 +542,6 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     createPurchaseOrderMutation,
     createConsignmentReceiveMutation,
     createConsignmentSendMutation,
-    syncPrices,
     isPendingMode2,
     isSubmitting,
   };

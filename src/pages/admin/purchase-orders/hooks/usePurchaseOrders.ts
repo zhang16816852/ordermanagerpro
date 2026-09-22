@@ -221,9 +221,25 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+      queryClient.invalidateQueries({ queryKey: ['delivery-methods-logistics-suppliers'] });
+      queryClient.invalidateQueries({ queryKey: ['shipping-suppliers'] });
       toast.success('供應商已新增');
     },
     onError: () => toast.error('新增失敗'),
+  });
+
+  const updateSupplierMutation = useMutation({
+    mutationFn: async ({ id, ...data }: Partial<Supplier> & { id: string }) => {
+      const { error } = await (supabase as any).from('suppliers').update(data).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+      queryClient.invalidateQueries({ queryKey: ['delivery-methods-logistics-suppliers'] });
+      queryClient.invalidateQueries({ queryKey: ['shipping-suppliers'] });
+      toast.success('供應商已更新');
+    },
+    onError: () => toast.error('更新失敗'),
   });
 
   const addItemMutation = useMutation({
@@ -504,6 +520,7 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
     updateOrderMutation,
     deleteOrderMutation,
     createSupplierMutation,
+    updateSupplierMutation,
     addItemMutation,
     updateItemMutation,
     deleteItemMutation,

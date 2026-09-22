@@ -11,7 +11,7 @@ export interface DeviceModel {
 }
 
 // Admin/CRUD version (full DB row + custom fields)
-export type FullDeviceModel = Database['public']['Tables']['device_models']['Row'] & {
+export type FullDeviceModel = Omit<Database['public']['Tables']['device_models']['Row'], 'specifications'> & {
     device_type?: string | null;
     screen_size?: string | null;
     device_series?: string | null;
@@ -21,7 +21,7 @@ export type FullDeviceModel = Database['public']['Tables']['device_models']['Row
     specifications?: Record<string, any> | null;
 };
 
-export type FullDeviceModelInsert = Database['public']['Tables']['device_models']['Insert'] & {
+export type FullDeviceModelInsert = Omit<Database['public']['Tables']['device_models']['Insert'], 'specifications'> & {
     device_type?: string | null;
     screen_size?: string | null;
     device_series?: string | null;
@@ -31,7 +31,7 @@ export type FullDeviceModelInsert = Database['public']['Tables']['device_models'
     specifications?: Record<string, any> | null;
 };
 
-export type FullDeviceModelUpdate = Database['public']['Tables']['device_models']['Update'] & {
+export type FullDeviceModelUpdate = Omit<Database['public']['Tables']['device_models']['Update'], 'specifications'> & {
     device_type?: string | null;
     screen_size?: string | null;
     device_series?: string | null;

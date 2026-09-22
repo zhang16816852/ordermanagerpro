@@ -4,7 +4,6 @@ import AdminOrderList from "@/pages/admin/orders/list/OrderListPage";
 import AdminProducts from "@/pages/admin/products/ProductsPage";
 import AdminProductFormPage from "@/pages/admin/products/ProductFormPage";
 import AdminStores from "@/pages/admin/Stores";
-import AdminOrderComposer from "@/pages/admin/OrderComposer";
 import AdminOrderForm from "@/pages/admin/AdminOrderForm";
 import AdminSalesNotes from "@/pages/admin/SalesNotes";
 import AdminShippingPool from "@/pages/admin/ShippingPool";
@@ -40,7 +39,6 @@ export const adminRoutes = [
     { path: "/admin/reps/:userId/commission", element: <RepCommissionPage /> },
     { path: "/admin/my-commission", element: <MyCommissionPage /> },
     { path: "/admin/orders", element: <AdminOrderList /> },
-    { path: "/admin/orders/new", element: <AdminOrderComposer /> },
     { path: "/admin/orders/checkout", element: <AdminOrderForm /> },
     { path: "/admin/orders/:orderId/edit", element: <AdminOrderForm /> },
     { path: "/admin/sales-notes", element: <AdminSalesNotes /> },

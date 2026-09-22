@@ -61,10 +61,10 @@ export default function AdminShippingPool() {
   }, [stores]);
 
   const {
-    deliveryMethods,
     deliveryMap,
     ensureStores,
     resetStores,
+    setStoreType,
     setStoreAddress,
     applyStoreAddressFromStores,
     setParcelCount,
@@ -398,8 +398,8 @@ export default function AdminShippingPool() {
         onNotesChange={setNotes}
         isPending={shipMutation.isPending}
         onConfirm={() => shipMutation.mutate()}
-        deliveryMethods={deliveryMethods}
         deliveryMap={deliveryMap}
+        onSetStoreType={setStoreType}
         onSetStoreAddress={setStoreAddress}
         onApplyStoreAddress={applyStoreAddressFromStores}
         onSetParcelCount={setParcelCount}

@@ -1,38 +1,71 @@
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import {
+  formatAddress,
+  getCityDistrictOfPostal,
   getDistrictsOfCity,
   getPostalOf,
   getTaiwanCities,
+  parseTaiwanAddressText,
 } from "@/utils/taiwanAddress";
 
-export interface ShippingAddressValue {
+export type ShippingAddressValue = {
   recipient: string;
   phone: string;
   postal_code: string;
   city: string;
   district: string;
   address: string;
-}
+};
 
 interface ShippingAddressFieldsProps {
   value: ShippingAddressValue;
   onChange: (value: ShippingAddressValue) => void;
   className?: string;
   prefix?: string; // 多實例時 input id 前綴
+  hideContact?: boolean; // 隱藏收件人/電話（如店鋪營業地址）
 }
 
 const EMPTY = { recipient: "", phone: "", postal_code: "", city: "", district: "", address: "" };
 
 // 全站共用：收件地址欄位（縣市→鄉鎮級聯、郵區自動帶出、可手動覆寫郵區）
-export function ShippingAddressFields({ value, onChange, className, prefix = "addr" }: ShippingAddressFieldsProps) {
+export function ShippingAddressFields({ value, onChange, className, prefix = "addr", hideContact = false }: ShippingAddressFieldsProps) {
   const v = { ...EMPTY, ...(value || {}) };
   const districts = v.city ? getDistrictsOfCity(v.city) : [];
   const hintPostal = v.city && v.district ? getPostalOf(v.city, v.district) : null;
+  const { postal_code: vPostal, city: vCity, district: vDistrict, address: vAddress } = v;
 
   const patch = (p: Partial<ShippingAddressValue>) => onChange({ ...v, ...p });
+
+  // 完整地址欄：本元件內部 state（不綁 value）。單向鏈避免循環——
+  // local→parent 只在 blur 解析時寫回；parent→local 只經下方 effect（依 primitive 值，非 v 物件）。
+  const [fullText, setFullText] = useState(() => formatAddress(v));
+  useEffect(() => {
+    setFullText(formatAddress({ postal_code: vPostal, city: vCity, district: vDistrict, address: vAddress }));
+  }, [vPostal, vCity, vDistrict, vAddress]);
+
+  const handleFullBlur = () => {
+    const raw = fullText.trim();
+    if (!raw) return;
+    const parsed = parseTaiwanAddressText(raw);
+    const next: Partial<ShippingAddressValue> = {};
+    if (parsed.postal_code) next.postal_code = parsed.postal_code;
+    if (parsed.city) next.city = parsed.city;
+    if (parsed.district) next.district = parsed.district;
+    if (parsed.address) next.address = parsed.address;
+    if (Object.keys(next).length > 0) onChange({ ...v, ...next });
+    setFullText(formatAddress({ ...v, ...next }));
+  };
+
+  const handlePostalBlur = () => {
+    const code = v.postal_code.trim();
+    if (!code) return;
+    const loc = getCityDistrictOfPostal(code);
+    if (loc) patch({ city: loc.city, district: loc.district });
+  };
 
   const handleCity = (city: string) => {
     const next: Partial<ShippingAddressValue> = { city, district: "" };
@@ -54,26 +87,38 @@ export function ShippingAddressFields({ value, onChange, className, prefix = "ad
 
   return (
     <div className={cn("grid gap-3", className)}>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor={`${prefix}-recipient`}>收件人</Label>
-          <Input
-            id={`${prefix}-recipient`}
-            value={v.recipient}
-            onChange={(e) => patch({ recipient: e.target.value })}
-            placeholder="收件人姓名"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`${prefix}-phone`}>電話</Label>
-          <Input
-            id={`${prefix}-phone`}
-            value={v.phone}
-            onChange={(e) => patch({ phone: e.target.value })}
-            placeholder="聯絡電話"
-          />
-        </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${prefix}-full`}>完整地址（自動分欄）</Label>
+        <Input
+          id={`${prefix}-full`}
+          value={fullText}
+          onChange={(e) => setFullText(e.target.value)}
+          onBlur={handleFullBlur}
+          placeholder="例：640雲林縣斗六市鎮南里中山路286-3號（郵遞區號可省略）"
+        />
       </div>
+      {!hideContact && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor={`${prefix}-recipient`}>收件人</Label>
+            <Input
+              id={`${prefix}-recipient`}
+              value={v.recipient}
+              onChange={(e) => patch({ recipient: e.target.value })}
+              placeholder="收件人姓名"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`${prefix}-phone`}>電話</Label>
+            <Input
+              id={`${prefix}-phone`}
+              value={v.phone}
+              onChange={(e) => patch({ phone: e.target.value })}
+              placeholder="聯絡電話"
+            />
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-[110px_1fr] gap-3">
         <div className="space-y-1.5">
           <Label htmlFor={`${prefix}-postal`}>郵遞區號</Label>
@@ -81,8 +126,8 @@ export function ShippingAddressFields({ value, onChange, className, prefix = "ad
             id={`${prefix}-postal`}
             value={v.postal_code}
             onChange={(e) => patch({ postal_code: e.target.value.replace(/\D/g, "").slice(0, 5) })}
+            onBlur={handlePostalBlur}
             placeholder={hintPostal || "自動帶入"}
-            readOnly={!!hintPostal && v.postal_code === hintPostal}
             className={cn(hintPostal && !v.postal_code && "text-muted-foreground")}
           />
         </div>

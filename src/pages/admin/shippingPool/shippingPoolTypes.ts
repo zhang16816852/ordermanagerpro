@@ -38,7 +38,12 @@ export const getDisplayName = (item: ShippingPoolItem) => {
 };
 
 // ---- 出貨配送（Phase C-4）----
-// 每家店（＝每張銷貨單）共享一份收件地址，可拆多個包裹
+// 每家店（＝每張銷貨單）共享一份收件地址；類型優先決定包裹：
+//   delivery → 銷貨單帶預設送貨方式快照（不建包裹）
+//   logistics → 逐包裹列（方法/費用/成本/追蹤）
+//   pickup → 不建包裹、不寫配送方式
+import type { DeliveryType } from "@/components/shipping/DeliveryMethodPicker";
+
 export interface ShipParcelDraft {
   delivery_method_id: string | null;
   fee: string;
@@ -48,6 +53,7 @@ export interface ShipParcelDraft {
 }
 
 export interface ShipDeliveryState {
+  delivery_type: DeliveryType | null;
   address: {
     recipient: string;
     phone: string;

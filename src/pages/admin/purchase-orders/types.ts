@@ -9,6 +9,7 @@ export interface Supplier {
   address: string | null;
   notes: string | null;
   is_active: boolean;
+  is_logistics_company: boolean;
 }
 
 export type PurchaseOrderPurpose = 'general' | 'repair_parts';

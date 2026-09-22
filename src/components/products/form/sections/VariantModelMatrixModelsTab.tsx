@@ -2,11 +2,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { CheckSquare, Square } from 'lucide-react';
-import { DeviceModel } from '@/types/device-models';
+import { DeviceModelOption } from '@/hooks/useDeviceModels';
 
 interface VariantModelMatrixModelsTabProps {
     variants: any[];
-    filteredModels: DeviceModel[];
+    filteredModels: DeviceModelOption[];
     localLinks: Record<string, Set<string>>;
     toggleLink: (vId: string, mId: string) => void;
     applyRowToAll: (mId: string, checked: boolean) => void;

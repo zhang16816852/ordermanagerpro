@@ -1,5 +1,5 @@
-import { useCallback, useRef, useState } from "react";
-import { useDeliveryMethods, DeliveryMethodOption } from "@/components/shipping/DeliveryMethodPicker";
+import { useCallback, useState } from "react";
+import type { DeliveryType } from "@/components/shipping/DeliveryMethodPicker";
 import { ShipDeliveryMap, ShipParcelDraft, EMPTY_SHIP_ADDRESS, makeEmptyParcel } from "./shippingPoolTypes";
 
 export interface StoreWithAddress {
@@ -14,37 +14,41 @@ export interface StoreWithAddress {
   address: string | null;
 }
 
-// 每家店的配送狀態 hook：地址（共享）＋包裹清單（可拆多包）
+const makeEmptyState = (): ShipDeliveryMap[string] => ({
+  delivery_type: "delivery",
+  address: { ...EMPTY_SHIP_ADDRESS },
+  parcels: [makeEmptyParcel()],
+});
+
+// 每家店的配送狀態 hook：類型（優先）＋地址（共享）＋包裹清單（logistics 可拆多包）
 // state 依 storeId 存放，dialog 開啟／店家切換時自動補齊
 export function useShipDelivery() {
-  const { data: deliveryMethods } = useDeliveryMethods();
   const [deliveryMap, setDeliveryMap] = useState<ShipDeliveryMap>({});
   const [appliedStoreKeys, setAppliedStoreKeys] = useState<Record<string, string>>({});
-  const methodsRef = useRef<DeliveryMethodOption[]>([]);
-  methodsRef.current = deliveryMethods || [];
 
-  const defaultMethodId = useCallback((): string | null => {
-    const d = methodsRef.current.find((m) => m.is_default && m.type === "delivery");
-    return d?.id ?? null;
-  }, []);
-
-  // 確保某店家存在配送 state（缺省建立時用預設配送方式、空地址）
+  // 確保某店家存在配送 state（缺省建立時：類型 delivery、空地址、一空包裹）
   const ensureStore = useCallback((storeId: string) => {
     setDeliveryMap((prev) => {
       if (prev[storeId]) return prev;
-      return { ...prev, [storeId]: { address: { ...EMPTY_SHIP_ADDRESS }, parcels: [makeEmptyParcel(defaultMethodId())] } };
+      return { ...prev, [storeId]: makeEmptyState() };
     });
-  }, [defaultMethodId]);
+  }, []);
 
   // 對話框開／店家選取時確保所有選取店家都有配送 state（由呼叫端觸發 ensureStores）
-
   const ensureStores = useCallback((storeIds: string[]) => {
     storeIds.forEach((sid) => ensureStore(sid));
   }, [ensureStore]);
 
+  const setStoreType = useCallback((storeId: string, deliveryType: DeliveryType | null) => {
+    setDeliveryMap((prev) => {
+      const cur = prev[storeId] || makeEmptyState();
+      return { ...prev, [storeId]: { ...cur, delivery_type: deliveryType } };
+    });
+  }, []);
+
   const setStoreAddress = useCallback((storeId: string, address: ShipDeliveryMap[string]["address"]) => {
     setDeliveryMap((prev) => {
-      const cur = prev[storeId] || { address: { ...EMPTY_SHIP_ADDRESS }, parcels: [makeEmptyParcel()] };
+      const cur = prev[storeId] || makeEmptyState();
       return { ...prev, [storeId]: { ...cur, address } };
     });
   }, []);
@@ -79,17 +83,17 @@ export function useShipDelivery() {
   const setParcelCount = useCallback((storeId: string, count: number) => {
     const n = Math.max(1, Math.floor(count) || 1);
     setDeliveryMap((prev) => {
-      const cur = prev[storeId] || { address: { ...EMPTY_SHIP_ADDRESS }, parcels: [] };
+      const cur = prev[storeId] || makeEmptyState();
       const parcels = [...cur.parcels];
-      while (parcels.length < n) parcels.push(makeEmptyParcel(defaultMethodId()));
+      while (parcels.length < n) parcels.push(makeEmptyParcel());
       while (parcels.length > n) parcels.pop();
       return { ...prev, [storeId]: { ...cur, parcels } };
     });
-  }, [defaultMethodId]);
+  }, []);
 
   const updateParcel = useCallback((storeId: string, index: number, patch: Partial<ShipParcelDraft>) => {
     setDeliveryMap((prev) => {
-      const cur = prev[storeId] || { address: { ...EMPTY_SHIP_ADDRESS }, parcels: [] };
+      const cur = prev[storeId] || makeEmptyState();
       const parcels = cur.parcels.map((p, i) => (i === index ? { ...p, ...patch } : p));
       return { ...prev, [storeId]: { ...cur, parcels } };
     });
@@ -105,11 +109,11 @@ export function useShipDelivery() {
   }, []);
 
   return {
-    deliveryMethods: deliveryMethods || [],
     deliveryMap,
     ensureStore,
     ensureStores,
     resetStores,
+    setStoreType,
     setStoreAddress,
     applyStoreAddressFromStores,
     setParcelCount,

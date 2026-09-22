@@ -7,15 +7,17 @@ import { CreateOrderDialog } from './components/CreateOrderDialog';
 import { OrderDetailDialog } from './components/OrderDetailDialog';
 import { ReportsTab } from './components/ReportsTab';
 import { ConsignmentOrder } from './types';
+import { DocImportDialog } from '@/components/orders/DocImportDialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, ClipboardList, ClipboardCheck, ListOrdered, Building2 } from 'lucide-react';
+import { Plus, ClipboardList, ClipboardCheck, ListOrdered, Building2, FileUp } from 'lucide-react';
 
 export default function AdminConsignment() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'orders');
   const [view, setView] = useState<string>(searchParams.get('view') || 'list');
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [viewingOrder, setViewingOrder] = useState<ConsignmentOrder | null>(null);
   const {
     orders,
@@ -41,9 +43,14 @@ export default function AdminConsignment() {
           <h1 className="text-2xl font-bold tracking-tight">寄賣管理</h1>
           <p className="text-muted-foreground">管理廠商寄賣收貨與店家寄賣出貨、銷售回報審核與結算</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" /> 建立寄賣單
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <FileUp className="h-4 w-4 mr-2" /> 匯入
+          </Button>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" /> 建立寄賣單
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => {
@@ -112,6 +119,12 @@ export default function AdminConsignment() {
       </Tabs>
 
       <CreateOrderDialog open={createOpen} onOpenChange={setCreateOpen} />
+
+      <DocImportDialog
+        kind="consignment"
+        open={importOpen}
+        onOpenChange={setImportOpen}
+      />
 
       <OrderDetailDialog
         order={viewingOrder}

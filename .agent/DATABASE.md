@@ -13,7 +13,7 @@
 |---|---|---|
 | `profiles` | 使用者資料 | id(=auth.users)、email、full_name、phone、line_id、telegram_id |
 | `user_roles` | 系統角色 | user_id、role(`system_role`) |
-| `stores` | 門市 | name、code、brand、owner_id、address、phone |
+| `stores` | 門市 | name、code、brand、owner_id、address、phone、recipient、postal_code/city/district、default_delivery_method_id、business_address/business_city/business_district/business_postal_code |
 | `store_users` | 門市成員 | user_id、store_id、role(`store_role`) |
 | `invitations` | 門市邀請 | email、token、role、status(`invitation_status`)、expires_at、store_id |
 
@@ -194,7 +194,7 @@
   - orders：`OD{YYMMDD}{5碼}`，seq key = `order_YYMMDD`
   - sales_notes：`SL{YYMM}{門市碼}{4碼}`，門市碼 = store.code（null 時取 store.id 前 4 字元），seq key = `sales_YYMM_{store_id}`
 - 維修單：`generate_repair_order_code()` → `RO-YYYYMMDD-XXXXX`（掃當日最大序號+1）
-- 寄賣單：`trgfn_generate_consignment_code()`（BEFORE INSERT OR UPDATE OF status）→ 草稿 `CS-DRAFT-{id 前 8 碼}` 暫存碼，非草稿/activation 時用 `next_consignment_code()` 產 **`CS{YYMM}{店碼}{0001}`**（YYMM 看出貨月份 `shipped_at`，fallback created_at/NOW；店碼 = store.code，receive_from_supplier 或無碼時 `'SP'`；流水 4 位逐月逐店累加，seq key = `consignment_{YYMM}_{store_id|SP}`）
+- 寄賣單：`trgfn_generate_consignment_code()`（BEFORE INSERT OR UPDATE OF status）→ 草稿 `CS-DRAFT-{id 前 8 碼}` 暫存碼，非草稿/activation 時用 `next_consignment_code()` 產 **`CS{YYMM}{店碼}{0001}`**（YYMM 看出貨月份 `shipped_at`，fallback created_at/NOW；店碼 = store.code，receive_from_supplier 或無碼時 `'SP'`。⚠️ 2026-09-21 起流水為**遞補制**：以既有 `consignment_orders.code` 找該店家該月份第一個空缺號碼，不再依賴 system_sequences）
 
 ## 5.1 分享存取權（決定性 token + 隨機 token 並存，2026-09-16）
 
@@ -364,7 +364,7 @@
 
 ### 10.4 單據層欄位（orders / sales_notes / consignment_orders）
 - 三者皆新增：`delivery_method_id`、`delivery_method_title/code`（快照）、`shipping_fee`(NUMERIC NOT NULL DEFAULT 0)、`shipping_cost`(NUMERIC DEFAULT 0)、`shipping_address`(JSONB，`{recipient, phone, postal_code, city, district, address}`)。
-- `stores` 新增：`default_delivery_method_id`、`postal_code/city/district`、`recipient`（收件人姓名，migration `20260921000008`）。
+- `stores` 新增：`default_delivery_method_id`、`postal_code/city/district`、`recipient`（收件人姓名，migration `20260921000008`）；`business_address/business_city/business_district/business_postal_code`（營業地址，與配送/收件地址分開，migration `20260921000009`，回填＝原配送地址快照）。
 - `suppliers.is_logistics_company`（BOOL NOT NULL DEFAULT false）：物流公司身分牌。
 
 ### 10.5 Seed 與既有資料回填
@@ -375,10 +375,11 @@
 
 ### 10.6 Phase B（✅ DB 層已套用，migration `20260921000003~06`）
 - `upsert_shipment`/`delete_shipment`/`_recompute_doc_shipping`（migration 3，見 10.7）：寫包裹後自動重算單據 shipping_fee/cost 並補方法快照。
-- 四支出貨 RPC 尾端新增 `p_delivery_method_id/p_shipping_fee/p_shipping_address`（migration 4，舊簽名以 OVERLOAD 保留）：`create_consignment_shipment_layer`(9)、`create_order_with_sales_note`(10)、`direct_ship_order`(10)、`ship_from_pool`(11)。寄賣分支轉 layer（每寄賣單 1 包）、一般分支每銷貨單 1 包＋`upsert_shipment`；寫單據層快照與 shipping_address（`COALESCE` 保留既有值）；未傳方式完全維持舊行為。
+- 四支出貨 RPC 尾端新增 `p_delivery_method_id/p_shipping_fee/p_shipping_address`（migration `20260921000004`，**已於 `20260921000011` 收斂為單一最長簽名，勿與舊短簽名並存**，見 10.6 註記）：`create_consignment_shipment_layer`(9)、`create_order_with_sales_note`(10)、`direct_ship_order`(10)、`ship_from_pool`(11→12)。寄賣分支轉 layer（每寄賣單 1 包）、一般分支每銷貨單 1 包＋`upsert_shipment`；寫單據層快照與 shipping_address（`COALESCE` 保留既有值）；未傳方式完全維持舊行為。
+- **migration `20260921000011_collapse_overloaded_rpcs.sql`（已套用）**：PostgREST 以具名參數解析時，多 overload 無法選出唯一函數即 **PGRST203**（如「轉銷貨單」 `direct_ship_order` 只傳 6 參數、`create_order_with_sales_note` 少傳配送參數時）。已 DROP 舊短簽名、每函數名只留單一「最長＋尾參數 DEFAULT」版：`create_consignment_shipment_layer`(9)、`create_order_with_sales_note`(10)、`direct_ship_order`(10)、`ship_from_pool`(12)、`adjust_inventory`(4)、`receive_purchase_items`(2)、`bump_data_version`(2)、`compare_product_row`(3，4 參數 compat wrapper 已 DROP)。⚠️ **教訓**：RPC 尾端加 DEFAULT 參數時不可與舊短簽名並存（會成為 overload 致 PGRST203），應 DROP 重建單一新簽名。
 - `register_shipping_settlement` 重寫（migration 5，同 signature 需先 DROP 再 CREATE）：`p_order_item_ids` → `p_shipment_ids`，以 `SUM(shipments.cost)` 結給物流公司、join `delivery_methods` 驗證 supplier、reference_type='shipment' 防重複結算。RETURNS `{period_id, entry_id, total_amount, shipment_count}`。
 - 三分享 RPC 回傳單據層 delivery 快照＋`shipments[]`（migration 5）。⚠️ `shipments` 欄位為 `delivery_method_id/title/code` 三欄分存；首版誤用 jsonb `delivery_method` 於執行時 42703，migration 6 修正。日後一律用三欄。
-- **`ship_from_pool` 動態包裹列（migration `20260921000006`，Phase C-4，已套用）**：新增第 12 參數 `p_delivery_overrides jsonb DEFAULT NULL`（舊 9/11 參數版以 OVERLOAD 保留）——`{ "<store_id>": { "address": {...}, "parcels": [{ delivery_method_id, fee, cost, tracking_company, tracking_number, tracking_url, note }] } }`。有 override 店家：同一店家（＝1 張銷貨單）**拆多包共享地址**（shipping_address 僅寫一次）＋逐包 `upsert_shipment`；包裹 `delivery_method_id IS NULL`（未選方式）跳過；純寄賣店家（無銷貨單、走 `create_consignment_shipment_layer`）僅取首包的 method/fee/address 帶入（寄賣層維持 1 包）。無 override 店家維持舊行為（全局 `p_delivery_method_id/fee/address`→1 包）。
+- **`ship_from_pool` 動態包裹列（migration `20260921000006`，Phase C-4，已套用）**：新增第 12 參數 `p_delivery_overrides jsonb DEFAULT NULL`（已於 `20260921000011` 收斂為單一 12 參數簽名，舊 8/11 參數版已 DROP）——`{ "<store_id>": { "address": {...}, "parcels": [{ delivery_method_id, fee, cost, tracking_company, tracking_number, tracking_url, note }] } }`。有 override 店家：同一店家（＝1 張銷貨單）**拆多包共享地址**（shipping_address 僅寫一次）＋逐包 `upsert_shipment`；包裹 `delivery_method_id IS NULL`（未選方式）跳過；純寄賣店家（無銷貨單、走 `create_consignment_shipment_layer`）僅取首包的 method/fee/address 帶入（寄賣層維持 1 包）。無 override 店家維持舊行為（全局 `p_delivery_method_id/fee/address`→1 包）。
 - **`list_settleable_shipments(p_supplier_id) RETURNS jsonb`（migration `20260921000007`，Phase C-6，已套用）**：SECURITY DEFINER admin 守門；列出該物流公司（`suppliers.is_logistics_company`）**未結算**月結包裹——`shipments.fee_payment='monthly'` 且該方法所屬配送方式綁定該物流商（`delivery_methods.supplier_id`）且無任何已結算期間涵蓋（`accounting_entry_references` join `shipping_settlement_periods`）。回傳欄位 `id/doc_type/doc_id/doc_code/method_id/method_title/method_code/fee/cost/fee_payment/tracking_company/tracking_number/tracking_url/shipped_at/note`，`doc_code` 依 doc_type join orders/sales_notes/consignment_orders 取 code。
 - Phase C（✅ C-1~C-6 全部完成）：`/admin/delivery-methods` 後台管理、配送卡片、ShipDialog 動態包裹列、詳情包裹管理（共用 `useShipments`/`useShipmentMutations`/`ParcelManager`，包裹 CRUD 走 `upsert_shipment`/`delete_shipment` RPC）、Stores 地址/預設方式（`StoresTab` 配送地址＋`DeliveryMethodPicker` 寫 `postal_code/city/district/default_delivery_method_id`）、運費結帳轉 shipments.cost（`useEntryShippingQueries` 改呼叫 `list_settleable_shipments`、`ShippingSettlementSubmission.shipmentIds`、`ShippingSettlementsPage` refs 查詢改 `reference_type='shipment'`）。
 - Phase D（✅ 全部完成，2026-09-21）：門市結帳選方式＋套用店家預設（`CheckoutForm` 以 `["store-info", storeId]` 讀 stores 的 `default_delivery_method_id` 並首次載入套用；`useCreateOrder` 帶 `deliveryMethod/shippingAddress`，`orders.insert` 寫 `delivery_method_id/title/code`＋`shipping_fee`（＝method.price）＋`shipping_address`（空值存 null）；return 增 `shippingFee/grandTotal`）；分享/列印/匯出總額含運費（`getOrderTotal(items, shippingFee?)`、`SharedReceiptExport`/`exportDocExcel` 秀「配送方式＋運費＋總金額含運」）；月結 UI 以成本（C-6 已含）。

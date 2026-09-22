@@ -533,6 +533,7 @@ export type Database = {
           delivery_method_code: string | null
           delivery_method_id: string | null
           delivery_method_title: string | null
+          delivery_type: string | null
           direction: string
           id: string
           note: string | null
@@ -556,6 +557,7 @@ export type Database = {
           delivery_method_code?: string | null
           delivery_method_id?: string | null
           delivery_method_title?: string | null
+          delivery_type?: string | null
           direction: string
           id?: string
           note?: string | null
@@ -579,6 +581,7 @@ export type Database = {
           delivery_method_code?: string | null
           delivery_method_id?: string | null
           delivery_method_title?: string | null
+          delivery_type?: string | null
           direction?: string
           id?: string
           note?: string | null
@@ -2075,6 +2078,7 @@ export type Database = {
           delivery_method_code: string | null
           delivery_method_id: string | null
           delivery_method_title: string | null
+          delivery_type: string | null
           id: string
           notes: string | null
           sales_rep_id: string | null
@@ -2095,6 +2099,7 @@ export type Database = {
           delivery_method_code?: string | null
           delivery_method_id?: string | null
           delivery_method_title?: string | null
+          delivery_type?: string | null
           id?: string
           notes?: string | null
           sales_rep_id?: string | null
@@ -2115,6 +2120,7 @@ export type Database = {
           delivery_method_code?: string | null
           delivery_method_id?: string | null
           delivery_method_title?: string | null
+          delivery_type?: string | null
           id?: string
           notes?: string | null
           sales_rep_id?: string | null
@@ -3620,6 +3626,7 @@ export type Database = {
           delivery_method_code: string | null
           delivery_method_id: string | null
           delivery_method_title: string | null
+          delivery_type: string | null
           id: string
           notes: string | null
           payment_status: string
@@ -3642,6 +3649,7 @@ export type Database = {
           delivery_method_code?: string | null
           delivery_method_id?: string | null
           delivery_method_title?: string | null
+          delivery_type?: string | null
           id?: string
           notes?: string | null
           payment_status?: string
@@ -3664,6 +3672,7 @@ export type Database = {
           delivery_method_code?: string | null
           delivery_method_id?: string | null
           delivery_method_title?: string | null
+          delivery_type?: string | null
           id?: string
           notes?: string | null
           payment_status?: string
@@ -4130,6 +4139,10 @@ export type Database = {
         Row: {
           address: string | null
           brand: string | null
+          business_address: string | null
+          business_city: string | null
+          business_district: string | null
+          business_postal_code: string | null
           city: string | null
           code: string | null
           created_at: string
@@ -4146,6 +4159,10 @@ export type Database = {
         Insert: {
           address?: string | null
           brand?: string | null
+          business_address?: string | null
+          business_city?: string | null
+          business_district?: string | null
+          business_postal_code?: string | null
           city?: string | null
           code?: string | null
           created_at?: string
@@ -4162,6 +4179,10 @@ export type Database = {
         Update: {
           address?: string | null
           brand?: string | null
+          business_address?: string | null
+          business_city?: string | null
+          business_district?: string | null
+          business_postal_code?: string | null
           city?: string | null
           code?: string | null
           created_at?: string
@@ -4693,20 +4714,15 @@ export type Database = {
         Args: { p_invitation_id: string }
         Returns: undefined
       }
-      adjust_inventory:
-        | {
-            Args: { p_created_by: string; p_id: string; p_new_quantity: number }
-            Returns: undefined
-          }
-        | {
-            Args: {
-              p_created_by: string
-              p_id: string
-              p_new_quantity: number
-              p_note?: string
-            }
-            Returns: undefined
-          }
+      adjust_inventory: {
+        Args: {
+          p_created_by: string
+          p_id: string
+          p_new_quantity: number
+          p_note?: string
+        }
+        Returns: undefined
+      }
       allocate_inventory: {
         Args: {
           p_created_by?: string
@@ -4736,12 +4752,10 @@ export type Database = {
         Args: { p_role: string; p_store_id: string; p_user_id: string }
         Returns: undefined
       }
-      bump_data_version:
-        | { Args: { p_table_name: string }; Returns: undefined }
-        | {
-            Args: { p_source_table?: string; p_table_name: string }
-            Returns: undefined
-          }
+      bump_data_version: {
+        Args: { p_source_table?: string; p_table_name: string }
+        Returns: undefined
+      }
       can_access_repair_order: {
         Args: { p_order: Database["public"]["Tables"]["repair_orders"]["Row"] }
         Returns: boolean
@@ -4756,20 +4770,10 @@ export type Database = {
           deleted_count: number
         }[]
       }
-      compare_product_row:
-        | {
-            Args: { p_code: string; p_description: string; p_name: string }
-            Returns: string[]
-          }
-        | {
-            Args: {
-              p_brand_id: string
-              p_code: string
-              p_description: string
-              p_name: string
-            }
-            Returns: string[]
-          }
+      compare_product_row: {
+        Args: { p_code: string; p_description: string; p_name: string }
+        Returns: string[]
+      }
       confirm_consignment_receipt: {
         Args: { p_consignment_order_id: string; p_received_by: string }
         Returns: undefined
@@ -4802,60 +4806,45 @@ export type Database = {
         }
         Returns: Json
       }
-      create_consignment_shipment_layer:
-        | {
-            Args: {
-              p_created_by: string
-              p_notes?: string
-              p_order_items: Json
-              p_shipped_at?: string
-              p_store_id: string
-              p_warehouse_id?: string
-            }
-            Returns: undefined
-          }
-        | {
-            Args: {
-              p_created_by: string
-              p_delivery_method_id?: string
-              p_notes?: string
-              p_order_items: Json
-              p_shipped_at?: string
-              p_shipping_address?: Json
-              p_shipping_fee?: number
-              p_store_id: string
-              p_warehouse_id?: string
-            }
-            Returns: undefined
-          }
-      create_order_with_sales_note:
-        | {
-            Args: {
-              p_consignment_mode?: boolean
-              p_created_by: string
-              p_items?: Json
-              p_notes?: string
-              p_shipped_at?: string
-              p_store_id: string
-              p_warehouse_id?: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_consignment_mode?: boolean
-              p_created_by: string
-              p_delivery_method_id?: string
-              p_items?: Json
-              p_notes?: string
-              p_shipped_at?: string
-              p_shipping_address?: Json
-              p_shipping_fee?: number
-              p_store_id: string
-              p_warehouse_id?: string
-            }
-            Returns: Json
-          }
+      create_consignment_shipment_layer: {
+        Args: {
+          p_created_by: string
+          p_delivery_method_id?: string
+          p_delivery_type?: string
+          p_notes?: string
+          p_order_items: Json
+          p_shipped_at?: string
+          p_shipping_address?: Json
+          p_shipping_cost?: number
+          p_shipping_fee?: number
+          p_store_id: string
+          p_tracking_company?: string
+          p_tracking_number?: string
+          p_tracking_url?: string
+          p_warehouse_id?: string
+        }
+        Returns: undefined
+      }
+      create_order_with_sales_note: {
+        Args: {
+          p_consignment_mode?: boolean
+          p_created_by: string
+          p_delivery_method_id?: string
+          p_delivery_type?: string
+          p_items?: Json
+          p_notes?: string
+          p_shipped_at?: string
+          p_shipping_address?: Json
+          p_shipping_cost?: number
+          p_shipping_fee?: number
+          p_store_id: string
+          p_tracking_company?: string
+          p_tracking_number?: string
+          p_tracking_url?: string
+          p_warehouse_id?: string
+        }
+        Returns: Json
+      }
       deduct_repair_part_stock: {
         Args: {
           p_created_by: string
@@ -4882,34 +4871,26 @@ export type Database = {
       delete_sales_note: { Args: { p_sales_note_id: string }; Returns: Json }
       delete_shipment: { Args: { p_shipment_id: string }; Returns: Json }
       delete_variant_if_safe: { Args: { p_variant_id: string }; Returns: Json }
-      direct_ship_order:
-        | {
-            Args: {
-              p_created_by: string
-              p_notes?: string
-              p_order_id: string
-              p_shipped_at?: string
-              p_source_map?: Json
-              p_warehouse_id?: string
-              p_warehouse_map?: Json
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_created_by: string
-              p_delivery_method_id?: string
-              p_notes?: string
-              p_order_id: string
-              p_shipped_at?: string
-              p_shipping_address?: Json
-              p_shipping_fee?: number
-              p_source_map?: Json
-              p_warehouse_id?: string
-              p_warehouse_map?: Json
-            }
-            Returns: Json
-          }
+      direct_ship_order: {
+        Args: {
+          p_created_by: string
+          p_delivery_method_id?: string
+          p_delivery_type?: string
+          p_notes?: string
+          p_order_id: string
+          p_shipped_at?: string
+          p_shipping_address?: Json
+          p_shipping_cost?: number
+          p_shipping_fee?: number
+          p_source_map?: Json
+          p_tracking_company?: string
+          p_tracking_number?: string
+          p_tracking_url?: string
+          p_warehouse_id?: string
+          p_warehouse_map?: Json
+        }
+        Returns: Json
+      }
       duplicate_product_with_variants: {
         Args: { new_name: string; new_sku?: string; target_product_id: string }
         Returns: string
@@ -4977,7 +4958,25 @@ export type Database = {
         }
         Returns: boolean
       }
+      import_consignment_batch: {
+        Args: { p_created_by?: string; p_rows: Json }
+        Returns: Json
+      }
+      import_orders_batch: {
+        Args: { p_created_by?: string; p_rows: Json }
+        Returns: Json
+      }
       import_product_batch: { Args: { p_items: Json }; Returns: Json }
+      import_resolve_item: {
+        Args: { p_item_name?: string; p_sku: string }
+        Returns: Json
+      }
+      import_resolve_store: { Args: { p_code: string }; Returns: Json }
+      import_resolve_supplier: { Args: { p_code: string }; Returns: Json }
+      import_sales_notes_batch: {
+        Args: { p_created_by?: string; p_rows: Json }
+        Returns: Json
+      }
       is_rep: { Args: { _user_id: string }; Returns: boolean }
       is_rep_store: {
         Args: { _store_id: string; _user_id: string }
@@ -5065,12 +5064,10 @@ export type Database = {
         }
         Returns: undefined
       }
-      receive_purchase_items:
-        | { Args: { p_items: Json }; Returns: undefined }
-        | {
-            Args: { p_items: Json; p_warehouse_id?: string }
-            Returns: undefined
-          }
+      receive_purchase_items: {
+        Args: { p_items: Json; p_warehouse_id?: string }
+        Returns: undefined
+      }
       register_batch_rep_commission_payout: {
         Args: {
           p_account_id: string
@@ -5190,53 +5187,28 @@ export type Database = {
         Returns: string
       }
       share_token_for_code: { Args: { p_code: string }; Returns: string }
-      ship_from_pool:
-        | {
-            Args: {
-              p_consignment_override_map?: Json
-              p_created_by: string
-              p_notes?: string
-              p_shipped_at?: string
-              p_source_map?: Json
-              p_store_ids: string[]
-              p_warehouse_id?: string
-              p_warehouse_map?: Json
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_consignment_override_map?: Json
-              p_created_by: string
-              p_delivery_method_id?: string
-              p_notes?: string
-              p_shipped_at?: string
-              p_shipping_address?: Json
-              p_shipping_fee?: number
-              p_source_map?: Json
-              p_store_ids: string[]
-              p_warehouse_id?: string
-              p_warehouse_map?: Json
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_consignment_override_map?: Json
-              p_created_by: string
-              p_delivery_method_id?: string
-              p_delivery_overrides?: Json
-              p_notes?: string
-              p_shipped_at?: string
-              p_shipping_address?: Json
-              p_shipping_fee?: number
-              p_source_map?: Json
-              p_store_ids: string[]
-              p_warehouse_id?: string
-              p_warehouse_map?: Json
-            }
-            Returns: Json
-          }
+      ship_from_pool: {
+        Args: {
+          p_consignment_override_map?: Json
+          p_created_by: string
+          p_delivery_method_id?: string
+          p_delivery_overrides?: Json
+          p_delivery_type?: string
+          p_notes?: string
+          p_shipped_at?: string
+          p_shipping_address?: Json
+          p_shipping_cost?: number
+          p_shipping_fee?: number
+          p_source_map?: Json
+          p_store_ids: string[]
+          p_tracking_company?: string
+          p_tracking_number?: string
+          p_tracking_url?: string
+          p_warehouse_id?: string
+          p_warehouse_map?: Json
+        }
+        Returns: Json
+      }
       sync_product_specs_v6: {
         Args: {
           p_category_id: string

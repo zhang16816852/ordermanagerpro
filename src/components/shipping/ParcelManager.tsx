@@ -152,7 +152,8 @@ export function ParcelManager({
 
       {visibleDrafts.map((d, idx) => {
         const original = d.shipmentId ? shipments.find((s) => s.id === d.shipmentId) : undefined;
-        const dirty = editable && !!original && fromDraft(original, d);
+        const hasContent = !!(d.deliveryMethodId || d.fee || d.cost || d.trackingCompany || d.trackingNumber || d.trackingUrl || d.note);
+        const dirty = editable && (original ? fromDraft(original, d) : hasContent);
         return (
           <div key={d.key} className="rounded-lg border p-3 space-y-2">
             <div className="flex items-center justify-between">

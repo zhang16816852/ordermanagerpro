@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Send, PackagePlus } from "lucide-react";
 import { formatCurrency } from '@/lib/formatters';
 import { GroupedByStore, getDisplayName, ShipDeliveryState, ShipParcelDraft, EMPTY_SHIP_ADDRESS } from "./shippingPoolTypes";
-import { DeliveryMethodOption, DeliveryMethodPicker } from "@/components/shipping/DeliveryMethodPicker";
+import { useDeliveryMethods, DeliveryMethodPicker, DeliveryTypePicker } from "@/components/shipping/DeliveryMethodPicker";
 import { ShippingAddressFields } from "@/components/shipping/ShippingAddressFields";
 import { StoreWithAddress } from "./useShipDelivery";
 
@@ -33,8 +33,8 @@ interface ShipDialogProps {
   isPending: boolean;
   onConfirm: () => void;
   // 配送（Phase C-4）
-  deliveryMethods: DeliveryMethodOption[];
   deliveryMap: Record<string, ShipDeliveryState>;
+  onSetStoreType: (storeId: string, deliveryType: ShipDeliveryState["delivery_type"]) => void;
   onSetStoreAddress: (storeId: string, address: ShipDeliveryState["address"]) => void;
   onApplyStoreAddress: (storeId: string, store?: StoreWithAddress) => void;
   onSetParcelCount: (storeId: string, count: number) => void;
@@ -60,14 +60,15 @@ export function ShipDialog({
   onNotesChange,
   isPending,
   onConfirm,
-  deliveryMethods,
   deliveryMap,
+  onSetStoreType,
   onSetStoreAddress,
   onApplyStoreAddress,
   onSetParcelCount,
   onUpdateParcel,
   storesById,
 }: ShipDialogProps) {
+  const { data: deliveryMethods = [] } = useDeliveryMethods();
   const selectedGroups = groups.filter(g => selectedStores.has(g.storeId));
 
   return (
@@ -102,7 +103,12 @@ export function ShipDialog({
           {selectedGroups.map(group => {
             const groupTotal = group.items.reduce((sum, item) => sum + item.quantity * (item.order_item?.unit_price || 0), 0);
             const delivery = deliveryMap[group.storeId];
+            const deliveryType = delivery?.delivery_type || "delivery";
             const parcels: ShipParcelDraft[] = delivery?.parcels || [{ delivery_method_id: null, fee: "", cost: "", tracking_company: "", tracking_number: "" }];
+            const parcelFees = parcels.reduce(
+              (sum, p) => sum + (p.fee !== "" ? Number(p.fee) || 0 : 0),
+              0
+            );
             const store = storesById[group.storeId];
             return (
               <div key={group.storeId} className="space-y-3 border rounded p-3">
@@ -177,15 +183,30 @@ export function ShipDialog({
                   </TableBody>
                 </Table>
                 <div className="text-right text-sm font-bold">
-                  合計：{formatCurrency(groupTotal)}
+                  合計：
+                  {groupTotal && parcelFees
+                    ? `${formatCurrency(groupTotal)}＋${formatCurrency(parcelFees)}運費＝${formatCurrency(groupTotal + parcelFees)}`
+                    : formatCurrency(groupTotal + parcelFees)}
                 </div>
 
-                {/* 配送設定（每店家 1 組地址，可拆多包裹） */}
+                {/* 配送設定（每店家 1 組類型＋地址；logistics 可拆多包裹） */}
                 <div className="rounded-lg border bg-card p-3 space-y-3">
                   <div className="flex items-center gap-2 font-semibold text-sm">
                     <PackagePlus className="h-4 w-4" />
-                    配送方式（{group.storeName}）
+                    配送類型（{group.storeName}）
                   </div>
+                  <DeliveryTypePicker
+                    value={deliveryType}
+                    onValueChange={(t) => onSetStoreType(group.storeId, t)}
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    {deliveryType === "logistics"
+                      ? "物流配送：逐包裹選配送方式、填追蹤資訊"
+                      : deliveryType === "pickup"
+                        ? "自取：不產生包裹、不寫配送方式"
+                        : "送貨：以預設送貨方式出貨（不另建包裹）"}
+                  </div>
+                  {deliveryType === "logistics" && (<>
                   <div className="grid sm:grid-cols-[1fr_auto] gap-3">
                     <ShippingAddressFields
                       value={delivery?.address || EMPTY_SHIP_ADDRESS}
@@ -277,6 +298,7 @@ export function ShipDialog({
                       })}
                     </TableBody>
                   </Table>
+                  </>)}
                 </div>
               </div>
             );

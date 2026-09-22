@@ -2,13 +2,15 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Store, Send, RotateCcw } from 'lucide-react';
-import { WarehouseSelector } from '@/components/WarehouseSelector';
+import { Store, RotateCcw } from 'lucide-react';
 import { Order } from '@/types/order';
-import { getDisplayProductName } from './orderListUtils';
+import { DeliveryType } from '@/components/shipping/DeliveryMethodPicker';
+import {
+  DirectShipDialog as SharedDirectShipDialog,
+  DirectShipDelivery, DirectShipOrderContext,
+} from '@/components/orders/DirectShipDialog';
 
 interface ConvertToConsignmentDialogProps {
   open: boolean;
@@ -65,7 +67,6 @@ interface DirectShipDialogProps {
   onOpenChange: (open: boolean) => void;
   orders: Order[];
   selectedOrderIds: Set<string>;
-  allSelectedConsignment: boolean;
   directShipAt: string;
   onDirectShipAtChange: (v: string) => void;
   directShipNotes: string;
@@ -73,7 +74,7 @@ interface DirectShipDialogProps {
   getItemWarehouse: (itemId: string) => string;
   onItemWarehouseChange: (itemId: string, warehouseId: string) => void;
   isPending: boolean;
-  onConfirm: () => void;
+  onConfirm: (delivery: DirectShipDelivery) => void;
 }
 
 export function DirectShipDialog({
@@ -81,7 +82,6 @@ export function DirectShipDialog({
   onOpenChange,
   orders,
   selectedOrderIds,
-  allSelectedConsignment,
   directShipAt,
   onDirectShipAtChange,
   directShipNotes,
@@ -91,79 +91,42 @@ export function DirectShipDialog({
   isPending,
   onConfirm,
 }: DirectShipDialogProps) {
+  const contexts: DirectShipOrderContext[] = orders
+    .filter((o) => selectedOrderIds.has(o.id))
+    .map((order) => ({
+      id: order.id,
+      code: order.code,
+      storeName: order.stores?.name || undefined,
+      consignmentMode: order.consignment_mode,
+      deliveryType: (order.delivery_type as DeliveryType) || null,
+      deliveryMethodId: order.delivery_method_id,
+      deliveryMethodTitle: order.delivery_method_title,
+      defaultDeliveryMethodId: order.stores?.default_delivery_method_id || null,
+      items: order.order_items
+        .filter((item) => item.status !== 'cancelled' && item.status !== 'discontinued' && (item.quantity - item.shipped_quantity) > 0)
+        .map((item) => ({
+          id: item.id,
+          productId: item.product_id,
+          variantId: item.variant_id,
+          name: item.product_variant?.name || item.product?.name || item.id,
+          quantity: item.quantity - item.shipped_quantity,
+        })),
+    }));
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Send className="h-5 w-5" />
-            {allSelectedConsignment ? '寄賣出貨' : '直接轉銷貨單'}
-          </DialogTitle>
-          <DialogDescription>
-            {allSelectedConsignment
-              ? '所有品項將以寄賣模式出貨（不開立銷貨單），店家確認收貨並回報銷售後才會開收款單。'
-              : '為每個品項選擇出貨倉庫，所有剩餘數量將全額出貨。'}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium">出貨時間</label>
-              <Input
-                type="datetime-local"
-                value={directShipAt}
-                onChange={(e) => onDirectShipAtChange(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">備註（選填）</label>
-              <Textarea
-                value={directShipNotes}
-                onChange={(e) => onDirectShipNotesChange(e.target.value)}
-                placeholder="輸入出貨備註..."
-                className="mt-1"
-              />
-            </div>
-          </div>
-          <div className="rounded-lg border divide-y max-h-96 overflow-y-auto">
-            {orders.filter(o => selectedOrderIds.has(o.id)).map(order => (
-              <div key={order.id}>
-                <div className="px-3 py-2 bg-muted/30 font-medium text-sm">{order.code} - {order.stores?.name || '未知店家'}</div>
-                <div className="divide-y">
-                  {order.order_items
-                    .filter(item => item.status !== 'cancelled' && item.status !== 'discontinued' && (item.quantity - item.shipped_quantity) > 0)
-                    .map(item => (
-                      <div key={item.id} className="flex items-center gap-3 px-3 py-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm truncate">{getDisplayProductName(item.product?.name, item.product_variant?.name)}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {item.product?.code} × {item.quantity - item.shipped_quantity}
-                          </div>
-                        </div>
-                        <WarehouseSelector
-                          value={getItemWarehouse(item.id)}
-                          onChange={(w) => onItemWarehouseChange(item.id, w)}
-                          productId={item.product_id}
-                          variantId={item.variant_id}
-                        />
-                      </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            取消
-          </Button>
-          <Button onClick={onConfirm} disabled={isPending}>
-            {isPending ? '處理中...' : allSelectedConsignment ? '確認寄賣出貨' : '確認轉銷貨單'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <SharedDirectShipDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      orders={contexts}
+      shippedAt={directShipAt}
+      onShippedAtChange={onDirectShipAtChange}
+      notes={directShipNotes}
+      onNotesChange={onDirectShipNotesChange}
+      getItemWarehouse={getItemWarehouse}
+      onItemWarehouseChange={onItemWarehouseChange}
+      isPending={isPending}
+      onConfirm={(delivery) => onConfirm(delivery)}
+    />
   );
 }
 

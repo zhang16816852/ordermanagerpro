@@ -17,6 +17,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Plus, Search, Users, Pencil, Store } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +33,10 @@ export function StoresTab({ c }: { c: StoresController }) {
     const parts = [s.postal_code, s.city, s.district, s.address].filter(Boolean);
     return parts.length > 0 ? parts.join('') : null;
   };
+  const formatBusinessAddress = (s: any) => {
+    const parts = [s.business_postal_code, s.business_city, s.business_district, s.business_address].filter(Boolean);
+    return parts.length > 0 ? parts.join('') : null;
+  };
   const [address, setAddress] = useState<ShippingAddressValue>(() => {
     const s = (c.editingStore as any) || {};
     return {
@@ -43,6 +48,18 @@ export function StoresTab({ c }: { c: StoresController }) {
       address: s.address || '',
     };
   });
+  const [businessAddress, setBusinessAddress] = useState<ShippingAddressValue>(() => {
+    const s = (c.editingStore as any) || {};
+    return {
+      recipient: '',
+      phone: '',
+      postal_code: s.business_postal_code || '',
+      city: s.business_city || '',
+      district: s.business_district || '',
+      address: s.business_address || '',
+    };
+  });
+  const [sameAsBusiness, setSameAsBusiness] = useState(false);
   const [defaultMethodId, setDefaultMethodId] = useState<string | null>((c.editingStore as any)?.default_delivery_method_id || null);
 
   // 切換編輯店家時同步地址與預設方式
@@ -56,8 +73,29 @@ export function StoresTab({ c }: { c: StoresController }) {
       district: s.district || '',
       address: s.address || '',
     });
+    setBusinessAddress({
+      recipient: '',
+      phone: '',
+      postal_code: s.business_postal_code || '',
+      city: s.business_city || '',
+      district: s.business_district || '',
+      address: s.business_address || '',
+    });
+    setSameAsBusiness(false);
     setDefaultMethodId(s.default_delivery_method_id || null);
   }, [c.editingStore, c.isStoreDialogOpen]);
+
+  // 勾選「收件地址同營業地址」→ 將營業地址複製到配送地址（僅地址欄，收件人/電話保留）
+  useEffect(() => {
+    if (!sameAsBusiness) return;
+    setAddress((prev) => ({
+      ...prev,
+      postal_code: businessAddress.postal_code,
+      city: businessAddress.city,
+      district: businessAddress.district,
+      address: businessAddress.address,
+    }));
+  }, [sameAsBusiness, businessAddress]);
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -77,7 +115,7 @@ export function StoresTab({ c }: { c: StoresController }) {
               新增店鋪
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{c.editingStore ? '編輯店鋪' : '新增店鋪'}</DialogTitle>
               <DialogDescription>請輸入店鋪的基本聯絡資訊與系統識別代碼。</DialogDescription>
@@ -98,14 +136,36 @@ export function StoresTab({ c }: { c: StoresController }) {
                 <Input id="brand" name="brand" defaultValue={(c.editingStore as any)?.brand || ''} placeholder="例：雷神快修" />
               </div>
               <div className="space-y-2">
-                <Label>配送地址（收件人/電話/郵區，供配送方式預填）</Label>
+                <Label>營業地址</Label>
                 <ShippingAddressFields
-                  value={address}
-                  onChange={setAddress}
-                  prefix="store-addr"
+                  value={businessAddress}
+                  onChange={setBusinessAddress}
+                  prefix="store-biz-addr"
+                  hideContact
                   className="rounded-lg border p-3"
                 />
               </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="store-same-as-business"
+                  checked={sameAsBusiness}
+                  onCheckedChange={(checked) => setSameAsBusiness(checked === true)}
+                />
+                <Label htmlFor="store-same-as-business" className="cursor-pointer font-normal">
+                  收件地址同營業地址（自動複製地址欄）
+                </Label>
+              </div>
+              {!sameAsBusiness && (
+                <div className="space-y-2">
+                  <Label>配送地址（收件人/電話/郵區，供配送方式預填）</Label>
+                  <ShippingAddressFields
+                    value={address}
+                    onChange={setAddress}
+                    prefix="store-addr"
+                    className="rounded-lg border p-3"
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>預設配送方式</Label>
                 <DeliveryMethodPicker
@@ -122,6 +182,10 @@ export function StoresTab({ c }: { c: StoresController }) {
               <input type="hidden" name="postal_code" value={address.postal_code} />
               <input type="hidden" name="city" value={address.city} />
               <input type="hidden" name="district" value={address.district} />
+              <input type="hidden" name="business_address" value={businessAddress.address} />
+              <input type="hidden" name="business_postal_code" value={businessAddress.postal_code} />
+              <input type="hidden" name="business_city" value={businessAddress.city} />
+              <input type="hidden" name="business_district" value={businessAddress.district} />
               <input type="hidden" name="default_delivery_method_id" value={defaultMethodId || ''} />
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => { c.setIsStoreDialogOpen(false); c.setEditingStore(null); }}>
@@ -179,6 +243,7 @@ export function StoresTab({ c }: { c: StoresController }) {
                   <TableCell className="text-muted-foreground max-w-[260px]">
                     {(() => {
                       const full = formatFullAddress(store);
+                      const biz = formatBusinessAddress(store);
                       return (
                         <div className="min-w-0">
                           {(store as any).recipient && (
@@ -188,6 +253,9 @@ export function StoresTab({ c }: { c: StoresController }) {
                             </div>
                           )}
                           <div className="truncate">{full || '-'}</div>
+                          {biz && biz !== full && (
+                            <div className="truncate text-xs text-muted-foreground/80">營業：{biz}</div>
+                          )}
                         </div>
                       );
                     })()}
@@ -254,6 +322,13 @@ export function StoresTab({ c }: { c: StoresController }) {
                   {formatFullAddress(store) && (
                     <p className="text-xs text-muted-foreground truncate">{formatFullAddress(store)}</p>
                   )}
+                  {(() => {
+                    const full = formatFullAddress(store);
+                    const biz = formatBusinessAddress(store);
+                    return biz && biz !== full ? (
+                      <p className="text-xs text-muted-foreground/80 truncate">營業：{biz}</p>
+                    ) : null;
+                  })()}
                   <Button
                     variant="ghost"
                     size="sm"

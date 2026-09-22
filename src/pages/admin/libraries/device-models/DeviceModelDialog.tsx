@@ -40,20 +40,23 @@ const ASPECT_FIELDS: { key: SpecAspectKey; label: string; example: string }[] = 
   { key: 'cpu_options', label: 'CPU', example: 'A17 Pro' },
 ];
 
+const asSpecs = (v: unknown): Record<string, unknown> =>
+  v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+
 function useSpecs(editingData: Partial<DeviceModel> | null, setEditingData: DeviceModelDialogProps['setEditingData']) {
-  const specs = editingData?.specifications || {};
+  const specs = asSpecs(editingData?.specifications);
   const get = (key: SpecAspectKey): string[] => (Array.isArray(specs[key]) ? specs[key] as string[] : []);
   const set = (key: SpecAspectKey, values: string[]) => {
     setEditingData(prev => ({
       ...prev!,
-      specifications: { ...(prev?.specifications || {}), [key]: values },
+      specifications: { ...asSpecs(prev?.specifications), [key]: values },
     }));
   };
   const versions: VersionRow[] = Array.isArray(specs.versions) ? specs.versions as VersionRow[] : [];
   const setVersions = (rows: VersionRow[]) => {
     setEditingData(prev => ({
       ...prev!,
-      specifications: { ...(prev?.specifications || {}), versions: rows },
+      specifications: { ...asSpecs(prev?.specifications), versions: rows },
     }));
   };
   return { get, set, versions, setVersions, specs };
