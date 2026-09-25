@@ -4,11 +4,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Package, Check, CreditCard, Calendar, Store, Info, Pencil, RotateCcw } from "lucide-react";
+import { Package, Check, CreditCard, Calendar, Store, Info, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { SalesNoteStatusBadge } from "./SalesNoteStatusBadge";
-import { SalesReturnDialog } from "./SalesReturnDialog";
 import { SalesNoteCorrectDialog } from "./SalesNoteCorrectDialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -33,6 +32,8 @@ export interface SalesNoteItem {
     unitPrice?: number;
     sortOrder?: number;
     returnedQuantity?: number;
+    lineType?: "sale" | "exchange" | "return" | null;
+    lineNote?: string | null;
 }
 
 export interface SalesNoteDetail {
@@ -72,7 +73,6 @@ interface SalesNoteDetailDialogProps {
     isConfirming?: boolean;
     enablePayment?: boolean;
     showSku?: boolean;
-    enableReturn?: boolean;
     enableCorrect?: boolean;
     parcelEditable?: boolean;
 }
@@ -85,14 +85,12 @@ export function SalesNoteDetailDialog({
     isConfirming,
     enablePayment = false,
     showSku = true,
-    enableReturn = false,
     enableCorrect = false,
     parcelEditable = false
 }: SalesNoteDetailDialogProps) {
     const { user } = useAuth();
     const queryClient = useQueryClient();
     const [entryDialogOpen, setEntryDialogOpen] = useState(false);
-    const [returnDialogOpen, setReturnDialogOpen] = useState(false);
     const [correctDialogOpen, setCorrectDialogOpen] = useState(false);
     const [editingDate, setEditingDate] = useState(false);
     const [newShippedDate, setNewShippedDate] = useState("");
@@ -121,7 +119,7 @@ export function SalesNoteDetailDialog({
             if (error) throw error;
             return (data || []) as Account[];
         },
-        enabled: open && (enablePayment || enableReturn),
+        enabled: open && enablePayment,
     });
 
     const { data: categories = [] } = useQuery({
@@ -211,10 +209,38 @@ export function SalesNoteDetailDialog({
                 }
             }
 
-            // 用 RPC 統一同步收款狀態（同時檢查 entry row 和 references 子表）
-            const { error: noteError } = await (supabase as any)
-                .rpc('sync_sales_note_payment_status', { p_sales_note_id: note.id });
-            if (noteError) throw noteError;
+            // 用 RPC 統一同步收款狀態——必須涵蓋 entry row 綁定的單據與 references 子表全部單據
+            // （例如在收款對話框內把 B 加進單據清單時，A 與 B 都要同步，不能只同步 note.id）
+            const salesNoteIds = new Set<string>([note.id]);
+            if (data.reference_type === 'sales_note' && data.reference_id) {
+                salesNoteIds.add(data.reference_id);
+            }
+            for (const ref of references || []) {
+                if (ref.reference_type === 'sales_note' && ref.reference_id) {
+                    salesNoteIds.add(ref.reference_id);
+                }
+            }
+            for (const noteId of salesNoteIds) {
+                const { error: noteError } = await (supabase as any)
+                    .rpc('sync_sales_note_payment_status', { p_sales_note_id: noteId });
+                if (noteError) throw noteError;
+            }
+
+            // 同一筆分錄可能同時關聯維修單（跨單結帳），維修單收款狀態也必須同步
+            const repairOrderIds = new Set<string>();
+            if (data.reference_type === 'repair_order' && data.reference_id) {
+                repairOrderIds.add(data.reference_id);
+            }
+            for (const ref of references || []) {
+                if (ref.reference_type === 'repair_order' && ref.reference_id) {
+                    repairOrderIds.add(ref.reference_id);
+                }
+            }
+            for (const roId of repairOrderIds) {
+                const { error: repairError } = await (supabase as any)
+                    .rpc('sync_repair_order_payment_status', { p_repair_order_id: roId });
+                if (repairError) throw repairError;
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['accounts'] });
@@ -222,6 +248,7 @@ export function SalesNoteDetailDialog({
             queryClient.invalidateQueries({ queryKey: ['sales-note-payment'] });
             queryClient.invalidateQueries({ queryKey: ['admin-sales-notes'] });
             queryClient.invalidateQueries({ queryKey: ['store-sales-notes'] });
+            queryClient.invalidateQueries({ queryKey: ['repair_orders'] });
             setEntryDialogOpen(false);
             toast.success('收款已記錄');
         },
@@ -399,8 +426,12 @@ export function SalesNoteDetailDialog({
                                             <TableCell>
                                                 <div className="font-medium product-name-cell">
                                                     {item.variantName ? item.variantName : item.productName}
+                                                    {item.lineType === "exchange" && (
+                                                        <Badge variant="outline" className="ml-2 bg-sky-50 text-sky-700 border-sky-200">換貨</Badge>
+                                                    )}
                                                 </div>
                                                 {showSku && <div className="text-xs text-muted-foreground font-mono mt-0.5">{item.productSku}</div>}
+                                                {item.lineNote && <div className="text-xs text-muted-foreground mt-0.5">備註：{item.lineNote}</div>}
                                                 {!!item.returnedQuantity && (
                                                     <Badge variant="outline" className="mt-1 text-orange-600 border-orange-300 bg-orange-50">
                                                         已退 {item.returnedQuantity}
@@ -424,8 +455,12 @@ export function SalesNoteDetailDialog({
                                     <CardContent className="p-3 space-y-2 text-sm">
                                         <div className="font-medium flex flex-wrap gap-1 items-center product-name-cell">
                                             {item.variantName ? item.variantName : item.productName}
+                                            {item.lineType === "exchange" && (
+                                                <Badge variant="outline" className="bg-sky-50 text-sky-700 border-sky-200">換貨</Badge>
+                                            )}
                                         </div>
                                         {showSku && <div className="text-xs text-muted-foreground font-mono">{item.productSku}</div>}
+                                        {item.lineNote && <div className="text-xs text-muted-foreground">備註：{item.lineNote}</div>}
                                         {!!item.returnedQuantity && (
                                             <div>
                                                 <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">
@@ -470,17 +505,6 @@ export function SalesNoteDetailDialog({
                                 >
                                     <CreditCard className="h-4 w-4 mr-2" />
                                     {existingPayment ? "已完成收款登記" : "登記收款"}
-                                </Button>
-                            )}
-                            {enableReturn && (note.status === 'shipped' || note.status === 'received') && (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="w-full sm:w-auto text-orange-600 border-orange-300 hover:bg-orange-50"
-                                    onClick={() => setReturnDialogOpen(true)}
-                                >
-                                    <RotateCcw className="h-4 w-4 mr-2" />
-                                    退貨登記
                                 </Button>
                             )}
                             {enableCorrect && note.status !== 'received' && note.payment_status !== 'paid' && (
@@ -563,14 +587,6 @@ export function SalesNoteDetailDialog({
                     }],
                 }}
                 onSubmit={(data, references) => receivePaymentMutation.mutate({ data, references })}
-            />
-
-            {/* 退貨對話框 */}
-            <SalesReturnDialog
-                open={returnDialogOpen}
-                onOpenChange={setReturnDialogOpen}
-                note={note}
-                accounts={accounts}
             />
 
             {/* 修正對話框 */}

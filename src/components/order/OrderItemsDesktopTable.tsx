@@ -18,7 +18,9 @@ import {
 import { formatCurrency } from '@/lib/formatters';
 import { handleColumnNav, selectOnFocus } from './orderItemsHelpers';
 import { SortableTableRow } from './SortableTableRow';
-import type { KeyOption, NameSort, OrderItemRow, ViewMode } from './orderItemsTypes';
+import { LineTypeBadge, LineTypePicker } from './LineTypeBadge';
+import type { KeyOption, LineTypeOption, NameSort, OrderItemRow, ViewMode } from './orderItemsTypes';
+import { displayQty, lineAmount } from './orderItemsTypes';
 
 interface OrderItemsDesktopTableProps {
     items: OrderItemRow[];
@@ -38,6 +40,7 @@ interface OrderItemsDesktopTableProps {
     onSplit?: (index: number) => void;
     onRemove: (index: number) => void;
     onDragEnd: (event: DragEndEvent) => void;
+    onUpdateLineType?: (index: number, lineType: LineTypeOption) => void;
     getComponentInfo: (item: OrderItemRow) => { name: string };
     getVariantWithOptions: (item: OrderItemRow) => { keyOptions: KeyOption[] };
 }
@@ -60,6 +63,7 @@ export function OrderItemsDesktopTable({
     onSplit,
     onRemove,
     onDragEnd,
+    onUpdateLineType,
     getComponentInfo,
     getVariantWithOptions,
 }: OrderItemsDesktopTableProps) {
@@ -135,13 +139,13 @@ export function OrderItemsDesktopTable({
                                 ? sortedItems.map((item, index) => {
                                     const { keyOptions } = getVariantWithOptions(item);
                                     return (
-                                        <SortableTableRow key={item.id} item={item} index={index} viewMode={viewMode} keyOptions={keyOptions}>
+                                        <SortableTableRow key={item.id} item={item} index={index} viewMode={viewMode} keyOptions={keyOptions} onUpdateLineType={onUpdateLineType}>
                                             <TableCell>
                                                 {isEditable ? (
                                                     <Input
                                                         type="number"
-                                                        value={item.quantity}
-                                                        onChange={(e) => onUpdateQuantity(index, parseInt(e.target.value) || 1)}
+                                                        value={displayQty(item)}
+                                                        onChange={(e) => onUpdateQuantity(index, Math.abs(parseInt(e.target.value) || 1))}
                                                         onKeyDown={(e) => handleColumnNav(e, 'qty')}
                                                         onFocus={selectOnFocus}
                                                         data-col="qty"
@@ -149,11 +153,11 @@ export function OrderItemsDesktopTable({
                                                         min={1}
                                                     />
                                                 ) : (
-                                                    <span>{item.quantity}</span>
+                                                    <span>{displayQty(item)}</span>
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                {showPriceInput ? (
+                                                {showPriceInput && (item.lineType ?? 'sale') === 'sale' ? (
                                                     <Input
                                                         type="number"
                                                         value={item.unitPrice}
@@ -168,14 +172,18 @@ export function OrderItemsDesktopTable({
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right font-semibold">
-                                                {formatCurrency(item.quantity * item.unitPrice)}
+                                                {formatCurrency(lineAmount(item))}
                                             </TableCell>
                                             {showPriceSync && (
                                                 <TableCell className="text-center">
-                                                    <Checkbox
-                                                        checked={priceSyncMap?.[item.id] ?? false}
-                                                        onCheckedChange={(checked) => onTogglePriceSync?.(item.id, !!checked)}
-                                                    />
+                                                    {(item.lineType ?? 'sale') === 'sale' ? (
+                                                        <Checkbox
+                                                            checked={priceSyncMap?.[item.id] ?? false}
+                                                            onCheckedChange={(checked) => onTogglePriceSync?.(item.id, !!checked)}
+                                                        />
+                                                    ) : (
+                                                        <span className="text-muted-foreground">—</span>
+                                                    )}
                                                 </TableCell>
                                             )}
                                             {isEditable && (
@@ -216,6 +224,9 @@ export function OrderItemsDesktopTable({
                                                         <span className="text-xs font-mono text-muted-foreground">
                                                             {item.selectedModelName && <span className="ml-2">{item.selectedModelName}</span>}
                                                         </span>
+                                                        <span className="inline-flex items-center gap-1 flex-wrap">
+                                                            {onUpdateLineType ? <LineTypePicker row={item} index={index} onUpdate={onUpdateLineType} /> : <LineTypeBadge row={item} />}
+                                                        </span>
                                                     </div>
                                                 </TableCell>
                                             ) : (
@@ -223,6 +234,7 @@ export function OrderItemsDesktopTable({
                                                     <TableCell className="font-medium">
                                                         {name}
                                                         {item.isNew && <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 border-green-200">新增</Badge>}
+                                                        {onUpdateLineType ? <LineTypePicker row={item} index={index} onUpdate={onUpdateLineType} /> : <LineTypeBadge row={item} />}
                                                     </TableCell>
                                                     {keyOptions.map((opt, idx) => (
                                                         <TableCell key={idx} className="text-xs text-muted-foreground w-[100px]">
@@ -236,8 +248,8 @@ export function OrderItemsDesktopTable({
                                                 {isEditable ? (
                                                     <Input
                                                         type="number"
-                                                        value={item.quantity}
-                                                        onChange={(e) => onUpdateQuantity(index, parseInt(e.target.value) || 1)}
+                                                        value={displayQty(item)}
+                                                        onChange={(e) => onUpdateQuantity(index, Math.abs(parseInt(e.target.value) || 1))}
                                                         onKeyDown={(e) => handleColumnNav(e, 'qty')}
                                                         onFocus={selectOnFocus}
                                                         data-col="qty"
@@ -245,11 +257,11 @@ export function OrderItemsDesktopTable({
                                                         min={1}
                                                     />
                                                 ) : (
-                                                    <span>{item.quantity}</span>
+                                                    <span>{displayQty(item)}</span>
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                {showPriceInput ? (
+                                                {showPriceInput && (item.lineType ?? 'sale') === 'sale' ? (
                                                     <Input
                                                         type="number"
                                                         value={item.unitPrice}
@@ -264,14 +276,18 @@ export function OrderItemsDesktopTable({
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right font-semibold">
-                                                {formatCurrency(item.quantity * item.unitPrice)}
+                                                {formatCurrency(lineAmount(item))}
                                             </TableCell>
                                             {showPriceSync && (
                                                 <TableCell className="text-center">
-                                                    <Checkbox
-                                                        checked={priceSyncMap?.[item.id] ?? false}
-                                                        onCheckedChange={(checked) => onTogglePriceSync?.(item.id, !!checked)}
-                                                    />
+                                                    {(item.lineType ?? 'sale') === 'sale' ? (
+                                                        <Checkbox
+                                                            checked={priceSyncMap?.[item.id] ?? false}
+                                                            onCheckedChange={(checked) => onTogglePriceSync?.(item.id, !!checked)}
+                                                        />
+                                                    ) : (
+                                                        <span className="text-muted-foreground">—</span>
+                                                    )}
                                                 </TableCell>
                                             )}
                                             {isEditable && (

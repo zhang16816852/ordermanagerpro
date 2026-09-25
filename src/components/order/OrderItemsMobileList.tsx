@@ -10,7 +10,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrency } from '@/lib/formatters';
 import { handleColumnNav, selectOnFocus } from './orderItemsHelpers';
 import { SortableMobileCard } from './SortableMobileCard';
-import type { KeyOption, OrderItemRow, ViewMode } from './orderItemsTypes';
+import { LineTypeBadge, LineTypePicker } from './LineTypeBadge';
+import type { KeyOption, LineTypeOption, OrderItemRow, ViewMode } from './orderItemsTypes';
+import { displayQty, lineAmount } from './orderItemsTypes';
 
 interface OrderItemsMobileListProps {
     items: OrderItemRow[];
@@ -22,6 +24,7 @@ interface OrderItemsMobileListProps {
     onUpdatePrice?: (index: number, value: number) => void;
     onRemove: (index: number) => void;
     onSplit?: (index: number) => void;
+    onUpdateLineType?: (index: number, lineType: LineTypeOption) => void;
     showPriceInput: boolean;
     showPriceSync: boolean;
     priceSyncMap?: Record<string, boolean>;
@@ -42,6 +45,7 @@ export function OrderItemsMobileList({
     onUpdatePrice,
     onRemove,
     onSplit,
+    onUpdateLineType,
     showPriceInput,
     showPriceSync,
     priceSyncMap,
@@ -73,6 +77,7 @@ export function OrderItemsMobileList({
                                     onUpdatePrice={onUpdatePrice}
                                     onRemove={onRemove}
                                     onSplit={onSplit}
+                                    onUpdateLineType={onUpdateLineType}
                                     showPriceInput={showPriceInput}
                                     showPriceSync={showPriceSync}
                                     priceSyncMap={priceSyncMap}
@@ -101,19 +106,22 @@ export function OrderItemsMobileList({
 {name}
                                         {item.isNew && <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 border-green-200">新增</Badge>}
                                     </div>
-                                    {viewMode === 'compact' ? (
-                                        item.selectedModelName && (<div className="text-xs text-muted-foreground">{item.selectedModelName}</div>)
-                                    ) : (
-                                        <>
-                                            {item.selectedModelName && (<div className="text-xs text-muted-foreground/70">型號: {item.selectedModelName}</div>)}
-                                            {/* 关键选项显示 */}
-                                            {keyOptions.map((opt, idx) => (
-                                                <div key={idx} className="text-xs text-muted-foreground/60">
-                                                    {opt.name}: {opt.value}
-                                                </div>
-                                            ))}
-                                        </>
-                                    )}
+{viewMode === 'compact' ? (
+                                                item.selectedModelName && (<div className="text-xs text-muted-foreground">{item.selectedModelName}</div>)
+                                            ) : (
+                                                <>
+                                                    {item.selectedModelName && (<div className="text-xs text-muted-foreground/70">型號: {item.selectedModelName}</div>)}
+                                                    {/* 关键选项显示 */}
+                                                    {keyOptions.map((opt, idx) => (
+                                                        <div key={idx} className="text-xs text-muted-foreground/60">
+                                                            {opt.name}: {opt.value}
+                                                        </div>
+                                                    ))}
+                                                </>
+                                            )}
+                                            <div>
+                                                {onUpdateLineType ? <LineTypePicker row={item} index={index} onUpdate={onUpdateLineType} /> : <LineTypeBadge row={item} />}
+                                            </div>
                                 </div>
                                 {isEditable && (
                                     <div className="flex items-center gap-1.5">
@@ -132,21 +140,21 @@ export function OrderItemsMobileList({
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Package className="h-3 w-3" /> 數量</label>
                                     {isEditable ? (
-                                        <Input type="number" value={item.quantity} onChange={(e) => onUpdateQuantity(index, parseInt(e.target.value) || 1)} onKeyDown={(e) => handleColumnNav(e, 'qty')} onFocus={selectOnFocus} data-col="qty" className="h-9" min={1} />
+                                        <Input type="number" value={displayQty(item)} onChange={(e) => onUpdateQuantity(index, Math.abs(parseInt(e.target.value) || 1))} onKeyDown={(e) => handleColumnNav(e, 'qty')} onFocus={selectOnFocus} data-col="qty" className="h-9" min={1} />
                                     ) : (
-                                        <div className="font-medium p-1.5 text-sm">{item.quantity}</div>
+                                        <div className="font-medium p-1.5 text-sm">{displayQty(item)}</div>
                                     )}
                                 </div>
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Tag className="h-3 w-3" /> {priceLabel}</label>
-                                    {showPriceInput ? (
+                                    {showPriceInput && (item.lineType ?? 'sale') === 'sale' ? (
                                         <Input type="number" value={item.unitPrice} onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)} onKeyDown={(e) => handleColumnNav(e, 'price')} onFocus={selectOnFocus} data-col="price" className="h-9" />
                                     ) : (
                                         <div className="font-medium p-1.5 text-sm">{formatCurrency(item.unitPrice)}</div>
                                     )}
                                 </div>
                             </div>
-                            {showPriceSync && (
+                            {showPriceSync && (item.lineType ?? 'sale') === 'sale' && (
                                 <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
                                     <Checkbox id={`sync-${item.id}`} checked={priceSyncMap?.[item.id] ?? false} onCheckedChange={(checked) => onTogglePriceSync?.(item.id, !!checked)} />
                                     <label htmlFor={`sync-${item.id}`} className="cursor-pointer flex items-center gap-1"><Save className="h-3 w-3" /> 存為店價</label>
@@ -154,7 +162,7 @@ export function OrderItemsMobileList({
                             )}
                             <div className="flex justify-between items-center bg-muted/30 p-2 rounded-md">
                                 <span className="text-xs text-muted-foreground flex items-center gap-1"><Calculator className="h-3 w-3" /> 小計</span>
-                                <span className="font-bold text-primary">{formatCurrency(item.quantity * item.unitPrice)}</span>
+                                <span className="font-bold text-primary">{formatCurrency(lineAmount(item))}</span>
                             </div>
                         </div>
                     );

@@ -5,9 +5,17 @@ import { GripVertical } from 'lucide-react';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { ServiceItemBadge } from './ServiceItemBadge';
-import type { KeyOption, OrderItemRow, ViewMode } from './orderItemsTypes';
+import { LineTypeBadge, LineTypePicker } from './LineTypeBadge';
+import type { KeyOption, LineTypeOption, OrderItemRow, ViewMode } from './orderItemsTypes';
 
-export function SortableTableRow({ item, index, viewMode, keyOptions, children }: { item: OrderItemRow; index: number; viewMode: ViewMode; keyOptions: KeyOption[]; children: ReactNode }) {
+export function SortableTableRow({ item, index, viewMode, keyOptions, onUpdateLineType, children }: {
+    item: OrderItemRow;
+    index: number;
+    viewMode: ViewMode;
+    keyOptions: KeyOption[];
+    onUpdateLineType?: (index: number, lineType: LineTypeOption) => void;
+    children: ReactNode;
+}) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
     const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.45 : 1 };
     return (
@@ -22,6 +30,7 @@ export function SortableTableRow({ item, index, viewMode, keyOptions, children }
                         <span className="inline-flex items-center gap-1 flex-wrap">
                             {item.selectedModelName && <span className="text-xs font-mono text-muted-foreground">{item.selectedModelName}</span>}
                             <ServiceItemBadge item={item} />
+                            {onUpdateLineType ? <LineTypePicker row={item} index={index} onUpdate={onUpdateLineType} /> : <LineTypeBadge row={item} />}
                         </span>
                     </div>
                 </TableCell>
@@ -31,6 +40,7 @@ export function SortableTableRow({ item, index, viewMode, keyOptions, children }
                         {item.variantName || item.productName || item.sku || item.id.slice(0, 8)}
                         {item.isNew && <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 border-green-200">新增</Badge>}
                         <ServiceItemBadge item={item} />
+                        {onUpdateLineType ? <LineTypePicker row={item} index={index} onUpdate={onUpdateLineType} /> : <LineTypeBadge row={item} />}
                     </TableCell>
                     {/* 关键选项欄位 */}
                     {keyOptions.map((opt, idx) => (

@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OrderItemsTable } from '@/components/order/OrderItemsTable';
-import { OrderItemRow } from '@/components/order/orderItemsTypes';
+import { OrderItemRow, LineTypeOption } from '@/components/order/orderItemsTypes';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 export type PanelState = 'information' | 'delivery' | 'items' | 'products' | null;
@@ -15,6 +15,7 @@ interface OrderItemsPanelProps {
   onRemove: (index: number) => void;
   onSplit?: (index: number) => void;
   onReorder: (items: OrderItemRow[]) => void;
+  onUpdateLineType?: (index: number, lineType: LineTypeOption) => void;
   priceSyncMap?: Record<string, boolean>;
   onTogglePriceSync?: (id: string, checked: boolean) => void;
   activePanel: PanelState;
@@ -32,6 +33,7 @@ export function OrderItemsPanel({
   onRemove,
   onSplit,
   onReorder,
+  onUpdateLineType,
   priceSyncMap,
   onTogglePriceSync,
   activePanel,
@@ -71,6 +73,7 @@ export function OrderItemsPanel({
             onSplit={onSplit}
             isEditable={true}
             onReorder={onReorder}
+            onUpdateLineType={onUpdateLineType}
             priceSyncMap={orderType === 'sales' ? priceSyncMap : undefined}
             onTogglePriceSync={orderType === 'sales' ? onTogglePriceSync : undefined}
             priceLabel={orderType === 'sales' ? '單價' : '進貨價'}

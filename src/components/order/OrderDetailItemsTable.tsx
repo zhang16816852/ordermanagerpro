@@ -7,6 +7,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { OrderStatusBadge } from './OrderStatusBadge';
+import { LineTypeBadge } from './LineTypeBadge';
 import { OrderItem } from '@/types/order';
 import { formatCurrency } from '@/lib/formatters';
 
@@ -32,12 +33,23 @@ export function OrderDetailItemsTable({ items }: OrderItemsTableProps) {
                     {sortedItems.map((item) => (
                         <TableRow key={item.id}>
                             <TableCell>
-                                {item.product_variant?.name || item.product?.name}
+                                <span className="inline-flex items-center">
+                                    {item.product_variant?.name || item.product?.name}
+                                    <LineTypeBadge
+                                        row={{
+                                            lineType: item.line_type ?? 'sale',
+                                            isRepair: item.is_repair ?? false,
+                                            returnStatus: item.return_status ?? null,
+                                        }}
+                                    />
+                                </span>
                             </TableCell>
                             <TableCell className="text-right">
                                 {formatCurrency(item.unit_price)}
                             </TableCell>
-                            <TableCell className="text-right">{item.quantity}</TableCell>
+                            <TableCell className="text-right">
+                                {(item.line_type ?? 'sale') === 'return' ? -item.quantity : item.quantity}
+                            </TableCell>
                             <TableCell className="text-right">
                                 {item.shipped_quantity}
                             </TableCell>

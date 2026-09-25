@@ -9,6 +9,7 @@ import { OrderItemsToolbar } from './OrderItemsToolbar';
 import { OrderItemsDesktopTable } from './OrderItemsDesktopTable';
 import { OrderItemsMobileList } from './OrderItemsMobileList';
 import type { NameSort, OrderItemRow, OrderItemsTableProps, ViewMode } from './orderItemsTypes';
+import { lineAmount } from './orderItemsTypes';
 
 export function OrderItemsTable({
     items,
@@ -19,6 +20,7 @@ export function OrderItemsTable({
     onSplit,
     isEditable,
     onReorder,
+    onUpdateLineType,
     priceSyncMap,
     onTogglePriceSync,
     defaultCompact = false,
@@ -86,7 +88,7 @@ export function OrderItemsTable({
     };
 
     const getTotalAmount = () => {
-        return items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+        return items.reduce((sum, item) => sum + lineAmount(item), 0);
     };
 
     const handleDragEnd = useCallback((event: DragEndEvent) => {
@@ -197,6 +199,7 @@ export function OrderItemsTable({
                         onSplit={onSplit}
                         onRemove={onRemove}
                         onDragEnd={handleDragEnd}
+                        onUpdateLineType={onUpdateLineType}
                         getComponentInfo={getComponentInfo}
                         getVariantWithOptions={getVariantWithOptions}
                     />
@@ -210,6 +213,7 @@ export function OrderItemsTable({
                         onUpdatePrice={onUpdatePrice}
                         onRemove={onRemove}
                         onSplit={onSplit}
+                        onUpdateLineType={onUpdateLineType}
                         showPriceInput={showPriceInput}
                         showPriceSync={showPriceSync}
                         priceSyncMap={priceSyncMap}

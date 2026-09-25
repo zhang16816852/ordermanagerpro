@@ -1,5 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { OrderStatusBadge } from './OrderStatusBadge';
+import { LineTypeBadge } from './LineTypeBadge';
 import { OrderItem } from '@/types/order';
 import { formatCurrency } from '@/lib/formatters';
 
@@ -18,6 +19,15 @@ export function OrderDetailItemsCards({ items }: OrderItemsCardsProps) {
                             <span className="block text-muted-foreground ml-1 break-all">
                                 {item.product_variant?.name || item.product?.name}
                             </span>
+                            <span className="inline-flex items-center mt-0.5">
+                                <LineTypeBadge
+                                    row={{
+                                        lineType: item.line_type ?? 'sale',
+                                        isRepair: item.is_repair ?? false,
+                                        returnStatus: item.return_status ?? null,
+                                    }}
+                                />
+                            </span>
                         </div>
 
                         <div className="grid grid-cols-2 gap-2 min-w-0">
@@ -28,7 +38,7 @@ export function OrderDetailItemsCards({ items }: OrderItemsCardsProps) {
 
                             <div>
                                 <span className="text-muted-foreground">數量：</span>
-                                {item.quantity}
+                                {(item.line_type ?? 'sale') === 'return' ? -item.quantity : item.quantity}
                             </div>
 
                             <div>

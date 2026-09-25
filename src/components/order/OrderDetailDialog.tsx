@@ -13,7 +13,7 @@ import { OrderInfo } from './OrderInfo';
 import { OrderDetailItemsTable } from './OrderDetailItemsTable';
 import { OrderDetailItemsCards } from './OrderDetailItemsCards';
 import { Order } from '@/types/order';
-import { Check, Share2, Trash2 } from 'lucide-react';
+import { Check, Share2, Trash2, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/formatters';
 import { useRepCommission } from '@/hooks/useRepCommission';
@@ -24,10 +24,11 @@ interface OrderDetailDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onDeleteOrder?: (orderId: string) => void;
+    onProcessReturns?: () => void;
     parcelEditable?: boolean;
 }
 
-export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, parcelEditable = false }: OrderDetailDialogProps) {
+export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, onProcessReturns, parcelEditable = false }: OrderDetailDialogProps) {
     const [isCopied, setIsCopied] = useState(false);
     const { isRep, computeOrder } = useRepCommission();
 
@@ -36,11 +37,16 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, pa
         [order?.order_items]
     );
 
+    const hasPendingReturns = (order?.order_items ?? []).some(
+        (item) => item.line_type === 'return' && item.return_status === 'pending'
+    );
+
     if (!order) return null;
 
     const getTotalAmount = () =>
         order.order_items.reduce(
-            (sum, item) => sum + item.quantity * item.unit_price,
+            (sum, item) =>
+                sum + (item.line_type === 'return' ? -1 : 1) * item.quantity * item.unit_price,
             (order.shipping_fee ?? 0)
         );
 
@@ -50,6 +56,7 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, pa
             variantId: i.variant_id,
             unitPrice: i.unit_price,
             quantity: i.quantity,
+            lineType: i.line_type,
           })))
         : null;
 
@@ -89,6 +96,12 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, pa
                             <Button variant="outline" size="sm" onClick={copyShareLink}>
                                 {isCopied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4 mr-1" />}
                                 {isCopied ? '已複製' : '分享'}
+                            </Button>
+                        )}
+                        {onProcessReturns && hasPendingReturns && (
+                            <Button variant="outline" size="sm" onClick={onProcessReturns}>
+                                <RotateCcw className="h-4 w-4 mr-1" />
+                                處理退貨
                             </Button>
                         )}
                         {onDeleteOrder && (

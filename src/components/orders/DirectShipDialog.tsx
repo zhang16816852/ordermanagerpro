@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -15,6 +16,9 @@ import { DeliveryType, useDeliveryMethods, deliveryTypeOfMethod } from '@/compon
 import {
   ShippingDeliveryFields, ShippingDeliveryValue,
 } from '@/components/shipping/ShippingDeliveryFields';
+import {
+  ShippingAddressFields, ShippingAddressValue, isEmptyShippingAddress,
+} from '@/components/shipping/ShippingAddressFields';
 
 export interface DirectShipDelivery {
   deliveryType: DeliveryType | null;
@@ -22,6 +26,8 @@ export interface DirectShipDelivery {
   trackingCompany: string | null;
   trackingNumber: string | null;
   trackingUrl: string | null;
+  shippingAddress?: ShippingAddressValue | null;
+  syncToStore?: boolean;
 }
 
 export interface DirectShipItemLine {
@@ -30,17 +36,22 @@ export interface DirectShipItemLine {
   variantId?: string | null;
   name: string;
   quantity: number;
+  lineType?: 'sale' | 'exchange' | 'return';
 }
 
 export interface DirectShipOrderContext {
   id: string;
   code?: string | null;
   storeName?: string;
+  storeId?: string | null;
   consignmentMode?: boolean;
   deliveryType?: DeliveryType | null;
   deliveryMethodId?: string | null;
   deliveryMethodTitle?: string | null;
   defaultDeliveryMethodId?: string | null;
+  // 繼承來源：訂單既有收件地址快照（order.shipping_address）與店家最新地址（stores 地址欄）
+  shippingAddress?: ShippingAddressValue | null;
+  storeAddress?: ShippingAddressValue | null;
   items: DirectShipItemLine[];
 }
 
@@ -84,6 +95,15 @@ export function DirectShipDialog({
     trackingNumber: '',
     trackingUrl: '',
   });
+  const [shippingAddress, setShippingAddress] = useState<ShippingAddressValue>({
+    recipient: '',
+    phone: '',
+    postal_code: '',
+    city: '',
+    district: '',
+    address: '',
+  });
+  const [syncToStore, setSyncToStore] = useState(false);
 
   const allConsignment = orders.length > 0 && orders.every((o) => o.consignmentMode);
   const orderIds = orders.map((o) => o.id);
@@ -112,7 +132,49 @@ export function DirectShipDialog({
       trackingNumber: '',
       trackingUrl: '',
     });
+    // 收件地址繼承：訂單快照 → 店家最新地址 → 空
+    const addr = latest.shippingAddress || latest.storeAddress;
+    setShippingAddress({
+      recipient: addr?.recipient || '',
+      phone: addr?.phone || '',
+      postal_code: addr?.postal_code || '',
+      city: addr?.city || '',
+      district: addr?.district || '',
+      address: addr?.address || '',
+    });
+    setSyncToStore(false);
   }, [open]);
+
+  // 地址與店家目前地址不同時自動勾選「同步至店鋪」（僅地址異動觸發；相同時不主動取消）
+  useEffect(() => {
+    if (!open) return;
+    const latest = firstRef.current;
+    const storeAddr = latest?.storeAddress;
+    if (!storeAddr || !latest?.storeId || isEmptyShippingAddress(storeAddr)) return;
+    const differs =
+      shippingAddress.recipient !== (storeAddr.recipient || '') ||
+      shippingAddress.phone !== (storeAddr.phone || '') ||
+      shippingAddress.postal_code !== (storeAddr.postal_code || '') ||
+      shippingAddress.city !== (storeAddr.city || '') ||
+      shippingAddress.district !== (storeAddr.district || '') ||
+      shippingAddress.address !== (storeAddr.address || '');
+    if (differs) setSyncToStore(true);
+  }, [shippingAddress, open]);
+
+  const applyStoreAddress = () => {
+    const latest = firstRef.current;
+    const a = latest?.storeAddress;
+    if (!a) return;
+    setShippingAddress({
+      recipient: a.recipient || '',
+      phone: a.phone || '',
+      postal_code: a.postal_code || '',
+      city: a.city || '',
+      district: a.district || '',
+      address: a.address || '',
+    });
+    setSyncToStore(false);
+  };
 
   const handleConfirm = () => {
     onConfirm({
@@ -121,6 +183,8 @@ export function DirectShipDialog({
       trackingCompany: isLogistics(delivery.deliveryType) ? (delivery.trackingCompany || null) : null,
       trackingNumber: isLogistics(delivery.deliveryType) ? (delivery.trackingNumber || null) : null,
       trackingUrl: isLogistics(delivery.deliveryType) ? (delivery.trackingUrl || null) : null,
+      shippingAddress: isLogistics(delivery.deliveryType) && !isEmptyShippingAddress(shippingAddress) ? { ...shippingAddress } : null,
+      syncToStore: isLogistics(delivery.deliveryType) && syncToStore,
     }, orderIds);
   };
 
@@ -155,8 +219,20 @@ export function DirectShipDialog({
                   {order.items.map((item) => (
                     <div key={item.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                       <div className="flex-1 min-w-0">
-                        <div className="truncate">{item.name}</div>
-                        <div className="text-xs text-muted-foreground">{item.quantity}件</div>
+                        <div className="truncate">
+                          {item.name}
+                          {item.lineType === 'exchange' && (
+                            <span className="ml-2 text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded px-1 py-0.5">換貨</span>
+                          )}
+                          {item.lineType === 'return' && (
+                            <span className="ml-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-1 py-0.5">退貨</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {item.lineType === 'return'
+                            ? <span className="text-red-600">-{item.quantity}件（退貨入庫）</span>
+                            : `${item.quantity}件`}
+                        </div>
                       </div>
                       <WarehouseSelector
                         value={getItemWarehouse(item.id)}
@@ -196,6 +272,30 @@ export function DirectShipDialog({
               onChange={setDelivery}
             />
           </div>
+
+          {isLogistics(delivery.deliveryType) && first?.storeAddress && (
+            <div className="space-y-3 rounded-lg border p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-medium">收件地址</div>
+                <Button type="button" variant="outline" size="sm" onClick={applyStoreAddress}>
+                  套用店家最新地址
+                </Button>
+              </div>
+              <ShippingAddressFields
+                value={shippingAddress}
+                onChange={setShippingAddress}
+              />
+              {first?.storeId && (
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Checkbox
+                    checked={syncToStore}
+                    onCheckedChange={(v) => setSyncToStore(!!v)}
+                  />
+                  同步至店鋪（出貨後將此地址寫回店家配送地址）
+                </label>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
