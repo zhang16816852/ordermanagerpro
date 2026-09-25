@@ -32,7 +32,7 @@ export function useOrderFormQueries({
         .from('orders') as any)
         .select(`
           *,
-          stores (name, code, brand, postal_code, city, district, address, recipient, default_delivery_method_id),
+          stores (name, code, brand, postal_code, city, district, address, recipient, phone, default_delivery_method_id, default_delivery_type),
           order_items (
             id,
             product_id,
@@ -43,6 +43,10 @@ export function useOrderFormQueries({
             status,
             selected_model_name,
             sort_order,
+            line_type,
+            line_note,
+            return_status,
+            is_repair,
             products (name, code),
             product_variants (name)
           )
@@ -63,7 +67,7 @@ export function useOrderFormQueries({
       if (!storeId) return null;
       const { data, error } = await (supabase
         .from('stores') as any)
-        .select('id, name, code, brand, postal_code, city, district, address, recipient, default_delivery_method_id')
+        .select('id, name, code, brand, postal_code, city, district, address, recipient, phone, default_delivery_method_id, default_delivery_type')
         .eq('id', storeId)
         .single();
       if (error) throw error;

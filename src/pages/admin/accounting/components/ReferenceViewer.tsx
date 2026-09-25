@@ -113,7 +113,9 @@ export function ReferenceViewer({ referenceType, referenceId, open, onOpenChange
               sort_order,
               order:orders(code),
               product:products(name, code),
-              product_variant:product_variants(name)
+              product_variant:product_variants(name),
+              line_type,
+              line_note
             )
           )
         `)
@@ -146,6 +148,8 @@ export function ReferenceViewer({ referenceType, referenceId, open, onOpenChange
             productSku: item.order_item?.product?.code || '-',
             variantName: item.order_item?.product_variant?.name,
             unitPrice: item.order_item?.unit_price,
+            lineType: item.order_item?.line_type,
+            lineNote: item.order_item?.line_note,
             sortOrder: item.sort_order ?? 0,
           })),
       };

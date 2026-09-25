@@ -169,7 +169,7 @@ export default function AdminAccounting() {
         isLoading={createEntryMutation.isPending || updateEntryMutation.isPending || recordPaymentMutation.isPending || registerPayout.isPending || settleMutation.isPending}
         onSubmit={(data, references) => {
           if (editingEntry) {
-            updateEntryMutation.mutate({ id: editingEntry.id, ...data }, {
+            updateEntryMutation.mutate({ id: editingEntry.id, ...data, references }, {
               onSuccess: () => setEntryDialogOpen(false)
             });
           } else {

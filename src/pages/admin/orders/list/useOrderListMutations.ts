@@ -41,6 +41,9 @@ export function useOrderListMutations(params: UseOrderListMutationsParams): UseO
     }: { orderIds: string[]; notes: string; delivery?: DirectShipDelivery }) => {
       if (!user) throw new Error('未登入');
       const results: any[] = [];
+      const shellSyncToStore = delivery?.deliveryType === 'logistics' && delivery?.syncToStore && !!delivery?.shippingAddress;
+      const syncAddress = delivery?.shippingAddress || null;
+      const syncStoreIds = new Set<string>();
       for (const orderId of orderIds) {
         const order = orders.find(o => o.id === orderId);
         const warehouseMap: Record<string, string> = {};
@@ -50,6 +53,9 @@ export function useOrderListMutations(params: UseOrderListMutationsParams): UseO
             if (wh) warehouseMap[item.id] = wh;
           }
         }
+        const addr = delivery?.deliveryType === 'logistics' && delivery.shippingAddress
+          ? delivery.shippingAddress
+          : undefined;
         const { data, error } = await supabase.rpc('direct_ship_order', {
           p_order_id: orderId,
           p_created_by: user.id,
@@ -59,12 +65,35 @@ export function useOrderListMutations(params: UseOrderListMutationsParams): UseO
           p_warehouse_map: warehouseMap as any,
           p_delivery_type: delivery?.deliveryType || undefined,
           p_delivery_method_id: delivery?.deliveryType === 'logistics' ? delivery.deliveryMethodId || undefined : undefined,
+          p_shipping_address: addr,
           p_tracking_company: delivery?.deliveryType === 'logistics' ? delivery.trackingCompany || undefined : undefined,
           p_tracking_number: delivery?.deliveryType === 'logistics' ? delivery.trackingNumber || undefined : undefined,
           p_tracking_url: delivery?.deliveryType === 'logistics' ? delivery.trackingUrl || undefined : undefined,
         });
         if (error) throw error;
         results.push(data as any);
+        // 勾選「同步至店鋪」：出貨後將配送地址回寫店家（僅地址欄位，不含配送類型/方式）
+        if (shellSyncToStore && addr) {
+          const storeId = order?.store_id;
+          if (storeId) syncStoreIds.add(storeId);
+        }
+      }
+      if (syncStoreIds.size > 0 && syncAddress) {
+        for (const storeId of syncStoreIds) {
+          const { error: sErr } = await (supabase as any)
+            .from('stores')
+            .update({
+              recipient: syncAddress.recipient || null,
+              phone: syncAddress.phone || null,
+              postal_code: syncAddress.postal_code || null,
+              city: syncAddress.city || null,
+              district: syncAddress.district || null,
+              address: syncAddress.address || null,
+            })
+            .eq('id', storeId);
+          if (sErr) throw sErr;
+        }
+        queryClient.invalidateQueries({ queryKey: ['stores'] });
       }
       return results;
     },

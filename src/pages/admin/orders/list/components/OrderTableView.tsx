@@ -64,7 +64,11 @@ export function OrderTableView({
   };
 
   const getOrderTotal = (items: OrderItem[], shippingFee?: number | null) => {
-    return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0) + (shippingFee || 0);
+    const itemTotal = items.reduce((sum, item) => {
+      const isReturn = item.line_type === 'return';
+      return sum + (isReturn ? -1 : 1) * item.quantity * item.unit_price;
+    }, 0);
+    return itemTotal + (shippingFee || 0);
   };
 
   const getSourceLabel = (sourceType: string) => {

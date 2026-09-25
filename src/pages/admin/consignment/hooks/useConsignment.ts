@@ -7,6 +7,7 @@ import {
   ConsignmentOrder,
   ConsignmentOrderItem,
   ConsignmentOrderItemSummary,
+  ConsignmentOrderItemSummaryMap,
   ConsignmentSalesReport,
   ConsignmentSettlement,
   Supplier,
@@ -23,6 +24,7 @@ export function useConsignment() {
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['consignment'] });
     queryClient.invalidateQueries({ queryKey: ['consignment-reports'] });
+    queryClient.invalidateQueries({ queryKey: ['consignment-order-summaries'] });
     queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
     queryClient.invalidateQueries({ queryKey: ['inventory-movements'] });
     queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
@@ -72,10 +74,27 @@ export function useConsignment() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('consignment_orders')
-        .select('*, access_token, supplier:suppliers(id, name), store:stores(id, name), consignment_order_items(id, quantity, unit_price)')
+        .select('*, access_token, shipped_at, supplier:suppliers(id, name), store:stores(id, name), items:consignment_order_items(id, quantity, unit_price, product:products(id, name), variant:product_variants(id, name))')
         .order('created_at', { ascending: false });
       if (error) throw error;
       return (data || []) as ConsignmentOrder[];
+    },
+  });
+
+  const { data: orderSummaries = {} } = useQuery({
+    queryKey: ['consignment-order-summaries', orders.map(o => o.id)],
+    enabled: orders.length > 0,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('consignment_order_item_summary')
+        .select('*')
+        .in('consignment_order_id', orders.map(o => o.id));
+      if (error) throw error;
+      const map: ConsignmentOrderItemSummaryMap = {};
+      (data || []).forEach((s: ConsignmentOrderItemSummary) => {
+        map[s.consignment_order_item_id] = s;
+      });
+      return map as ConsignmentOrderItemSummaryMap;
     },
   });
 
@@ -250,7 +269,7 @@ export function useConsignment() {
     },
     {
       successMessage: '品項已新增',
-      invalidateKeys: [['consignment-order-detail'], ['admin-orders']],
+      invalidateKeys: [['consignment-order-detail'], ['consignment-order-summaries'], ['admin-orders']],
     }
   );
 
@@ -276,7 +295,7 @@ export function useConsignment() {
     },
     {
       successMessage: '品項已移除',
-      invalidateKeys: [['consignment-order-detail'], ['admin-orders']],
+      invalidateKeys: [['consignment-order-detail'], ['consignment-order-summaries'], ['admin-orders']],
     }
   );
 
@@ -324,7 +343,7 @@ export function useConsignment() {
     },
     {
       successMessage: '品項已更新',
-      invalidateKeys: [['consignment-order-detail'], ['admin-orders']],
+      invalidateKeys: [['consignment-order-detail'], ['consignment-order-summaries'], ['admin-orders']],
     }
   );
 
@@ -332,17 +351,30 @@ export function useConsignment() {
     async (orderId) => {
       const { data: co } = await (supabase as any)
         .from('consignment_orders')
-        .select('source_order_id')
+        .select('status, source_order_id')
         .eq('id', orderId)
         .single();
+      // 草稿＝完整刪除（含 mirror pending 來源訂單），走專用守門 RPC
+      if (co?.status === 'draft') {
+        const { data: delResult, error: delError } = await (supabase as any)
+          .rpc('delete_consignment_draft_if_clean', { p_consignment_order_id: orderId });
+        if (delError) throw delError;
+        const result = delResult as { ok?: boolean; reason?: string } | null;
+        if (result && result.ok === false) {
+          const err = new Error(result.reason || '取消寄賣草稿失敗') as any;
+          err.reason = result.reason;
+          throw err;
+        }
+        return;
+      }
+      // 非草稿：取消但保留來源訂單（若為 pending 鏡像來源訂單，改用有守門
+      // 的 delete_order_if_unadopted 一併刪除，避免繞過引用檢查）
       if (co?.source_order_id) {
         const { data: src } = await (supabase as any)
           .from('orders')
           .select('status')
           .eq('id', co.source_order_id)
           .single();
-        // 草稿鏡像來源訂單：取消即刪除；已出貨的來源訂單保留
-        //（改用有守門的 delete_order_if_unadopted，避免繞過引用檢查）
         if (src?.status === 'pending') {
           const { data: delResult, error: delError } = await (supabase as any)
             .rpc('delete_order_if_unadopted', { p_order_id: co.source_order_id });
@@ -390,24 +422,67 @@ export function useConsignment() {
     },
     {
       successMessage: '收貨完成，庫存已更新',
-      invalidateKeys: [['consignment-orders'], ['consignment-order-detail']],
+      invalidateKeys: [['consignment-orders'], ['consignment-order-detail'], ['consignment-order-summaries']],
     }
   );
 
-  const shipMutation = useSupabaseAction<Record<string, unknown>, { orderId: string; note?: string }>(
-    async ({ orderId, note }) => {
+  const shipMutation = useSupabaseAction<
+    Record<string, unknown>,
+    {
+      orderId: string;
+      note?: string;
+      storeId?: string | null;
+      syncToStore?: boolean;
+      delivery?: {
+        deliveryType: string | null;
+        deliveryMethodId: string | null;
+        trackingCompany: string;
+        trackingNumber: string;
+        trackingUrl: string;
+        shippingAddress?: Record<string, unknown> | null;
+      } | null;
+    }
+  >(
+    async ({ orderId, note, storeId, syncToStore, delivery }) => {
+      const isLogistics = delivery?.deliveryType === 'logistics';
       const { data, error } = await (supabase as any).rpc('create_consignment_shipment', {
         p_consignment_order_id: orderId,
         p_created_by: user?.id,
         p_notes: note || null,
         p_shipped_at: null,
+        p_delivery_type: delivery?.deliveryType || undefined,
+        p_delivery_method_id: isLogistics ? (delivery?.deliveryMethodId || undefined) : undefined,
+        p_shipping_fee: undefined,
+        p_shipping_cost: undefined,
+        p_tracking_company: isLogistics ? (delivery?.trackingCompany || null) : undefined,
+        p_tracking_number: isLogistics ? (delivery?.trackingNumber || null) : undefined,
+        p_tracking_url: isLogistics ? (delivery?.trackingUrl || null) : undefined,
+        p_shipping_address: isLogistics && delivery?.shippingAddress ? delivery.shippingAddress : undefined,
       });
       if (error) throw error;
+
+      // 同步至店鋪：僅回寫地址欄＋收件人/電話（不寫配送類型/方式）
+      if (syncToStore && isLogistics && delivery?.shippingAddress && storeId) {
+        const addr = delivery.shippingAddress;
+        const { error: updateError } = await (supabase as any)
+          .from('stores')
+          .update({
+            recipient: addr.recipient || null,
+            phone: addr.phone || null,
+            postal_code: addr.postal_code || null,
+            city: addr.city || null,
+            district: addr.district || null,
+            address: addr.address || null,
+          })
+          .eq('id', storeId);
+        if (updateError) throw updateError;
+      }
+
       return data;
     },
     {
       successMessage: '已出貨（店家寄賣，確認售出後才會開立銷貨單）',
-      invalidateKeys: [['consignment-orders'], ['consignment-order-detail']],
+      invalidateKeys: [['consignment-orders'], ['consignment-order-detail'], ['consignment-order-summaries'], ['stores'], ['store-info']],
     }
   );
 
@@ -446,7 +521,7 @@ export function useConsignment() {
     },
     {
       successMessage: '銷售回報已審核確認，已依店家開立收款銷貨單',
-      invalidateKeys: [['consignment-reports'], ['consignment-orders'], ['consignment-order-detail'], ['sales-notes'], ['store-sales-notes']],
+      invalidateKeys: [['consignment-reports'], ['consignment-orders'], ['consignment-order-detail'], ['consignment-order-summaries'], ['sales-notes'], ['store-sales-notes']],
     }
   );
 
@@ -479,7 +554,7 @@ export function useConsignment() {
     },
     {
       successMessage: '退回已記錄，庫存已更新',
-      invalidateKeys: [['consignment-orders'], ['consignment-order-detail']],
+      invalidateKeys: [['consignment-orders'], ['consignment-order-detail'], ['consignment-order-summaries']],
     }
   );
 
@@ -529,6 +604,7 @@ export function useConsignment() {
     products,
     orders,
     ordersLoading,
+    orderSummaries,
     pendingReports,
     reportsLoading,
     useOrderDetail,

@@ -32,7 +32,7 @@ export function useEntryDocQueries({ isList, isRepair, docTab }: UseEntryDocQuer
         `)
         .in('status', ['shipped', 'received'])
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(200);
       if (error) throw error;
       return (data || []).map((n: any) => ({
         id: n.id,

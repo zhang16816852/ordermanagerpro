@@ -25,10 +25,28 @@ export interface ConsignmentOrder {
   source_order_id?: string | null;
   received_at?: string | null;
   received_by?: string | null;
+  shipped_at?: string | null;
   access_token?: string;
+  delivery_type?: string | null;
+  delivery_method_id?: string | null;
+  delivery_method_title?: string | null;
+  delivery_method_code?: string | null;
+  shipping_address?: Record<string, unknown> | null;
+  shipping_fee?: number | null;
+  shipping_cost?: number | null;
   supplier?: { id: string; name: string } | null;
   store?: { id: string; name: string } | null;
-  items?: Array<{ id: string; quantity: number; unit_price: number }> | null;
+  items?: Array<{
+    id: string;
+    quantity: number;
+    unit_price: number;
+    product?: { id: string; name: string };
+    variant?: { id: string; name: string };
+  }> | null;
+}
+
+export interface ConsignmentOrderItemSummaryMap {
+  [consignmentOrderItemId: string]: ConsignmentOrderItemSummary;
 }
 
 export interface ConsignmentOrderItem {

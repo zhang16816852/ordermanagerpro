@@ -137,17 +137,24 @@ export function ShippingPoolGroups({
                             </span>
                             <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
                               來源單號: {item.order_item?.order?.code || item.order_item?.order_id.slice(0, 8)}
+                              {item.order_item?.line_type === 'return' && (
+                                <Badge variant="destructive" className="text-[10px] px-1.5 py-0 font-normal">退貨入庫</Badge>
+                              )}
                               {item.order_item?.order?.consignment_mode && (
                                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="text-right">{item.quantity}</TableCell>
+                          <TableCell className="text-right">
+                            {item.order_item?.line_type === 'return'
+                              ? <span className="text-red-600">-{item.quantity}</span>
+                              : item.quantity}
+                          </TableCell>
                           <TableCell className="text-right">
                             {formatCurrency(item.order_item?.unit_price)}
                           </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatCurrency(item.quantity * (item.order_item?.unit_price || 0))}
+                          <TableCell className={`text-right font-medium ${item.order_item?.line_type === 'return' ? 'text-red-600' : ''}`}>
+                            {formatCurrency((item.order_item?.line_type === 'return' ? -1 : 1) * item.quantity * (item.order_item?.unit_price || 0))}
                           </TableCell>
                           <TableCell className="text-muted-foreground">
                             {format(new Date(item.created_at), "MM/dd HH:mm")}

@@ -6,20 +6,26 @@ export const getDisplayProductName = (productName: string = '', variantName?: st
 };
 
 export const getOrderShipmentStatus = (items: OrderItem[]) => {
-  if (items.length === 0) return 'waiting';
-  const allProcessed = items.every((i) =>
+  const activeItems = items.filter((i) => i.line_type !== 'return');
+  if (activeItems.length === 0) return 'shipped';
+  const allProcessed = activeItems.every((i) =>
     i.status === 'shipped' || i.status === 'cancelled' || i.status === 'discontinued' || i.status === 'out_of_stock'
   );
-  const someShipped = items.some((i) => i.shipped_quantity > 0);
+  const someShipped = activeItems.some((i) => i.shipped_quantity > 0);
   if (allProcessed) return 'shipped';
   if (someShipped) return 'partial';
   return 'waiting';
 };
 
 export const getOrderTotal = (items: OrderItem[], shippingFee?: number | null) => {
-  const itemTotal = items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+  const itemTotal = items.reduce((sum, item) => {
+    const isReturn = item.line_type === 'return';
+    return sum + (isReturn ? -1 : 1) * item.quantity * item.unit_price;
+  }, 0);
   return itemTotal + (shippingFee || 0);
 };
+
+export const isReturnLine = (item: OrderItem) => item.line_type === 'return';
 
 export const getAggregateItemKey = (productId: string, variantId: string | null) =>
   `${productId}_${variantId || 'null'}`;

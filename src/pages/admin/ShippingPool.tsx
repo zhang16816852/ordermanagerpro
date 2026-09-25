@@ -48,7 +48,7 @@ export default function AdminShippingPool() {
   const { data: stores } = useQuery({
     queryKey: ["admin-stores"],
     queryFn: async () => {
-      const { data, error } = await (supabase.from("stores") as any).select("id, name, code, phone, recipient, postal_code, city, district, address");
+      const { data, error } = await (supabase.from("stores") as any).select("id, name, code, phone, recipient, postal_code, city, district, address, default_delivery_method_id");
       if (error) throw error;
       return data as StoreWithAddress[];
     },
@@ -66,6 +66,8 @@ export default function AdminShippingPool() {
     resetStores,
     setStoreType,
     setStoreAddress,
+    setStoreSync,
+    applyStoreDefaultType,
     applyStoreAddressFromStores,
     setParcelCount,
     updateParcel,
@@ -99,6 +101,7 @@ export default function AdminShippingPool() {
               quantity,
               shipped_quantity,
               unit_price,
+              line_type,
               product:products(name, code),
               product_variant:product_variants(name)
             )
@@ -401,6 +404,8 @@ export default function AdminShippingPool() {
         deliveryMap={deliveryMap}
         onSetStoreType={setStoreType}
         onSetStoreAddress={setStoreAddress}
+        onSetStoreSync={setStoreSync}
+        onApplyStoreDefaultType={applyStoreDefaultType}
         onApplyStoreAddress={applyStoreAddressFromStores}
         onSetParcelCount={setParcelCount}
         onUpdateParcel={updateParcel}

@@ -93,16 +93,28 @@ export function BatchActionBar({
             )}
 
             {statusTab === 'pending' && viewMode === 'orders' && !isRep && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={onDeleteOrders}
-                disabled={isLoading}
-                className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                刪除
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onConvertToConsignment}
+                  disabled={isLoading}
+                  className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
+                >
+                  <Store className="h-4 w-4 mr-2" />
+                  轉寄賣（草稿）
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={onDeleteOrders}
+                  disabled={isLoading}
+                  className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  刪除
+                </Button>
+              </>
             )}
 
             {statusTab === 'processing' && viewMode === 'orders' && !isRep && (
@@ -118,16 +130,6 @@ export function BatchActionBar({
                     >
                       <Send className="h-4 w-4 mr-2" />
                       轉銷貨單
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={onConvertToConsignment}
-                      disabled={isLoading}
-                      className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
-                    >
-                      <Store className="h-4 w-4 mr-2" />
-                      轉寄賣（草稿）
                     </Button>
                     {hasConsignmentSelection && <span className="w-px h-6 bg-primary-foreground/30" />}
                   </>
@@ -324,16 +326,28 @@ export function BatchActionBar({
           )}
 
           {statusTab === 'pending' && viewMode === 'orders' && !isRep && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={onDeleteOrders}
-              disabled={isLoading}
-              className="snap-start shrink-0"
-            >
-              <Trash2 className="h-4 w-4 mr-1.5" />
-              刪除
-            </Button>
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onConvertToConsignment}
+                disabled={isLoading}
+                className="snap-start shrink-0"
+              >
+                <Store className="h-4 w-4 mr-1.5" />
+                轉寄賣（草稿）
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={onDeleteOrders}
+                disabled={isLoading}
+                className="snap-start shrink-0"
+              >
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                刪除
+              </Button>
+            </>
           )}
 
           {statusTab === 'processing' && viewMode === 'orders' && !isRep && (

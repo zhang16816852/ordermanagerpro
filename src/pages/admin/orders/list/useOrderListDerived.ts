@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { Order, OrderItem } from '@/types/order';
 import { AggregatedItem } from './components/AggregateTableView';
-import { getDisplayProductName, getOrderTotal } from './orderListUtils';
+import { getDisplayProductName, getOrderShipmentStatus, getOrderTotal, isReturnLine } from './orderListUtils';
 import type { AggregateFilterMode, AggregateSelectionItem, OrderViewMode } from './orderListTypes';
 
 export interface PoProductStats {
@@ -28,7 +28,7 @@ export interface UseOrderListDerivedParams {
   selectedItems: Map<string, any>;
   selectedAggregateItems: Map<string, AggregateSelectionItem>;
   isRep: boolean;
-  computeRepOrder: (items: { productId: string; variantId?: string | null; unitPrice: number; quantity: number }[]) => {
+  computeRepOrder: (items: { productId: string; variantId?: string | null; unitPrice: number; quantity: number; lineType?: string }[]) => {
     totalProfit: number;
     totalCommission: number;
   };
@@ -85,6 +85,7 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
           variantId: i.variant_id,
           unitPrice: i.unit_price,
           quantity: i.quantity,
+          lineType: i.line_type,
         }))
       ));
     }
@@ -171,7 +172,7 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
     if (viewMode !== 'items') return [];
     return orders?.flatMap(order =>
       order.order_items
-        .filter(item => getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued' && item.status !== 'out_of_stock')
+        .filter(item => !isReturnLine(item) && getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued' && item.status !== 'out_of_stock')
         .filter(item => itemMatchesSearch(item))
         .map(item => ({
           ...item,
@@ -213,7 +214,7 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
 
     const allItems = orders?.flatMap(order =>
       order.order_items
-        .filter(item => getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued' && item.status !== 'out_of_stock')
+        .filter(item => !isReturnLine(item) && getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued' && item.status !== 'out_of_stock')
         .filter(item => itemMatchesSearch(item))
         .map(item => ({
           ...item,
@@ -297,6 +298,7 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
     for (const order of orders.filter(o => selectedOrderIds.has(o.id))) {
       for (const item of order.order_items) {
         if (item.status === 'cancelled' || item.status === 'discontinued' || item.status === 'out_of_stock') continue;
+        if (isReturnLine(item)) continue;
         const pending = item.quantity - item.shipped_quantity;
         if (pending <= 0) continue;
         const purchasedKey = `${order.id}|${item.product_id}|${item.variant_id || 'null'}`;
@@ -338,6 +340,7 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
       const order = orders.find(o => o.id === sel.orderId);
       const item = order?.order_items.find(i => i.id === sel.itemId);
       if (!item) continue;
+      if (isReturnLine(item)) continue;
       const purchasedKey = `${sel.orderId}|${item.product_id}|${item.variant_id || 'null'}`;
       const alreadyPurchased = purchasedByOrderKey.get(purchasedKey) || 0;
       const remaining = Math.max(0, sel.quantity - alreadyPurchased);
@@ -375,6 +378,7 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
         const pending = getPendingQuantity(item);
         if (pending <= 0) continue;
         if (item.status === 'cancelled' || item.status === 'discontinued' || item.status === 'out_of_stock') continue;
+        if (isReturnLine(item)) continue;
         if (!grouped[order.store_id]) {
           grouped[order.store_id] = { storeName: order.stores?.name || '', items: [] };
         }
@@ -405,16 +409,7 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
     orderPoolGroupedItems,
     poItemsFromOrders,
     poItemsSource,
-    getOrderShipmentStatus: (items: OrderItem[]) => {
-      if (items.length === 0) return 'waiting';
-      const allProcessed = items.every((i) =>
-        i.status === 'shipped' || i.status === 'cancelled' || i.status === 'discontinued'
-      );
-      const someShipped = items.some((i) => i.shipped_quantity > 0);
-      if (allProcessed) return 'shipped';
-      if (someShipped) return 'partial';
-      return 'waiting';
-    },
+    getOrderShipmentStatus,
     getItemStatusLabel: (status: string) => itemStatusLabels[status],
   };
 }

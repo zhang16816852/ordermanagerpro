@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import type { DeliveryType } from "@/components/shipping/DeliveryMethodPicker";
+import { useStoreDeliveryDefaults } from "@/hooks/useStoreDeliveryDefaults";
 import { ShipDeliveryMap, ShipParcelDraft, EMPTY_SHIP_ADDRESS, makeEmptyParcel } from "./shippingPoolTypes";
 
 export interface StoreWithAddress {
@@ -12,10 +13,12 @@ export interface StoreWithAddress {
   city: string | null;
   district: string | null;
   address: string | null;
+  default_delivery_method_id?: string | null;
 }
 
 const makeEmptyState = (): ShipDeliveryMap[string] => ({
   delivery_type: "delivery",
+  sync_to_store: false,
   address: { ...EMPTY_SHIP_ADDRESS },
   parcels: [makeEmptyParcel()],
 });
@@ -25,6 +28,8 @@ const makeEmptyState = (): ShipDeliveryMap[string] => ({
 export function useShipDelivery() {
   const [deliveryMap, setDeliveryMap] = useState<ShipDeliveryMap>({});
   const [appliedStoreKeys, setAppliedStoreKeys] = useState<Record<string, string>>({});
+  const [appliedTypeKeys, setAppliedTypeKeys] = useState<Record<string, string>>({});
+  const { fromStore: fromStoreDefaults } = useStoreDeliveryDefaults();
 
   // 確保某店家存在配送 state（缺省建立時：類型 delivery、空地址、一空包裹）
   const ensureStore = useCallback((storeId: string) => {
@@ -53,6 +58,21 @@ export function useShipDelivery() {
     });
   }, []);
 
+  // 套用店家預設配送類型（僅限首次 per store，避免覆寫使用者已選）：
+  // 依店家 default_delivery_method_id 的方法型別推導（無店家資料時維持預設 'delivery'）
+  const applyStoreDefaultType = useCallback((storeId: string, store?: StoreWithAddress) => {
+    if (!store) return;
+    const { type } = fromStoreDefaults(store);
+    if (!type) return;
+    setDeliveryMap((prev) => {
+      const cur = prev[storeId];
+      if (!cur) return prev;
+      if (appliedTypeKeys[storeId] === store.code) return prev;
+      setAppliedTypeKeys((m) => ({ ...m, [storeId]: store.code || storeId }));
+      return { ...prev, [storeId]: { ...cur, delivery_type: type } };
+    });
+  }, [fromStoreDefaults, appliedTypeKeys]);
+
   // 套用店家最新地址（僅限首次 per store，避免覆寫使用者手填）
   const applyStoreAddressFromStores = useCallback((storeId: string, store?: StoreWithAddress) => {
     if (!store) return;
@@ -78,6 +98,15 @@ export function useShipDelivery() {
       };
     });
   }, [appliedStoreKeys]);
+
+  // 是否在出貨時將配送地址同步寫回店家
+  const setStoreSync = useCallback((storeId: string, sync: boolean) => {
+    setDeliveryMap((prev) => {
+      const cur = prev[storeId] || makeEmptyState();
+      if (cur.sync_to_store === sync) return prev;
+      return { ...prev, [storeId]: { ...cur, sync_to_store: sync } };
+    });
+  }, []);
 
   // 調整包裹數量（>=1）
   const setParcelCount = useCallback((storeId: string, count: number) => {
@@ -106,6 +135,7 @@ export function useShipDelivery() {
       return next;
     });
     setAppliedStoreKeys({});
+    setAppliedTypeKeys({});
   }, []);
 
   return {
@@ -115,6 +145,8 @@ export function useShipDelivery() {
     resetStores,
     setStoreType,
     setStoreAddress,
+    setStoreSync,
+    applyStoreDefaultType,
     applyStoreAddressFromStores,
     setParcelCount,
     updateParcel,

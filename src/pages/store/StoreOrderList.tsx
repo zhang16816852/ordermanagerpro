@@ -60,6 +60,10 @@ export default function StoreOrderList() {
             unit_price,
             status,
             sort_order,
+            line_type,
+            return_status,
+            is_repair,
+            line_note,
             product:products (name, code),
             product_variant:product_variants (name)
           )
@@ -77,6 +81,7 @@ export default function StoreOrderList() {
   // 獲取所有商品項目（用於商品視圖）
   const allItems = orders?.flatMap(order =>
     order.order_items
+      .filter(item => item.line_type !== 'return')
       .filter(item => {
         if (!productFilter) return true;
         const searchLower = productFilter.toLowerCase();
@@ -107,16 +112,21 @@ export default function StoreOrderList() {
   });
 
   const getOrderShipmentStatus = (items: OrderItem[]) => {
-    if (items.length === 0) return 'waiting';
-    const allShipped = items.every((i) => i.status === 'shipped');
-    const someShipped = items.some((i) => i.shipped_quantity > 0);
+    const activeItems = items.filter(i => i.line_type !== 'return');
+    if (activeItems.length === 0) return 'shipped';
+    const allShipped = activeItems.every((i) => i.status === 'shipped');
+    const someShipped = activeItems.some((i) => i.shipped_quantity > 0);
     if (allShipped) return 'shipped';
     if (someShipped) return 'partial';
     return 'waiting';
   };
 
   const getOrderTotal = (items: OrderItem[], shippingFee?: number | null) => {
-    return items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0) + (shippingFee || 0);
+    const itemTotal = items.reduce((sum, item) => {
+      const isReturn = item.line_type === 'return';
+      return sum + (isReturn ? -1 : 1) * item.quantity * item.unit_price;
+    }, 0);
+    return itemTotal + (shippingFee || 0);
   };
 
   if (!storeId) {

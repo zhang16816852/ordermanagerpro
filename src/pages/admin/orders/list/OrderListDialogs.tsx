@@ -7,9 +7,10 @@ import { Label } from '@/components/ui/label';
 import { Store, RotateCcw } from 'lucide-react';
 import { Order } from '@/types/order';
 import { DeliveryType } from '@/components/shipping/DeliveryMethodPicker';
+import { isReturnLine } from './orderListUtils';
 import {
   DirectShipDialog as SharedDirectShipDialog,
-  DirectShipDelivery, DirectShipOrderContext,
+  DirectShipDelivery, DirectShipOrderContext, DirectShipItemLine,
 } from '@/components/orders/DirectShipDialog';
 
 interface ConvertToConsignmentDialogProps {
@@ -45,7 +46,7 @@ export function ConvertToConsignmentDialog({
           {orders.filter(o => selectedOrderIds.has(o.id)).map(order => (
             <div key={order.id} className="flex items-center justify-between px-3 py-2">
               <div className="text-sm font-medium">{order.code} - {order.stores?.name || '未知店家'}</div>
-              <div className="text-xs text-muted-foreground">{order.order_items.filter(i => i.status !== 'cancelled' && i.status !== 'discontinued' && (i.quantity - i.shipped_quantity) > 0).length} 個品項待轉寄賣（未出貨）</div>
+              <div className="text-xs text-muted-foreground">{order.order_items.filter(i => !isReturnLine(i) && i.status !== 'cancelled' && i.status !== 'discontinued' && (i.quantity - i.shipped_quantity) > 0).length} 個品項待轉寄賣（未出貨）</div>
             </div>
           ))}
         </div>
@@ -97,11 +98,30 @@ export function DirectShipDialog({
       id: order.id,
       code: order.code,
       storeName: order.stores?.name || undefined,
+      storeId: order.store_id || null,
       consignmentMode: order.consignment_mode,
       deliveryType: (order.delivery_type as DeliveryType) || null,
       deliveryMethodId: order.delivery_method_id,
       deliveryMethodTitle: order.delivery_method_title,
       defaultDeliveryMethodId: order.stores?.default_delivery_method_id || null,
+      shippingAddress: order.shipping_address ? {
+        recipient: order.shipping_address.recipient || '',
+        phone: order.shipping_address.phone || '',
+        postal_code: order.shipping_address.postal_code || '',
+        city: order.shipping_address.city || '',
+        district: order.shipping_address.district || '',
+        address: order.shipping_address.address || '',
+      } : null,
+      storeAddress: order.stores
+        ? {
+            recipient: order.stores.recipient || '',
+            phone: order.stores.phone || '',
+            postal_code: order.stores.postal_code || '',
+            city: order.stores.city || '',
+            district: order.stores.district || '',
+            address: order.stores.address || '',
+          }
+        : null,
       items: order.order_items
         .filter((item) => item.status !== 'cancelled' && item.status !== 'discontinued' && (item.quantity - item.shipped_quantity) > 0)
         .map((item) => ({
@@ -110,6 +130,7 @@ export function DirectShipDialog({
           variantId: item.variant_id,
           name: item.product_variant?.name || item.product?.name || item.id,
           quantity: item.quantity - item.shipped_quantity,
+          lineType: (item.line_type as DirectShipItemLine['lineType']) ?? 'sale',
         })),
     }));
 

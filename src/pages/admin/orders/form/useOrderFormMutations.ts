@@ -7,6 +7,7 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import { OrderItemRow } from '@/components/order/orderItemsTypes';
 import { useStoreDraft } from '@/store/useOrderDraftStore';
 import { DeliveryType } from '@/components/shipping/DeliveryMethodPicker';
+import type { ShippingAddressValue } from '@/components/shipping/ShippingAddressFields';
 
 export interface DirectShipDelivery {
   deliveryType: DeliveryType | null;
@@ -14,6 +15,8 @@ export interface DirectShipDelivery {
   trackingCompany: string | null;
   trackingNumber: string | null;
   trackingUrl: string | null;
+  shippingAddress?: ShippingAddressValue | null;
+  syncToStore?: boolean;
 }
 
 export interface OrderFormMutationParams {
@@ -85,6 +88,10 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       temp_key: item.isNew ? (item.tempKey ?? `temp-${Date.now().toString(36)}-${index}`) : undefined,
       parent_temp_key: item.parentTempKey ?? undefined,
       sort_order: index + 1,
+      line_type: item.lineType || undefined,
+      line_note: item.lineNote || undefined,
+      return_status: item.returnStatus || undefined,
+      is_repair: item.isRepair || undefined,
     })), []);
 
   // 同步勾選品項的價格到品牌：auto 時（儲存送出自動執行）不顯示「無品牌/無勾選」提示
@@ -96,7 +103,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     }
 
     const itemsToSync = itemsForSync
-      .filter((i) => priceSyncMap[i.id])
+      .filter((i) => priceSyncMap[i.id] && (i.lineType ?? 'sale') === 'sale')
       .map((i) => ({
         product_id: i.productId,
         variant_id: i.variantId || null,
@@ -209,6 +216,10 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         selected_model_name: item.selectedModelName || null,
         shipping_payment: item.shippingPayment ?? null,
         sort_order: index + 1,
+        line_type: item.lineType || 'sale',
+        line_note: item.lineNote || null,
+        return_status: item.returnStatus || null,
+        is_repair: item.isRepair || false,
       }));
 
       const { error: itemsError } = await (supabase.from('order_items') as any).insert(orderItems);
@@ -250,6 +261,10 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         temp_key: i.tempKey ?? `temp-${Date.now().toString(36)}-${index}`,
         parent_temp_key: i.parentTempKey ?? undefined,
         sort_order: index + 1,
+        line_type: i.lineType || 'sale',
+        line_note: i.lineNote || undefined,
+        return_status: i.returnStatus || undefined,
+        is_repair: i.isRepair || undefined,
       }));
 
       const d = getDeliveryType();
@@ -351,6 +366,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         return acc;
       }, {} as Record<string, string>);
       const loader = delivery || { deliveryType: getDeliveryType(), deliveryMethodId: null, trackingCompany: null, trackingNumber: null, trackingUrl: null };
+      const addr = loader?.deliveryType === 'logistics' && loader.shippingAddress ? loader.shippingAddress : undefined;
       const { data, error } = await supabase.rpc('direct_ship_order', {
         p_order_id: orderId,
         p_created_by: user.id,
@@ -361,7 +377,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         p_source_map: Object.keys(sourceMap).length > 0 ? sourceMap : undefined,
         p_delivery_method_id: loader?.deliveryMethodId || undefined,
         p_shipping_fee: undefined,
-        p_shipping_address: undefined,
+        p_shipping_address: addr,
         p_delivery_type: loader?.deliveryType || undefined,
         p_shipping_cost: undefined,
         p_tracking_company: loader?.trackingCompany || undefined,
@@ -369,6 +385,26 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         p_tracking_url: loader?.trackingUrl || undefined,
       });
       if (error) throw error;
+
+      // 勾選「同步至店鋪」：出貨後將配送地址回寫店家（僅地址欄位，不含配送類型/方式）
+      if (addr && loader?.syncToStore) {
+        const targetStoreId = order?.store_id || storeId;
+        if (targetStoreId) {
+          const { error: sErr } = await (supabase as any)
+            .from('stores')
+            .update({
+              recipient: addr.recipient || null,
+              phone: addr.phone || null,
+              postal_code: addr.postal_code || null,
+              city: addr.city || null,
+              district: addr.district || null,
+              address: addr.address || null,
+            })
+            .eq('id', targetStoreId);
+          if (sErr) throw sErr;
+        }
+        queryClient.invalidateQueries({ queryKey: ['stores'] });
+      }
       return data as any;
     },
     onSuccess: (result) => {

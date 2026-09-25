@@ -5,9 +5,10 @@ import { useStoreProductCache } from '@/hooks/useProductCache';
 import { useStoreDraft } from '@/store/useOrderDraftStore';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { OrderItemRow } from '@/components/order/orderItemsTypes';
+import { OrderItemRow, LineTypeOption } from '@/components/order/orderItemsTypes';
 import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
 import { DeliveryType } from '@/components/shipping/DeliveryMethodPicker';
+import { useStoreDeliveryDefaults } from '@/hooks/useStoreDeliveryDefaults';
 
 import { useOrderFormQueries } from './useOrderFormQueries';
 import { useCatalogFilters } from './useCatalogFilters';
@@ -154,6 +155,14 @@ export function useAdminOrderFormController() {
     if (defaultWarehouse && !warehouseId) setWarehouseId(defaultWarehouse.id);
   }, [defaultWarehouse]);
 
+  // 建立模式：依店家預設配送方式推導預設配送類型（使用者已選則不覆寫）
+  const { fromStore: fromStoreDefaults } = useStoreDeliveryDefaults();
+  useEffect(() => {
+    if (isEditMode || orderType !== 'sales' || !storeInfo || deliveryType) return;
+    const { type } = fromStoreDefaults(storeInfo);
+    if (type) setDeliveryType(type);
+  }, [isEditMode, orderType, storeInfo, deliveryType, fromStoreDefaults]);
+
   const getItemWarehouse = (id: string) => itemWarehouses[id] || warehouseId || defaultWarehouse?.id || '';
 
   const { itemsRef, notesRef, consignmentModeRef, orderRef, pendingDeletedIdsRef } = useOrderFormStateSync({
@@ -184,7 +193,10 @@ export function useAdminOrderFormController() {
   }, [draft]);
 
   const handlePriceChange = useCallback((index: number, value: number) => {
-    const itemId = itemsRef.current[index]?.id;
+    const item = itemsRef.current[index];
+    const itemId = item?.id;
+    // 換貨/退貨/送修列不寫入價格表（換貨固定單價 0）
+    if (item && (item.lineType ?? 'sale') !== 'sale') return;
     setItems((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], unitPrice: Math.max(0, value) };
@@ -195,6 +207,31 @@ export function useAdminOrderFormController() {
       const nextMap = { ...priceSyncMap, [itemId]: true };
       setPriceSyncMap(nextMap);
       draft.setPriceSyncMap(nextMap);
+    }
+  }, [draft, priceSyncMap]);
+
+  // 打單性質切換：一般/換貨→清退貨狀態；退貨→待處理；送修→退貨＋待處理＋isRepair
+  // 換貨→單價歸 0 且不寫入價格表；非一般（退貨/送修/換貨）一律退出價格同步
+  const handleUpdateLineType = useCallback((index: number, lineType: LineTypeOption) => {
+    const item = itemsRef.current[index];
+    setItems((prev) => {
+      const next = [...prev];
+      next[index] = {
+        ...next[index],
+        lineType: lineType === 'sale' || lineType === 'exchange' ? lineType : 'return',
+        returnStatus: lineType === 'exchange' || lineType === 'sale' ? null : 'pending',
+        isRepair: lineType === 'repair',
+        unitPrice: lineType === 'exchange' ? 0 : next[index].unitPrice,
+      };
+      return next;
+    });
+    if (item) {
+      if (lineType === 'exchange') draft.updateItemPrice(item.id, 0);
+      if (lineType !== 'sale') {
+        const nextMap = { ...priceSyncMap, [item.id]: false };
+        setPriceSyncMap(nextMap);
+        draft.setPriceSyncMap(nextMap);
+      }
     }
   }, [draft, priceSyncMap]);
 
@@ -261,6 +298,8 @@ export function useAdminOrderFormController() {
   }, [draft]);
 
   const handleTogglePriceSync = useCallback((id: string, checked: boolean) => {
+    const item = itemsRef.current.find(i => i.id === id);
+    if (!item || item.lineType !== 'sale') return;
     const nextMap = { ...priceSyncMap, [id]: checked };
     setPriceSyncMap(nextMap);
     draft.setPriceSyncMap(nextMap);
@@ -399,6 +438,7 @@ itemsForSync: items,
     handleRemoveItem,
     handleReorder,
     handleSplitItem,
+    handleUpdateLineType,
     handleTogglePriceSync,
     updateOrderMutation,
     createPendingMutation,

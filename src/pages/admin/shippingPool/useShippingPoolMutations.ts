@@ -126,6 +126,29 @@ export function useShippingPoolMutations({
       });
 
       if (error) throw error;
+
+      // 勾選「同步至店鋪」且為物流配送者，出貨後將配送地址寫回店家
+      await Promise.all(
+        Array.from(selectedStores)
+          .filter((storeId) => deliveryMap[storeId]?.delivery_type === "logistics" && deliveryMap[storeId]?.sync_to_store)
+          .filter((storeId) => deliveryMap[storeId]?.address?.city)
+          .map(async (storeId) => {
+            const a = deliveryMap[storeId].address;
+            const { error: storeError } = await supabase
+              .from("stores")
+              .update({
+                recipient: a.recipient || null,
+                phone: a.phone || null,
+                postal_code: a.postal_code || null,
+                city: a.city || null,
+                district: a.district || null,
+                address: a.address || null,
+              })
+              .eq("id", storeId);
+            if (storeError) throw storeError;
+          })
+      );
+
       return data as Array<{ sales_note_id: string; sales_note_code: string; store_id: string; access_token: string }>;
     },
     onSuccess: (data) => {
@@ -154,6 +177,8 @@ export function useShippingPoolMutations({
       queryClient.invalidateQueries({ queryKey: ["shipping-pool-items"] });
       queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
       queryClient.invalidateQueries({ queryKey: ["admin-sales-notes"] });
+      queryClient.invalidateQueries({ queryKey: ["stores"] });
+      queryClient.invalidateQueries({ queryKey: ["store-info"] });
     },
     onError: (error: Error) => {
       toast.error(getErrorMessage(error));

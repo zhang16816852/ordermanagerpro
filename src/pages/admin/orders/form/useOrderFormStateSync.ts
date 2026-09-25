@@ -46,11 +46,17 @@ export function useOrderFormStateSync(params: OrderFormStateSyncParams) {
   orderRef.current = order;
   const pendingDeletedIdsRef = useRef(pendingDeletedIds);
   pendingDeletedIdsRef.current = pendingDeletedIds;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const loadedOrderIdRef = useRef<string | null>(null);
 
-  // Edit mode: populate state from fetched order
+  // Edit mode: populate state from fetched order (once per order id to avoid
+  // re-running when `draft` identity changes every render)
   useEffect(() => {
     if (!isEditMode || !order) return;
-    draft.clearDraft();
+    if (loadedOrderIdRef.current === order.id) return;
+    loadedOrderIdRef.current = order.id;
+    draftRef.current.clearDraft();
     prevDraftItemsRef.current = '[]';
     skipNextDraftSyncRef.current = true;
     setNotes(order.notes || '');
@@ -66,8 +72,12 @@ export function useOrderFormStateSync(params: OrderFormStateSyncParams) {
       sku: item.products?.code || '',
       productName: item.products?.name || '',
       variantName: item.product_variants?.name || undefined,
+      lineType: item.line_type || 'sale',
+      lineNote: item.line_note || undefined,
+      returnStatus: item.return_status || null,
+      isRepair: item.is_repair || false,
     })));
-  }, [isEditMode, order]);
+  }, [isEditMode, order, setNotes, setPendingDeletedIds, setDeliveryType, setItems]);
 
   // Sync draft items → local items (ProductCatalog adds to Zustand, we read into local state)
   const prevDraftItemsRef = useRef<string>('[]');
@@ -111,7 +121,7 @@ export function useOrderFormStateSync(params: OrderFormStateSyncParams) {
       for (const item of draftItems) {
         const idx = merged.findIndex((i) => i.id === item.id);
         if (idx >= 0) {
-          merged[idx] = item;
+          merged[idx] = { ...merged[idx], ...item };
         } else {
           merged.push(item);
         }
@@ -119,7 +129,7 @@ export function useOrderFormStateSync(params: OrderFormStateSyncParams) {
       return merged;
     });
     setPriceSyncMap(draft.priceSyncMap);
-  }, [draft.items, draft.priceSyncMap, isEditMode, supplierMappings]);
+  }, [draft.items, draft.priceSyncMap, isEditMode, supplierMappings, setItems, setPriceSyncMap]);
 
   return { itemsRef, notesRef, consignmentModeRef, orderRef, pendingDeletedIdsRef };
 }

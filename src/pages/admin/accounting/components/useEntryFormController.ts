@@ -19,6 +19,7 @@ import {
   PayoutSubmission,
   BatchPayoutSubmission,
   ShippingSettlementSubmission,
+  DOC_TYPE_LABELS,
 } from './EntryFormTypes';
 
 export interface EntryFormController {
@@ -333,10 +334,28 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
     }
   }, [docTab, salesNotes, purchaseOrders, repairOrders]);
 
+  // 比對「說明」是否為自動產生的格式（空白、或常見的自動前綴），是才隨單據清單連動更新
+  const isAutoDescription = (s: string) => {
+    const t = s.trim();
+    return !t || /^(銷貨單收款|收款|付款|跨單結帳|採購單付款)[:：]?\s*/.test(t);
+  };
+
+  const buildDocItemsDescription = (items: DocItem[]) => {
+    const byType = new Map<DocType, string[]>();
+    for (const d of items) {
+      const codes = byType.get(d.docType) || [];
+      codes.push(d.code);
+      byType.set(d.docType, codes);
+    }
+    return Array.from(byType.entries())
+      .map(([type, codes]) => `${DOC_TYPE_LABELS[type]} ${codes.join('、')}`)
+      .join('；');
+  };
+
   const addDocItem = (item: DocCandidate) => {
     if (docItems.some(d => d.docType === docTab && d.docId === item.id)) return;
     const isPurchase = docTab === 'purchase_order';
-    setDocItems(prev => [...prev, {
+    const next = [...docItems, {
       docType: docTab,
       docId: item.id,
       code: item.code,
@@ -344,11 +363,15 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
       date: item.date,
       originalAmount: item.amount || 0,
       amountApplied: isPurchase ? -Math.abs(item.amount || 0) : (item.amount || 0),
-    }]);
+    }];
+    setDocItems(next);
+    setDescription(prev => isAutoDescription(prev) ? buildDocItemsDescription(next) : prev);
   };
 
   const removeDocItem = (index: number) => {
-    setDocItems(prev => prev.filter((_, i) => i !== index));
+    const next = docItems.filter((_, i) => i !== index);
+    setDocItems(next);
+    setDescription(prev => isAutoDescription(prev) ? buildDocItemsDescription(next) : prev);
   };
 
   const updateDocAmount = (index: number, val: string) => {

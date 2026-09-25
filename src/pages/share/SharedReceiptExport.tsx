@@ -14,6 +14,7 @@ export interface ReceiptItem {
   variant?: string | null;
   quantity: number;
   unit_price: number | null;
+  note?: string | null;
 }
 
 interface ReceiptTotals {
@@ -128,6 +129,7 @@ function ReceiptPage({
   code,
   createdAt,
   status,
+  deliveryMethodTitle,
   widthClass,
   children,
 }: {
@@ -146,6 +148,7 @@ function ReceiptPage({
   createdAt: string;
   status: string;
   notes?: string;
+  deliveryMethodTitle?: string | null;
   widthClass: "a4" | "middle-cut";
   children?: ReactNode;
 }) {
@@ -159,6 +162,7 @@ function ReceiptPage({
           <div className="doc-meta">
             日期：{new Date(createdAt).toLocaleString("zh-TW", { hour12: false })}
             {status ? <><br />狀態：{status}</> : null}
+            {deliveryMethodTitle ? <><br />配送方式：{deliveryMethodTitle}</> : null}
           </div>
           {showQR && qrValue && (
             <div className="doc-qr">
@@ -186,7 +190,7 @@ function ReceiptPage({
                     <td className="doc-right doc-num">{formatCurrency(Number(item.unit_price ?? 0) * qty)}</td>
                   </>
                 )}
-                <td className="doc-note"></td>
+                <td className="doc-note">{item.note || ''}</td>
               </tr>
             );
           })}
@@ -393,6 +397,7 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
               createdAt={createdAt}
               status={statusText}
               notes={notes}
+              deliveryMethodTitle={deliveryMethodTitle}
               widthClass={widthClass}
             >
               {isLast && (
@@ -402,7 +407,6 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
                   notes={notes}
                   canShowPrice={baseShowPrice}
                   shippingFee={shippingFee}
-                  deliveryMethodTitle={deliveryMethodTitle}
                 />
               )}
             </ReceiptPage>
@@ -516,14 +520,12 @@ function LastPageSummary({
   notes,
   canShowPrice,
   shippingFee,
-  deliveryMethodTitle,
 }: {
   items: ReceiptItem[];
   showPrice: boolean;
   notes?: string;
   canShowPrice: boolean;
   shippingFee?: number | null;
-  deliveryMethodTitle?: string | null;
 }) {
   const { itemCount, totalQty, totalAmount } = calcReceiptTotals(items);
   const fee = canShowPrice ? Number(shippingFee ?? 0) : 0;
@@ -542,12 +544,6 @@ function LastPageSummary({
           <span>總件數</span>
           <span className="doc-summary-val">{totalQty} 件</span>
         </div>
-        {deliveryMethodTitle && (
-          <div className="doc-summary-row">
-            <span>配送方式</span>
-            <span className="doc-summary-val">{deliveryMethodTitle}</span>
-          </div>
-        )}
         {canShowPrice && fee > 0 && (
           <div className="doc-summary-row">
             <span>運費</span>

@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 import { ParcelManager } from '@/components/shipping/ParcelManager';
+import { useShipments } from '@/hooks/useShipments';
 
 import { ReceiveDialog } from './ReceiveDialog';
 import { ShipDialog } from './ShipDialog';
@@ -45,6 +46,9 @@ type ActionType = 'receive' | 'ship' | 'return' | 'settle' | 'reverse' | 'edit';
 export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
   const { useOrderDetail, accounts, cancelOrderMutation, warehouses } = useConsignment();
   const detail = useOrderDetail(order?.id || null);
+  const shipmentsQuery = useShipments('consignment_order', order?.id || null);
+  const hasShipments = (shipmentsQuery.data?.length || 0) > 0;
+  const hasDelivery = order?.delivery_type === 'logistics' || hasShipments;
   const [action, setAction] = useState<ActionType | null>(null);
 
   const isSupplier = order?.direction === 'receive_from_supplier';
@@ -164,10 +168,12 @@ export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
             </table>
           </div>
 
-          {/* 配送 / 包裹 */}
-          <div className="border rounded-md p-4">
-            <ParcelManager docType="consignment_order" docId={order.id} editable={!isSupplier} />
-          </div>
+          {/* 配送 / 包裹（僅物流類型或已有包裹時顯示） */}
+          {hasDelivery && (
+            <div className="border rounded-md p-4">
+              <ParcelManager docType="consignment_order" docId={order.id} editable={!isSupplier} />
+            </div>
+          )}
 
           {/* 動作區 */}
           {canAct && (
@@ -205,7 +211,8 @@ export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
                 variant="ghost"
                 className="text-destructive"
                 onClick={() => {
-                  if (confirm('確定要取消此寄賣單嗎？')) cancelOrderMutation.mutate(order.id);
+                  if (confirm(order.status === 'draft' ? '確定要完整刪除這筆寄賣草稿嗎？' : '確定要取消此寄賣單嗎？'))
+                    cancelOrderMutation.mutate(order.id);
                 }}
               >
                 <Ban className="h-4 w-4 mr-1" /> 取消

@@ -2,6 +2,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Search } from 'lucide-react';
+import { useState, useMemo } from 'react';
 import {
   Select,
   SelectContent,
@@ -26,6 +28,7 @@ import { EntryFormController } from './useEntryFormController';
 import { DocType } from './EntryFormTypes';
 
 export function EntryDocListFields({ ctl }: { ctl: EntryFormController }) {
+  const [docSearch, setDocSearch] = useState('');
   const {
     accounts,
     accountId,
@@ -43,6 +46,12 @@ export function EntryDocListFields({ ctl }: { ctl: EntryFormController }) {
     totalAmount,
     autoType,
   } = ctl;
+
+  const filteredDocList = useMemo(() => {
+    const q = docSearch.trim().toLowerCase();
+    if (!q) return currentDocList;
+    return currentDocList.filter(item => `${item.code} ${item.name} ${item.supplierName || ''} ${item.customerName || ''} ${item.deviceModelName || ''}`.toLowerCase().includes(q));
+  }, [currentDocList, docSearch]);
 
   return (
     <div className="space-y-4">
@@ -100,11 +109,21 @@ export function EntryDocListFields({ ctl }: { ctl: EntryFormController }) {
               key={dt}
               variant={docTab === dt ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setDocTab(dt)}
+              onClick={() => { setDocTab(dt); setDocSearch(''); }}
             >
               {DOC_TYPE_LABELS[dt]}
             </Button>
           ))}
+        </div>
+
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={docSearch}
+            onChange={e => setDocSearch(e.target.value)}
+            placeholder="查找單據（單號 / 名稱 / 店家 / 客戶 / 機型）"
+            className="h-9 pl-8"
+          />
         </div>
 
         <div className="border rounded-md max-h-[180px] overflow-y-auto bg-background">
@@ -119,12 +138,14 @@ export function EntryDocListFields({ ctl }: { ctl: EntryFormController }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {currentDocList.length === 0 ? (
+              {filteredDocList.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">無資料</TableCell>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    {docSearch.trim() ? `查無符合「${docSearch.trim()}」的單據` : '無資料'}
+                  </TableCell>
                 </TableRow>
               ) : (
-                currentDocList.map(item => {
+                filteredDocList.map(item => {
                   const alreadyAdded = docItems.some(d => d.docType === docTab && d.docId === item.id);
                   return (
                     <TableRow key={item.id} className={alreadyAdded ? 'opacity-40' : ''}>

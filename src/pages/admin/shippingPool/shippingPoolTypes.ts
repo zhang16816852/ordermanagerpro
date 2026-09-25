@@ -13,6 +13,7 @@ export interface ShippingPoolItem {
     quantity: number;
     shipped_quantity: number;
     unit_price: number;
+    line_type?: 'sale' | 'exchange' | 'return';
     product: { name: string; sku: string };
     product_variant?: { name: string } | null;
   };
@@ -54,6 +55,7 @@ export interface ShipParcelDraft {
 
 export interface ShipDeliveryState {
   delivery_type: DeliveryType | null;
+  sync_to_store?: boolean;
   address: {
     recipient: string;
     phone: string;

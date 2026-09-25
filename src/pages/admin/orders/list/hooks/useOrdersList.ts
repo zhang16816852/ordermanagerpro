@@ -157,7 +157,8 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
           delivery_method_id,
           delivery_method_title,
           shipping_fee,
-          stores (name, code, default_delivery_method_id),
+          shipping_address,
+          stores (name, code, postal_code, city, district, address, recipient, phone, default_delivery_method_id, default_delivery_type),
           order_items (
             id,
             quantity,
@@ -168,6 +169,10 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
             product_id,
             variant_id,
             sort_order,
+            line_type,
+            return_status,
+            is_repair,
+            line_note,
             product:products (name, code),
             product_variant:product_variants (name)
           )
