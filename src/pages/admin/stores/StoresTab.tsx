@@ -22,7 +22,7 @@ import { Plus, Search, Users, Pencil, Store } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useState, useEffect } from 'react';
-import { useDeliveryMethods, DeliveryMethodPicker } from '@/components/shipping/DeliveryMethodPicker';
+import { DeliveryType, useDeliveryMethods, DeliveryMethodPicker, DeliveryTypePicker } from '@/components/shipping/DeliveryMethodPicker';
 import { ShippingAddressFields, ShippingAddressValue } from '@/components/shipping/ShippingAddressFields';
 import type { StoresController } from './useStoresController';
 
@@ -61,6 +61,7 @@ export function StoresTab({ c }: { c: StoresController }) {
   });
   const [sameAsBusiness, setSameAsBusiness] = useState(false);
   const [defaultMethodId, setDefaultMethodId] = useState<string | null>((c.editingStore as any)?.default_delivery_method_id || null);
+  const [defaultDeliveryType, setDefaultDeliveryType] = useState<DeliveryType | null>((c.editingStore as any)?.default_delivery_type || null);
 
   // 切換編輯店家時同步地址與預設方式
   useEffect(() => {
@@ -83,6 +84,7 @@ export function StoresTab({ c }: { c: StoresController }) {
     });
     setSameAsBusiness(false);
     setDefaultMethodId(s.default_delivery_method_id || null);
+    setDefaultDeliveryType(s.default_delivery_type || null);
   }, [c.editingStore, c.isStoreDialogOpen]);
 
   // 勾選「收件地址同營業地址」→ 將營業地址複製到配送地址（僅地址欄，收件人/電話保留）
@@ -167,6 +169,14 @@ export function StoresTab({ c }: { c: StoresController }) {
                 </div>
               )}
               <div className="space-y-2">
+                <Label>預設配送類型</Label>
+                <DeliveryTypePicker
+                  value={defaultDeliveryType}
+                  onValueChange={setDefaultDeliveryType}
+                  allowNone
+                />
+              </div>
+              <div className="space-y-2">
                 <Label>預設配送方式</Label>
                 <DeliveryMethodPicker
                   value={defaultMethodId}
@@ -186,6 +196,7 @@ export function StoresTab({ c }: { c: StoresController }) {
               <input type="hidden" name="business_postal_code" value={businessAddress.postal_code} />
               <input type="hidden" name="business_city" value={businessAddress.city} />
               <input type="hidden" name="business_district" value={businessAddress.district} />
+              <input type="hidden" name="default_delivery_type" value={defaultDeliveryType || ''} />
               <input type="hidden" name="default_delivery_method_id" value={defaultMethodId || ''} />
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => { c.setIsStoreDialogOpen(false); c.setEditingStore(null); }}>

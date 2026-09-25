@@ -6,8 +6,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,7 +16,11 @@ import { Package, PackageCheck, Send } from 'lucide-react';
 import { SalesNoteListTable } from '@/components/sales/SalesNoteListTable';
 import { SalesNoteDetailDialog } from '@/components/sales/SalesNoteDetailDialog';
 import type { SalesNoteDetail } from '@/components/sales/SalesNoteDetailDialog';
-import { formatCurrency } from '@/lib/formatters';
+import { ConsignmentGroupedView } from '@/components/consignment/ConsignmentGroupedView';
+import type {
+  ConsignmentViewOrder,
+  ConsignmentViewStatus,
+} from '@/components/consignment/consignmentViewTypes';
 
 interface SalesNoteWithItems {
   id: string;
@@ -70,8 +72,8 @@ interface ConsignmentItem {
   consignment_order_id: string;
   quantity: number;
   unit_price: number;
-  product: { name: string; code: string };
-  product_variant?: { name: string };
+  product: { id?: string; name: string; code: string };
+  product_variant?: { id?: string; name: string };
 }
 
 interface ConsignmentOrderRow {
@@ -79,6 +81,8 @@ interface ConsignmentOrderRow {
   code: string;
   status: string;
   note: string | null;
+  created_at: string;
+  shipped_at: string | null;
   received_at: string | null;
   items: ConsignmentItem[];
 }
@@ -123,6 +127,8 @@ export default function StoreSalesNotes() {
               order:orders (code),
               sort_order,
               unit_price,
+              line_type,
+              line_note,
               product:products (name, code),
               product_variant:product_variants (name)
             )
@@ -166,13 +172,13 @@ export default function StoreSalesNotes() {
       const { data: orderData, error: orderError } = await (supabase
         .from("consignment_orders") as any)
         .select(`
-          id, code, status, note, received_at,
+          id, code, status, note, created_at, shipped_at, received_at,
           items:consignment_order_items(
             id,
             quantity,
             unit_price,
-            product:products(name, code),
-            product_variant:product_variants(name)
+            product:products(id, name, code),
+            product_variant:product_variants(id, name)
           )
         `)
         .eq("direction", "send_to_store")
@@ -198,7 +204,30 @@ export default function StoreSalesNotes() {
   });
 
   const summaries = consignmentData?.summaries || {};
-  const orderList = consignmentData?.orders || [];
+  const orderList = useMemo(() => consignmentData?.orders ?? [], [consignmentData?.orders]);
+
+  const consignmentViewOrders = useMemo<ConsignmentViewOrder[]>(
+    () =>
+      orderList.map((order) => ({
+        id: order.id,
+        code: order.code,
+        direction: 'send_to_store' as const,
+        status: order.status as ConsignmentViewStatus,
+        created_at: order.created_at,
+        shipped_at: order.shipped_at,
+        received_at: order.received_at,
+        note: order.note,
+        store: { id: storeId || '', name: storeRoles[0]?.store_name || '本店' },
+        items: (order.items || []).map((item) => ({
+          id: item.id,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          product: item.product,
+          variant: item.product_variant,
+        })),
+      })),
+    [orderList, storeId, storeRoles]
+  );
 
   const reportMutation = useMutation({
     mutationFn: async ({ itemId }: { orderId: string; itemId: string }) => {
@@ -297,6 +326,8 @@ export default function StoreSalesNotes() {
           productName: item.order_items?.product?.name || '',
           variantName: item.order_items?.product_variant?.name || null,
           unitPrice: (item as any).order_items?.unit_price,
+          lineType: (item as any).order_items?.line_type,
+          lineNote: (item as any).order_items?.line_note,
           sortOrder: (item as any).sort_order ?? 0,
         })),
     };
@@ -343,112 +374,76 @@ export default function StoreSalesNotes() {
         </TabsList>
 
         <TabsContent value="consignment" className="space-y-4">
-          {consignmentLoading ? (
-            <div className="text-center py-12 text-muted-foreground" role="status" aria-live="polite">載入中…</div>
-          ) : orderList.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
-              <Package className="h-12 w-12 mx-auto mb-4 opacity-30" />
-              <p className="text-lg font-medium">目前沒有寄賣訂單</p>
-              <p className="text-sm">後台建立店家寄賣單並出貨後，即可在此回報銷售</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {orderList.map((order: ConsignmentOrderRow) => {
-                const totalSold = order.items.reduce((sum, item) => {
-                  const s = summaries[item.id];
-                  return sum + (s?.sold_quantity ?? 0);
-                }, 0);
-                const totalShipped = order.items.reduce((sum, item) => {
-                  const s = summaries[item.id];
-                  return sum + (s?.shipped_quantity ?? 0);
-                }, 0);
-                return (
-                  <Card key={order.id}>
-                    <CardHeader className="py-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <CardTitle className="text-base font-mono">{order.code}</CardTitle>
-                          <Badge variant="outline" className="border-blue-500 text-blue-600">寄賣</Badge>
-                          {order.received_at ? (
-                            <Badge variant="outline" className="border-green-500 text-green-600">已收貨</Badge>
-                          ) : (
-                            <Badge variant="secondary">待收貨</Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-sm text-muted-foreground">
-                            已出貨 <span className="font-medium text-foreground">{totalShipped}</span> 件
-                            / 已回報 <span className="font-medium text-foreground">{totalSold}</span> 件
-                          </div>
-                          {!order.received_at && order.status === 'active' && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-green-600 border-green-500 hover:bg-green-50"
-                              onClick={() => confirmReceiptMutation.mutate(order.id)}
-                              disabled={confirmReceiptMutation.isPending}
-                            >
-                              <PackageCheck className="h-3.5 w-3.5 mr-1" />確認收貨
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="border rounded-md overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b bg-muted/50">
-                              <th className="text-left py-2 px-3 font-medium">商品</th>
-                              <th className="text-right py-2 px-3 font-medium w-20">出貨</th>
-                              <th className="text-right py-2 px-3 font-medium w-20">已回報</th>
-                              <th className="text-right py-2 px-3 font-medium w-20">可回報</th>
-                              <th className="text-right py-2 px-3 font-medium w-28">建議售價</th>
-                              <th className="text-right py-2 px-3 font-medium w-24">操作</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {order.items.map((item) => {
-                              const s = summaries[item.id];
-                              const shipped = s?.shipped_quantity ?? 0;
-                              const sold = s?.sold_quantity ?? 0;
-                              const available = s?.remaining_quantity ?? 0;
-                              return (
-                                <tr key={item.id} className="border-b last:border-0">
-                                  <td className="py-2 px-3">
-                                    <p className="font-medium">{item.product_variant?.name || item.product.name}</p>
-                                  </td>
-                                  <td className="text-right py-2 px-3">{shipped}</td>
-                                  <td className="text-right py-2 px-3">{sold}</td>
-                                  <td className="text-right py-2 px-3 font-medium">{available}</td>
-                                  <td className="text-right py-2 px-3 text-muted-foreground">
-                                    {formatCurrency(item.unit_price)}
-                                  </td>
-                                  <td className="py-2 px-3">
-                                    <div className="flex justify-end">
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="text-blue-600 border-blue-500 hover:bg-blue-50"
-                                        onClick={() => openReport(order.id, item.id)}
-                                        disabled={available <= 0 || !order.received_at || reportMutation.isPending}
-                                      >
-                                        <Send className="h-3.5 w-3.5 mr-1" />回報銷售
-                                      </Button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
+          <ConsignmentGroupedView
+            orders={consignmentViewOrders}
+            summaries={summaries}
+            isLoading={consignmentLoading}
+            emptyState={
+              <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
+                <Package className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                <p className="text-lg font-medium">目前沒有寄賣訂單</p>
+                <p className="text-sm">後台建立店家寄賣單並出貨後，即可在此回報銷售</p>
+              </div>
+            }
+            renderOrderActions={(order) => {
+              const orderItems = order.items || [];
+              const totalShipped = orderItems.reduce(
+                (sum, item) => sum + (summaries[item.id]?.shipped_quantity ?? 0),
+                0
+              );
+              const totalSold = orderItems.reduce(
+                (sum, item) => sum + (summaries[item.id]?.sold_quantity ?? 0),
+                0
+              );
+              return (
+                <>
+                  <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
+                    已出貨 <span className="font-medium text-foreground">{totalShipped}</span> 件
+                    / 已回報 <span className="font-medium text-foreground">{totalSold}</span> 件
+                  </span>
+                  {!order.received_at && order.status === 'active' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-green-600 border-green-500 hover:bg-green-50 shrink-0"
+                      onClick={() => confirmReceiptMutation.mutate(order.id)}
+                      disabled={confirmReceiptMutation.isPending}
+                    >
+                      <PackageCheck className="h-3.5 w-3.5 mr-1" />確認收貨
+                    </Button>
+                  )}
+                </>
+              );
+            }}
+            renderItemActions={(order, item, summary) => {
+              const available = summary?.remaining_quantity ?? 0;
+              return (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-blue-600 border-blue-500 hover:bg-blue-50"
+                  onClick={() => openReport(order.id, item.id)}
+                  disabled={available <= 0 || !order.received_at || reportMutation.isPending}
+                >
+                  <Send className="h-3.5 w-3.5 mr-1" />回報銷售
+                </Button>
+              );
+            }}
+            renderProductActions={(product) => {
+              const target = product.defaultReportTarget;
+              return (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-blue-600 border-blue-500 hover:bg-blue-50"
+                  onClick={() => { if (target) openReport(target.orderId, target.itemId); }}
+                  disabled={!target || reportMutation.isPending}
+                >
+                  <Send className="h-3.5 w-3.5 mr-1" />回報銷售
+                </Button>
+              );
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="sales-notes" className="space-y-4">

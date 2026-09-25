@@ -4,6 +4,8 @@ type Tables<T extends keyof Database['public']['Tables']> = Database['public']['
 
 export type OrderStatus = 'pending' | 'processing' | 'shipped';
 export type OrderItemStatus = 'waiting' | 'partial' | 'shipped' | 'out_of_stock' | 'discontinued' | 'cancelled';
+export type OrderLineType = 'sale' | 'exchange' | 'return';
+export type ReturnStatus = 'pending' | 'stock' | 'exchange' | 'repaired';
 export type OrderSourceType = 'frontend' | 'admin_proxy' | 'consignment';
 
 export interface OrderItem {
@@ -17,6 +19,10 @@ export interface OrderItem {
     status: OrderItemStatus;
     store_id: string;
     sort_order?: number;
+    line_type?: OrderLineType;
+    line_note?: string | null;
+    return_status?: ReturnStatus | null;
+    is_repair?: boolean;
     product?: {
         name: string;
         code: string;
@@ -40,6 +46,13 @@ export interface Order {
         name: string;
         code: string | null;
         default_delivery_method_id?: string | null;
+        default_delivery_type?: string | null;
+        recipient?: string | null;
+        phone?: string | null;
+        postal_code?: string | null;
+        city?: string | null;
+        district?: string | null;
+        address?: string | null;
     } | null;
     order_items: OrderItem[];
     access_token?: string | null;

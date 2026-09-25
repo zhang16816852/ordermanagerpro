@@ -26,8 +26,19 @@ interface SharedOrderData {
     quantity: number;
     unit_price: number | null;
     sort_order?: number;
+    line_type?: string;
+    line_note?: string | null;
   }[];
 }
+
+const toReceiptItems = (items: SharedOrderData['items']) =>
+  items.map((item) => ({
+    name: `${item.line_type === 'return' ? '[退貨] ' : ''}${item.product_name}`,
+    variant: item.variant_name,
+    quantity: item.line_type === 'return' ? -Math.abs(item.quantity) : item.quantity,
+    unit_price: item.unit_price,
+    note: item.line_type === 'return' ? '退貨' : (item.line_note || undefined),
+  }));
 
 export default function SharedOrder() {
   const { orderId } = useParams();
@@ -86,12 +97,7 @@ export default function SharedOrder() {
   if (isPrintingMode) {
     return (
       <SharedReceiptExport
-        items={sortedItems.map((item) => ({
-          name: item.product_name,
-          variant: item.variant_name,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-        }))}
+        items={toReceiptItems(sortedItems)}
         title="訂單"
         docTitleLabel="訂購店家"
         storeName={order.store_name}
@@ -129,12 +135,7 @@ export default function SharedOrder() {
       </div>
 
       <SharedReceiptExport
-        items={sortedItems.map((item) => ({
-          name: item.product_name,
-          variant: item.variant_name,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-        }))}
+        items={toReceiptItems(sortedItems)}
         title="訂單"
         docTitleLabel="訂購店家"
         storeName={order.store_name}

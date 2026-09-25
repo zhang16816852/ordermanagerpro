@@ -129,6 +129,7 @@ export default function AdminOrderForm() {
       onRemove={c.handleRemoveItem}
       onSplit={c.handleSplitItem}
       onReorder={c.handleReorder}
+      onUpdateLineType={c.orderType === 'sales' ? c.handleUpdateLineType : undefined}
       priceSyncMap={c.priceSyncMap}
       onTogglePriceSync={c.handleTogglePriceSync}
       activePanel={c.activePanel}
@@ -325,6 +326,8 @@ export default function AdminOrderForm() {
         orderId={c.orderId}
         items={c.items}
         displayStoreName={c.displayStoreName}
+        defaultDeliveryMethodId={c.storeInfo?.default_delivery_method_id}
+        deliveryType={c.deliveryType}
         shippedAt={c.shippedAt}
         onShippedAtChange={c.setShippedAt}
         getItemWarehouse={c.getItemWarehouse}

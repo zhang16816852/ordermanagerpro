@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useConsignment } from './hooks/useConsignment';
 import { OrderListTab } from './components/OrderListTab';
-import { StoreViewTab } from './components/StoreViewTab';
+import { ConsignmentGroupedView } from '@/components/consignment/ConsignmentGroupedView';
 import { CreateOrderDialog } from './components/CreateOrderDialog';
 import { OrderDetailDialog } from './components/OrderDetailDialog';
 import { ReportsTab } from './components/ReportsTab';
@@ -22,6 +22,7 @@ export default function AdminConsignment() {
   const {
     orders,
     ordersLoading,
+    orderSummaries,
     pendingReports,
     reportsLoading,
   } = useConsignment();
@@ -96,8 +97,9 @@ export default function AdminConsignment() {
           </div>
 
           {view === 'partner' ? (
-            <StoreViewTab
+            <ConsignmentGroupedView
               orders={orders}
+              summaries={orderSummaries}
               onView={(order) => setViewingOrder(order)}
               isLoading={ordersLoading}
             />

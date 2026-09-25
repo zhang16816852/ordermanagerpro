@@ -32,8 +32,19 @@ interface SharedSalesData {
     quantity: number;
     unit_price: number | null;
     sort_order?: number;
+    line_type?: string;
+    line_note?: string | null;
   }[];
 }
+
+const toReceiptItems = (items: SharedSalesData['items']) =>
+  items.map((item) => ({
+    name: `${item.line_type === 'return' ? '[退貨] ' : ''}${item.product_name}`,
+    variant: item.variant_name,
+    quantity: item.line_type === 'return' ? -Math.abs(item.quantity) : item.quantity,
+    unit_price: item.unit_price,
+    note: item.line_type === 'return' ? '退貨' : (item.line_note || undefined),
+  }));
 
 export default function SharedSales() {
   const { salesNoteId } = useParams();
@@ -116,12 +127,7 @@ export default function SharedSales() {
   if (isPrintingMode) {
     return (
       <SharedReceiptExport
-        items={sortedItems.map((item) => ({
-          name: item.product_name,
-          variant: item.variant_name,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-        }))}
+        items={toReceiptItems(sortedItems)}
         title="銷貨單"
         docTitleLabel="店名"
         storeName={sales_note.store_name}
@@ -172,12 +178,7 @@ export default function SharedSales() {
       </div>
 
       <SharedReceiptExport
-        items={sortedItems.map((item) => ({
-          name: item.product_name,
-          variant: item.variant_name,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-        }))}
+        items={toReceiptItems(sortedItems)}
         title="銷貨單"
         docTitleLabel="店名"
         storeName={sales_note.store_name}

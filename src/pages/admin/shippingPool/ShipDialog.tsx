@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,7 +38,9 @@ interface ShipDialogProps {
   deliveryMap: Record<string, ShipDeliveryState>;
   onSetStoreType: (storeId: string, deliveryType: ShipDeliveryState["delivery_type"]) => void;
   onSetStoreAddress: (storeId: string, address: ShipDeliveryState["address"]) => void;
+  onSetStoreSync: (storeId: string, sync: boolean) => void;
   onApplyStoreAddress: (storeId: string, store?: StoreWithAddress) => void;
+  onApplyStoreDefaultType: (storeId: string, store?: StoreWithAddress) => void;
   onSetParcelCount: (storeId: string, count: number) => void;
   onUpdateParcel: (storeId: string, index: number, patch: Partial<ShipParcelDraft>) => void;
   storesById: Record<string, StoreWithAddress>;
@@ -63,13 +67,45 @@ export function ShipDialog({
   deliveryMap,
   onSetStoreType,
   onSetStoreAddress,
+  onSetStoreSync,
   onApplyStoreAddress,
+  onApplyStoreDefaultType,
   onSetParcelCount,
   onUpdateParcel,
   storesById,
 }: ShipDialogProps) {
   const { data: deliveryMethods = [] } = useDeliveryMethods();
   const selectedGroups = groups.filter(g => selectedStores.has(g.storeId));
+
+  // 開啟時依店家 default_delivery_method_id 套用預設配送類型（每家一次）
+  useEffect(() => {
+    if (!open) return;
+    selectedGroups.forEach((g) => {
+      onApplyStoreDefaultType(g.storeId, storesById[g.storeId]);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // 配送地址與店家資料不一致時自動勾選「同步至店鋪」（僅 logistics，有變更才自動勾、不主動取消）
+  useEffect(() => {
+    if (!open) return;
+    selectedGroups.forEach((g) => {
+      const d = deliveryMap[g.storeId];
+      if (!d || d.delivery_type !== "logistics" || d.sync_to_store) return;
+      const store = storesById[g.storeId];
+      if (!store) return;
+      const addr = d.address || EMPTY_SHIP_ADDRESS;
+      const differs =
+        addr.recipient !== (store.recipient || store.name || "") ||
+        addr.phone !== (store.phone || "") ||
+        addr.postal_code !== (store.postal_code || "") ||
+        addr.city !== (store.city || "") ||
+        addr.district !== (store.district || "") ||
+        addr.address !== (store.address || "");
+      if (differs) onSetStoreSync(g.storeId, true);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, deliveryMap]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -101,7 +137,10 @@ export function ShipDialog({
             </div>
           </div>
           {selectedGroups.map(group => {
-            const groupTotal = group.items.reduce((sum, item) => sum + item.quantity * (item.order_item?.unit_price || 0), 0);
+            const groupTotal = group.items.reduce((sum, item) => {
+              const isReturn = item.order_item?.line_type === 'return';
+              return sum + (isReturn ? -1 : 1) * item.quantity * (item.order_item?.unit_price || 0);
+            }, 0);
             const delivery = deliveryMap[group.storeId];
             const deliveryType = delivery?.delivery_type || "delivery";
             const parcels: ShipParcelDraft[] = delivery?.parcels || [{ delivery_method_id: null, fee: "", cost: "", tracking_company: "", tracking_number: "" }];
@@ -138,11 +177,20 @@ export function ShipDialog({
                         <TableRow key={item.id}>
                           <TableCell className="text-sm">
                             {getDisplayName(item)}
+                            {item.order_item?.line_type === 'return' && (
+                              <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0 font-normal">退貨入庫</Badge>
+                            )}
                             {isConsignment && <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>}
                           </TableCell>
-                          <TableCell className="text-right">{item.quantity}</TableCell>
+                          <TableCell className="text-right">
+                            {item.order_item?.line_type === 'return'
+                              ? <span className="text-red-600">-{item.quantity}</span>
+                              : item.quantity}
+                          </TableCell>
                           <TableCell className="text-right">{formatCurrency(item.order_item?.unit_price)}</TableCell>
-                          <TableCell className="text-right font-medium">{formatCurrency(item.quantity * (item.order_item?.unit_price || 0))}</TableCell>
+                          <TableCell className={`text-right font-medium ${item.order_item?.line_type === 'return' ? 'text-red-600' : ''}`}>
+                            {formatCurrency((item.order_item?.line_type === 'return' ? -1 : 1) * item.quantity * (item.order_item?.unit_price || 0))}
+                          </TableCell>
                           <TableCell className="text-center">
                             {isConsignment ? (
                               <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
@@ -232,6 +280,19 @@ export function ShipDialog({
                         onChange={(e) => onSetParcelCount(group.storeId, parseInt(e.target.value || "1", 10))}
                       />
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={!!delivery?.sync_to_store}
+                      onCheckedChange={(v) => onSetStoreSync(group.storeId, v === true)}
+                      id={`sync-store-${group.storeId}`}
+                    />
+                    <Label
+                      htmlFor={`sync-store-${group.storeId}`}
+                      className="text-xs leading-none font-normal"
+                    >
+                      出貨後將配送地址同步至店鋪（僅地址欄位，類型仍以店家設定為主）
+                    </Label>
                   </div>
                   <Table>
                     <TableHeader className="bg-muted/30">

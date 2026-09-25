@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { OrderDetailDialog } from '@/components/order/OrderDetailDialog';
+import { OrderReturnProcessDialog } from '@/components/order/OrderReturnProcessDialog';
 import { DocImportDialog } from '@/components/orders/DocImportDialog';
 import { OrdersCardView } from '@/components/order/OrdersCardView';
 import { ItemsCardView } from '@/components/order/ItemsCardView';
@@ -20,6 +21,7 @@ export default function AdminOrderList() {
   const navigate = useNavigate();
   const c = useOrderListPageController();
   const [importOrdersOpen, setImportOrdersOpen] = useState(false);
+  const [returnProcessOpen, setReturnProcessOpen] = useState(false);
 
   const {
     statusTab,
@@ -358,7 +360,14 @@ export default function AdminOrderList() {
         open={!!viewingOrder}
         onOpenChange={(open) => !open && setViewingOrder(null)}
         onDeleteOrder={(id) => handleDeleteOrders([id])}
+        onProcessReturns={() => setReturnProcessOpen(true)}
         parcelEditable
+      />
+
+      <OrderReturnProcessDialog
+        order={viewingOrder}
+        open={returnProcessOpen}
+        onOpenChange={setReturnProcessOpen}
       />
 
       {/* Convert to PO Dialog */}

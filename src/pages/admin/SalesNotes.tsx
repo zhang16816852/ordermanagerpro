@@ -11,11 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Search, FileText, CalendarIcon, X, CheckSquare, Download, List, LayoutGrid, FileUp } from "lucide-react";
+import { Search, FileText, CalendarIcon, X, CheckSquare, Download, List, LayoutGrid, FileUp, ReceiptText } from "lucide-react";
 import { SalesNoteListTable } from "@/components/sales/SalesNoteListTable";
 import { StorePicker } from "@/components/ui/StorePicker";
 import { SalesNoteProductView, SalesNoteAggregateItem } from "@/components/sales/SalesNoteProductView";
 import { SalesNoteDetailDialog, SalesNoteDetail } from "@/components/sales/SalesNoteDetailDialog";
+import { CustomerStatementDialog } from "@/components/sales/CustomerStatementDialog";
 import { toast } from "sonner";
 import { getErrorDetails, getErrorMessage } from '@/lib/errorMessages';
 import { format, addDays } from "date-fns";
@@ -50,6 +51,7 @@ export default function AdminSalesNotes() {
   const [selectedNote, setSelectedNote] = useState<typeof salesNotes[number] | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
   const [importOpen, setImportOpen] = useState(false);
+  const [statementOpen, setStatementOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const from = searchParams.get("from");
     const to = searchParams.get("to");
@@ -129,6 +131,8 @@ export default function AdminSalesNotes() {
               sort_order,
               product_id,
               variant_id,
+              line_type,
+              line_note,
               order:orders(code),
               product:products(name, code),
               product_variant:product_variants(name)
@@ -343,6 +347,8 @@ export default function AdminSalesNotes() {
           productSku: item.order_item?.product?.code || "-",
           variantName: item.order_item?.product_variant?.name,
           unitPrice: item.order_item?.unit_price,
+          lineType: item.order_item?.line_type,
+          lineNote: item.order_item?.line_note,
           sortOrder: item.sort_order ?? 0
         }))
     };
@@ -415,6 +421,11 @@ export default function AdminSalesNotes() {
             {!isRep && (
               <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => setImportOpen(true)}>
                 <FileUp className="h-3.5 w-3.5 mr-1" /> 匯入
+              </Button>
+            )}
+            {!isRep && (
+              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => setStatementOpen(true)}>
+                <ReceiptText className="h-3.5 w-3.5 mr-1" /> 對帳單
               </Button>
             )}
             <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-lg">
@@ -718,7 +729,6 @@ export default function AdminSalesNotes() {
         onOpenChange={(open) => !open && setSelectedNote(null)}
         note={dialogData}
         enablePayment={true}
-        enableReturn={!isRep}
         enableCorrect={!isRep}
         parcelEditable={!isRep}
       />
@@ -727,6 +737,11 @@ export default function AdminSalesNotes() {
         kind="sales"
         open={importOpen}
         onOpenChange={setImportOpen}
+      />
+
+      <CustomerStatementDialog
+        open={statementOpen}
+        onOpenChange={setStatementOpen}
       />
     </div>
   );

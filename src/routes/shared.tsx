@@ -4,6 +4,7 @@ import AcceptInvite from "@/pages/AcceptInvite";
 import SharedOrder from "@/pages/share/SharedOrder";
 import SharedSales from "@/pages/share/SharedSales";
 import SharedConsignment from "@/pages/share/SharedConsignment";
+import SharedCustomerStatement from "@/pages/share/SharedCustomerStatement";
 import NotFound from "@/pages/NotFound";
 
 export const sharedRoutes = [
@@ -12,5 +13,6 @@ export const sharedRoutes = [
     { path: "/share/order/:orderId", element: <SharedOrder /> },
     { path: "/share/sale/:salesNoteId", element: <SharedSales /> },
     { path: "/share/consignment/:consignmentId", element: <SharedConsignment /> },
+    { path: "/share/statement/:statementId", element: <SharedCustomerStatement /> },
     { path: "*", element: <NotFound /> },
 ];
