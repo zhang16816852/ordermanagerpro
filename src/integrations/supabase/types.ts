@@ -982,6 +982,47 @@ export type Database = {
           },
         ]
       }
+      customer_statement_shares: {
+        Row: {
+          access_token: string
+          created_at: string
+          created_by: string
+          date_from: string
+          date_to: string
+          id: string
+          store_id: string
+          title: string
+        }
+        Insert: {
+          access_token?: string
+          created_at?: string
+          created_by: string
+          date_from: string
+          date_to: string
+          id?: string
+          store_id: string
+          title: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          created_by?: string
+          date_from?: string
+          date_to?: string
+          id?: string
+          store_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_statement_shares_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       data_change_logs: {
         Row: {
           action: string
@@ -1973,10 +2014,14 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_repair: boolean
+          line_note: string | null
+          line_type: string
           order_id: string
           parent_order_item_id: string | null
           product_id: string
           quantity: number
+          return_status: string | null
           selected_model_name: string | null
           shipped_quantity: number
           shipping_payment: string | null
@@ -1993,10 +2038,14 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          is_repair?: boolean
+          line_note?: string | null
+          line_type?: string
           order_id: string
           parent_order_item_id?: string | null
           product_id: string
           quantity?: number
+          return_status?: string | null
           selected_model_name?: string | null
           shipped_quantity?: number
           shipping_payment?: string | null
@@ -2013,10 +2062,14 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          is_repair?: boolean
+          line_note?: string | null
+          line_type?: string
           order_id?: string
           parent_order_item_id?: string | null
           product_id?: string
           quantity?: number
+          return_status?: string | null
           selected_model_name?: string | null
           shipped_quantity?: number
           shipping_payment?: string | null
@@ -3467,156 +3520,6 @@ export type Database = {
           },
         ]
       }
-      sales_note_return_items: {
-        Row: {
-          id: string
-          order_item_id: string
-          product_id: string
-          quantity: number
-          refund_amount: number
-          return_id: string
-          sales_note_item_id: string
-          unit_price: number
-          variant_id: string | null
-        }
-        Insert: {
-          id?: string
-          order_item_id: string
-          product_id: string
-          quantity: number
-          refund_amount?: number
-          return_id: string
-          sales_note_item_id: string
-          unit_price?: number
-          variant_id?: string | null
-        }
-        Update: {
-          id?: string
-          order_item_id?: string
-          product_id?: string
-          quantity?: number
-          refund_amount?: number
-          return_id?: string
-          sales_note_item_id?: string
-          unit_price?: number
-          variant_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sales_note_return_items_order_item_id_fkey"
-            columns: ["order_item_id"]
-            isOneToOne: false
-            referencedRelation: "order_items"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sales_note_return_items_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sales_note_return_items_return_id_fkey"
-            columns: ["return_id"]
-            isOneToOne: false
-            referencedRelation: "sales_note_returns"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sales_note_return_items_sales_note_item_id_fkey"
-            columns: ["sales_note_item_id"]
-            isOneToOne: false
-            referencedRelation: "sales_note_items"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sales_note_return_items_variant_id_fkey"
-            columns: ["variant_id"]
-            isOneToOne: false
-            referencedRelation: "product_variants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      sales_note_returns: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          entry_id: string | null
-          id: string
-          reason: string | null
-          reference_code: string | null
-          sales_note_id: string
-          status: string
-          store_id: string
-          total_refund: number
-          warehouse_id: string
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          entry_id?: string | null
-          id?: string
-          reason?: string | null
-          reference_code?: string | null
-          sales_note_id: string
-          status?: string
-          store_id: string
-          total_refund?: number
-          warehouse_id: string
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          entry_id?: string | null
-          id?: string
-          reason?: string | null
-          reference_code?: string | null
-          sales_note_id?: string
-          status?: string
-          store_id?: string
-          total_refund?: number
-          warehouse_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sales_note_returns_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sales_note_returns_entry_id_fkey"
-            columns: ["entry_id"]
-            isOneToOne: false
-            referencedRelation: "accounting_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sales_note_returns_sales_note_id_fkey"
-            columns: ["sales_note_id"]
-            isOneToOne: false
-            referencedRelation: "sales_notes"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sales_note_returns_store_id_fkey"
-            columns: ["store_id"]
-            isOneToOne: false
-            referencedRelation: "stores"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sales_note_returns_warehouse_id_fkey"
-            columns: ["warehouse_id"]
-            isOneToOne: false
-            referencedRelation: "warehouses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       sales_notes: {
         Row: {
           access_token: string | null
@@ -4147,6 +4050,7 @@ export type Database = {
           code: string | null
           created_at: string
           default_delivery_method_id: string | null
+          default_delivery_type: string | null
           district: string | null
           id: string
           name: string
@@ -4167,6 +4071,7 @@ export type Database = {
           code?: string | null
           created_at?: string
           default_delivery_method_id?: string | null
+          default_delivery_type?: string | null
           district?: string | null
           id?: string
           name: string
@@ -4187,6 +4092,7 @@ export type Database = {
           code?: string | null
           created_at?: string
           default_delivery_method_id?: string | null
+          default_delivery_type?: string | null
           district?: string | null
           id?: string
           name?: string
@@ -4710,6 +4616,14 @@ export type Database = {
         Args: { p_doc_id: string; p_doc_type: string }
         Returns: Json
       }
+      _resolve_delivery: {
+        Args: {
+          p_delivery_method_id?: string
+          p_delivery_type?: string
+          p_use_method_type_fallback?: boolean
+        }
+        Returns: Json
+      }
       accept_invitation: {
         Args: { p_invitation_id: string }
         Returns: undefined
@@ -4801,8 +4715,16 @@ export type Database = {
         Args: {
           p_consignment_order_id: string
           p_created_by: string
+          p_delivery_method_id?: string
+          p_delivery_type?: string
           p_notes?: string
           p_shipped_at?: string
+          p_shipping_address?: Json
+          p_shipping_cost?: number
+          p_shipping_fee?: number
+          p_tracking_company?: string
+          p_tracking_number?: string
+          p_tracking_url?: string
         }
         Returns: Json
       }
@@ -4929,6 +4851,10 @@ export type Database = {
         Args: { p_identifier: string; p_token: string }
         Returns: Json
       }
+      get_shared_customer_statement: {
+        Args: { p_statement_id: string; p_token: string }
+        Returns: Json
+      }
       get_shared_order_details: {
         Args: { p_identifier: string; p_token: string }
         Returns: Json
@@ -5023,6 +4949,18 @@ export type Database = {
         Args: { p_shipped_at: string; p_store_id: string }
         Returns: string
       }
+      process_order_return_lines: {
+        Args: {
+          p_action?: string
+          p_category_id?: string
+          p_created_by?: string
+          p_description?: string
+          p_line_ids: string[]
+          p_refund_account_id?: string
+          p_warehouse_id?: string
+        }
+        Returns: Json
+      }
       process_purchase_return: {
         Args: {
           p_created_by?: string
@@ -5030,17 +4968,6 @@ export type Database = {
           p_items: Json
           p_purchase_order_id: string
           p_reason?: string
-          p_warehouse_id?: string
-        }
-        Returns: Json
-      }
-      process_sales_note_return: {
-        Args: {
-          p_created_by?: string
-          p_items: Json
-          p_reason?: string
-          p_refund_account_id?: string
-          p_sales_note_id: string
           p_warehouse_id?: string
         }
         Returns: Json
