@@ -19,6 +19,7 @@ interface ExportDocExcelOptions {
   filename: string;
   shippingFee?: number | null;
   deliveryMethodTitle?: string | null;
+  trackingNumbers?: string[];
 }
 
 export async function exportDocExcel(opts: ExportDocExcelOptions): Promise<void> {
@@ -58,6 +59,9 @@ export async function exportDocExcel(opts: ExportDocExcelOptions): Promise<void>
     rows.push(["總件數", `${totalQty} 件`]);
     if (opts.deliveryMethodTitle) {
       rows.push(["配送方式", opts.deliveryMethodTitle]);
+    }
+    if (opts.trackingNumbers && opts.trackingNumbers.length > 0) {
+      rows.push(["物流單號", opts.trackingNumbers.join("、")]);
     }
     if (fee > 0) {
       rows.push(["運費", fee]);

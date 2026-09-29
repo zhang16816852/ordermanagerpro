@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, AlertCircle, Truck } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { SharedReceiptExport } from "./SharedReceiptExport";
+import { receiptTrackingNumbers } from "./receiptTracking";
 import { useState } from "react";
 
 interface SharedConsignmentData {
@@ -22,7 +23,9 @@ interface SharedConsignmentData {
     access_token?: string;
     shipping_fee?: number | null;
     delivery_method_title?: string | null;
+    delivery_type?: string | null;
   };
+  shipments?: { tracking_number?: string | null }[];
   items: {
     product_name: string;
     variant_name?: string | null;
@@ -83,11 +86,12 @@ export default function SharedConsignment() {
     );
   }
 
-  const { consignment, items } = data;
+  const { consignment, items, shipments } = data;
   const sortedItems = [...(items ?? [])];
   const showPrice = sortedItems.length > 0 && sortedItems[0].unit_price !== null;
   const directionLabel = DIRECTION_LABEL[consignment.direction] || consignment.direction;
   const placeName = consignment.store_name || consignment.supplier_name || "-";
+  const trackingNumbers = receiptTrackingNumbers(shipments);
 
   if (isPrintingMode) {
     return (
@@ -110,6 +114,8 @@ export default function SharedConsignment() {
         canViewPrice={showPrice}
         shippingFee={consignment.shipping_fee}
         deliveryMethodTitle={consignment.delivery_method_title}
+        deliveryType={consignment.delivery_type}
+        trackingNumbers={trackingNumbers}
         printMode
         webPreview
         defaultPaperSize={printSize}
@@ -154,6 +160,8 @@ export default function SharedConsignment() {
         canViewPrice={showPrice}
         shippingFee={consignment.shipping_fee}
         deliveryMethodTitle={consignment.delivery_method_title}
+        deliveryType={consignment.delivery_type}
+        trackingNumbers={trackingNumbers}
         webPreview
         defaultPaperSize={printSize}
       />

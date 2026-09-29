@@ -6,6 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, AlertCircle, Package } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { SharedReceiptExport } from "./SharedReceiptExport";
+import { receiptTrackingNumbers } from "./receiptTracking";
 import { useState } from "react";
 
 interface SharedOrderData {
@@ -19,7 +20,9 @@ interface SharedOrderData {
     notes: string;
     shipping_fee?: number | null;
     delivery_method_title?: string | null;
+    delivery_type?: string | null;
   };
+  shipments?: { tracking_number?: string | null }[];
   items: {
     product_name: string;
     variant_name?: string | null;
@@ -31,14 +34,22 @@ interface SharedOrderData {
   }[];
 }
 
+/** 單據層類型對應的預設備註（品項備註 line_note 為空時使用） */
+const LINE_TYPE_NOTE: Record<string, string> = { return: '退貨', exchange: '換貨' };
+
 const toReceiptItems = (items: SharedOrderData['items']) =>
-  items.map((item) => ({
-    name: `${item.line_type === 'return' ? '[退貨] ' : ''}${item.product_name}`,
-    variant: item.variant_name,
-    quantity: item.line_type === 'return' ? -Math.abs(item.quantity) : item.quantity,
-    unit_price: item.unit_price,
-    note: item.line_type === 'return' ? '退貨' : (item.line_note || undefined),
-  }));
+  items.map((item) => {
+    const noteParts = [LINE_TYPE_NOTE[item.line_type ?? 'sale'], item.line_note].filter(
+      (s): s is string => !!s,
+    );
+    return {
+      name: `${item.line_type === 'return' ? '[退貨] ' : ''}${item.product_name}`,
+      variant: item.variant_name,
+      quantity: item.line_type === 'return' ? -Math.abs(item.quantity) : item.quantity,
+      unit_price: item.unit_price,
+      note: noteParts.join('・') || undefined,
+    };
+  });
 
 export default function SharedOrder() {
   const { orderId } = useParams();
@@ -89,9 +100,10 @@ export default function SharedOrder() {
     );
   }
 
-  const { order, items } = data;
+  const { order, items, shipments } = data;
   const sortedItems = [...(items ?? [])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
   const canViewPrice = user ? (isAdmin || storeRoles.some(r => r.store_id === order.store_id)) : false;
+  const trackingNumbers = receiptTrackingNumbers(shipments);
 
   // 列印模式：只顯示列印版型，方便版面調整測試
   if (isPrintingMode) {
@@ -110,6 +122,8 @@ export default function SharedOrder() {
         canViewPrice={canViewPrice}
         shippingFee={order.shipping_fee}
         deliveryMethodTitle={order.delivery_method_title}
+        deliveryType={order.delivery_type}
+        trackingNumbers={trackingNumbers}
         printMode
         webPreview
         defaultPaperSize={printSize}
@@ -148,6 +162,8 @@ export default function SharedOrder() {
         canViewPrice={canViewPrice}
         shippingFee={order.shipping_fee}
         deliveryMethodTitle={order.delivery_method_title}
+        deliveryType={order.delivery_type}
+        trackingNumbers={trackingNumbers}
         webPreview
         defaultPaperSize={printSize}
       />

@@ -578,6 +578,25 @@
   height: 60px;
 }
 
+/* 收據表頭右欄：配送方式／物流單號 + QR */
+.doc-side {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-right: 12px;
+}
+
+.doc-side-info {
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: right;
+}
+
+.doc-side-line {
+  max-width: 70mm;
+  overflow-wrap: anywhere;
+}
+
 /* 網頁版分頁預覽：正面顯示 doc-receipt-wrap，套用正常文件版型 */
 .doc-receipt-web-preview {
   position: static;

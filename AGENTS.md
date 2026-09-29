@@ -2,6 +2,15 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（分享收據：品項備註補「換貨」＋物流配送資訊移至 QR 旁，2026-09-30）
+
+- **品項備註（分享頁）**：`SharedOrder`／`SharedSales` 的 `toReceiptItems` 改為 `[LINE_TYPE_NOTE[line_type], line_note].filter(Boolean).join('・')`，`LINE_TYPE_NOTE = { return: '退貨', exchange: '換貨' }`——**實體 `line_note` 仍優先**（`return` 列有真實備註如「退貨出貨入庫」照顯示），但 `line_note` 為空時**不再留白**：`exchange` 顯示「換貨」、`return` 顯示「退貨」。根因：實查 `order_items` 4 筆 `line_type='exchange'`（OD26092900001×3、OD26092500003）`line_note` 全為 NULL（**訂單打單 UI 本來就沒有逐品項備註輸入框**，只有訂單層 `OrderInfoCard` 的備註），故換貨列在收據備註欄全空。`sale` 類型無 label、備註為空則維持空白。
+- **分享收據表頭右欄（物流）**：`SharedReceiptExport` 的 `ReceiptPage` 新增 props `deliveryType`／`trackingNumbers`；`配送方式` 從左欄 `.doc-meta` **移至右欄** `.doc-side`（新增 CSS：`.doc-side` flex、`gap:10px`、`.doc-side-info` 右對齊 12px、`.doc-side-line` `max-width:46vw` + `overflow-wrap:anywhere`），**僅 `deliveryType === 'logistics'` 且有單號時**追加一行 `物流單號：A、B`（多包裹以「、」串接）。QR 恆置於該資訊區右側；無配送資訊且關閉 QR 時右欄不渲染（維持原外觀）。
+- **後端**：`supabase/migrations/20260930000001_share_rpc_delivery_type.sql`（**已套用遠端**）＝ `CREATE OR REPLACE` 三支分享 RPC（`get_shared_order_details`／`get_shared_sales_note_details`／`get_shared_consignment_details`），**doc 物件（`order`／`sales_note`／`consignment`）補回傳 `delivery_type`**；簽名不變、其餘欄位與驗證沿用線上最新 body，`GRANT EXECUTE` 補回 `anon`＋`authenticated`。⚠️ 重發時 `p_token` 需 `::text` 明確轉型（`share_token_for_code` 回 UUID，直接呼叫會 42883 函式不存在）。遠端實測 `SL2609BN0010001` 等 6 張 logistics 單：RPC `delivery_type='logistics'` 且 `shipments` 正確回傳。
+- **三個分享頁接線**：`SharedOrder`／`SharedSales`／`SharedConsignment` 的 data interface 加 `delivery_type?` 與 `shipments?: { tracking_number?: string|null }[]`；共用取號 helper 放**新檔 `src/pages/share/receiptTracking.ts`**（`receiptTrackingNumbers` 去重去空）——**刻意不放 `SharedReceiptExport.tsx`**，避免多一條 `react-refresh/only-export-components` 警告。列印模式與一般模式**兩處**呼叫皆傳 `deliveryType`／`trackingNumbers`。
+- **Excel 匯出一致化**：`exportExcel.ts` 的 `ExportDocExcelOptions` 加 `trackingNumbers?`，統計區在「配送方式」後補「物流單號」列（`SharedReceiptExport.handleExport` 傳入）。
+- **驗證**：`npm run typecheck` 0 errors、`npx eslint src/pages/share/` 0 errors（3 warnings 皆既有）、`npm run build` 通過（1m22s，僅既有 chunk-size 警告）。
+
 ## 近期變更（批次建立變體 42883 修復＋表單內按鈕誤提交修復，2026-09-29）
 
 - **問題 1｜`batch_upsert_product_options` 拋 42883「operator does not exist: jsonb ->> jsonb」**（用 `VariantBatchCreator` 批次建立變體時）：第 4/5 段的 key 查詢寫成 `(v_sku_to_id->>v_opt_row.value->>'sku')`，`->>` 為**左結合**，Postgres 實際解析為 `((v_sku_to_id ->> v_opt_row.value) ->> 'sku')` → 42883，整筆 transaction ROLLBACK。`20260910000003` 早已修過，但 **① 該 migration 從未套用遠端**（`supabase_migrations.schema_migrations` 查無紀錄）② 後來 `20260928000001`（tracking）**以舊 body 重發又把括號弄掉**，等於把線上改回壞版。

@@ -89,6 +89,10 @@ interface SharedReceiptProps {
   shippingFee?: number | null;
   /** 配送方式名稱（單據層 delivery_method_title） */
   deliveryMethodTitle?: string | null;
+  /** 配送類型（單據層 delivery_type：delivery | logistics | pickup） */
+  deliveryType?: string | null;
+  /** 物流追蹤單號（shipments[].tracking_number），僅 logistics 類型顯示 */
+  trackingNumbers?: string[];
 }
 
 function HeaderRow({ showPrice }: { showPrice: boolean }) {
@@ -130,6 +134,8 @@ function ReceiptPage({
   createdAt,
   status,
   deliveryMethodTitle,
+  deliveryType,
+  trackingNumbers,
   widthClass,
   children,
 }: {
@@ -149,9 +155,18 @@ function ReceiptPage({
   status: string;
   notes?: string;
   deliveryMethodTitle?: string | null;
+  deliveryType?: string | null;
+  trackingNumbers?: string[];
   widthClass: "a4" | "middle-cut";
   children?: ReactNode;
 }) {
+  const showQrBlock = showQR && !!qrValue;
+  // 右欄：配送方式 + 物流單號（物流類型才顯示單號），QR 置於其右
+  const deliveryLines: string[] = [];
+  if (deliveryMethodTitle) deliveryLines.push(`配送方式：${deliveryMethodTitle}`);
+  if (deliveryType === "logistics" && trackingNumbers && trackingNumbers.length > 0) {
+    deliveryLines.push(`物流單號：${trackingNumbers.join("、")}`);
+  }
   return (
     <div className="doc-page">
       <div className="doc-head-wrap">
@@ -162,11 +177,21 @@ function ReceiptPage({
           <div className="doc-meta">
             日期：{new Date(createdAt).toLocaleString("zh-TW", { hour12: false })}
             {status ? <><br />狀態：{status}</> : null}
-            {deliveryMethodTitle ? <><br />配送方式：{deliveryMethodTitle}</> : null}
           </div>
-          {showQR && qrValue && (
-            <div className="doc-qr">
-              <QRCodeSVG value={qrValue} size={72} />
+          {(showQrBlock || deliveryLines.length > 0) && (
+            <div className="doc-side">
+              {deliveryLines.length > 0 && (
+                <div className="doc-side-info">
+                  {deliveryLines.map((line) => (
+                    <div key={line} className="doc-side-line">{line}</div>
+                  ))}
+                </div>
+              )}
+              {showQrBlock && (
+                <div className="doc-qr">
+                  <QRCodeSVG value={qrValue!} size={72} />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -236,6 +261,8 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
     webShowQR: webShowQRProp,
     shippingFee,
     deliveryMethodTitle,
+    deliveryType,
+    trackingNumbers,
   } = props;
 
   const printRef = useRef<HTMLDivElement>(null);
@@ -302,6 +329,7 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
           showPrice,
           shippingFee,
           deliveryMethodTitle,
+          trackingNumbers,
           filename: `${filenamePrefix}_${code || "note"}`,
         });
         toast.success("Excel 匯出成功");
@@ -398,6 +426,8 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
               status={statusText}
               notes={notes}
               deliveryMethodTitle={deliveryMethodTitle}
+              deliveryType={deliveryType}
+              trackingNumbers={trackingNumbers}
               widthClass={widthClass}
             >
               {isLast && (

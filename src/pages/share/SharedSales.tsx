@@ -12,6 +12,7 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import { format } from "date-fns";
 import { useState } from "react";
 import { SharedReceiptExport } from "./SharedReceiptExport";
+import { receiptTrackingNumbers } from "./receiptTracking";
 
 interface SharedSalesData {
   sales_note: {
@@ -25,7 +26,9 @@ interface SharedSalesData {
     access_token?: string;
     shipping_fee?: number | null;
     delivery_method_title?: string | null;
+    delivery_type?: string | null;
   };
+  shipments?: { tracking_number?: string | null }[];
   items: {
     product_name: string;
     variant_name?: string | null;
@@ -37,14 +40,22 @@ interface SharedSalesData {
   }[];
 }
 
+/** 單據層類型對應的預設備註（品項備註 line_note 為空時使用） */
+const LINE_TYPE_NOTE: Record<string, string> = { return: '退貨', exchange: '換貨' };
+
 const toReceiptItems = (items: SharedSalesData['items']) =>
-  items.map((item) => ({
-    name: `${item.line_type === 'return' ? '[退貨] ' : ''}${item.product_name}`,
-    variant: item.variant_name,
-    quantity: item.line_type === 'return' ? -Math.abs(item.quantity) : item.quantity,
-    unit_price: item.unit_price,
-    note: item.line_type === 'return' ? '退貨' : (item.line_note || undefined),
-  }));
+  items.map((item) => {
+    const noteParts = [LINE_TYPE_NOTE[item.line_type ?? 'sale'], item.line_note].filter(
+      (s): s is string => !!s,
+    );
+    return {
+      name: `${item.line_type === 'return' ? '[退貨] ' : ''}${item.product_name}`,
+      variant: item.variant_name,
+      quantity: item.line_type === 'return' ? -Math.abs(item.quantity) : item.quantity,
+      unit_price: item.unit_price,
+      note: noteParts.join('・') || undefined,
+    };
+  });
 
 export default function SharedSales() {
   const { salesNoteId } = useParams();
@@ -119,9 +130,10 @@ export default function SharedSales() {
     );
   }
 
-  const { sales_note, items } = data;
+  const { sales_note, items, shipments } = data;
   const sortedItems = [...(items ?? [])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
   const showPrice = sortedItems.length > 0 && sortedItems[0].unit_price !== null;
+  const trackingNumbers = receiptTrackingNumbers(shipments);
 
   // 列印模式：只顯示列印版型，方便版面調整測試
   if (isPrintingMode) {
@@ -140,6 +152,8 @@ export default function SharedSales() {
         canViewPrice={showPrice}
         shippingFee={sales_note.shipping_fee}
         deliveryMethodTitle={sales_note.delivery_method_title}
+        deliveryType={sales_note.delivery_type}
+        trackingNumbers={trackingNumbers}
         printMode
         webPreview
         defaultPaperSize={printSize}
@@ -191,6 +205,8 @@ export default function SharedSales() {
         canViewPrice={showPrice}
         shippingFee={sales_note.shipping_fee}
         deliveryMethodTitle={sales_note.delivery_method_title}
+        deliveryType={sales_note.delivery_type}
+        trackingNumbers={trackingNumbers}
         webPreview
         defaultPaperSize={printSize}
       />
