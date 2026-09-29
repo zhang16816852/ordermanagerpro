@@ -86,6 +86,7 @@ export function useSalesNoteCorrectQueries(note: SalesNoteDetail | null, open: b
                         quantity,
                         shipped_quantity,
                         unit_price,
+                        line_type,
                         product:products(name, code),
                         product_variant:product_variants(name, sku)
                     )

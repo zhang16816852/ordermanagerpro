@@ -429,6 +429,9 @@ export function SalesNoteDetailDialog({
                                                     {item.lineType === "exchange" && (
                                                         <Badge variant="outline" className="ml-2 bg-sky-50 text-sky-700 border-sky-200">換貨</Badge>
                                                     )}
+                                                    {item.lineType === "return" && (
+                                                        <Badge variant="outline" className="ml-2 bg-orange-50 text-orange-700 border-orange-300">退貨</Badge>
+                                                    )}
                                                 </div>
                                                 {showSku && <div className="text-xs text-muted-foreground font-mono mt-0.5">{item.productSku}</div>}
                                                 {item.lineNote && <div className="text-xs text-muted-foreground mt-0.5">備註：{item.lineNote}</div>}
@@ -457,6 +460,9 @@ export function SalesNoteDetailDialog({
                                             {item.variantName ? item.variantName : item.productName}
                                             {item.lineType === "exchange" && (
                                                 <Badge variant="outline" className="bg-sky-50 text-sky-700 border-sky-200">換貨</Badge>
+                                            )}
+                                            {item.lineType === "return" && (
+                                                <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">退貨</Badge>
                                             )}
                                         </div>
                                         {showSku && <div className="text-xs text-muted-foreground font-mono">{item.productSku}</div>}

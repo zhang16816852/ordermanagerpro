@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { OrderDetailDialog } from '@/components/order/OrderDetailDialog';
 import { OrderReturnProcessDialog } from '@/components/order/OrderReturnProcessDialog';
+import { OrderReturnRevertDialog } from '@/components/order/OrderReturnRevertDialog';
 import { DocImportDialog } from '@/components/orders/DocImportDialog';
 import { OrdersCardView } from '@/components/order/OrdersCardView';
 import { ItemsCardView } from '@/components/order/ItemsCardView';
@@ -22,6 +23,7 @@ export default function AdminOrderList() {
   const c = useOrderListPageController();
   const [importOrdersOpen, setImportOrdersOpen] = useState(false);
   const [returnProcessOpen, setReturnProcessOpen] = useState(false);
+  const [returnRevertOpen, setReturnRevertOpen] = useState(false);
 
   const {
     statusTab,
@@ -361,6 +363,7 @@ export default function AdminOrderList() {
         onOpenChange={(open) => !open && setViewingOrder(null)}
         onDeleteOrder={(id) => handleDeleteOrders([id])}
         onProcessReturns={() => setReturnProcessOpen(true)}
+        onRevertReturns={() => setReturnRevertOpen(true)}
         parcelEditable
       />
 
@@ -368,6 +371,12 @@ export default function AdminOrderList() {
         order={viewingOrder}
         open={returnProcessOpen}
         onOpenChange={setReturnProcessOpen}
+      />
+
+      <OrderReturnRevertDialog
+        order={viewingOrder}
+        open={returnRevertOpen}
+        onOpenChange={setReturnRevertOpen}
       />
 
       {/* Convert to PO Dialog */}

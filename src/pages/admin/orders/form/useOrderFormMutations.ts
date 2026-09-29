@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
-import { OrderItemRow } from '@/components/order/orderItemsTypes';
+import { OrderItemRow, isReturnLine } from '@/components/order/orderItemsTypes';
 import { useStoreDraft } from '@/store/useOrderDraftStore';
 import { DeliveryType } from '@/components/shipping/DeliveryMethodPicker';
 import type { ShippingAddressValue } from '@/components/shipping/ShippingAddressFields';
@@ -44,6 +44,22 @@ export interface OrderFormMutationParams {
   getDeliveryType: () => DeliveryType | null;
   onDirectShipDialogClose: () => void;
 }
+
+/**
+ * line_type / line_note / return_status / is_repair 必須成組送出：
+ * 後端 update_order_with_items 對未帶入的 key 會「保留現值」，
+ * 若把退貨列改回一般銷售卻漏掉 return_status=null，會殘留舊值並觸發
+ * chk_order_item_return_status_scope / chk_order_item_is_repair_scope（23514）。
+ */
+const lineTypeFields = (item: OrderItemRow) => {
+  const isReturn = isReturnLine(item);
+  return {
+    line_type: item.lineType || 'sale',
+    line_note: item.lineNote || null,
+    return_status: isReturn ? item.returnStatus || 'pending' : null,
+    is_repair: isReturn ? !!item.isRepair : false,
+  };
+};
 
 export function useOrderFormMutations(params: OrderFormMutationParams) {
   const navigate = useNavigate();
@@ -88,10 +104,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       temp_key: item.isNew ? (item.tempKey ?? `temp-${Date.now().toString(36)}-${index}`) : undefined,
       parent_temp_key: item.parentTempKey ?? undefined,
       sort_order: index + 1,
-      line_type: item.lineType || undefined,
-      line_note: item.lineNote || undefined,
-      return_status: item.returnStatus || undefined,
-      is_repair: item.isRepair || undefined,
+      ...lineTypeFields(item),
     })), []);
 
   // 同步勾選品項的價格到品牌：auto 時（儲存送出自動執行）不顯示「無品牌/無勾選」提示
@@ -216,10 +229,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         selected_model_name: item.selectedModelName || null,
         shipping_payment: item.shippingPayment ?? null,
         sort_order: index + 1,
-        line_type: item.lineType || 'sale',
-        line_note: item.lineNote || null,
-        return_status: item.returnStatus || null,
-        is_repair: item.isRepair || false,
+        ...lineTypeFields(item),
       }));
 
       const { error: itemsError } = await (supabase.from('order_items') as any).insert(orderItems);
@@ -261,10 +271,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         temp_key: i.tempKey ?? `temp-${Date.now().toString(36)}-${index}`,
         parent_temp_key: i.parentTempKey ?? undefined,
         sort_order: index + 1,
-        line_type: i.lineType || 'sale',
-        line_note: i.lineNote || undefined,
-        return_status: i.returnStatus || undefined,
-        is_repair: i.isRepair || undefined,
+        ...lineTypeFields(i),
       }));
 
       const d = getDeliveryType();

@@ -13,7 +13,7 @@ import { OrderInfo } from './OrderInfo';
 import { OrderDetailItemsTable } from './OrderDetailItemsTable';
 import { OrderDetailItemsCards } from './OrderDetailItemsCards';
 import { Order } from '@/types/order';
-import { Check, Share2, Trash2, RotateCcw } from 'lucide-react';
+import { Check, Share2, Trash2, RotateCcw, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/formatters';
 import { useRepCommission } from '@/hooks/useRepCommission';
@@ -25,10 +25,11 @@ interface OrderDetailDialogProps {
     onOpenChange: (open: boolean) => void;
     onDeleteOrder?: (orderId: string) => void;
     onProcessReturns?: () => void;
+    onRevertReturns?: () => void;
     parcelEditable?: boolean;
 }
 
-export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, onProcessReturns, parcelEditable = false }: OrderDetailDialogProps) {
+export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, onProcessReturns, onRevertReturns, parcelEditable = false }: OrderDetailDialogProps) {
     const [isCopied, setIsCopied] = useState(false);
     const { isRep, computeOrder } = useRepCommission();
 
@@ -39,6 +40,11 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, on
 
     const hasPendingReturns = (order?.order_items ?? []).some(
         (item) => item.line_type === 'return' && item.return_status === 'pending'
+    );
+
+    // 撤銷退貨適用於「任何」退貨列（含已退庫存的誤標），故不限定 pending
+    const hasAnyReturns = (order?.order_items ?? []).some(
+        (item) => item.line_type === 'return'
     );
 
     if (!order) return null;
@@ -102,6 +108,12 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, on
                             <Button variant="outline" size="sm" onClick={onProcessReturns}>
                                 <RotateCcw className="h-4 w-4 mr-1" />
                                 處理退貨
+                            </Button>
+                        )}
+                        {onRevertReturns && hasAnyReturns && (
+                            <Button variant="outline" size="sm" onClick={onRevertReturns}>
+                                <Undo2 className="h-4 w-4 mr-1" />
+                                撤銷退貨
                             </Button>
                         )}
                         {onDeleteOrder && (

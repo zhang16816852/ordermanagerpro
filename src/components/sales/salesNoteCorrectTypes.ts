@@ -32,6 +32,7 @@ export interface PoolItem {
         quantity: number;
         shipped_quantity: number;
         unit_price: number;
+        line_type?: 'sale' | 'exchange' | 'return' | null;
         order: { code: string | null; consignment_mode: boolean } | null;
         product: { name: string; code: string } | null;
         product_variant: { name: string; sku: string } | null;

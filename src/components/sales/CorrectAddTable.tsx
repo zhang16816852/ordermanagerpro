@@ -53,12 +53,20 @@ export function CorrectAddTable({
                                     {poolItems.map((p) => {
                                         const oi = p.order_item;
                                         const qty = addedFromPool[oi.id] || 0;
+                                        // 退貨列（line_type='return'）不可追加出貨：
+                                        // 整包 correct_sales_note 會被後端守門擋下，提示改用訂單層「撤銷退貨」
+                                        const isReturn = (oi?.line_type ?? 'sale') === 'return';
                                         return (
-                                            <TableRow key={p.id}>
+                                            <TableRow key={p.id} className={isReturn ? "opacity-70" : undefined}>
                                                 <TableCell>
                                                     <div className="font-medium text-sm">{itemLabel(oi?.product?.name, oi?.product_variant?.name)}</div>
                                                     {oi?.order?.code && (
                                                         <div className="text-xs text-muted-foreground">訂單 {oi.order.code}</div>
+                                                    )}
+                                                    {isReturn && (
+                                                        <div className="text-xs text-orange-600 mt-0.5">
+                                                            退貨品項不可追加出貨
+                                                        </div>
                                                     )}
                                                 </TableCell>
                                                 <TableCell className="text-right">{p.quantity}</TableCell>
@@ -70,7 +78,8 @@ export function CorrectAddTable({
                                                         max={p.quantity}
                                                         className="h-8 w-20 text-right ml-auto"
                                                         value={qty || ""}
-                                                        placeholder="0"
+                                                        placeholder={isReturn ? "—" : "0"}
+                                                        disabled={isReturn}
                                                         onChange={(e) => {
                                                             const val = Math.max(0, Math.min(p.quantity, Number(e.target.value) || 0));
                                                             setAddedFromPool((prev) => ({ ...prev, [oi.id]: val }));

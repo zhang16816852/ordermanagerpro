@@ -122,7 +122,12 @@ export function SalesNoteCorrectDialog({
             if (!note) throw new Error("無銷貨單資料");
             const itemsToRemove = Array.from(removingIds);
             const itemsToAdd: CorrectAddItem[] = [
-                ...Object.entries(addedFromPool).map(([order_item_id, quantity]) => ({ order_item_id, quantity })),
+                // 防呆：退貨列一律不得作為追加出貨來源（UI 已停用輸入，此處再擋一次）
+                ...Object.entries(addedFromPool)
+                    .filter(([order_item_id]) =>
+                        poolItems.some((p) => p.order_item_id === order_item_id && (p.order_item?.line_type ?? "sale") !== "return")
+                    )
+                    .map(([order_item_id, quantity]) => ({ order_item_id, quantity })),
                 ...Object.entries(addedFromOrder).map(([order_item_id, quantity]) => ({ order_item_id, quantity })),
             ];
             const { data, error } = await (supabase as any).rpc("correct_sales_note", {
