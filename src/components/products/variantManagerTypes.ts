@@ -61,7 +61,7 @@ export interface BatchEditEntry {
   modelRefs?: DeviceSelectionRef[];
 }
 
-export type FieldOptionType = 'number' | 'text' | 'select' | 'option' | 'model';
+export type FieldOptionType = 'number' | 'text' | 'select' | 'option' | 'model' | 'tracking';
 
 export interface FieldOption {
   value: string;
@@ -85,6 +85,7 @@ export const FIELD_OPTIONS: FieldOption[] = [
   { value: 'wholesale_price', label: '批發價', type: 'number' },
   { value: 'retail_price', label: '零售價', type: 'number' },
   { value: 'status', label: '狀態', type: 'select' },
+  { value: 'tracking_mode', label: '追蹤模式', type: 'tracking' },
   { value: 'name', label: '變體名稱', type: 'text' },
   { value: 'barcode', label: '條碼', type: 'text' },
 ];

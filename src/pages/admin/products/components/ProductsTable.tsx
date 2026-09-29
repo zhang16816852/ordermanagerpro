@@ -2,28 +2,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ProductRowItem } from './ProductRowItem';
-import { Tables } from '@/integrations/supabase/types';
-
-type Product = Tables<'products'>;
-
-interface ProductsTableProps {
-    products: Product[] | undefined;
-    isLoading: boolean;
-    brandMap: Record<string, string>;
-    selectedIds: Set<string>;
-    isAllSelected: boolean;
-    expandedIds: Set<string>;
-    onToggleSelectAll: (checked: boolean) => void;
-    onToggleSelect: (id: string) => void;
-    onToggleExpand: (id: string) => void;
-    getVariants: (id: string) => any[];
-    getModels?: (id: string) => string[];
-    getModelGroups?: (id: string) => string[];
-    onEdit: (p: Product) => void;
-    onCopy: (p: Product) => void;
-    onDelete: (p: Product) => void;
-    onUpdateVariant: (id: string, updates: any) => void;
-}
+import type { ProductsListViewProps } from './productsListTypes';
 
 export function ProductsTable({
     products,
@@ -42,7 +21,7 @@ export function ProductsTable({
     onCopy,
     onDelete,
     onUpdateVariant
-}: ProductsTableProps) {
+}: ProductsListViewProps) {
     if (isLoading) {
         return (
             <div className="rounded-xl border bg-card overflow-x-auto">

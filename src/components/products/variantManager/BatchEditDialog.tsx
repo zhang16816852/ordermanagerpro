@@ -16,6 +16,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Plus, Trash2 } from 'lucide-react';
 import { StandaloneDeviceModelSelectField } from '../StandaloneDeviceModelSelectField';
+import { TRACKING_MODE_LABELS } from '@/utils/lotTracking';
 import type {
   BatchEditEntry,
   FieldOption,
@@ -98,6 +99,17 @@ export function BatchEditDialog({
                         <SelectItem value="preorder">預購中</SelectItem>
                         <SelectItem value="sold_out">售完停產</SelectItem>
                         <SelectItem value="discontinued">已停售</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : opt?.type === 'tracking' ? (
+                    <Select value={entry.value} onValueChange={v => updateBatchEntry(idx, { value: v })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="選擇追蹤模式" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(['none', 'serial', 'batch'] as const).map(m => (
+                          <SelectItem key={m} value={m}>{TRACKING_MODE_LABELS[m]}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   ) : opt?.type === 'option' ? (

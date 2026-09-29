@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
 import { formatCurrency } from '@/lib/formatters';
+import { LotInputFields } from '@/components/purchase/LotInputFields';
+import { LotInput, TrackingMode, trackingModeOf, isLotValid } from '@/utils/lotTracking';
 
 interface ReceivingItem {
   id: string;
@@ -21,7 +23,7 @@ interface ReceivingItem {
   unit_cost: number;
   sort_order?: number;
   product?: { name: string; sku: string };
-  variant?: { name: string; sku: string };
+  variant?: { name: string; sku: string; tracking_mode?: TrackingMode };
 }
 
 interface ReceivingOrder {
@@ -42,6 +44,7 @@ export function ReceivingTab() {
   const [expandedPO, setExpandedPO] = useState<string | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [itemWarehouses, setItemWarehouses] = useState<Record<string, string>>({});
+  const [lots, setLots] = useState<Record<string, LotInput>>({});
 
   const getItemWarehouse = (itemId: string) => itemWarehouses[itemId] || defaultWarehouse?.id || '';
 
@@ -56,7 +59,7 @@ export function ReceivingTab() {
           items:purchase_order_items(
             id, product_id, variant_id, quantity, received_quantity, unit_cost, sort_order,
             product:products(name, code),
-            variant:product_variants(name, sku)
+            variant:product_variants(name, sku, tracking_mode)
           )
         `)
         .in('status', ['ordered', 'partial_received'])
@@ -68,7 +71,10 @@ export function ReceivingTab() {
   });
 
   const receiveMutation = useMutation({
-    mutationFn: async (payload: { poId: string; poCode: string; items: { id: string; product_id: string; variant_id: string | null; received_quantity: number; warehouse_id: string }[] }) => {
+    mutationFn: async (payload: { poId: string; poCode: string; items: { id: string; product_id: string; variant_id: string | null; received_quantity: number; warehouse_id: string; lots?: LotInput }[] }) => {
+      const rpcLots = payload.items
+        .filter(item => item.lots)
+        .map(item => ({ purchase_order_item_id: item.id, ...item.lots } as Record<string, unknown>));
       const { error: rpcError } = await (supabase as any)
         .rpc('receive_purchase_items', {
           p_items: payload.items.map(item => ({
@@ -81,6 +87,7 @@ export function ReceivingTab() {
             warehouse_id: item.warehouse_id || null,
           })),
           p_warehouse_id: null,
+          p_lots: rpcLots.length > 0 ? rpcLots : null,
         });
       if (rpcError) throw rpcError;
     },
@@ -92,6 +99,7 @@ export function ReceivingTab() {
       toast.success('收貨已記錄，庫存已更新');
       setExpandedPO(null);
       setQuantities({});
+      setLots({});
     },
     onError: (error: Error) => toast.error(getErrorMessage(error)),
   });
@@ -107,13 +115,23 @@ export function ReceivingTab() {
       return;
     }
 
-    const updates = filteredItems.map(item => ({
-      id: item.id,
-      product_id: item.product_id!,
-      variant_id: item.variant_id,
-      received_quantity: quantities[item.id] ?? item.received_quantity,
-      warehouse_id: getItemWarehouse(item.id),
-    }));
+    const updates = filteredItems.map(item => {
+      const lotInput = lots[item.id] || null;
+      const tracking = trackingModeOf(item.variant);
+      if (!isLotValid(lotInput, tracking, quantities[item.id] ?? item.received_quantity)) {
+        throw new Error(tracking === 'serial'
+          ? `「${item.variant?.name || item.product?.name || '品項'}」需輸入與收貨數量相同的序號`
+          : `「${item.variant?.name || item.product?.name || '品項'}」需輸入批號`);
+      }
+      return {
+        id: item.id,
+        product_id: item.product_id!,
+        variant_id: item.variant_id,
+        received_quantity: quantities[item.id] ?? item.received_quantity,
+        warehouse_id: getItemWarehouse(item.id),
+        lots: lotInput || undefined,
+      };
+    });
 
     receiveMutation.mutate({
       poId: po.id,
@@ -206,7 +224,8 @@ export function ReceivingTab() {
                       {po.items.map((item) => {
                         const isItemDone = item.received_quantity >= item.quantity;
                         return (
-                          <tr key={item.id} className={`border-b last:border-0 ${isItemDone ? 'bg-green-50/50' : ''}`}>
+                          <Fragment key={item.id}>
+                          <tr className={`border-b last:border-0 ${isItemDone ? 'bg-green-50/50' : ''}`}>
                             <td className="py-2 px-3">
                               <p className="font-medium">{item.variant?.name || item.product?.name || '-'}</p>
                             </td>
@@ -247,6 +266,24 @@ export function ReceivingTab() {
                               {formatCurrency(item.unit_cost)}
                             </td>
                           </tr>
+                          {trackingModeOf(item.variant) !== 'none' && (
+                            <tr key={`${item.id}-lots`} className="border-b last:border-0 bg-muted/20">
+                              <td colSpan={6} className="py-2 px-4">
+                                <LotInputFields
+                                  trackingMode={trackingModeOf(item.variant)}
+                                  quantity={quantities[item.id] ?? item.received_quantity}
+                                  defaultUnitCost={item.unit_cost}
+                                  value={lots[item.id] || null}
+                                  onChange={(v) => setLots(prev => {
+                                    const next = { ...prev };
+                                    if (v) next[item.id] = v; else delete next[item.id];
+                                    return next;
+                                  })}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
                         );
                       })}
                     </tbody>

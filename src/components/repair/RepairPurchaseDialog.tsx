@@ -31,6 +31,8 @@ import { DeviceBlock, RepairBlockItem } from '@/components/repair/deviceBlockTyp
 import { EntryDialog } from '@/pages/admin/accounting/components/EntryDialog';
 import { EntryPrefill } from '@/pages/admin/accounting/components/EntryForm';
 import { useAccounting } from '@/pages/admin/accounting/hooks/useAccounting';
+import { LotInputFields } from '@/components/purchase/LotInputFields';
+import { LotInput, TrackingMode, trackingModeOf, isLotValid } from '@/utils/lotTracking';
 
 export interface RepairPurchaseDialogProps {
   open: boolean;
@@ -75,6 +77,7 @@ export function RepairPurchaseDialog({
   const [entryPrefill, setEntryPrefill] = useState<EntryPrefill | null>(null);
 
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItemState[]>([]);
+  const [lots, setLots] = useState<Record<string, LotInput>>({});
 
   // 抓取活躍供應商（排除不存在的 code 欄位以避免 PostgREST 報錯，並兼顧 is_active 為 null 的情況）
   const { data: suppliers = [], isLoading: isLoadingSuppliers } = useQuery({
@@ -89,6 +92,24 @@ export function RepairPurchaseDialog({
       return (data || []) as { id: string; name: string }[];
     },
     enabled: open,
+  });
+
+  const { data: trackingModeMap = {} } = useQuery({
+    queryKey: ['repair-dialog-tracking', open ? block?.key : null],
+    queryFn: async () => {
+      const ids = [...new Set((block?.items || []).map(i => i.variant_id).filter(Boolean))] as string[];
+      if (ids.length === 0) return {};
+      const { data, error } = await (supabase as any)
+        .from('product_variants')
+        .select('id, tracking_mode')
+        .in('id', ids);
+      if (error) throw error;
+      return (data || []).reduce((acc: Record<string, 'none' | 'serial' | 'batch'>, v: any) => {
+        acc[v.id] = v.tracking_mode || 'none';
+        return acc;
+      }, {});
+    },
+    enabled: open && !!block,
   });
 
   // 當打開或 block 改變時初始化品項列表
@@ -121,6 +142,7 @@ export function RepairPurchaseDialog({
       setExpectedDate('');
       setSupplierOrderNumber('');
       setDirectReceive(false);
+      setLots({});
     }
   }, [open, block, deviceModelName, customerName]);
 
@@ -137,6 +159,11 @@ export function RepairPurchaseDialog({
     setPurchaseItems(prev => prev.map(item => item.itemId === itemId ? { ...item, [field]: value } : item));
   };
 
+  const trackingOf = (item: PurchaseItemState): TrackingMode => {
+    if (item.variantId) return trackingModeMap[item.variantId] || 'none';
+    return 'none';
+  };
+
   const handleCreatePurchaseOrder = async () => {
     if (!supplierId) {
       toast.error('請選擇採購供應商');
@@ -151,6 +178,21 @@ export function RepairPurchaseDialog({
 
     try {
       setIsSubmitting(true);
+
+      // 直接收貨時，序號/批號追蹤品項的批次資料必須齊全
+      if (directReceive) {
+        const invalidItem = itemsToOrder.find(item => {
+          const tracking = trackingOf(item);
+          if (tracking === 'none') return false;
+          return !isLotValid(lots[item.itemId] || null, tracking, item.quantity);
+        });
+        if (invalidItem) {
+          toast.error(invalidItem.partName
+            ? `「${invalidItem.partName}」需輸入${trackingOf(invalidItem) === 'serial' ? '序號（每支一列）' : '批號'}`
+            : `品項需輸入${trackingOf(invalidItem) === 'serial' ? '序號（每支一列）' : '批號'}`);
+          return;
+        }
+      }
 
       // 1. 建立採購單 (purchase_orders)
       const poDate = new Date().toISOString().split('T')[0];
@@ -240,9 +282,19 @@ export function RepairPurchaseDialog({
           warehouse_id: null,
         }));
 
+        const rpcLots = linkedResults
+          .filter(r => r.isReceived)
+          .map(r => {
+            const lot = lots[r.itemId];
+            if (!lot) return null;
+            return { purchase_order_item_id: r.purchaseOrderItemId, ...lot };
+          })
+          .filter(Boolean);
+
         const { error: rpcError } = await (supabase as any).rpc('receive_purchase_items', {
           p_items: rpcPayload,
           p_warehouse_id: null,
+          p_lots: rpcLots.length > 0 ? rpcLots : null,
         });
 
         if (rpcError) {
@@ -385,8 +437,8 @@ export function RepairPurchaseDialog({
             ) : (
               <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
                 {purchaseItems.map((item) => (
+                  <div key={item.itemId} className="space-y-1">
                   <div
-                    key={item.itemId}
                     className={`flex items-center gap-3 p-2 rounded-md border text-sm transition-colors ${
                       item.selected ? 'bg-background border-primary/40' : 'bg-muted/30 border-border opacity-80'
                     }`}
@@ -438,6 +490,21 @@ export function RepairPurchaseDialog({
                         disabled={!item.selected}
                       />
                     </div>
+                  </div>
+                  {trackingOf(item) !== 'none' && item.selected && (
+                    <div className="px-2 pb-1 bg-background">
+                      <LotInputFields
+                        trackingMode={trackingOf(item)}
+                        quantity={item.quantity}
+                        value={lots[item.itemId] || null}
+                        onChange={(v) => setLots(prev => {
+                          const next = { ...prev };
+                          if (v) next[item.itemId] = v; else delete next[item.itemId];
+                          return next;
+                        })}
+                      />
+                    </div>
+                  )}
                   </div>
                 ))}
               </div>

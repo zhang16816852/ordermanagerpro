@@ -68,6 +68,7 @@ export function mergeWithExisting(
         ...newV,
         sku: dbMatch.sku,
         barcode: dbMatch.barcode || existing?.barcode || newV.barcode,
+        tracking_mode: dbMatch.tracking_mode || 'none',
         _dbId: dbMatch._dbId,
       };
     }
@@ -238,6 +239,7 @@ export async function loadExistingBatchData(
       wholesale_price: v.wholesale_price,
       retail_price: v.retail_price,
       sort_order: v.sort_order,
+      tracking_mode: v.tracking_mode || 'none',
       optionValueIds: (variantOptionMap.get(v.id) || []).map(id => dbValueToColorId.get(id) ?? id),
       _modelGroupId: singleMapping?.id,
       _modelGroupType: singleMapping?.type,

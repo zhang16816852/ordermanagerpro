@@ -88,6 +88,7 @@ interface RepairOrderItemView {
   description: string | null;
   product?: { name: string } | null;
   variant?: { name: string } | null;
+  repair_part?: { id: string; name: string } | null;
 }
 
 export function ReferenceViewer({ referenceType, referenceId, open, onOpenChange }: ReferenceViewerProps) {
@@ -235,7 +236,8 @@ export function ReferenceViewer({ referenceType, referenceId, open, onOpenChange
             unit_cost,
             description,
             product:product_id(name),
-            variant:variant_id(name)
+            variant:variant_id(name),
+            repair_part:repair_part_id(id, name)
           )
         `)
         .eq('id', referenceId)
@@ -498,6 +500,9 @@ export function ReferenceViewer({ referenceType, referenceId, open, onOpenChange
                       <TableRow key={item.id}>
                         <TableCell>
                           <p className="text-sm font-medium">{item.service_name || item.part_name || item.product?.name || item.variant?.name || '-'}</p>
+                          {item.repair_part && (
+                            <p className="text-[11px] text-muted-foreground">型錄零件：{item.repair_part.name}</p>
+                          )}
                           {item.description && <p className="text-xs text-muted-foreground">{item.description}</p>}
                         </TableCell>
                         <TableCell>

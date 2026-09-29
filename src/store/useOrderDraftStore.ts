@@ -116,10 +116,25 @@ export interface OrderDraftItem {
   parentTempKey?: string;
 }
 
+// 後台訂單表單的表頭欄位（隨草稿一起持久化，重新整理後不遺失）
+export interface OrderFormMeta {
+  supplierId?: string;
+  targetStoreId?: string;
+  expectedDate?: string;
+  supplierOrderNumber?: string;
+  shippedAt?: string;
+  warehouseId?: string;
+  consignmentMode?: boolean;
+  deliveryType?: 'delivery' | 'logistics' | 'pickup';
+  itemWarehouses?: Record<string, string>;
+  itemSources?: Record<string, string>;
+}
+
 export interface OrderDraft {
   items: OrderDraftItem[];
   notes: string;
   priceSyncMap: Record<string, boolean>;
+  meta?: OrderFormMeta;
   updatedAt: number;
 }
 
@@ -156,6 +171,9 @@ interface OrderDraftState {
 
   // 更新備註
   updateNotes: (storeId: string, notes: string) => void;
+
+  // 合併更新表頭欄位（供應商/目標門市/日期/配送等）
+  updateMeta: (storeId: string, patch: Partial<OrderFormMeta>) => void;
 
   // 清空購物車
   clearDraft: (storeId: string) => void;
@@ -367,6 +385,27 @@ export const useOrderDraftStore = create<OrderDraftState>()(
         });
       },
 
+      updateMeta: (storeId, patch) => {
+        set((state) => {
+          const draft = state.drafts[storeId] || createEmptyDraft();
+          const nextMeta = { ...draft.meta, ...patch };
+          // 欄位全部為空值時移除 key，避免草稿殘留無效資料
+          const hasAny = Object.values(nextMeta).some(
+            (v) => v !== undefined && v !== null && v !== '' && v !== false
+          );
+          return {
+            drafts: {
+              ...state.drafts,
+              [storeId]: {
+                ...draft,
+                meta: hasAny ? nextMeta : undefined,
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        });
+      },
+
       clearDraft: (storeId) => {
         set((state) => {
           const { [storeId]: _, ...rest } = state.drafts;
@@ -427,6 +466,7 @@ export function useStoreDraft(storeId: string | undefined) {
       setPriceSyncMap: () => { },
       removeItem: () => { },
       updateNotes: () => { },
+      updateMeta: () => { },
       clearDraft: () => { },
       getItemQuantity: () => 0,
       getTotalProductQuantity: () => 0,
@@ -463,6 +503,7 @@ export function useStoreDraft(storeId: string | undefined) {
       store.setPriceSyncMap(storeId, map),
     removeItem: (itemId: string) => store.removeItem(storeId, itemId),
     updateNotes: (notes: string) => store.updateNotes(storeId, notes),
+    updateMeta: (patch: Partial<OrderFormMeta>) => store.updateMeta(storeId, patch),
     clearDraft: () => store.clearDraft(storeId),
     getItemQuantity: (productId: string, variantId?: string) =>
       store.getItemQuantity(storeId, productId, variantId),

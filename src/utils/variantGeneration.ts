@@ -30,6 +30,7 @@ export interface SharedVariant {
   wholesale_price: number;
   retail_price: number;
   sort_order: number;
+  tracking_mode?: string;
   optionValueIds: string[];
   _modelGroupId?: string;
   _modelGroupType?: 'model' | 'group';
@@ -323,6 +324,7 @@ export function buildDedupedVariantsPayload(variants: SharedVariant[]) {
     wholesale_price: v.wholesale_price,
     retail_price: v.retail_price,
     sort_order: v.sort_order,
+    tracking_mode: v.tracking_mode || 'none',
   }));
   return [...new Map(list.map(v => [v.sku, v])).values()];
 }

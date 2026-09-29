@@ -24,6 +24,8 @@ import { DeviceBlockSummaryCard } from '@/components/repair/FeesFieldsSection';
 import { useProductMutations } from '@/pages/admin/products/hooks/useProductMutations';
 import { StorePicker } from '@/components/ui/StorePicker';
 import { RepairPurchaseDialog } from '@/components/repair/RepairPurchaseDialog';
+import { RepairPartFormDialog } from '@/components/repair/RepairPartFormDialog';
+import { useRepairParts } from '@/hooks/useRepairParts';
 
 export default function AdminRepairOrderForm() {
   const navigate = useNavigate();
@@ -80,9 +82,19 @@ export default function AdminRepairOrderForm() {
 
   const [partDialogOpen, setPartDialogOpen] = useState(false);
   const [partModelId, setPartModelId] = useState<string | null>(null);
+  const [editingPartId, setEditingPartId] = useState<string | null>(null);
+  const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const { parts: repairParts } = useRepairParts();
 
   const openCreatePart = (modelId: string | null) => {
     setPartModelId(modelId);
+    setEditingPartId(null);
+    setPartDialogOpen(true);
+  };
+
+  const openEditPart = (repairPartId: string) => {
+    setPartModelId(null);
+    setEditingPartId(repairPartId);
     setPartDialogOpen(true);
   };
 
@@ -141,6 +153,7 @@ export default function AdminRepairOrderForm() {
             item_type: (isPart ? 'part' : 'service') as 'part' | 'service',
             service_name: i.service_name || i.part_name || '',
             part_name: i.part_name || i.service_name || '',
+            repair_part_id: i.repair_part_id || null,
             product_id: i.product_id || null,
             variant_id: i.variant_id || null,
             quantity: i.quantity || 1,
@@ -222,6 +235,7 @@ export default function AdminRepairOrderForm() {
         item_type: it.item_type,
         service_name: it.item_type === 'service' ? it.service_name || null : null,
         part_name: it.item_type === 'part' ? it.part_name || null : null,
+        repair_part_id: it.item_type === 'part' ? it.repair_part_id || null : null,
         product_id: it.item_type === 'part' ? it.product_id || null : null,
         variant_id: it.item_type === 'part' ? it.variant_id || null : null,
         quantity: it.quantity,
@@ -541,6 +555,7 @@ export default function AdminRepairOrderForm() {
               onAddBlock={addBlock}
               onRemoveBlock={removeBlock}
               onCreatePart={openCreatePart}
+              onEditPart={openEditPart}
               onRequestPurchase={handleRequestPurchase}
             />
           ))}
@@ -570,6 +585,7 @@ export default function AdminRepairOrderForm() {
             onAddBlock={addBlock}
             onRemoveBlock={removeBlock}
             onCreatePart={openCreatePart}
+            onEditPart={openEditPart}
             onRequestPurchase={handleRequestPurchase}
           />
         ))}
@@ -593,9 +609,21 @@ export default function AdminRepairOrderForm() {
         </div>
       </div>
 
-      <ProductFormDialog
+      <RepairPartFormDialog
         open={partDialogOpen}
         onOpenChange={setPartDialogOpen}
+        editingPart={editingPartId ? repairParts.find(p => p.id === editingPartId) || null : null}
+        presetDeviceModelId={partModelId}
+        onCreateProduct={(modelId) => {
+          setPartDialogOpen(false);
+          setPartModelId(modelId);
+          setProductDialogOpen(true);
+        }}
+      />
+
+      <ProductFormDialog
+        open={productDialogOpen}
+        onOpenChange={setProductDialogOpen}
         onSubmit={createProductMutation.mutate}
         initialData={{
           name: '新維修零件',

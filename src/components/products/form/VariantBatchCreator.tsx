@@ -3,6 +3,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -10,6 +17,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Layers, Sparkles } from 'lucide-react';
+import { TRACKING_MODE_LABELS } from '@/utils/lotTracking';
 import { StandaloneDeviceModelSelectField } from '../StandaloneDeviceModelSelectField';
 import { VariantOptionsEditor } from '@/components/products/variant/VariantOptionsEditor';
 import { useVariantBatchCreator } from './useVariantBatchCreator';
@@ -100,6 +108,24 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
             <Sparkles className="mr-2 h-4 w-4" />
             生成變體預覽
           </Button>
+
+          {/* Default Tracking Mode */}
+          <div className="space-y-2">
+            <Label>預設追蹤模式</Label>
+            <Select value={ctl.trackingMode} onValueChange={ctl.setTrackingMode}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(['none', 'serial', 'batch'] as const).map(m => (
+                  <SelectItem key={m} value={m}>{TRACKING_MODE_LABELS[m]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              一機一號：每台獨立序號，進貨時逐台輸入；批號：整批單一列。既有變體保留原追蹤模式。
+            </p>
+          </div>
 
           {/* Preview */}
           {ctl.generatedVariants.length > 0 && (

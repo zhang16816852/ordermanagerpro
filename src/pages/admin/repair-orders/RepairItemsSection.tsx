@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DollarSign, Edit, Package, Truck, PackageCheck, Loader2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
+import { RepairPartTags } from '@/components/repair/RepairPartTags';
 
 interface RepairItemsSectionProps {
   items: any[];
@@ -122,6 +123,7 @@ export function RepairItemsSection({
                             {item.variant?.sku ? ` (${item.variant.sku})` : ''}
                           </div>
                         )}
+                        {isPart && <RepairPartTags tags={item.repair_part?.tags} />}
                       </td>
                       <td className="py-2.5 px-2 align-top text-xs text-muted-foreground max-w-[180px]">
                         {item.description ? (

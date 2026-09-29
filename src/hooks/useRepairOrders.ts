@@ -218,7 +218,7 @@ export function useRepairOrderDetail(orderId: string) {
           device_model:device_model_id(id, name, specifications, device_type, screen_size, device_series, brand:brand_id(id, name)),
           device_brand:device_model_id(brand_id(name)),
           store:store_id(name),
-          items:repair_order_items(*, product:product_id(name, code), variant:variant_id(name, sku)),
+          items:repair_order_items(*, product:product_id(name, code), variant:variant_id(name, sku), repair_part:repair_part_id(id, name, tags)),
           status_history:repair_order_status_history(*),
           checklists:repair_device_checklists(*)
         `)

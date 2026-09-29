@@ -185,9 +185,12 @@ export function ConsignmentProductsView<T extends ConsignmentViewOrder>({
                     </div>
                   </div>
                   {hasProductActions && (
-                    <div className="flex justify-end">{renderProductActions?.(row)}</div>
+                    <div className="flex items-center justify-end gap-2">
+                      <DateBreakdown cells={row.dateCells ?? []} />
+                      {renderProductActions?.(row)}
+                    </div>
                   )}
-                  <DateBreakdown cells={row.dateCells ?? []} />
+                  {!hasProductActions && <DateBreakdown cells={row.dateCells ?? []} />}
                 </div>
               ))}
             </div>

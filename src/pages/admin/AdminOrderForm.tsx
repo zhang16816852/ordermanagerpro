@@ -69,7 +69,9 @@ export default function AdminOrderForm() {
       shippedAt={c.shippedAt}
       onShippedAtChange={c.setShippedAt}
       consignmentMode={c.consignmentMode}
-      onConsignmentModeChange={c.setConsignmentMode}
+      onConsignmentModeChange={c.handleConsignmentModeChange}
+      consignmentModePending={c.toggleConsignmentModeMutation.isPending}
+      isRep={c.isRep}
       items={c.items}
       getItemWarehouse={c.getItemWarehouse}
       itemWarehouses={c.itemWarehouses}
@@ -142,7 +144,7 @@ export default function AdminOrderForm() {
     <div className="space-y-4">
       {/* Type selector (create mode only) */}
       {!c.isEditMode && !c.isRep && (
-        <Tabs value={c.orderType} onValueChange={(v) => c.setOrderType(v as any)}>
+        <Tabs value={c.orderType} onValueChange={c.handleOrderTypeChange}>
           <TabsList>
             <TabsTrigger value="sales" className="gap-1.5">
               <ShoppingBag className="h-4 w-4" />銷售訂單
@@ -278,7 +280,7 @@ export default function AdminOrderForm() {
       <div className="flex justify-end gap-3">
         {c.isEditMode ? (
           <>
-            {c.order?.status === 'processing' && !c.isRep && (
+            {['pending', 'processing'].includes(c.order?.status ?? '') && !c.isRep && (
               <Button variant="default" onClick={() => c.setDirectShipDialogOpen(true)} disabled={c.isSubmitting}>
                 <Send className="mr-2 h-4 w-4" />
                 {c.order?.consignment_mode ? '寄賣出貨' : '轉銷貨單'}
@@ -309,7 +311,7 @@ export default function AdminOrderForm() {
             {c.createConsignmentReceiveMutation.isPending ? '建立中…' : '建立寄賣收貨單'}
           </Button>
         ) : (
-          <Button onClick={() => c.createConsignmentSendMutation.mutate()} disabled={c.isSubmitting || c.items.length === 0 || !c.supplierId || !c.targetStoreId}>
+          <Button onClick={() => c.createConsignmentSendMutation.mutate()} disabled={c.isSubmitting || c.items.length === 0 || !c.targetStoreId}>
             {c.createConsignmentSendMutation.isPending ? '建立中…' : '建立寄賣出貨單'}
           </Button>
         )}

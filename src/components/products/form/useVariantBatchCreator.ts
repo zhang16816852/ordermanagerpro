@@ -37,6 +37,7 @@ export function useVariantBatchCreator({ open, onOpenChange, product, onSuccess 
   const [selectedDeviceRefs, setSelectedDeviceRefs] = useState<DeviceSelectionRef[]>([]);
   const [defaultWholesalePrice, setDefaultWholesalePrice] = useState('');
   const [defaultRetailPrice, setDefaultRetailPrice] = useState('');
+  const [trackingMode, setTrackingMode] = useState<string>('none');
   const [generatedVariants, setGeneratedVariants] = useState<SharedVariant[]>([]);
   const [diffSummary, setDiffSummary] = useState<DiffSummary | null>(null);
   const [orphanConfirm, setOrphanConfirm] = useState<OrphanConfirmState | null>(null);
@@ -160,7 +161,7 @@ export function useVariantBatchCreator({ open, onOpenChange, product, onSuccess 
         defaults,
         unified: isUnified ? { ...defaults } : null,
       });
-      setGeneratedVariants(mergeGenerated(variants));
+      setGeneratedVariants(mergeGenerated(variants.map(v => ({ ...v, tracking_mode: trackingMode }))));
       return;
     }
 
@@ -193,7 +194,7 @@ export function useVariantBatchCreator({ open, onOpenChange, product, onSuccess 
       return;
     }
 
-    setGeneratedVariants(mergeGenerated(variants));
+    setGeneratedVariants(mergeGenerated(variants.map(v => ({ ...v, tracking_mode: trackingMode }))));
   };
 
   const mergeGenerated = (newVariants: SharedVariant[]): SharedVariant[] => {
@@ -296,6 +297,7 @@ export function useVariantBatchCreator({ open, onOpenChange, product, onSuccess 
     setSelectedDeviceRefs([]);
     setDefaultWholesalePrice('');
     setDefaultRetailPrice('');
+    setTrackingMode('none');
     setBarcodeList('');
     setGeneratedVariants([]);
     setDiffSummary(null);
@@ -338,6 +340,8 @@ export function useVariantBatchCreator({ open, onOpenChange, product, onSuccess 
     setDefaultWholesalePrice,
     defaultRetailPrice,
     setDefaultRetailPrice,
+    trackingMode,
+    setTrackingMode,
     generatedVariants,
     diffSummary,
     deviceNames,

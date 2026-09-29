@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useStoreProductCache } from '@/hooks/useProductCache';
-import { useStoreDraft } from '@/store/useOrderDraftStore';
+import { useStoreDraft, useOrderDraftStore } from '@/store/useOrderDraftStore';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { OrderItemRow, LineTypeOption } from '@/components/order/orderItemsTypes';
@@ -17,7 +17,7 @@ import { useOrderFormStateSync } from './useOrderFormStateSync';
 
 export function useAdminOrderFormController() {
   const { orderId } = useParams<{ orderId: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const storeIdFromParam = searchParams.get('storeId') || '';
   const [selectedStoreId, setSelectedStoreId] = useState(storeIdFromParam);
   const navigate = useNavigate();
@@ -57,7 +57,8 @@ export function useAdminOrderFormController() {
   });
 
   const storeId = isEditMode ? (order?.store_id ?? '') : selectedStoreId;
-  const draftKey = storeId || '_admin_new_order';
+  // 建立模式依訂單類型分桶（分頁間草稿互不干擾），編輯模式獨立於建立中草稿
+  const draftKey = isEditMode ? `_edit_${orderId}` : (storeId || `_admin_new_${orderType}`);
 
   const { products: storeProducts, isLoading: productsLoading, templates } = useStoreProductCache(
     orderType !== 'purchase' ? (storeId || null) : null,
@@ -81,6 +82,49 @@ export function useAdminOrderFormController() {
   const [consignmentMode, setConsignmentMode] = useState(false);
   // 訂單層只存配送類型（delivery/logistics/pickup），方法/包裹細節於出貨 RPC 內產生
   const [deliveryType, setDeliveryType] = useState<DeliveryType | null>(null);
+
+  // 表頭欄位隨草稿持久化：建立模式於 render 階段單次 hydrate（早於下方 persist effect，
+  // 避免以空值覆寫既有草稿）；編輯模式以伺服器資料為準，不做 hydrate/persist。
+  const [metaHydratedKey, setMetaHydratedKey] = useState('');
+  if (!isEditMode && metaHydratedKey !== draftKey) {
+    const stored = useOrderDraftStore.getState().getDraft(draftKey);
+    const meta = stored.meta;
+    if (meta) {
+      if (meta.supplierId) setSupplierId(meta.supplierId);
+      if (meta.targetStoreId) setTargetStoreId(meta.targetStoreId);
+      if (meta.expectedDate) setExpectedDate(meta.expectedDate);
+      if (meta.supplierOrderNumber) setSupplierOrderNumber(meta.supplierOrderNumber);
+      if (meta.shippedAt) setShippedAt(meta.shippedAt);
+      if (meta.warehouseId) setWarehouseId(meta.warehouseId);
+      if (typeof meta.consignmentMode === 'boolean') setConsignmentMode(meta.consignmentMode);
+      if (meta.deliveryType) setDeliveryType(meta.deliveryType);
+      if (meta.itemWarehouses) setItemWarehouses(meta.itemWarehouses);
+      if (meta.itemSources) setItemSources(meta.itemSources);
+    }
+    if (stored.notes) setNotes(stored.notes);
+    setMetaHydratedKey(draftKey);
+  }
+
+  useEffect(() => {
+    if (isEditMode || metaHydratedKey !== draftKey) return;
+    useOrderDraftStore.getState().updateMeta(draftKey, {
+      supplierId,
+      targetStoreId,
+      expectedDate,
+      supplierOrderNumber,
+      shippedAt,
+      warehouseId,
+      consignmentMode,
+      deliveryType: deliveryType ?? undefined,
+      itemWarehouses,
+      itemSources,
+    });
+    useOrderDraftStore.getState().updateNotes(draftKey, notes);
+  }, [
+    isEditMode, metaHydratedKey, draftKey, supplierId, targetStoreId, expectedDate,
+    supplierOrderNumber, shippedAt, warehouseId, consignmentMode, deliveryType,
+    itemWarehouses, itemSources, notes,
+  ]);
 
   // Product browsing state
   const [activePanel, setActivePanel] = useState<'information' | 'delivery' | 'items' | 'products' | null>(null);
@@ -310,6 +354,7 @@ export function useAdminOrderFormController() {
     createPendingMutation,
     handleCreateWithSalesNote,
     toggleStatusMutation,
+    toggleConsignmentModeMutation,
     directShipMutation,
     createPurchaseOrderMutation,
     createConsignmentReceiveMutation,
@@ -341,6 +386,28 @@ itemsForSync: items,
     onDirectShipDialogClose: () => setDirectShipDialogOpen(false),
   });
 
+  // 切換訂單類型分頁時同步 URL，重新整理後仍停留在同一分頁
+  const handleOrderTypeChange = useCallback((next: string) => {
+    setOrderType(next as typeof orderType);
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        p.set('type', next);
+        return p;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
+
+  // 建立模式為一般表單欄位；編輯模式為立即執行的動作（update_order_with_items 不含 consignment_mode）
+  const handleConsignmentModeChange = useCallback((next: boolean) => {
+    if (isEditMode) {
+      toggleConsignmentModeMutation.mutate(next);
+    } else {
+      setConsignmentMode(next);
+    }
+  }, [isEditMode, toggleConsignmentModeMutation]);
+
   const navigateBack = useCallback(() => {
     if (orderType === 'purchase') navigate('/admin/purchase-orders');
     else if (orderType === 'consignment_receive' || orderType === 'consignment_send') navigate('/admin/consignment');
@@ -364,6 +431,7 @@ itemsForSync: items,
     user,
     orderType,
     setOrderType,
+    handleOrderTypeChange,
     supplierId,
     setSupplierId,
     targetStoreId,
@@ -410,6 +478,7 @@ itemsForSync: items,
     setItemSources,
     consignmentMode,
     setConsignmentMode,
+    handleConsignmentModeChange,
     deliveryType,
     setDeliveryType,
     activePanel,
@@ -444,6 +513,7 @@ itemsForSync: items,
     createPendingMutation,
     handleCreateWithSalesNote,
     toggleStatusMutation,
+    toggleConsignmentModeMutation,
     directShipMutation,
     createPurchaseOrderMutation,
     createConsignmentReceiveMutation,

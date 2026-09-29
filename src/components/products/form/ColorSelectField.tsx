@@ -109,6 +109,7 @@ export function ColorSelectField({ selectedColorIds, onChange, multiple = true }
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
+            type="button"
             variant="outline"
             role="combobox"
             aria-expanded={open}
@@ -141,9 +142,10 @@ export function ColorSelectField({ selectedColorIds, onChange, multiple = true }
                 <CommandEmpty>
                   <div className="p-2 space-y-2">
                     <p className="text-[10px] text-muted-foreground px-2">找不到顏色 "{searchQuery}"</p>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
                       className="w-full justify-start gap-2 h-8 text-xs border-dashed"
                       onClick={() => setIsAddingNew(true)}
                     >

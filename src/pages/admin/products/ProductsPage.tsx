@@ -11,7 +11,7 @@ import { CopyProductDialog } from '@/components/products/CopyProductDialog';
 import { toast } from 'sonner';
 
 import { useProductsList } from './hooks/useProductsList';
-import { ProductsTable } from './components/ProductsTable';
+import { ProductsListView } from './components/ProductsListView';
 import { ProductDialogs } from './components/ProductDialogs';
 import { ColorManager } from '../libraries/colors/ColorManager';
 import { CatalogSidebar } from '@/components/products/catalog/CatalogSidebar';
@@ -213,7 +213,7 @@ export default function AdminProducts() {
                                     />
                                 </div>
                             </div>
-                            <ProductsTable
+                            <ProductsListView
                                 products={filteredProducts}
                                 isLoading={isLoading}
                                 brandMap={brandMap}

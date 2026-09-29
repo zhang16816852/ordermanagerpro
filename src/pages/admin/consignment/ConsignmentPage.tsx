@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useConsignment } from './hooks/useConsignment';
 import { OrderListTab } from './components/OrderListTab';
@@ -10,6 +10,7 @@ import { ConsignmentOrder } from './types';
 import { DocImportDialog } from '@/components/orders/DocImportDialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { usePageHeader } from '@/components/layout/PageHeaderContext';
 import { Plus, ClipboardList, ClipboardCheck, ListOrdered, Building2, FileUp } from 'lucide-react';
 
 export default function AdminConsignment() {
@@ -27,6 +28,8 @@ export default function AdminConsignment() {
     reportsLoading,
   } = useConsignment();
 
+  const { setPageHeader } = usePageHeader();
+
   const setViewParam = (v: string) => {
     setView(v);
     setSearchParams((prev) => {
@@ -37,10 +40,16 @@ export default function AdminConsignment() {
     }, { replace: true });
   };
 
+  // 手機版把頁面標題交給 sticky MobileHeader 顯示（桌機仍用頁面內的大標，故 mobileOnly）
+  useLayoutEffect(() => {
+    setPageHeader({ title: '寄賣管理', mobileOnly: true });
+    return () => setPageHeader(null);
+  }, [setPageHeader]);
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-wrap items-center justify-end gap-2 md:justify-between">
+        <div className="hidden md:block">
           <h1 className="text-2xl font-bold tracking-tight">寄賣管理</h1>
           <p className="text-muted-foreground">管理廠商寄賣收貨與店家寄賣出貨、銷售回報審核與結算</p>
         </div>

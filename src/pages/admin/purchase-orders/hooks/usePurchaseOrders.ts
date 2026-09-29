@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { PurchaseOrder, Supplier, PurchaseOrderItem, ProductWithPrice, PurchaseOrderStatus } from '../types';
+import { LotInput } from '@/utils/lotTracking';
 
 export interface PurchaseOrderFilters {
   supplierId?: string;
@@ -104,7 +105,7 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
       if (variantIds.length > 0) {
         const { data: variants } = await (supabase
           .from('product_variants') as any)
-          .select('id, name, sku')
+          .select('id, name, sku, tracking_mode')
           .in('id', variantIds);
         variantMap = (variants || []).reduce((acc, v) => ({ ...acc, [v.id]: v }), {});
       }
@@ -405,7 +406,9 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
   });
 
   const receiveItemsMutation = useMutation({
-    mutationFn: async (params: { items: { id: string; received_quantity: number; warehouse_id?: string }[] }) => {
+    mutationFn: async (params: {
+      items: { id: string; received_quantity: number; warehouse_id?: string; lots?: LotInput }[];
+    }) => {
       const { items } = params;
 
       // Build payload for receive_purchase_items RPC (now handles UPDATE + status atomically)
@@ -424,10 +427,15 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
         };
       });
 
+      const rpcLots = items
+        .filter(item => item.lots)
+        .map(item => ({ purchase_order_item_id: item.id, ...item.lots } as Record<string, unknown>));
+
       const { error: rpcError } = await (supabase as any)
         .rpc('receive_purchase_items', {
           p_items: rpcItems,
           p_warehouse_id: null,
+          p_lots: rpcLots.length > 0 ? rpcLots : null,
         });
       if (rpcError) throw rpcError;
     },

@@ -130,6 +130,7 @@ export function useStoresController() {
       business_postal_code: (formData.get('business_postal_code') as string) || null,
       business_city: (formData.get('business_city') as string) || null,
       business_district: (formData.get('business_district') as string) || null,
+      delivery_address_matches_business: formData.get('delivery_address_matches_business') === 'true',
       default_delivery_type: (formData.get('default_delivery_type') as string) || null,
       default_delivery_method_id: (formData.get('default_delivery_method_id') as string) || null,
     };

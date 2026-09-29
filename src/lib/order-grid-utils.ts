@@ -27,18 +27,14 @@ function collectFieldValues(
 }
 
 function getOptionGroupName(groupId: string, products: ProductWithPricing[]): string | null {
-  console.log('[grid-debug] getOptionGroupName groupId:', groupId, 'products:', products.length);
   for (const p of products) {
     const ogroups = (p as any).option_groups || [];
-    console.log('[grid-debug] product', p.id, 'option_groups:', ogroups.length, JSON.stringify(ogroups.map((og: any) => ({id: og.id, name: og.name}))));
     for (const og of ogroups) {
       if (og.id === groupId) {
-        console.log('[grid-debug] FOUND group name:', og.name);
         return og.name;
       }
     }
   }
-  console.log('[grid-debug] groupId NOT FOUND in any product');
   return null;
 }
 
@@ -48,7 +44,6 @@ function collectOptionValuesByName(
   product: ProductWithPricing,
 ): string[] {
   const ovs = (variant as any).option_values;
-  console.log('[grid-debug] collectOptionValuesByName variant:', variant.id, 'groupName:', groupName, 'product:', product.id, 'hasOV:', !!ovs, 'ovLen:', ovs?.length, 'productOGs:', ((product as any).option_groups || []).length);
   if (!ovs || !Array.isArray(ovs)) return [];
 
   const matchingGroupIds = new Set(
@@ -56,18 +51,11 @@ function collectOptionValuesByName(
       .filter((g: any) => g.name === groupName)
       .map((g: any) => g.id),
   );
-  console.log('[grid-debug] matchingGroupIds:', [...matchingGroupIds]);
 
-  const result = ovs
-    .filter((ov: any) => {
-      const match = matchingGroupIds.has(ov.group_id);
-      console.log('[grid-debug] ov:', ov.id, ov.label, 'group_id:', ov.group_id, 'match:', match);
-      return match;
-    })
+  return ovs
+    .filter((ov: any) => matchingGroupIds.has(ov.group_id))
     .map((ov: any) => ov.label || ov.value || '')
     .filter(Boolean);
-  console.log('[grid-debug] collectOptionValuesByName result:', result);
-  return result;
 }
 
 function collectSpecValues(
@@ -136,9 +124,7 @@ export function extractDimensionValues(
   }
 
   if (config.type === 'option' && config.option_group_id) {
-    console.log('[grid-debug] extractDimensionValues option config:', JSON.stringify(config), 'products:', products.length);
     const groupName = getOptionGroupName(config.option_group_id, products);
-    console.log('[grid-debug] resolved groupName:', groupName);
     if (!groupName) return [];
 
     const values = new Set<string>();
@@ -149,9 +135,7 @@ export function extractDimensionValues(
         );
       });
     });
-    const result = Array.from(values).sort((a, b) => a.localeCompare(b, 'zh'));
-    console.log('[grid-debug] option dimension values:', result);
-    return result;
+    return Array.from(values).sort((a, b) => a.localeCompare(b, 'zh'));
   }
 
   if (config.type === 'spec' && config.spec_id) {
@@ -197,10 +181,7 @@ export function matchVariantToDimension(
     if (!groupName) return false;
     const product = products.find((p) => p.id === variant.product_id);
     if (!product) return false;
-    const ovs = collectOptionValuesByName(variant, groupName, product);
-    const matched = ovs.includes(value);
-    console.log('[grid-debug] matchVariantToDimension variant:', variant.id, 'value:', value, 'ovs:', ovs, 'matched:', matched);
-    return matched;
+    return collectOptionValuesByName(variant, groupName, product).includes(value);
   }
 
   // custom: always match (values are user-defined)
@@ -224,15 +205,6 @@ export function buildGridMatrix(
   tabValues: string[];
   cells: Map<string, GridCellVariant[]>;
 } {
-  console.log('[grid-debug] buildGridMatrix products count:', products.length);
-  products.forEach((p) => {
-    const og = (p as any).option_groups;
-    console.log('[grid-debug] product:', p.id, p.name, 'option_groups:', og?.length, og ? JSON.stringify(og.map((g: any) => ({id: g.id, name: g.name, valuesCount: (g.product_option_values || g.values || []).length}))) : 'null');
-    p.variants?.forEach((v) => {
-      const ov = (v as any).option_values;
-      console.log('[grid-debug]   variant:', v.id, v.name, 'option_values:', ov?.length, ov ? JSON.stringify(ov.map((o: any) => ({id: o.id, label: o.label, group_id: o.group_id}))) : 'null');
-    });
-  });
   const rowValues = extractDimensionValues(template.row_config, products);
   const colValues = extractDimensionValues(template.col_config, products);
   const tabValues = template.tab_config

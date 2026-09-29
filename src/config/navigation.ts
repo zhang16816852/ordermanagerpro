@@ -31,6 +31,7 @@ export const adminNavItems: NavItem[] = [
   { title: '產品管理', href: '/admin/products', icon: PackageSearch },
   { title: '庫存管理', href: '/admin/inventory', icon: Package },
   { title: '維修管理', href: '/admin/repair-orders', icon: Wrench },
+  { title: '維修零件', href: '/admin/repair-parts', icon: Wrench },
   { title: '分類管理', href: '/admin/categories', icon: Layers },
   { title: '連鎖客戶價格', href: '/admin/brand-pricing', icon: ShoppingCart },
   { title: '所有訂單', href: '/admin/orders', icon: ClipboardList },

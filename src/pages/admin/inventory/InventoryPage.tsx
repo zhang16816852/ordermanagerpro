@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Search, RefreshCw, AlertTriangle, Save, FileText, History, Calculator, Warehouse } from 'lucide-react';
+import { Search, RefreshCw, AlertTriangle, Save, FileText, History, Calculator, Warehouse, PackageSearch } from 'lucide-react';
 import { DataTable } from '@/components/shared/DataTable';
 import { formatCurrency } from '@/lib/formatters';
 import { exportToCSV } from '@/lib/exportUtils';
@@ -17,6 +17,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import WarehousesTab from './components/WarehousesTab';
+import BatchesTab from './components/BatchesTab';
 
 const SOURCE_TYPE_LABELS: Record<string, string> = {
     purchase_receipt: '採購入庫',
@@ -299,6 +300,10 @@ export default function AdminInventory() {
                         <Warehouse className="mr-1.5 h-3.5 w-3.5" />
                         倉庫管理
                     </TabsTrigger>
+                    <TabsTrigger value="batches">
+                        <PackageSearch className="mr-1.5 h-3.5 w-3.5" />
+                        批次 / 序號
+                    </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="inventory" className="space-y-6 mt-6">
@@ -389,6 +394,10 @@ export default function AdminInventory() {
 
                 <TabsContent value="warehouses" className="mt-6">
                     <WarehousesTab />
+                </TabsContent>
+
+                <TabsContent value="batches" className="mt-6">
+                    <BatchesTab />
                 </TabsContent>
             </Tabs>
         </div>

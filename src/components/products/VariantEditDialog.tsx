@@ -83,6 +83,7 @@ export function VariantEditDialog({
             wholesale_price: 0,
             retail_price: 0,
             status: 'active' as any,
+            tracking_mode: 'none' as string,
             spec_values: {} as Record<string, any>,
             selectedModelIds: [] as string[],
             selectedGroupIds: [] as string[],
@@ -177,6 +178,7 @@ export function VariantEditDialog({
                     wholesale_price: isUnified ? Number((product as any)?.unified_wholesale_price ?? 0) : variant.wholesale_price,
                     retail_price: isUnified ? Number((product as any)?.unified_retail_price ?? 0) : variant.retail_price,
                     status: variant.status as any,
+                    tracking_mode: variant.tracking_mode || 'none',
                     spec_values: deserializeSpecs(specValues.data || []),
                     selectedModelIds: links.data?.map(l => l.model_id) || [],
                     selectedGroupIds: groupLinks.data?.map(l => l.group_id) || [],
@@ -191,6 +193,7 @@ export function VariantEditDialog({
                     wholesale_price: isUnified ? Number((product as any)?.unified_wholesale_price ?? 0) : 0,
                     retail_price: isUnified ? Number((product as any)?.unified_retail_price ?? 0) : 0,
                     status: 'active',
+                    tracking_mode: 'none',
                     spec_values: {},
                     selectedModelIds: [],
                     selectedGroupIds: [],
@@ -555,6 +558,32 @@ export function VariantEditDialog({
                                 )}
                             />
                         </div>
+
+                        <FormField
+                            control={form.control}
+                            name="tracking_mode"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>追蹤模式</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value || 'none'}>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="none">不追蹤</SelectItem>
+                                            <SelectItem value="serial">一機一號（序號）</SelectItem>
+                                            <SelectItem value="batch">批號</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <FormDescription>
+                                        一機一號：每台建立獨立序號列；批號：整批單一列。進貨時需提供對應序號/批號。
+                                    </FormDescription>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
 
                         <DynamicSpecsFields form={form} />
 

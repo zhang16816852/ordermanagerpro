@@ -59,7 +59,9 @@ export function StoresTab({ c }: { c: StoresController }) {
       address: s.business_address || '',
     };
   });
-  const [sameAsBusiness, setSameAsBusiness] = useState(false);
+  const [sameAsBusiness, setSameAsBusiness] = useState<boolean>(
+    () => !!(c.editingStore as any)?.delivery_address_matches_business,
+  );
   const [defaultMethodId, setDefaultMethodId] = useState<string | null>((c.editingStore as any)?.default_delivery_method_id || null);
   const [defaultDeliveryType, setDefaultDeliveryType] = useState<DeliveryType | null>((c.editingStore as any)?.default_delivery_type || null);
 
@@ -82,7 +84,7 @@ export function StoresTab({ c }: { c: StoresController }) {
       district: s.business_district || '',
       address: s.business_address || '',
     });
-    setSameAsBusiness(false);
+    setSameAsBusiness(!!s.delivery_address_matches_business);
     setDefaultMethodId(s.default_delivery_method_id || null);
     setDefaultDeliveryType(s.default_delivery_type || null);
   }, [c.editingStore, c.isStoreDialogOpen]);
@@ -157,17 +159,20 @@ export function StoresTab({ c }: { c: StoresController }) {
                   收件地址同營業地址（自動複製地址欄）
                 </Label>
               </div>
-              {!sameAsBusiness && (
-                <div className="space-y-2">
-                  <Label>配送地址（收件人/電話/郵區，供配送方式預填）</Label>
-                  <ShippingAddressFields
-                    value={address}
-                    onChange={setAddress}
-                    prefix="store-addr"
-                    className="rounded-lg border p-3"
-                  />
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label>
+                  {sameAsBusiness
+                    ? '配送收件人／聯絡電話（地址同營業地址）'
+                    : '配送地址（收件人/電話/郵區，供配送方式預填）'}
+                </Label>
+                <ShippingAddressFields
+                  value={address}
+                  onChange={setAddress}
+                  prefix="store-addr"
+                  hideAddress={sameAsBusiness}
+                  className="rounded-lg border p-3"
+                />
+              </div>
               <div className="space-y-2">
                 <Label>預設配送類型</Label>
                 <DeliveryTypePicker
@@ -196,6 +201,11 @@ export function StoresTab({ c }: { c: StoresController }) {
               <input type="hidden" name="business_postal_code" value={businessAddress.postal_code} />
               <input type="hidden" name="business_city" value={businessAddress.city} />
               <input type="hidden" name="business_district" value={businessAddress.district} />
+              <input
+                type="hidden"
+                name="delivery_address_matches_business"
+                value={sameAsBusiness ? 'true' : 'false'}
+              />
               <input type="hidden" name="default_delivery_type" value={defaultDeliveryType || ''} />
               <input type="hidden" name="default_delivery_method_id" value={defaultMethodId || ''} />
               <div className="flex justify-end gap-2">

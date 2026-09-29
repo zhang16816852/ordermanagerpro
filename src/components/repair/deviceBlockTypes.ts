@@ -6,6 +6,7 @@ export interface RepairBlockItem {
   item_type: 'service' | 'part';
   service_name: string;
   part_name: string;
+  repair_part_id: string | null;
   product_id: string | null;
   variant_id: string | null;
   quantity: number;
@@ -70,6 +71,7 @@ export function createEmptyBlockItem(type: 'part' | 'service' = 'part'): RepairB
     item_type: type,
     service_name: '',
     part_name: '',
+    repair_part_id: null,
     product_id: null,
     variant_id: null,
     quantity: 1,

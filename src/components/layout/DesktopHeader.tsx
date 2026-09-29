@@ -23,6 +23,9 @@ export function DesktopHeader({ isExpanded, onToggleCollapse, pageHeader }: Desk
   };
 
   const hasBack = !!(pageHeader?.back || pageHeader?.onBack);
+  // mobileOnly：標題僅供手機 sticky header 使用，桌機維持頁面內的大標，避免重複
+  const showTitle = !pageHeader?.mobileOnly && !!pageHeader?.title;
+  const showActions = !pageHeader?.mobileOnly && !!pageHeader?.actions;
 
   return (
     <header
@@ -40,16 +43,16 @@ export function DesktopHeader({ isExpanded, onToggleCollapse, pageHeader }: Desk
             <ArrowLeft className="h-4 w-4" />
           </Button>
         )}
-        {pageHeader?.title && (
-          typeof pageHeader.title === 'string' ? (
+        {showTitle && (
+          typeof pageHeader?.title === 'string' ? (
             <span className="text-sm font-semibold tracking-tight truncate min-w-0">{pageHeader.title}</span>
           ) : (
-            pageHeader.title
+            pageHeader?.title
           )
         )}
       </div>
       <div className="flex items-center gap-4">
-        {pageHeader?.actions}
+        {showActions && pageHeader?.actions}
         <NotificationDropdown />
       </div>
     </header>

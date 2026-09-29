@@ -326,7 +326,69 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     onError: (error: Error) => toast.error(getErrorMessage(error)),
   });
 
-  // Direct ship: turn processing order into sales note
+  // 編輯模式切換寄賣模式：consignment_mode 非 update_order_with_items 參數，
+  // 且 pending 單只翻 flag 沒草稿沒意義，故設計為「點擊即執行」的動作
+  const toggleConsignmentModeMutation = useMutation({
+    mutationFn: async (next: boolean) => {
+      if (!orderId || !order) throw new Error('訂單不存在');
+      if (!user) throw new Error('未登入');
+      if (isRep) throw new Error('業務不可切換寄賣模式');
+      if (order.status === 'shipped' || order.status === 'cancelled') {
+        throw new Error('已出貨或已取消的訂單無法切換寄賣模式');
+      }
+
+      if (next) {
+        // 未確認單：轉寄賣草稿（會鏡像品項並回填 source_order_id）
+        // 處理中單：僅設旗標，出貨時由 direct_ship_order 的寄賣分支建 active 寄賣單
+        if (order.status === 'pending') {
+          const { error } = await supabase.rpc('convert_order_to_consignment_draft', {
+            p_order_id: orderId,
+            p_created_by: user.id,
+          });
+          if (error) throw error;
+          return { next: true, created: true };
+        }
+        const { error } = await (supabase.from('orders') as any)
+          .update({ consignment_mode: true })
+          .eq('id', orderId);
+        if (error) throw error;
+        return { next: true, created: false };
+      }
+
+      // 關閉：已有寄賣單（草稿/進行中/已結算）時不可直接關閉，
+      // 需先於寄賣管理頁取消該寄賣單（不自動刪除草稿以免誤刪本訂單）
+      const { data: related, error: relError } = await (supabase as any)
+        .from('consignment_orders')
+        .select('id, code, status')
+        .eq('source_order_id', orderId)
+        .eq('direction', 'send_to_store')
+        .in('status', ['draft', 'active', 'settled']);
+      if (relError) throw relError;
+      if (related && related.length > 0) {
+        const codes = related.map((r: any) => r.code).filter(Boolean).join('、');
+        throw new Error(`此訂單已有寄賣單（${codes}），請先於寄賣管理頁取消後再關閉寄賣模式`);
+      }
+
+      const { error } = await (supabase.from('orders') as any)
+        .update({ consignment_mode: false })
+        .eq('id', orderId);
+      if (error) throw error;
+      return { next: false, created: false };
+    },
+    onSuccess: (result) => {
+      toast.success(
+        result.next
+          ? (result.created ? '已轉為寄賣草稿，可在寄賣管理頁出貨' : '已切換為寄賣模式')
+          : '已改回一般出貨'
+      );
+      queryClient.invalidateQueries({ queryKey: ['order-detail'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['consignment-orders'] });
+    },
+    onError: (error: Error) => toast.error(getErrorMessage(error)),
+  });
+
+  // Direct ship: turn pending/processing order into sales note (direct_ship_order 兩種狀態皆允許)
   const directShipMutation = useMutation({
     mutationFn: async (delivery?: DirectShipDelivery) => {
       if (!user || !orderId) throw new Error('訂單不存在');
@@ -528,14 +590,13 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       const currentItems = itemsRef.current;
       const currentNotes = notesRef.current;
       if (currentItems.length === 0) throw new Error('請至少新增一項產品');
-      if (!supplierId) throw new Error('請選擇供應商');
       if (!targetStoreId) throw new Error('請選擇目標門市');
 
+      // send_to_store 的 CHECK 約束要求 supplier_id IS NULL（結算對象為店家）
       const { data: newCO, error: coError } = await (supabase as any)
         .from('consignment_orders')
         .insert({
           direction: 'send_to_store',
-          supplier_id: supplierId,
           store_id: targetStoreId,
           status: 'draft',
           note: currentNotes.trim() || null,
@@ -574,6 +635,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     createPendingMutation,
     handleCreateWithSalesNote,
     toggleStatusMutation,
+    toggleConsignmentModeMutation,
     directShipMutation,
     createPurchaseOrderMutation,
     createConsignmentReceiveMutation,

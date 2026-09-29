@@ -13,7 +13,7 @@
 |---|---|---|
 | `profiles` | 使用者資料 | id(=auth.users)、email、full_name、phone、line_id、telegram_id |
 | `user_roles` | 系統角色 | user_id、role(`system_role`) |
-| `stores` | 門市 | name、code、brand、owner_id、address、phone、recipient、postal_code/city/district、default_delivery_method_id、default_delivery_type、business_address/business_city/business_district/business_postal_code |
+| `stores` | 門市 | name、code、brand、owner_id、address、phone、recipient、postal_code/city/district、default_delivery_method_id、default_delivery_type、business_address/business_city/business_district/business_postal_code、delivery_address_matches_business |
 | `store_users` | 門市成員 | user_id、store_id、role(`store_role`) |
 | `invitations` | 門市邀請 | email、token、role、status(`invitation_status`)、expires_at、store_id |
 
@@ -21,7 +21,7 @@
 | 表 | 說明 | 關鍵欄位 |
 |---|---|---|
 | `products` | 商品主表（精簡） | name、code、description |
-| `product_variants` | 變體 | product_id、name、sku、barcode、retail_price、wholesale_price、status(`product_status`) |
+| `product_variants` | 變體 | product_id、name、sku、barcode、retail_price、wholesale_price、status(`product_status`)、**tracking_mode（2026-09-27：none/serial/batch，收貨時決定序號或批號追蹤）** |
 | `product_images` | 圖片 | entity_id、entity_type、url、storage_path、is_cover、sort_order |
 | `product_option_groups` / `product_option_values` / `product_variant_options` | 選項（顏色/規格群組） | group/values/variant 三方關聯 |
 | `brands` | 品牌 | name、abbreviation、sort_order |
@@ -90,6 +90,7 @@
 | `warehouses` | 倉庫 | name、code、type、include_in_actual、include_in_available |
 | `product_inventory` | 庫存餘額 | product_id、variant_id、warehouse_id、quantity，UNIQUE(product_id, variant_id, warehouse_id) |
 | `inventory_movements` | 庫存異動流水 | product_id、variant_id、warehouse_id、quantity_change、balance_after、source_type、purchase_order_id/sales_note_id、reference_code |
+| `product_batches` | 批次/序號追蹤（2026-09-27，migration `20260924000002`＋`20260927000001_serial_ship_surgical.sql`） | variant_id（NOT NULL）、tracking_mode（serial/batch/none）、serial_number、batch_number、quantity、unit_cost、received_at、expiry_date、status、purchase_order_id、purchase_order_item_id、note；序號追蹤＝每支一列（quantity=1、serial_number 有值），批號追蹤＝整批一列（batch_number 有值） |
 
 ### 會計
 | 表 | 說明 | 關鍵欄位 |
@@ -104,11 +105,15 @@
 | 表 | 說明 | 關鍵欄位 |
 |---|---|---|
 | `repair_orders` | 維修單主表 | code(`RO-YYYYMMDD-XXXXX`)、store_id、status(`repair_order_status`)、**order_date**（DATE NOT NULL DEFAULT CURRENT_DATE，2026-09-12：單據日期，表單日期輸入預設今天）、**payment_status**（`unpaid`/`paid`，2026-09-12：收款狀態，與維修單 status 分離）、客戶/裝置/帳務/人員/時間欄位 |
-| `repair_order_items` | 維修品項（服務+零件） | repair_order_id、item_type(`repair_item_type`)、service_name、part_name、quantity、unit_cost、unit_price、**purchase_order_item_id（所用進貨批次，FK→purchase_order_items）、is_stock_deducted** |
+| `repair_order_items` | 維修品項（服務+零件） | repair_order_id、item_type(`repair_item_type`)、service_name、part_name、quantity、unit_cost、unit_price、**purchase_order_item_id（所用進貨批次，FK→purchase_order_items）、is_stock_deducted**、**repair_part_id（FK→repair_parts，NULL＝自訂材料，2026-09-27）** |
+| `repair_parts` | **維修零件型錄主檔**（2026-09-27） | name、**device_model_id（NULL＝通用零件）**、tags(text[])、description、supplier_id（中繼資料）、default_unit_cost、default_unit_price、is_active、sort_order；UNIQUE(COALESCE(device_model_id,0)，name)、GIN(tags)、partial index(device_model_id, sort_order) WHERE is_active |
+| `repair_part_variants` | **零件↔庫存實體連結**（2026-09-27） | repair_part_id、product_id、variant_id（NULL＝綁產品層級）、spec_label（規格／顏色等顯示名）、is_default、sort_order；UNIQUE(repair_part_id,product_id,variant_id) ＋ partial unique(repair_part_id,product_id) WHERE variant_id IS NULL（補 NULL 不互斥的缺口） |
+| `repair_part_tags` | **零件標籤字典**（2026-09-27） | name UNIQUE、sort_order；刪除字典項不影響零件既有 `tags` 陣列 |
 | `repair_order_status_history` | 狀態變更歷史 | repair_order_id、from_status、to_status、changed_by、note |
 | `repair_order_summary`（VIEW） | 彙總含利潤/毛利率/人員 | ⚠️ 含 `auth.users` email，前端未使用，已 REVOKE anon/authenticated 全數存取 |
 | `purchase_order_items`（附加） | 進貨批次 FIFO 記帳 | `consumed_quantity`（已被維修單耗用累計，剩餘＝received_quantity−consumed_quantity） |
 
+- **維修零件型錄（2026-09-27，migration `20260927000002`＋`20260927000003` 已套用遠端）**：三層設計——**上層 `repair_parts`**＝「適用型號 × 零件名稱」的型錄主檔；**下層 `products(item_type='repair_part')`**＝真正庫存實體，能進貨/叫料/FIFO 扣料；**橋接 `repair_part_variants`**＝一個零件可綁多個實際實體（多變體商品如「IP12 手機背蓋」6 色以 `spec_label` 記顏色）。`repair_order_items` 為 additive 設計：既有 `product_id`／`variant_id`／`part_name`／`unit_cost` 全數保留，**快照語意不變**（歷史單據不受型錄改名影響），另加 `repair_part_id`；選零件時由 `is_default` 連結解出 `product_id`／`variant_id` 一併寫入，故**庫存、進貨批次、扣料、採購叫料等既有路徑零改動**。`repair_part_id IS NULL` = 門市自訂材料（純名稱、不可扣料/叫料）。**恰有一筆預設連結**由應用層維護（`saveLinks` 以 `findIndex(is_default)` 正規化、無預設時以第一筆補上，UI 的 `setDefault` 亦互斥），DB 層無唯一約束。RLS 完全比照 `repair_checklist_library`：三表 RLS 皆 ENABLE，各有「admin FOR ALL USING has_role(admin)」＋「authenticated FOR SELECT USING(true)」兩條 policy（門市需讀取型錄以供維修單零件選擇器）。回填驗證：14 商品／44 變體（1 商品無變體）→ 37 `repair_parts`、45 links、5 字典標籤、19 筆既有品項回填 `repair_part_id`、2 個多變體組（IP12 6 色、IP14 PRO MAX 4 色）、2 個通用零件；orphan／nolink 均為 0。
 - **維修收款（2026-09-12，migration `20260912000001`）**：`public.sync_repair_order_payment_status(p_repair_order_id uuid)`（SECURITY DEFINER，revoke public/anon、grant authenticated）——計算「該維修單若有任一 `accounting_entries`（`type='income'`、`payment_status IN ('paid','partial')`，entry row `reference_type='repair_order'` 直接綁定 或 `accounting_entry_references` 子表有該單據）→ `repair_orders.payment_status='paid'`，否則 `'unpaid'`」；`p_repair_order_id IS NULL` 直接 return。前端 `useAccounting.createEntryMutation` 收款後呼叫同步；`delete_accounting_entry`（migration `20260911000006`）收集 `v_repair_order_ids` 並於回退後迴圈同步。收款入口＝維修單詳情「登記收款」按鈕開 `EntryDialog`（`prefill.repair={repairOrderId, repairCode, storeId, customerName, description}`，`EntryForm` 的 repair 模式設 `reference_type='repair_order'`）；列表與詳情顯示 `PaymentStatusBadge`（已收款/未收款）。
 - **維修收款同步補齊＋既有資料回填（2026-09-25，migration `20260925000002_backfill_repair_payment_status.sql` 已套用遠端）**：修 `SalesNoteDetailDialog.receivePaymentMutation` 只呼叫 `sync_sales_note_payment_status`、**漏掉同筆分錄綁定的維修單**（跨單結帳把維修單一起加進單據清單時，維修單狀態停在 `unpaid`）。前端補：① `SalesNoteDetailDialog.receivePaymentMutation` 收集 entry row ＋ `references` 子表的 `reference_type='repair_order'` ids（Set 去重）逐一呼叫 `sync_repair_order_payment_status`；② `useAccounting.createEntryMutation` 原忽略 RPC `error` 且重複呼叫 → 改與其他 mutation 一致（Set 去重 ＋ `if (e) throw e`）；③ 新增 `invalidateRepairQueries()` helper，以 `queryKey: ['repair_order']` 前綴失效，**同時涵蓋列表 `['repair_orders', storeId|'all']` 與詳情 `['repair_order', id]`**（原只失效 `['repair_orders']` 漏掉詳情頁）。回填 migration 以與 RPC **完全相同**的判定規則（`type='income'` ＋ entry row／子表兩路徑）全表雙向重算、`is distinct from` 保護故可重複執行。實測遠端 14 張維修單 1 張 mismatch（`RO-20260924-00001` unpaid→paid），回填後 **0 mismatch**；RPC 連呼兩次仍 `paid`（冪等）。
 
@@ -155,6 +160,7 @@
 - 授權模式：admin 全權限；門市成員對自己 store_id 的資料有權限；業務對自己建立的訂單（`orders.sales_rep_id = auth.uid()`）與名下店家（`is_rep_store`）資料有權限
 - ⚠️ **10 張表 RLS 未啟用**（anon key 可直接讀寫）：`categories`、`specification_definitions`、`category_spec_links`、`category_hierarchy`、`product_category_links`、`data_change_logs`、`data_snapshots`、`storefront_items`、`table_templates`、`table_template_variants`
 - 啟用 RLS 前需先建立 policies，否則會鎖死所有存取
+- **維修零件型錄三表（2026-09-27）**：`repair_parts`／`repair_part_variants`／`repair_part_tags` 皆 ENABLE RLS，各有 2 條 policy——admin `FOR ALL USING (has_role(auth.uid(),'admin'))`（**管理權限僅 admin**）、authenticated `FOR SELECT USING (true)`（門市需讀取型錄以供維修單零件選擇器）。比照 `repair_checklist_library` 慣例。
 
 ## 3.5 業務（rep）身分系統（2026-09-04）
 
@@ -236,7 +242,7 @@
 | `convert_order_to_consignment_draft(p_order_id, p_created_by)` | **訂單列表「轉寄賣」=建立草稿不立即出貨（2026-09-08，migration `20260908000004_convert_order_to_consignment_draft.sql`）**：SECURITY DEFINER，`SET search_path = public, extensions`，`REVOKE ALL FROM anon, PUBLIC`、`GRANT authenticated`；替代舊前端「先標 `consignment_mode=true` 再逐單 `direct_ship_order` 立即出貨」。守門：訂單存在、`source_type <> 'consignment'`（寄賣鏡像單拒絕）、`status='pending'`、有未出貨量（`quantity - shipped_quantity > 0`，排除 cancelled/discontinued）；既有 `consignment_mode=true` 且有 `send_to_store` draft/active 寄賣單時**重跑回傳既有草稿**（`reused:true`，不重複建立）。動作：`orders.consignment_mode=true`（維持 `pending`、品項維持 `waiting`）＋INSERT `consignment_orders`（`direction='send_to_store'`、`store_id`、`status='draft'`、`source_order_id`、`created_by`、`note`=訂單備註、**`delivery_type`/`shipping_address` 自來源訂單快照—2026-09-23 migration `20260923000002`**）＋逐項 INSERT `consignment_order_items`（`order_item_id` 回填、`product_id`/`variant_id`、`quantity = quantity - shipped_quantity`、沿用 `unit_price`/`unit_cost`）＋**不建 inventory_movements、不扣庫存、不開銷貨單**。RETURNS JSONB `{ok, reason?, consignment_order_id?, order_id?, reused?}`。測試注意：`consignment_orders.created_by` 有 FK→profiles。未出貨品項可在寄賣管理草稿頁 `EditItemsDialog` 調整後再經 `create_consignment_shipment` 出貨 |
 | `delete_sales_note(p_sales_note_id)` | 刪銷貨單：**consignment 來源不得直刪** → reverse `consignment_sales.reversed=true` + 反向 movement（`consignment_sale_reversal`/`consignment_shipment_reversal`）；非寄賣回退 order_items + sales_note_deletion 補庫存 + 回復 shipping_pool；`received` 狀態禁止刪除。**2026-09-05**：sales_note_deletion movement 寫入 `order_item_id`。**2026-09-09（migration `20260909000003`＋`_with_reference_code`）**：`RETURNS void`→`RETURNS JSONB`（DROP 後重建），並加守門——`received` 已收貨／已有會計分錄（`accounting_entries`＋`accounting_entry_references` two-path，如收款）／已有業務佣金發放（`rep_commission_payouts.sales_note_id`）／寄賣確認銷售未 reversed 時**擋下**回 `{ok:false, reason, adopted_by}`；通過才執行上述回退邏輯，成功回 `{ok:true}`。**庫存異動稽核（同批修補）**：FK `sales_note_id` 為 `ON DELETE SET NULL`（刪除銷貨單時歷史 movement 的 FK 會被清空），回補的 `sales_note_deletion` / `consignment_*_reversal` movement 現帶入 `reference_code`（= 刪除前的銷貨單 `code`），確保 FK 被 SET NULL 後仍可依 `reference_code` 追溯原始單號（歷史 `sales_shipment` movement 本來就有 `reference_code`）。⚠️（2026-09-01）舊 overload `(p_sales_note_id, p_warehouse_id)` 已移除，避免 PostgREST HTTP 300 |
 | `delete_purchase_order_if_empty(p_purchase_order_id)` | **採購單刪除守門（2026-09-09, migration `20260909000004`）**：僅 admin（`has_role`）；替代前端原生 `DELETE FROM purchase_orders`（後者遇已收貨會撞 CHECK 拋模糊錯誤、無法回滾庫存/會計）。擋下條件：任一 item `received_quantity>0`（回「已收貨，請改用採購退貨」）、`inventory_movements.purchase_order_id` 存在（收貨/退貨/寄賣入庫殘留異動）、已有會計分錄（`accounting_entries`＋`accounting_entry_references` two-path：採購付款/運費月結/跨單結帳）——任一命中回 `{ok:false, reason, adopted_by}`；全數乾淨才 `DELETE FROM purchase_orders`（items FK CASCADE）。RETURNS `{ok:true}`；`REVOKE FROM PUBLIC, anon`，GRANT authenticated |
-| `receive_purchase_items(p_items JSONB)` | 採購入庫：依 items 逐筆 insert purchase_receipt movement（own 倉） |
+| `receive_purchase_items(p_items JSONB, p_warehouse_id JSONB DEFAULT NULL, p_lots JSONB DEFAULT NULL)` | 採購入庫（2026-09-27 起 3 參數，migration `20260927000001_serial_ship_surgical.sql`；⚠️ 單一簽名，勿與舊 2 參數 overload 並存）：依 items 逐筆 insert purchase_receipt movement（own 倉）。變體 `tracking_mode='serial'`/`'batch'` 收貨時，p_items 對應項必須於 `p_lots` 提供 lots（`p_lots[]` 元素＝`{purchase_order_item_id, mode:'serial'|'batch', serials[]?|batch_number, unit_cost?}`，`purchase_order_item_id`＝p_items 的 `id`）：**serial**＝每支序號一列 `product_batches`（quantity=1）＋逐台 movement；**batch**＝單列 `product_batches`（quantity=GREATEST(qty,1)）＋單筆 movement；缺失/空值/tracking 模式不符 RAISE 整批回滾。無 p_lots 或 tracking_mode='none' → 維持舊單筆 movement 行為 |
 | `reorder_purchase_order_items(p_items JSONB)` | **採購品項排序（2026-09-08，migration `20260908000000`）**：僅 admin（`has_role`）；p_items＝`[{id, sort_order}]` 遞增序批次寫入（前端拖曳/名稱表頭排序後以 index+1 持久化）。既有資料 backfill 預設＝每張採購單依 `COALESCE(變體名稱, 產品名稱) DESC NULLS LAST`（tiebreak created_at）；新/匯入品項由前端取現有 `MAX(sort_order)+1` 排在末尾 |
 | `adjust_inventory(p_id, p_new_quantity, p_created_by, p_note)` | 手動調整：算 diff → insert manual_adjustment movement |
 | `recalculate_inventory(p_created_by)` | 系統重算：以 received - shipped 重算 own 倉餘額，差異 insert system_recalculation movement |
@@ -369,7 +375,7 @@
 
 ### 10.4 單據層欄位（orders / sales_notes / consignment_orders）
 - 三者皆新增：`delivery_method_id`、`delivery_method_title/code`（快照）、`shipping_fee`(NUMERIC NOT NULL DEFAULT 0)、`shipping_cost`(NUMERIC DEFAULT 0)、`shipping_address`(JSONB，`{recipient, phone, postal_code, city, district, address}`)。
-- `stores` 新增：`default_delivery_method_id`、`postal_code/city/district`、`recipient`（收件人姓名，migration `20260921000008`）；`business_address/business_city/business_district/business_postal_code`（營業地址，與配送/收件地址分開，migration `20260921000009`，回填＝原配送地址快照）。
+- `stores` 新增：`default_delivery_method_id`、`postal_code/city/district`、`recipient`（收件人姓名，migration `20260921000008`）；`business_address/business_city/business_district/business_postal_code`（營業地址，與配送/收件地址分開，migration `20260921000009`，回填＝原配送地址快照）；`delivery_address_matches_business boolean NOT NULL DEFAULT false`（「收件地址同營業地址」勾勾狀態，migration `20260928000002`，回填＝配送/營業地址四欄全等且 address 非空；**不可用「地址相同就推導」代替**，因 `20260921000009` 已讓多數既有店兩者相等）。
 - `suppliers.is_logistics_company`（BOOL NOT NULL DEFAULT false）：物流公司身分牌。
 
 ### 10.5 Seed 與既有資料回填

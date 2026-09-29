@@ -1709,6 +1709,7 @@ export type Database = {
       inventory_movements: {
         Row: {
           balance_after: number
+          batch_id: string | null
           consignment_order_id: string | null
           consignment_order_item_id: string | null
           created_at: string | null
@@ -1729,6 +1730,7 @@ export type Database = {
         }
         Insert: {
           balance_after: number
+          batch_id?: string | null
           consignment_order_id?: string | null
           consignment_order_item_id?: string | null
           created_at?: string | null
@@ -1749,6 +1751,7 @@ export type Database = {
         }
         Update: {
           balance_after?: number
+          batch_id?: string | null
           consignment_order_id?: string | null
           consignment_order_item_id?: string | null
           created_at?: string | null
@@ -1768,6 +1771,13 @@ export type Database = {
           warehouse_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "inventory_movements_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "product_batches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "inventory_movements_consignment_order_id_fkey"
             columns: ["consignment_order_id"]
@@ -2270,6 +2280,131 @@ export type Database = {
           },
         ]
       }
+      product_batch_inventory: {
+        Row: {
+          batch_id: string
+          id: string
+          quantity: number
+          updated_at: string | null
+          warehouse_id: string
+        }
+        Insert: {
+          batch_id: string
+          id?: string
+          quantity?: number
+          updated_at?: string | null
+          warehouse_id: string
+        }
+        Update: {
+          batch_id?: string
+          id?: string
+          quantity?: number
+          updated_at?: string | null
+          warehouse_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_batch_inventory_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "product_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_batch_inventory_warehouse_id_fkey"
+            columns: ["warehouse_id"]
+            isOneToOne: false
+            referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_batches: {
+        Row: {
+          batch_number: string | null
+          created_at: string
+          created_by: string | null
+          expiry_date: string | null
+          id: string
+          note: string | null
+          purchase_order_id: string | null
+          purchase_order_item_id: string | null
+          quantity: number
+          received_at: string
+          serial_number: string | null
+          status: string
+          tracking_mode: string
+          unit_cost: number
+          updated_at: string
+          variant_id: string
+        }
+        Insert: {
+          batch_number?: string | null
+          created_at?: string
+          created_by?: string | null
+          expiry_date?: string | null
+          id?: string
+          note?: string | null
+          purchase_order_id?: string | null
+          purchase_order_item_id?: string | null
+          quantity?: number
+          received_at?: string
+          serial_number?: string | null
+          status?: string
+          tracking_mode: string
+          unit_cost?: number
+          updated_at?: string
+          variant_id: string
+        }
+        Update: {
+          batch_number?: string | null
+          created_at?: string
+          created_by?: string | null
+          expiry_date?: string | null
+          id?: string
+          note?: string | null
+          purchase_order_id?: string | null
+          purchase_order_item_id?: string | null
+          quantity?: number
+          received_at?: string
+          serial_number?: string | null
+          status?: string
+          tracking_mode?: string
+          unit_cost?: number
+          updated_at?: string
+          variant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_batches_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_batches_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_batches_purchase_order_item_id_fkey"
+            columns: ["purchase_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_batches_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_brands: {
         Row: {
           brand_id: string
@@ -2618,6 +2753,7 @@ export type Database = {
           sku: string
           sort_order: number
           status: Database["public"]["Enums"]["product_status"]
+          tracking_mode: string
           updated_at: string
           wholesale_price: number
         }
@@ -2631,6 +2767,7 @@ export type Database = {
           sku: string
           sort_order?: number
           status?: Database["public"]["Enums"]["product_status"]
+          tracking_mode?: string
           updated_at?: string
           wholesale_price?: number
         }
@@ -2644,6 +2781,7 @@ export type Database = {
           sku?: string
           sort_order?: number
           status?: Database["public"]["Enums"]["product_status"]
+          tracking_mode?: string
           updated_at?: string
           wholesale_price?: number
         }
@@ -3205,6 +3343,7 @@ export type Database = {
           purchase_order_item_id: string | null
           quantity: number
           repair_order_id: string
+          repair_part_id: string | null
           service_category: string | null
           service_name: string | null
           sort_order: number
@@ -3223,6 +3362,7 @@ export type Database = {
           purchase_order_item_id?: string | null
           quantity?: number
           repair_order_id: string
+          repair_part_id?: string | null
           service_category?: string | null
           service_name?: string | null
           sort_order?: number
@@ -3241,6 +3381,7 @@ export type Database = {
           purchase_order_item_id?: string | null
           quantity?: number
           repair_order_id?: string
+          repair_part_id?: string | null
           service_category?: string | null
           service_name?: string | null
           sort_order?: number
@@ -3275,6 +3416,13 @@ export type Database = {
             columns: ["repair_order_id"]
             isOneToOne: false
             referencedRelation: "repair_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_order_items_repair_part_id_fkey"
+            columns: ["repair_part_id"]
+            isOneToOne: false
+            referencedRelation: "repair_parts"
             referencedColumns: ["id"]
           },
           {
@@ -3468,6 +3616,142 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      repair_part_tags: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      repair_part_variants: {
+        Row: {
+          created_at: string
+          id: string
+          is_default: boolean
+          product_id: string
+          repair_part_id: string
+          sort_order: number
+          spec_label: string | null
+          variant_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          product_id: string
+          repair_part_id: string
+          sort_order?: number
+          spec_label?: string | null
+          variant_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          product_id?: string
+          repair_part_id?: string
+          sort_order?: number
+          spec_label?: string | null
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repair_part_variants_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_part_variants_repair_part_id_fkey"
+            columns: ["repair_part_id"]
+            isOneToOne: false
+            referencedRelation: "repair_parts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_part_variants_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      repair_parts: {
+        Row: {
+          created_at: string
+          default_unit_cost: number
+          default_unit_price: number
+          description: string | null
+          device_model_id: string | null
+          id: string
+          is_active: boolean
+          name: string
+          sort_order: number
+          supplier_id: string | null
+          tags: string[]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          default_unit_cost?: number
+          default_unit_price?: number
+          description?: string | null
+          device_model_id?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+          supplier_id?: string | null
+          tags?: string[]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          default_unit_cost?: number
+          default_unit_price?: number
+          description?: string | null
+          device_model_id?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+          supplier_id?: string | null
+          tags?: string[]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repair_parts_device_model_id_fkey"
+            columns: ["device_model_id"]
+            isOneToOne: false
+            referencedRelation: "device_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "repair_parts_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
@@ -4051,6 +4335,7 @@ export type Database = {
           created_at: string
           default_delivery_method_id: string | null
           default_delivery_type: string | null
+          delivery_address_matches_business: boolean
           district: string | null
           id: string
           name: string
@@ -4072,6 +4357,7 @@ export type Database = {
           created_at?: string
           default_delivery_method_id?: string | null
           default_delivery_type?: string | null
+          delivery_address_matches_business?: boolean
           district?: string | null
           id?: string
           name: string
@@ -4093,6 +4379,7 @@ export type Database = {
           created_at?: string
           default_delivery_method_id?: string | null
           default_delivery_type?: string | null
+          delivery_address_matches_business?: boolean
           district?: string | null
           id?: string
           name?: string
@@ -4612,6 +4899,20 @@ export type Database = {
       }
     }
     Functions: {
+      _receive_return_to_stock: {
+        Args: {
+          p_created_by?: string
+          p_note?: string
+          p_order_item_id?: string
+          p_product_id: string
+          p_quantity?: number
+          p_reference_code?: string
+          p_sales_note_id?: string
+          p_variant_id?: string
+          p_warehouse_id?: string
+        }
+        Returns: undefined
+      }
       _recompute_doc_shipping: {
         Args: { p_doc_id: string; p_doc_type: string }
         Returns: Json
@@ -4623,6 +4924,23 @@ export type Database = {
           p_use_method_type_fallback?: boolean
         }
         Returns: Json
+      }
+      _ship_stock_movements: {
+        Args: {
+          p_consignment_order_id?: string
+          p_consignment_order_item_id?: string
+          p_created_by?: string
+          p_inventory_owner?: string
+          p_order_item_id?: string
+          p_product_id: string
+          p_quantity: number
+          p_reference_code?: string
+          p_sales_note_id?: string
+          p_source_type: string
+          p_variant_id: string
+          p_warehouse_id: string
+        }
+        Returns: undefined
       }
       accept_invitation: {
         Args: { p_invitation_id: string }
@@ -4780,6 +5098,10 @@ export type Database = {
         Returns: Json
       }
       delete_accounting_entry: { Args: { p_entry_id: string }; Returns: Json }
+      delete_consignment_draft_if_clean: {
+        Args: { p_consignment_order_id: string }
+        Returns: Json
+      }
       delete_order_if_unadopted: { Args: { p_order_id: string }; Returns: Json }
       delete_product_if_safe: { Args: { p_product_id: string }; Returns: Json }
       delete_purchase_order_if_empty: {
@@ -4992,7 +5314,7 @@ export type Database = {
         Returns: undefined
       }
       receive_purchase_items: {
-        Args: { p_items: Json; p_warehouse_id?: string }
+        Args: { p_items: Json; p_lots?: Json; p_warehouse_id?: string }
         Returns: undefined
       }
       register_batch_rep_commission_payout: {
@@ -5192,6 +5514,7 @@ export type Database = {
       }
       upsert_sales_note_deletion_movement: {
         Args: {
+          p_batch_id?: string
           p_created_by?: string
           p_order_item_id: string
           p_product_id: string

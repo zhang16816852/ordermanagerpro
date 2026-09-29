@@ -167,7 +167,7 @@ export function VariantOptionsEditor({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <Label className="text-base font-semibold">選項群組</Label>
-        <Button variant="outline" size="sm" onClick={addGroup}>
+        <Button type="button" variant="outline" size="sm" onClick={addGroup}>
           <Plus className="h-4 w-4 mr-1" />新增群組
         </Button>
       </div>
@@ -179,7 +179,7 @@ export function VariantOptionsEditor({
               分類建議（依此產品分類彙整自其他產品）
             </Label>
             {onImportAllSuggestions && (
-              <Button variant="outline" size="sm" onClick={onImportAllSuggestions}>
+              <Button type="button" variant="outline" size="sm" onClick={onImportAllSuggestions}>
                 <Sparkles className="h-3.5 w-3.5 mr-1" />全部套用
               </Button>
             )}
@@ -203,6 +203,7 @@ export function VariantOptionsEditor({
                   ) : (
                     onImportSuggestion && (
                       <Button
+                        type="button"
                         variant="ghost"
                         size="sm"
                         className="h-6 px-2 text-xs shrink-0"
@@ -244,6 +245,7 @@ export function VariantOptionsEditor({
                 <Badge variant="outline" className="text-xs text-muted-foreground">顏色群組</Badge>
               )}
               <Button
+                type="button"
                 variant="ghost"
                 size="sm"
                 className="h-8 w-8 p-0 text-destructive ml-auto"
@@ -353,8 +355,8 @@ export function VariantOptionsEditor({
             className="min-h-[200px]"
           />
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setBulkPasteTargetGroupId(null)}>取消</Button>
-            <Button onClick={handleConfirmBulkPaste}>確認新增</Button>
+            <Button type="button" variant="outline" onClick={() => setBulkPasteTargetGroupId(null)}>取消</Button>
+            <Button type="button" onClick={handleConfirmBulkPaste}>確認新增</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -449,6 +451,7 @@ function OptionValueTable({ values, onUpdate, onRemove, onAdd, onBulkPaste }: Op
                 </td>
                 <td className="px-2 py-1">
                   <Button
+                    type="button"
                     variant="ghost"
                     size="sm"
                     className="h-8 w-8 p-0 text-destructive"
@@ -463,10 +466,10 @@ function OptionValueTable({ values, onUpdate, onRemove, onAdd, onBulkPaste }: Op
         </table>
       </div>
       <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={onAdd}>
+        <Button type="button" variant="outline" size="sm" onClick={onAdd}>
           + 新增項目
         </Button>
-        <Button variant="outline" size="sm" onClick={onBulkPaste}>
+        <Button type="button" variant="outline" size="sm" onClick={onBulkPaste}>
           批量貼上
         </Button>
       </div>

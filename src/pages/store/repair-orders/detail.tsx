@@ -8,6 +8,7 @@ import { ArrowLeft, Smartphone, User, DollarSign, Printer } from 'lucide-react';
 import { useRepairOrderDetail, useRepairOrders, useRepairAssigneeMap } from '@/hooks/useRepairOrders';
 import { REPAIR_ORDER_STATUS_LABELS, REPAIR_ORDER_STATUS_COLORS, REPAIR_ITEM_TYPE_LABELS } from '@/types/repair';
 import { formatDate, formatCurrency } from '@/lib/formatters';
+import { RepairPartTags } from '@/components/repair/RepairPartTags';
 
 export default function StoreRepairOrderDetail() {
   const { id } = useParams();
@@ -209,6 +210,7 @@ export default function StoreRepairOrderDetail() {
                           </td>
                           <td className="py-2.5 px-2 align-top">
                             <span className="font-medium text-foreground">{itemName}</span>
+                            {isPart && <RepairPartTags tags={item.repair_part?.tags} />}
                             {item.description && (
                               <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
                             )}

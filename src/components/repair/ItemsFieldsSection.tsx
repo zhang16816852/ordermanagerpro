@@ -5,13 +5,14 @@ import { Badge } from '@/components/ui/badge';
 import { CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { Plus, Trash2, Package, Wrench, Truck } from 'lucide-react';
-import { RepairPartSelect } from '@/components/repair/RepairPartSelect';
+import { RepairPartPicker } from '@/components/repair/RepairPartPicker';
 import { RepairBatchSelect } from '@/components/repair/RepairBatchSelect';
 import { DeviceBlock, RepairBlockItem, BlockUpdateProps, createEmptyBlockItem } from './deviceBlockTypes';
 
 export interface ItemsFieldsSectionProps extends BlockUpdateProps {
   mode?: 'admin' | 'store';
   onCreatePart?: (deviceModelId: string | null) => void;
+  onEditPart?: (repairPartId: string) => void;
   onNavigateToPurchase?: () => void;
   onRequestPurchase?: (block: DeviceBlock) => void;
 }
@@ -21,6 +22,7 @@ export function ItemsFieldsSection({
   onChange,
   mode = 'admin',
   onCreatePart,
+  onEditPart,
   onNavigateToPurchase,
   onRequestPurchase,
 }: ItemsFieldsSectionProps) {
@@ -103,6 +105,7 @@ export function ItemsFieldsSection({
                     updateItemFields(item.id, {
                       item_type: 'service',
                       purchase_order_item_id: null,
+                      repair_part_id: null,
                       product_id: null,
                       variant_id: null,
                     });
@@ -127,17 +130,21 @@ export function ItemsFieldsSection({
 
               <div className="flex-1 min-w-0">
                 {item.item_type === 'part' ? (
-                  <RepairPartSelect
+                  <RepairPartPicker
                     value={{
+                      repair_part_id: item.repair_part_id,
                       product_id: item.product_id,
                       variant_id: item.variant_id,
                       part_name: item.part_name || item.service_name || '',
                       unit_cost: item.unit_cost,
                     }}
+                    deviceModelId={block.device_model_id || null}
                     onCreatePart={onCreatePart ? () => onCreatePart(block.device_model_id || null) : undefined}
+                    onEditPart={onEditPart}
                     onSelect={(sel) => {
                       if (!sel) {
                         updateItemFields(item.id, {
+                          repair_part_id: null,
                           product_id: null,
                           variant_id: null,
                           part_name: '',
@@ -147,6 +154,7 @@ export function ItemsFieldsSection({
                         return;
                       }
                       updateItemFields(item.id, {
+                        repair_part_id: sel.repair_part_id,
                         product_id: sel.product_id,
                         variant_id: sel.variant_id,
                         part_name: sel.part_name,
@@ -296,7 +304,7 @@ export function ItemsFieldsSection({
                 onClick={() => onCreatePart(block.device_model_id || null)}
               >
                 <Plus className="h-3.5 w-3.5 mr-1" />
-                建立零件商品
+                建立零件
               </Button>
             )}
             {mode === 'admin' && (onRequestPurchase || onNavigateToPurchase) && (
@@ -318,7 +326,7 @@ export function ItemsFieldsSection({
 
       {mode === 'admin' && block.items.some(i => i.item_type === 'part' && i.product_id) && (
         <p className="text-xs text-muted-foreground">
-          由零件挑選器選擇的零件料號會於儲存後自動扣減自有倉庫庫存。
+          從零件型錄選擇的項目會自動帶入庫存商品，儲存後自動扣減自有倉庫庫存；自訂材料不會扣庫存。
         </p>
       )}
     </CardContent>

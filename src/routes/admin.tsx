@@ -20,6 +20,7 @@ import AdminRepairOrders from "@/pages/admin/repair-orders/RepairOrdersPage";
 import AdminRepairOrderNew from "@/pages/admin/repair-orders/new";
 import AdminRepairOrderEdit from "@/pages/admin/repair-orders/new";
 import AdminRepairOrderDetail from "@/pages/admin/repair-orders/detail";
+import AdminRepairParts from "@/pages/admin/repair-parts/RepairPartsPage";
 import AdminReps from "@/pages/admin/Reps";
 import RepCommissionPage from "@/pages/admin/RepCommissionPage";
 import MyCommissionPage from "@/pages/admin/MyCommissionPage";
@@ -56,4 +57,5 @@ export const adminRoutes = [
     { path: "/admin/repair-orders/new", element: <AdminRepairOrderNew /> },
     { path: "/admin/repair-orders/:id", element: <AdminRepairOrderDetail /> },
     { path: "/admin/repair-orders/:id/edit", element: <AdminRepairOrderEdit /> },
+  { path: "/admin/repair-parts", element: <AdminRepairParts /> },
 ];

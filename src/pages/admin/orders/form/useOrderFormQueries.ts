@@ -114,7 +114,7 @@ export function useOrderFormQueries({
       if (error) throw error;
       return (data || []) as { id: string; name: string }[];
     },
-    enabled: orderType !== 'sales' && !isEditMode,
+    enabled: (orderType === 'purchase' || orderType === 'consignment_receive') && !isEditMode,
   });
 
   // Stores list (for consignment_send type)

@@ -77,6 +77,7 @@ export default function StoreRepairOrderForm() {
             item_type: (isPart ? 'part' : 'service') as 'part' | 'service',
             service_name: i.service_name || i.part_name || '',
             part_name: i.part_name || i.service_name || '',
+            repair_part_id: i.repair_part_id || null,
             product_id: i.product_id || null,
             variant_id: i.variant_id || null,
             quantity: i.quantity || 1,
@@ -185,6 +186,52 @@ export default function StoreRepairOrderForm() {
     return data;
   };
 
+  /** 門市不觸發庫存扣減（不呼叫 deduct_repair_part_stock），故品項同步僅做新增／更新／刪除 */
+  const saveItems = async (orderId: string, block: DeviceBlock, existingIds: string[]) => {
+    const db = supabase as any;
+    const removedIds = existingIds.filter(dbId => block.items.some(i => i.id === dbId) === false);
+    if (removedIds.length > 0) {
+      const { error } = await db.from('repair_order_items').delete().in('id', removedIds);
+      if (error) {
+        toast.error('刪除品項失敗：' + getErrorMessage(error));
+        throw error;
+      }
+    }
+
+    const pending: ({ kind: 'update'; id: string; row: Record<string, unknown> } | { kind: 'insert'; row: Record<string, unknown> })[] = [];
+
+    block.items.forEach((it, idx) => {
+      const row = {
+        item_type: it.item_type,
+        service_name: it.item_type === 'service' ? it.service_name || null : null,
+        part_name: it.item_type === 'part' ? it.part_name || null : null,
+        repair_part_id: it.item_type === 'part' ? it.repair_part_id || null : null,
+        product_id: it.item_type === 'part' ? it.product_id || null : null,
+        variant_id: it.item_type === 'part' ? it.variant_id || null : null,
+        quantity: it.quantity,
+        unit_cost: it.unit_cost,
+        unit_price: it.unit_price,
+        description: it.description || null,
+        sort_order: idx,
+      };
+      if (it.id && existingIds.includes(it.id)) {
+        pending.push({ kind: 'update', id: it.id, row });
+      } else {
+        pending.push({ kind: 'insert', row: { repair_order_id: orderId, ...row, is_stock_deducted: false } });
+      }
+    });
+
+    for (const op of pending) {
+      const { error } = op.kind === 'update'
+        ? await db.from('repair_order_items').update(op.row).eq('id', op.id)
+        : await db.from('repair_order_items').insert(op.row);
+      if (error) {
+        toast.error(op.kind === 'update' ? '更新品項失敗：' : '品項儲存失敗：' + getErrorMessage(error));
+        throw error;
+      }
+    }
+  };
+
   const handleSubmit = async () => {
     if (isEdit && id) {
       const block = blocks[0];
@@ -194,7 +241,13 @@ export default function StoreRepairOrderForm() {
         { id, values: payload as RepairOrderInsert },
         {
           onSuccess: async () => {
-            await saveChecklists(id, block);
+            try {
+              await saveItems(id, block, existingItemIds);
+              await saveChecklists(id, block);
+            } catch (e: any) {
+              toast.error('品項儲存失敗，未離開表單：' + getErrorMessage(e));
+              return;
+            }
             navigate(`/dashboard/repair-orders/${id}`);
           },
         }
@@ -208,6 +261,7 @@ export default function StoreRepairOrderForm() {
       const payload = buildPayload(block, totals);
       try {
         const order = await insertOrder(payload);
+        await saveItems(order.id, block, []);
         await saveChecklists(order.id, block);
         createdIds.push(order.id);
       } catch (e: any) {

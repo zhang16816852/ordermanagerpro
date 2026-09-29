@@ -27,12 +27,13 @@ interface ShippingAddressFieldsProps {
   className?: string;
   prefix?: string; // 多實例時 input id 前綴
   hideContact?: boolean; // 隱藏收件人/電話（如店鋪營業地址）
+  hideAddress?: boolean; // 隱藏地址欄位、僅保留收件人/電話（如地址沿用他處時）
 }
 
 const EMPTY = { recipient: "", phone: "", postal_code: "", city: "", district: "", address: "" };
 
 // 全站共用：收件地址欄位（縣市→鄉鎮級聯、郵區自動帶出、可手動覆寫郵區）
-export function ShippingAddressFields({ value, onChange, className, prefix = "addr", hideContact = false }: ShippingAddressFieldsProps) {
+export function ShippingAddressFields({ value, onChange, className, prefix = "addr", hideContact = false, hideAddress = false }: ShippingAddressFieldsProps) {
   const v = { ...EMPTY, ...(value || {}) };
   const districts = v.city ? getDistrictsOfCity(v.city) : [];
   const hintPostal = v.city && v.district ? getPostalOf(v.city, v.district) : null;
@@ -87,16 +88,18 @@ export function ShippingAddressFields({ value, onChange, className, prefix = "ad
 
   return (
     <div className={cn("grid gap-3", className)}>
-      <div className="space-y-1.5">
-        <Label htmlFor={`${prefix}-full`}>完整地址（自動分欄）</Label>
-        <Input
-          id={`${prefix}-full`}
-          value={fullText}
-          onChange={(e) => setFullText(e.target.value)}
-          onBlur={handleFullBlur}
-          placeholder="例：640雲林縣斗六市鎮南里中山路286-3號（郵遞區號可省略）"
-        />
-      </div>
+      {!hideAddress && (
+        <div className="space-y-1.5">
+          <Label htmlFor={`${prefix}-full`}>完整地址（自動分欄）</Label>
+          <Input
+            id={`${prefix}-full`}
+            value={fullText}
+            onChange={(e) => setFullText(e.target.value)}
+            onBlur={handleFullBlur}
+            placeholder="例：640雲林縣斗六市鎮南里中山路286-3號（郵遞區號可省略）"
+          />
+        </div>
+      )}
       {!hideContact && (
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
@@ -119,57 +122,61 @@ export function ShippingAddressFields({ value, onChange, className, prefix = "ad
           </div>
         </div>
       )}
-      <div className="grid grid-cols-[110px_1fr] gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor={`${prefix}-postal`}>郵遞區號</Label>
-          <Input
-            id={`${prefix}-postal`}
-            value={v.postal_code}
-            onChange={(e) => patch({ postal_code: e.target.value.replace(/\D/g, "").slice(0, 5) })}
-            onBlur={handlePostalBlur}
-            placeholder={hintPostal || "自動帶入"}
-            className={cn(hintPostal && !v.postal_code && "text-muted-foreground")}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label>縣市</Label>
-          <SearchableSelect
-            options={getTaiwanCities().map((c) => ({ id: c, name: c }))}
-            value={v.city || null}
-            onChange={(id) => handleCity(id || "")}
-            placeholder="選擇縣市"
-            searchPlaceholder="搜尋縣市..."
-            emptyText="找不到符合的縣市"
-            className="h-10"
-          />
-        </div>
-      </div>
-      <div className="space-y-1.5">
-        <Label>鄉鎮市區</Label>
-        <SearchableSelect
-          options={districts.map((d) => ({
-            id: d,
-            name: d,
-            subLabel: v.city && getPostalOf(v.city, d) ? `郵遞區號 ${getPostalOf(v.city, d)}` : undefined,
-          }))}
-          value={v.district || null}
-          onChange={(id) => handleDistrict(id || "")}
-          placeholder={v.city ? "選擇鄉鎮市區" : "請先選擇縣市"}
-          searchPlaceholder="搜尋鄉鎮市區..."
-          emptyText="找不到符合的鄉鎮市區"
-          disabled={!v.city}
-          className="h-10"
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor={`${prefix}-address`}>詳細地址</Label>
-        <Input
-          id={`${prefix}-address`}
-          value={v.address}
-          onChange={(e) => patch({ address: e.target.value })}
-          placeholder="街道巷弄門牌"
-        />
-      </div>
+      {!hideAddress && (
+        <>
+          <div className="grid grid-cols-[110px_1fr] gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor={`${prefix}-postal`}>郵遞區號</Label>
+              <Input
+                id={`${prefix}-postal`}
+                value={v.postal_code}
+                onChange={(e) => patch({ postal_code: e.target.value.replace(/\D/g, "").slice(0, 5) })}
+                onBlur={handlePostalBlur}
+                placeholder={hintPostal || "自動帶入"}
+                className={cn(hintPostal && !v.postal_code && "text-muted-foreground")}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>縣市</Label>
+              <SearchableSelect
+                options={getTaiwanCities().map((c) => ({ id: c, name: c }))}
+                value={v.city || null}
+                onChange={(id) => handleCity(id || "")}
+                placeholder="選擇縣市"
+                searchPlaceholder="搜尋縣市..."
+                emptyText="找不到符合的縣市"
+                className="h-10"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>鄉鎮市區</Label>
+            <SearchableSelect
+              options={districts.map((d) => ({
+                id: d,
+                name: d,
+                subLabel: v.city && getPostalOf(v.city, d) ? `郵遞區號 ${getPostalOf(v.city, d)}` : undefined,
+              }))}
+              value={v.district || null}
+              onChange={(id) => handleDistrict(id || "")}
+              placeholder={v.city ? "選擇鄉鎮市區" : "請先選擇縣市"}
+              searchPlaceholder="搜尋鄉鎮市區..."
+              emptyText="找不到符合的鄉鎮市區"
+              disabled={!v.city}
+              className="h-10"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`${prefix}-address`}>詳細地址</Label>
+            <Input
+              id={`${prefix}-address`}
+              value={v.address}
+              onChange={(e) => patch({ address: e.target.value })}
+              placeholder="街道巷弄門牌"
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

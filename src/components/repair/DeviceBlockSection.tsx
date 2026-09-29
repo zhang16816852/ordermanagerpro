@@ -22,6 +22,7 @@ export interface DeviceBlockSectionProps {
   onAddBlock: () => void;
   onRemoveBlock: (key: string) => void;
   onCreatePart?: (deviceModelId: string | null) => void;
+  onEditPart?: (repairPartId: string) => void;
   onNavigateToPurchase?: () => void;
   onRequestPurchase?: (block: DeviceBlock) => void;
 }
@@ -38,6 +39,7 @@ export function DeviceBlockSection({
   onAddBlock,
   onRemoveBlock,
   onCreatePart,
+  onEditPart,
   onNavigateToPurchase,
   onRequestPurchase,
 }: DeviceBlockSectionProps) {
@@ -121,6 +123,7 @@ export function DeviceBlockSection({
             onChange={onUpdate}
             mode={mode}
             onCreatePart={onCreatePart}
+            onEditPart={onEditPart}
             onNavigateToPurchase={onNavigateToPurchase}
             onRequestPurchase={onRequestPurchase}
           />

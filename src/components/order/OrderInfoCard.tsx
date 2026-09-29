@@ -46,6 +46,8 @@ interface OrderInfoCardProps {
   onShippedAtChange: (v: string) => void;
   consignmentMode: boolean;
   onConsignmentModeChange: (v: boolean) => void;
+  consignmentModePending?: boolean;
+  isRep?: boolean;
   items: OrderItemRow[];
   getItemWarehouse: (id: string) => string;
   itemWarehouses: Record<string, string>;
@@ -82,6 +84,8 @@ export function OrderInfoCard({
   onShippedAtChange,
   consignmentMode,
   onConsignmentModeChange,
+  consignmentModePending = false,
+  isRep = false,
   items,
   getItemWarehouse,
   itemWarehouses,
@@ -104,7 +108,15 @@ export function OrderInfoCard({
     ? (displayStoreName || order?.stores?.name)
     : orderType === 'sales'
     ? (displayStoreName || '未選門市')
+    : orderType === 'consignment_send'
+    ? (storesList.find((s) => s.id === targetStoreId)?.name || '未選目標門市')
     : suppliersList.find((s) => s.id === supplierId)?.name || '未選供應商';
+
+  // 編輯模式以伺服器資料為準（切換寄賣模式為立即執行的動作，非可儲存欄位）
+  const consignmentSwitchChecked = isEditMode ? !!order?.consignment_mode : consignmentMode;
+  const consignmentSwitchDisabled = isRep || (isEditMode
+    ? !order || order.status === 'shipped' || order.status === 'cancelled'
+    : false);
 
   return (
     <Card className="h-full flex flex-col">
@@ -217,29 +229,19 @@ export function OrderInfoCard({
               )}
 
               {orderType === 'consignment_send' && (
-                <>
-                  <div className="space-y-2">
-                    <Label>供應商</Label>
-                    <Select value={supplierId} onValueChange={onSupplierChange}>
-                      <SelectTrigger><SelectValue placeholder="選擇供應商" /></SelectTrigger>
-                      <SelectContent>
-                        {suppliersList.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>目標門市</Label>
-                    <StorePicker
-                      stores={storesList}
-                      value={targetStoreId}
-                      onChange={(v) => onTargetStoreChange(Array.isArray(v) ? v[0] || '' : v)}
-                      valueField="id"
-                      placeholder="搜尋門市名稱或編號..."
-                    />
-                  </div>
-                </>
+                <div className="space-y-2">
+                  <Label>目標門市</Label>
+                  <StorePicker
+                    stores={storesList}
+                    value={targetStoreId}
+                    onChange={(v) => onTargetStoreChange(Array.isArray(v) ? v[0] || '' : v)}
+                    valueField="id"
+                    placeholder="搜尋門市名稱或編號..."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    寄賣出貨的合作對象只有門市（結算對象為店家），不需選擇供應商。
+                  </p>
+                </div>
               )}
             </div>
           )}
@@ -249,7 +251,7 @@ export function OrderInfoCard({
             <Textarea placeholder="輸入備註..." value={notes} onChange={(e) => onNotesChange(e.target.value)} rows={3} />
           </div>
 
-          {!isEditMode && orderType === 'sales' && (
+          {(isEditMode || orderType === 'sales') && (
             <div className="space-y-4 pt-2 border-t">
               <div>
                 <Label className="text-sm font-medium">出貨時間</Label>
@@ -264,11 +266,20 @@ export function OrderInfoCard({
                 <div className="space-y-0.5">
                   <div className="text-sm font-medium">寄賣模式</div>
                   <div className="text-xs text-muted-foreground">
-                    訂單出貨時以店家寄賣方式轉出，不扣自有庫存
+                    {isEditMode
+                      ? '切換後立即生效：未確認單會建立寄賣草稿並鏡像品項，處理中單則於出貨時轉為寄賣單'
+                      : '訂單出貨時以店家寄賣方式轉出，不扣自有庫存'}
                   </div>
                 </div>
-                <Switch checked={consignmentMode} onCheckedChange={onConsignmentModeChange} />
+                <Switch
+                  checked={consignmentSwitchChecked}
+                  disabled={consignmentSwitchDisabled || consignmentModePending}
+                  onCheckedChange={onConsignmentModeChange}
+                />
               </div>
+              {isEditMode && consignmentSwitchDisabled && order && !isRep && (
+                <p className="text-xs text-muted-foreground">已出貨或已取消的訂單無法切換寄賣模式。</p>
+              )}
             </div>
           )}
 
