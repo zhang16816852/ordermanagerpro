@@ -17,10 +17,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { addDays, format } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/errorMessages";
+import { formatCurrency } from "@/lib/formatters";
 import {
   ReceiptText,
   Copy,
@@ -31,6 +32,7 @@ import {
   CalendarIcon,
   ArrowLeft,
   Loader2,
+  Package,
 } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 
@@ -39,7 +41,34 @@ interface CustomerStatementDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+interface PreviewNote {
+  id: string;
+  code?: string | null;
+  status?: string | null;
+  payment_status?: string | null;
+  shipped_at?: string | null;
+  shipping_fee?: number | null;
+  delivery_method_title?: string | null;
+  sales_note_items?:
+    | { quantity?: number | null; order_item?: { unit_price?: number | null } | null }[]
+    | null;
+}
+
+const PREVIEW_ROW_LIMIT = 200;
+
 const formatDay = (d: Date | undefined) => (d ? format(d, "yyyy/MM/dd") : "");
+
+const previewNoteTotal = (note: PreviewNote) => {
+  const items = note.sales_note_items || [];
+  const subtotal = items.reduce(
+    (s, i) => s + (i.quantity || 0) * Number(i.order_item?.unit_price || 0),
+    0
+  );
+  return subtotal + Number(note.shipping_fee || 0);
+};
+
+const previewNoteQty = (note: PreviewNote) =>
+  (note.sales_note_items || []).reduce((s, i) => s + (i.quantity || 0), 0);
 
 export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatementDialogProps) {
   const { user } = useAuth();
@@ -76,6 +105,53 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
     () => storeOptions.find((s) => s.id === storeId) || null,
     [storeOptions, storeId]
   );
+
+  const previewFrom = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : "";
+  const previewTo = dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : "";
+  // 分享頁 RPC 以 `shipped_at >= date_from` 且 `< date_to + 1 天` 篩選，
+  // 這裡用相同邊界（UTC）以確保預覽與實際產出完全一致。
+  const previewToExclusive = dateRange?.to
+    ? format(addDays(dateRange.to, 1), "yyyy-MM-dd")
+    : "";
+
+  const {
+    data: previewNotes,
+    isFetching: isPreviewFetching,
+    isError: isPreviewError,
+  } = useQuery<PreviewNote[]>({
+    queryKey: ["customer-statement-preview", storeId, previewFrom, previewTo],
+    enabled: view === "create" && !!storeId && !!previewFrom && !!previewTo,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("sales_notes")
+        .select(
+          `
+          id, code, status, payment_status, shipped_at,
+          shipping_fee, delivery_method_title,
+          sales_note_items(quantity, order_item:order_items(unit_price))
+        `
+        )
+        .eq("store_id", storeId)
+        .not("shipped_at", "is", null)
+        .gte("shipped_at", `${previewFrom}T00:00:00Z`)
+        .lt("shipped_at", `${previewToExclusive}T00:00:00Z`)
+        .order("shipped_at", { ascending: true })
+        .order("code", { ascending: true })
+        .order("id", { ascending: true })
+        .limit(PREVIEW_ROW_LIMIT);
+      if (error) throw error;
+      return (data || []) as PreviewNote[];
+    },
+  });
+
+  const previewSummary = useMemo(() => {
+    const notes = previewNotes || [];
+    return {
+      noteCount: notes.length,
+      qty: notes.reduce((s, n) => s + previewNoteQty(n), 0),
+      amount: notes.reduce((s, n) => s + previewNoteTotal(n), 0),
+    };
+  }, [previewNotes]);
 
   // 切換到建立視圖時給預設日期區間（本月）＋重設標題狀態
   useEffect(() => {
@@ -362,6 +438,89 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
                   />
                 </PopoverContent>
               </Popover>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label>將包含的銷貨單（依出貨日）</Label>
+                {isPreviewFetching && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" /> 更新中
+                  </span>
+                )}
+              </div>
+
+              {!storeId || !previewFrom || !previewTo ? (
+                <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+                  請先選擇客戶與日期區間，即可預覽會納入的銷貨單。
+                </p>
+              ) : isPreviewError ? (
+                <p className="rounded-md border border-destructive/50 bg-destructive/5 p-4 text-center text-sm text-destructive">
+                  載入預覽失敗，請稍後再試。
+                </p>
+              ) : (previewNotes || []).length === 0 ? (
+                <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+                  此日期區間內查無已出貨的銷貨單。
+                </p>
+              ) : (
+                <div className="rounded-md border">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-muted/30 px-3 py-2 text-xs">
+                    <span>
+                      共 <span className="font-medium text-foreground">{previewSummary.noteCount}</span> 張
+                    </span>
+                    <span className="text-muted-foreground">|</span>
+                    <span>
+                      總件數 <span className="font-medium text-foreground">{previewSummary.qty}</span> 件
+                    </span>
+                    <span className="text-muted-foreground">|</span>
+                    <span>
+                      總金額{" "}
+                      <span className="font-semibold text-foreground">
+                        {formatCurrency(previewSummary.amount)}
+                      </span>
+                    </span>
+                  </div>
+
+                  <ul className="max-h-56 divide-y overflow-y-auto">
+                    {(previewNotes || []).map((note) => (
+                      <li
+                        key={note.id}
+                        className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-xs"
+                      >
+                        <Package className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className="font-medium">{note.code || note.id.slice(0, 8)}</span>
+                        <span className="text-muted-foreground">
+                          {note.shipped_at ? format(new Date(note.shipped_at), "yyyy/MM/dd") : "-"}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {(note.sales_note_items || []).length} 品項 ・ 共 {previewNoteQty(note)} 件
+                        </span>
+                        <Badge
+                          variant="secondary"
+                          className={
+                            note.payment_status === "paid"
+                              ? "bg-green-600 text-white hover:bg-green-600"
+                              : "text-amber-600"
+                          }
+                        >
+                          {note.payment_status === "paid"
+                            ? "已收款"
+                            : note.payment_status === "partial"
+                              ? "部分收款"
+                              : "未收款"}
+                        </Badge>
+                        <span className="ml-auto font-medium">{formatCurrency(previewNoteTotal(note))}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {previewSummary.noteCount >= PREVIEW_ROW_LIMIT && (
+                    <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+                      僅顯示前 {PREVIEW_ROW_LIMIT} 張，實際對帳單將包含此區間內全部已出貨單據。
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
