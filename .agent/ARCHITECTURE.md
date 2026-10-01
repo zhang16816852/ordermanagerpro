@@ -93,6 +93,7 @@ App 掛載 → CacheService.init() 完成前顯示「載入中...」
 | `useCreateOrder.ts` | 建立訂單 mutation（insert orders → order_items）；Phase D 支援 optional `deliveryMethod/shippingAddress` 快照（`delivery_method_id/title/code`＋`shipping_fee`＝method.price＋`shipping_address`），return 含 `shippingFee/grandTotal` |
 | `useRepairOrders.ts` | 維修單 CRUD；detail query 帶 `repair_part:repair_part_id(id,name,tags)` 供明細顯示 catalog tags |
 | `useRepairParts.ts` | **維修零件型錄（2026-09-27）**：零件/links/標籤 CRUD ＋ `useRepairPartProductOptions()`（links 編輯器與批次建立共用）＋ `partLabelOf`／`resolveLinkOf`。管理頁 `/admin/repair-parts` |
+| `useShipments.ts` | 包裹（`shipments`）讀取與 mutations：`useShipments(docType, docId)`、**`useShipmentMutations(docType, docId)`**（`upsertMutation`／`deleteMutation`／**`setDeliveryTypeMutation`（2026-10-01，呼叫 `set_doc_delivery_type` 切換 order/sales_note/consignment_order 的配送類型，`{ok:false}` 轉為例外走統一 toast）**），共用於三層單據的 `ParcelManager` |
 | `useSupabaseAction.ts` | 通用 supabase action（含錯誤訊息） |
 | `useBrands.ts`、`useProductColors.ts`、`useProductSearch.ts`、`useNotifications.ts`、`useTableTemplates.ts` | 各自領域資料 |
 
@@ -177,6 +178,7 @@ App 掛載 → CacheService.init() 完成前顯示「載入中...」
 - 既有文件 `.agent/COMPONENT_ARCHITECTURE.md` 記錄訂單相關組件樹（OrdersTableView/CardsView、ItemsTableView/CardsView、OrderDetailDialog 等），此部分不再重複，需要時直接讀該檔
 - 響應式策略：電腦版 `*TableView.tsx`、手機版 `*CardView.tsx`，用 Tailwind `hidden md:block` / `md:hidden` 切換
 - 容器/展示分離：頁面處理資料與邏輯，子組件專注渲染
+- **配送類型與包裹（2026-10-01）**：`src/components/shipping/ParcelManager.tsx` 新增 `deliveryType?: string | null` prop 與 `DeliveryTypePicker`（複用 `DeliveryMethodPicker` 的 `DeliveryType`/`TYPE_LABEL`）——`editable` 時可切換送貨/物流/自取，切為非物流且已有包裹時以 `window.confirm` 確認（會移除包裹與追蹤號），**物流才渲染包裹清單與「新增包裹」**，唯讀時顯示「配送類型：X」；未傳 `deliveryType` 的舊呼叫端回退以 `shipments.length > 0` 判斷。三個詳情接線傳 `deliveryType`：`components/order/OrderDetailDialog`、`components/sales/SalesNoteDetailDialog`（`SalesNoteDetail` 需含 `delivery_type`）、`pages/admin/consignment/components/OrderDetailDialog`。銷貨單的 `delivery_type`／`shipping_fee`／`shipping_cost`／`delivery_method_*`／`shipping_address` 須在三處 mapping 帶入（`pages/admin/SalesNotes`、`pages/store/SalesNotes`、`pages/admin/accounting/components/ReferenceViewer`），否則「配送」列恆不顯示
 
 ## 9. 其他 utils
 

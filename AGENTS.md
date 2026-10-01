@@ -2,6 +2,65 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（配送類型 ↔ 包裹同步 ＋ 出貨後可改配送類型，2026-10-01）
+
+- **根因**：`_recompute_doc_shipping` 原本只回寫 `shipping_fee`/`shipping_cost`/方式快照，**不回寫 `delivery_type`**；而分享收據 `SharedReceiptExport` 以 `deliveryType === 'logistics'` 決定是否顯示追蹤號 → 實際走物流的單據，分享頁看不到物流單號。
+- **後端（migration `20261001000001_delivery_type_sync.sql`，已套用遠端，工具名 `delivery_type_sync`）**：
+  - 重發 `public._recompute_doc_shipping(p_doc_type text, p_doc_id uuid)`（簽名不變）：運費/成本仍加總所有包裹；**有包裹且第一包有方式時，`delivery_type` 與方式快照一律以第一包（`created_at, id` 最早）為準**；無包裹或方式不存在則保留單據原設定；回傳 JSON 新增 `delivery_type`。簽名不變 → 前端既有呼叫端零改動即同步修正。
+  - 新 RPC **`public.set_doc_delivery_type(p_doc_type text, p_doc_id uuid, p_delivery_type text)`**（`SECURITY DEFINER`、`SET search_path = public, extensions`、僅 `has_role(auth.uid(),'admin')`、`GRANT EXECUTE TO authenticated`、`REVOKE FROM public, anon`）：支援 `order`/`sales_note`/`consignment_order`。`logistics` → 優先啟用中預設物流方式，**無包裹時自動建立 1 包**、已有包裹時只轉換第一包；`delivery`/`pickup` → 先檢查 `accounting_entry_references(reference_type='shipment')`（月結已引用則回 `{ok:false, reason}`），否則刪除全部包裹並以 `_resolve_delivery(v_type, NULL, true)` 套預設送貨方式/不帶方式；一律 `COALESCE(...)` 保留既有 `shipping_address`。
+  - 回填：動態 SQL 依各表第一包裹式型別回填 `delivery_type`＋快照，**命中 4 筆**（皆為 `delivery_type='delivery'` 但第一包物流）：`SL2609CASEAGE0010003`／`SL2609MY0020005`／`SL2610MY0020001`／`SL2610MY0020002`。回填後 17 張有包裹單據 **type/title mismatch 皆為 0**。
+- **前端**：
+  - `useShipmentMutations`（`src/hooks/useShipments.ts`）新增 `setDeliveryTypeMutation`（`{ok:false}` 轉為例外→統一 toast），沿用既有 invalidation。
+  - `ParcelManager` 新增 `deliveryType?: string | null` prop：`editable` 時以 `DeliveryTypePicker`（＋`TYPE_LABEL`/`Truck` 圖示）切換類型，**物流才顯示包裹清單/新增包裹**，非物流顯示說明字樣；唯讀時顯示「配送類型：X」。**切換為送貨/自取且已有包裹時以 `window.confirm` 確認**（會移除包裹與追蹤號）。未傳 `deliveryType` 的舊呼叫端仍以 `shipments.length > 0` 判斷，不退回空畫面。
+  - 三個詳情接線傳 `deliveryType`：`components/order/OrderDetailDialog`、`components/sales/SalesNoteDetailDialog`、`pages/admin/consignment/components/OrderDetailDialog`。
+  - `SalesNoteDetail` 介面新增 `delivery_type`；**三處 `dialogData`/mapping 補上配送欄位**（`pages/admin/SalesNotes`（原本連 `shipping_fee` 都沒帶，導致「配送」列恆不顯示）、`pages/store/SalesNotes`（select 清單＋唯讀可見包裹）、`pages/admin/accounting/components/ReferenceViewer`）。
+- **遠端實測（17 項 `BEGIN…ROLLBACK`，全數回滾無殘留）**：物流自動建包（fee/cost 70）、切回送貨（清包＋套「送貨」）、自取（方式 NULL）、非法類型/`NULL` 類型/非法 doc_type/單據不存在四種守門、月結引用擋下且包裹保留、非管理員與無 JWT 均「僅管理員可修改配送類型」、訂單層只換第一包、寄賣層自動建包、`upsert_shipment` 自動把型別翻成 logistics 全數 PASSED。
+- **驗證**：`npm run typecheck` 0 errors、本批 8 檔 `eslint` 0 problems、`npm run build` 通過（1m4s，僅既有 chunk-size 警告）。`src/integrations/supabase/types.ts` 已重產（+72 行、UTF-8 no BOM，本次 CLI 未產生 UTF-16LE）。
+- ⚠️ **教訓**：`supabase_execute_sql` 多語句 harness **只回傳最後一個 SELECT 的結果**，且**同一個 `INSERT … VALUES` 內的所有子查詢共用同一 statement snapshot**（看不到同指令內先前 RPC 的寫入）——必須把每個測試結果 `insert into 暫存表` 後再統一 select 出來。harness 中途報錯會整筆回滾，但務必事後確認無殘留。
+
+## 近期變更（採購單交易化 CRUD ＋ 完整 payload 契約 ＋ 型別收斂，2026-09-30）
+
+- **後端（3 支 migration 已套用遠端）**：
+  - `20260930000004_purchase_order_consolidation.sql`：新增 `create_purchase_order_with_items`／`update_purchase_order_with_items`／`delete_purchase_order_item_if_safe`／`import_purchase_orders_batch` 四支 RPC（皆 `SECURITY DEFINER`、`SET search_path = public, extensions`、僅 `has_role(auth.uid(),'admin')`、失敗回 `{ok:false, reason}`）。**取代**前端逐欄 `insert`/`update`（原本標頭與品項分數次請求，無交易、中途失敗會留半套資料）。
+  - `20260930000005_fix_update_purchase_order_cardinality.sql`：**修 `42883` bug**——原以 `cardinality(p_items)` 判斷空陣列，但空 jsonb 陣列的 `cardinality` 回 `'{}'`（falsy）會被誤判成「有品項」而重跑守門，對**已取消單**（前端送空 `p_items` 只更新表頭）拋 `function jsonb_array_length(unknown) does not exist`。改用 `jsonb_array_length(...) = 0`。local/remote `prosrc` MD5 一致 `c4d58deb58716ecb426a6eb8ee1f1915`。
+  - `20260930000006_fix_duplicate_purchase_receipt.sql`：修重複收貨產生重複 movement 的問題。
+  - ⚠️ **遠端 ledger 缺 row**：`supabase_migrations.schema_migrations` 查無 `fix_update_purchase_order_cardinality`（遠端函式本體已正確套用，MD5 實測相符）。**未手動改寫 ledger**（維持 append-only 慣例）。
+  - ⚠️ **未新增** supplier_order_number unique index：實務上同供應商單號可分散於多張 PO，批次匯入亦可能拆組。
+- **`p_items` 完整 payload 契約（關鍵）**：`update_purchase_order_with_items` 的 `p_items` 是**整張單的完整品項清單**（非 delta），RPC 依 **payload 陣列順序**重編 `sort_order`、刪除不再出現的列、upsert 其餘、重算 `total_amount`。**更新／刪除／追加／重排四條前端路徑都必須送完整清單**，只送差異會導致未列出的品項被刪除。jsonb 參數**直接傳 JS 陣列，勿 `JSON.stringify`**。
+- **守門語意**：
+  - **已取消單**鎖定所有品項異動 → 前端此時送 `p_items: []`＋`p_deleted_item_ids: []`，只更新表頭。
+  - **已收貨品項**（`received_quantity>0`）不可刪除、不可降 `quantity`、不可換 `product_id`/`variant_id`，但**可更新 `unit_cost`**。
+  - **狀態**：手動僅 `draft`／`ordered`／`cancelled`；`partial_received`／`received` 由收貨流程決定，有任一收貨品項時 `p_status` 必須送 `null`（前端 `useOrderFormMutations` 依 `poHasReceived` 判斷）。
+  - **`p_notes`**：`COALESCE(p_notes, notes)`——傳 `NULL` 保留原值、傳 `''` 清空；日期欄位不可傳 `''`。
+  - `delete_purchase_order_item_if_safe` 保留於 server/types 但**前端已不再呼叫**（刪除走 `p_deleted_item_ids` 才能同交易重編 sort_order／重算總額）。
+- **前端**：
+  - `useOrderFormMutations`：**移除** `(supabase.rpc as any)`，改用 typed `PoUpdateItemsArgs` ＋ `supabase.rpc`；`purchaseStatus`／`purchasePurpose` 由 `string` 收斂為 `PurchaseOrderStatus`／`PurchaseOrderPurpose`（連動 `useAdminOrderFormController` state、`useOrderFormStateSync` props、`OrderInfoCard` 的 `onPurchaseStatusChange`／`onPurchasePurposeChange` 簽名）。`rpcUpdatePurchaseOrder` 統一將 `{ok:false}` 轉為例外。
+  - `PurchaseOrderDetailDialog`：`onImportItems`／`onUpdateItem`／`onDeleteItem`／`onReorder` 改為 **awaitable**（`Promise<unknown>`），失敗時回滾 optimistic `localItems`；追加匯入只在成功後關閉子 dialog，不再產生 unhandled rejection。
+  - `PurchaseOrdersPage`：四個 callback 改用 `mutateAsync`，讓失敗可回到 dialog。
+  - `PurchaseDocImportDialog`：補用 `PoImportBatchArgs` 具名 payload（取代直接 inline cast）。
+  - `SortableMobileCard`：數量輸入下限改 `Math.max(1, item.receivedQuantity || 0)`（與 `OrderItemsDesktopTable`／`OrderItemsMobileList` 對齊，已收貨品項不可降量）。
+  - `src/integrations/supabase/types.ts` 已重產（7 支採購 RPC，UTF-8 無 BOM）。
+- **已知範圍限制（記錄不修）**：`reorder_purchase_order_items` **無** `cancelled` 守門、**未驗證**品項同屬一張 PO（local/remote 一致，MD5 `199ef34909530bfd8cd9222762611336`／長度 495）；「已取消單不可排序」目前僅 UI 停用。`import_purchase_orders_batch` 遠端 `prosrc` 與本地唯一差異是多一個未使用的 `v_resolve jsonb;`（cosmetic，byte-identical 其餘）。
+- **遠端實測（`BEGIN…ROLLBACK`）**：降量／換商品／刪已收貨品項／手動改已收貨單狀態皆正確回 `{ok:false, reason}`；`unit_cost` 更新成功；追加＋重排成功（`sort_order` 依 payload 順序、總額 2650）；notes 保留／清空語意正確；已取消單表頭更新成功（**證實 42883 已修**）；非管理員回「僅管理員可編輯採購單」且未寫入。
+- **測試資料清理**：先前未包 transaction 的 harness 殘留一張測試 PO（`received_quantity=10` 但 **0 筆 `inventory_movements`**，非正常收貨流程產物），已確認無 movements／會計分錄／`repair_order_items` 參照後刪除。
+- **驗證**：`npm run typecheck` 0 errors；`npx eslint src/components/order src/pages/admin/purchase-orders src/pages/admin/orders/form` 0 errors（13 warnings 皆既有）。
+- ⚠️ **SQL harness 教訓**：`||` 與 `->>` 混用需括號（否則解析成 `(text || jsonb) ->> 'ok'`）；`NULL` 參與 `||` 會污染整行輸出（用 `COALESCE`）；`format()` 的字面 `%` 需跳脫。建議一律把 harness 包在 `BEGIN … ROLLBACK`。
+
+## 近期變更（採購單「預算外品項」改用商品目錄 ＋「匯入銷售需求」加搜尋，2026-09-30）
+
+- **背景**：採購單詳情的「預算外品項」原為 `ItemForm`（兩個下拉：產品／變體 + 數量 + 單價），商品一多就難找；使用者要求改用 `AdminOrderForm` 的商品選擇元件。同一輪另補上「匯入銷售需求」的搜尋。
+- **新元件 `src/pages/admin/purchase-orders/components/PurchaseProductPicker.tsx`**（262 行，對話框內嵌，取代已刪除的 `ItemForm.tsx`）：
+  - 直接組 `ProductSelector`（`src/components/order/ProductSelector.tsx`）＋完整 `ProductWithPricing[]`；商品來源是 `useProductCache()` **原始完整清單**（自行 map 出 `wholesale_price/retail_price/variants.effective_*`），**刻意不用 `useStoreProductCache`**——後者會排除 `item_type='repair_part'`、隱藏商品與運費型商品，採購需可挑全部商品，否則行為較舊版 `ItemForm` 倒退。`products` 表的 `wholesale_price/retail_price` 未進 `types.ts`，須 `(p as any)` 取值。
+  - **暫存 draft key `po-pick-${purchaseOrderId}`**（`useStoreDraft`）：`ProductCatalog`／`ProductDetailDialog` 直接把商品寫進 `useStoreDraft(storeId)` 並 persist 到 localStorage，故傳入隔離的合成 key，不污染 `order-drafts-storage` 的銷售草稿桶。
+  - **加購配件過濾**：`enqueueAddons` 會依 `product_addon_bindings` 自動塞 `item_type='packaging'`、`id='addon:*'` 的子列 → 已選清單以 `!item.id.startsWith('addon:')` 排除，不匯入採購單。
+  - **篩選狀態用區域 local state**（`viewMode/productSearch/filterSheetOpen/selectedCategory/selectedSpecs/selectedBrands`），**不用 `useCatalogFilters`**——該 hook 走 `useSearchParams`，會污染採購頁既有的 `tab/supplier/purpose/status/from/to`。分類／規格階層取自 `useSpecStore()`（空值時 `fetchSpecs()`），品牌名 map 取自 `useBrands()` 供 `useProductSearch` 文字搜尋。
+  - **成本預設**：`supplier_product_mappings.vendor_unit_cost`（key `${product_id}_${variant_id ?? ''}`，queryKey `['po-vendor-costs', supplierId]`，僅在有供應商時啟用）→ 否則 draft `unitCost`／`price`；使用者覆寫值存區域 `costOverrides`（不寫 draft）。已選清單可逐列改數量（`updateQuantity`，下限 1）／單價／移除，並顯示合計（`formatCurrency`）。
+  - 提交走**批次**：一次呼叫既有的 `onImportItems` → `importItemsMutation`（單次 insert + 依 `sort_order` 接續 + 重算 `total_amount`），**取代原本的 `addItemMutation`**（N 次 insert ＋ N 次加總，競態風險高）。提交後 `clearDraft()`。
+- **死碼／接線清理**：`ItemForm.tsx` 已刪除；`PurchaseOrderDetailDialog` 移除 `onAddItem` prop（改傳 `PurchaseProductPicker`）、`DialogContent` 改 `max-w-5xl`；`PurchaseOrdersPage` 移除 `onAddItem` 與 `isLoading` 中的 `addItemMutation`；`usePurchaseOrders` **刪除 `addItemMutation`**（已無任何呼叫端）。
+- **匯入銷售需求搜尋（`ImportFromOrdersDialog.tsx`）**：query 補 `orders.code` 顯示完整訂單號；表頭加關鍵字搜尋（欄位：訂單號／產品名／變體名／SKU，`useMemo` 過濾）；**全選／取消全選只作用於目前搜尋結果且為增量加／減**（不清除範圍外勾選），但確認仍以完整 `pendingItems` 送出；空結果顯示「查無符合的品項」。
+- **⚠️ 已知副作用**：`ProductCatalog` 開啟商品細節會寫 `?p=<商品名>` 到網址（`useSearchParams`）。採購頁僅讀取特定 key，故不影響既有篩選參數，但會出現在網址列。
+- **驗證**：`npm run typecheck` 0 errors、`npx eslint src/pages/admin/purchase-orders` 0 errors、`npm run build` 通過（56.63s，僅既有 chunk-size 警告）。
+
 ## 近期變更（撤銷誤標退貨 ＋ `update_order_with_items` 授權守門修復，2026-09-30）
 
 - **背景**：`line_type` 退貨功能上線後，誤把一般銷售品項標成退貨的事件難以復原（原本只能「處理退貨」走退庫存/退款，會憑空產生負庫存與退款分錄）。本次新增**撤銷**路徑，讓誤標可安全還原為一般銷售；同時修掉一個**安全性回歸**。
@@ -462,7 +521,7 @@ npm run supabase:types  # 從 Supabase 重新產生 src/integrations/supabase/ty
 - `src/hooks/`：資料讀取 hooks（`useProductCache`、`useCache`、`useAuth`、`useCreateOrder` 等）
 - `src/store/`：Zustand stores（`useSpecStore`、`useDeviceModelStore`、`useOrderDraftStore`、`useFilterStore`、`useColorStore`）
 - `src/integrations/supabase/`：`client.ts`（supabase client）、`types.ts`（自動產生，勿手改）
-- `supabase/migrations/`：72 支 SQL migration（唯一 schema 權威來源，另含 brands_ui_diff.patch）
+- `supabase/migrations/`：199 支 SQL migration（唯一 schema 權威來源，另含 brands_ui_diff.patch）。⚠️ **檔案數 ≠ 遠端 ledger 筆數**：`supabase_migrations.schema_migrations` 僅記錄「套用到遠端」者，部分 migration 是直接以 `CREATE OR REPLACE` 寫入遠端而未記 ledger（例：`20260929000001_fix_batch_upsert_product_options_operator`、`20260930000005_fix_update_purchase_order_cardinality`），此為**已知且刻意維持**（append-only，不手動補寫）。
 - `supabase/functions/`：Edge Functions
 - `.agent/`：架構文件（歷史紀錄保留）
 
@@ -577,6 +636,8 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 - 維修單：`repair_orders` + `repair_order_items` + `repair_order_status_history`
 
 ## ⚠️ 已知問題 / 安全注意
+
+**`.agent/DATABASE.md` 統一價格段落已損毀（2026-09-30 確認，**尚未修復**，需人工處理）**：該檔「統一價格（unified_pricing）」一節（原 lines 320–325）整段為亂碼，含 **133 個 U+FFFD**（`EF BF BD`）。⚠️ **已驗證為 repo 既有缺陷、非本次變更造成**：逐一檢查所有改過此檔的 commit（`e3b4dbeb` 2026-09-10、`4466fa05` 09-17、`fcd32606` 09-21、`083edc63` 09-22、`0d6b7557` 09-26、`7f6dc4df` 09-29、`bee8884f` 09-30），**每個版本都是恰好 133 個**，故**原文無法從 git 歷史還原**（最早的可用版本已損毀）。該段內容在 `AGENTS.md`「統一價格 unified_pricing」節有**乾淨且等價**的完整版本（以該節為權威來源即可）。**修復方式**：因原文是 U+FFFD 位元組、無法用一般文字編輯工具比對 `oldString`，且 `AGENTS.md` 已載明「PowerShell `Get-Content`/`Set-Content` 改寫 UTF-8 曾造成過 BOM＋亂碼」，故**不要**用 PowerShell 對此檔做位元組層級改寫；請用可精確指定行號／位元組的工具（如編輯器直接選取該 6 行後貼入乾淨文字）處理。
 
 **向後相容 VIEW 復原（2026-09-09）**：遠端資料庫缺少 `device_model_links`／`device_model_group_links`／`device_model_exclusions`／`product_effective_models_base` 這 4 個由 `20260602213529_consolidate_entity_model_relations.sql` 定義的 VIEW（該 migration 未記入遠端）；`sync_storefront_items` 執行時參考到缺漏的 VIEW 會 42P01，導致新增/編輯變體失敗。已以 migration `20260909000000_recreate_device_model_link_views.sql` 重建（CREATE OR REPLACE VIEW，冪等），`entity_model_relations` 實表與前端邏輯不受影響。若日後又出現 `relation "public.device_model_links" does not exist`，先確認這 4 個 VIEW 是否存在。
 
