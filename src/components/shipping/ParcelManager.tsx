@@ -2,8 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, Save, Package } from 'lucide-react';
-import { useDeliveryMethods, DeliveryMethodPicker } from '@/components/shipping/DeliveryMethodPicker';
+import { Plus, Trash2, Save, Package, Truck } from 'lucide-react';
+import {
+  useDeliveryMethods,
+  DeliveryMethodPicker,
+  DeliveryTypePicker,
+  TYPE_LABEL,
+} from '@/components/shipping/DeliveryMethodPicker';
+import type { DeliveryType } from '@/components/shipping/DeliveryMethodPicker';
 import { useShipments, useShipmentMutations, ShipmentRow, ShipmentDocType } from '@/hooks/useShipments';
 import { formatCurrency } from '@/lib/formatters';
 
@@ -47,19 +53,26 @@ function fromDraft(s: ShipmentRow, d: ParcelDraft): boolean {
 
 // 包裹管理卡片：依 doc_type/doc_id 列出 shipments，可新增/編輯/刪除
 // editable=false 時為唯讀清單（門市端等）
+// deliveryType 為單據層配送類型：editable 時可在「送貨/物流/自取」間切換（物流才需要包裹）
 export function ParcelManager({
   docType,
   docId,
   editable = true,
+  deliveryType,
 }: {
   docType: ShipmentDocType;
   docId: string | null;
   editable?: boolean;
+  deliveryType?: string | null;
 }) {
   const { data: shipments = [] } = useShipments(docType, docId);
   const { data: methods = [] } = useDeliveryMethods();
-  const { upsertMutation, deleteMutation } = useShipmentMutations(docType, docId);
+  const { upsertMutation, deleteMutation, setDeliveryTypeMutation } = useShipmentMutations(docType, docId);
   const [drafts, setDrafts] = useState<ParcelDraft[]>([]);
+
+  const currentType = (deliveryType || null) as DeliveryType | null;
+  // 未提供單據類型時（舊呼叫端）以既有包裹判斷，避免看不到已存在的包裹
+  const showParcels = currentType ? currentType === 'logistics' : shipments.length > 0;
 
   // shipments 載入後若無本地草稿則以 shipments 為底（僅初始建立）
   useEffect(() => {
@@ -115,6 +128,17 @@ export function ParcelManager({
     }
   };
 
+  const handleDeliveryTypeChange = (next: DeliveryType) => {
+    if (next === currentType) return;
+    if (next !== 'logistics' && shipments.length > 0) {
+      const ok = window.confirm(
+        `切換為「${TYPE_LABEL[next] || next}」將移除 ${shipments.length} 個包裹記錄（含追蹤號碼與運費），確定要繼續嗎？`
+      );
+      if (!ok) return;
+    }
+    setDeliveryTypeMutation.mutate(next);
+  };
+
   const visibleDrafts = useMemo(
     () => (drafts.length ? drafts : shipments.map(toDraft)),
     [drafts, shipments]
@@ -131,126 +155,156 @@ export function ParcelManager({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Package className="h-4 w-4" />
-          包裹（{visibleDrafts.length}）
+      {/* 配送類型（editable 時可切換；物流才需要包裹） */}
+      {editable ? (
+        <div className="space-y-1">
+          <Label className="text-xs flex items-center gap-1">
+            <Truck className="h-3.5 w-3.5" /> 配送類型
+          </Label>
+          <DeliveryTypePicker
+            value={currentType}
+            onValueChange={(v) => v && handleDeliveryTypeChange(v)}
+            disabled={setDeliveryTypeMutation.isPending}
+          />
+          <p className="text-xs text-muted-foreground">
+            {showParcels
+              ? '物流出貨：下方可維護多個包裹的追蹤號碼與運費。'
+              : '送貨／自取不需包裹記錄；切換為「物流」會自動建立一個包裹。'}
+          </p>
         </div>
-        <div className="text-sm text-muted-foreground">運費合計：{formatCurrency(totalFee)}</div>
-        {editable && (
-          <Button variant="outline" size="sm" onClick={addParcel}>
-            <Plus className="h-4 w-4 mr-1" /> 新增包裹
-          </Button>
-        )}
-      </div>
-
-      {visibleDrafts.length === 0 && (
-        <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-          尚無包裹記錄
-        </div>
+      ) : (
+        currentType && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Truck className="h-4 w-4" />
+            配送類型：{TYPE_LABEL[currentType] || currentType}
+          </div>
+        )
       )}
 
-      {visibleDrafts.map((d, idx) => {
-        const original = d.shipmentId ? shipments.find((s) => s.id === d.shipmentId) : undefined;
-        const hasContent = !!(d.deliveryMethodId || d.fee || d.cost || d.trackingCompany || d.trackingNumber || d.trackingUrl || d.note);
-        const dirty = editable && (original ? fromDraft(original, d) : hasContent);
-        return (
-          <div key={d.key} className="rounded-lg border p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">包裹 #{idx + 1}</span>
-              {editable && (
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeParcel(d)}>
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
-              )}
+      {showParcels && (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Package className="h-4 w-4" />
+              包裹（{visibleDrafts.length}）
             </div>
-
-            {editable ? (
-              <>
-                <DeliveryMethodPicker
-                  value={d.deliveryMethodId}
-                  onValueChange={(v) => patchDraft(d.key, { deliveryMethodId: v })}
-                  methods={methods}
-                  allowNone
-                />
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">實收運費</Label>
-                    <Input
-                      type="number"
-                      value={d.fee}
-                      onChange={(e) => patchDraft(d.key, { fee: e.target.value })}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">成本</Label>
-                    <Input
-                      type="number"
-                      value={d.cost}
-                      onChange={(e) => patchDraft(d.key, { cost: e.target.value })}
-                      placeholder="0"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">追蹤公司</Label>
-                    <Input
-                      value={d.trackingCompany}
-                      onChange={(e) => patchDraft(d.key, { trackingCompany: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">追蹤號碼</Label>
-                    <Input
-                      value={d.trackingNumber}
-                      onChange={(e) => patchDraft(d.key, { trackingNumber: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">追蹤網址</Label>
-                  <Input
-                    value={d.trackingUrl}
-                    onChange={(e) => patchDraft(d.key, { trackingUrl: e.target.value })}
-                    placeholder="https://..."
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">備註</Label>
-                  <Input
-                    value={d.note}
-                    onChange={(e) => patchDraft(d.key, { note: e.target.value })}
-                  />
-                </div>
-                {dirty && (
-                  <div className="flex justify-end">
-                    <Button size="sm" onClick={() => saveParcel(d)} disabled={upsertMutation.isPending}>
-                      <Save className="h-4 w-4 mr-1" /> 儲存
-                    </Button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="text-sm space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{methodTitle(d.deliveryMethodId)}</span>
-                  <span>{formatCurrency(parseFloat(d.fee) || 0)}</span>
-                </div>
-                {(d.trackingCompany || d.trackingNumber || d.trackingUrl) && (
-                  <div className="text-muted-foreground truncate">
-                    追蹤：{d.trackingCompany ? `${d.trackingCompany} / ` : ''}
-                    {d.trackingNumber}
-                    {d.trackingUrl ? `（${d.trackingUrl}）` : ''}
-                  </div>
-                )}
-                {d.note && <div className="text-muted-foreground">{d.note}</div>}
-              </div>
+            <div className="text-sm text-muted-foreground">運費合計：{formatCurrency(totalFee)}</div>
+            {editable && (
+              <Button variant="outline" size="sm" onClick={addParcel}>
+                <Plus className="h-4 w-4 mr-1" /> 新增包裹
+              </Button>
             )}
           </div>
-        );
+
+          {visibleDrafts.length === 0 && (
+            <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+              尚無包裹記錄
+            </div>
+          )}
+
+          {visibleDrafts.map((d, idx) => {
+          const original = d.shipmentId ? shipments.find((s) => s.id === d.shipmentId) : undefined;
+          const hasContent = !!(d.deliveryMethodId || d.fee || d.cost || d.trackingCompany || d.trackingNumber || d.trackingUrl || d.note);
+          const dirty = editable && (original ? fromDraft(original, d) : hasContent);
+          return (
+            <div key={d.key} className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">包裹 #{idx + 1}</span>
+                {editable && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeParcel(d)}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                )}
+              </div>
+
+              {editable ? (
+                <>
+                  <DeliveryMethodPicker
+                    value={d.deliveryMethodId}
+                    onValueChange={(v) => patchDraft(d.key, { deliveryMethodId: v })}
+                    methods={methods}
+                    allowNone
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">實收運費</Label>
+                      <Input
+                        type="number"
+                        value={d.fee}
+                        onChange={(e) => patchDraft(d.key, { fee: e.target.value })}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">成本</Label>
+                      <Input
+                        type="number"
+                        value={d.cost}
+                        onChange={(e) => patchDraft(d.key, { cost: e.target.value })}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">追蹤公司</Label>
+                      <Input
+                        value={d.trackingCompany}
+                        onChange={(e) => patchDraft(d.key, { trackingCompany: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">追蹤號碼</Label>
+                      <Input
+                        value={d.trackingNumber}
+                        onChange={(e) => patchDraft(d.key, { trackingNumber: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">追蹤網址</Label>
+                    <Input
+                      value={d.trackingUrl}
+                      onChange={(e) => patchDraft(d.key, { trackingUrl: e.target.value })}
+                      placeholder="https://..."
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">備註</Label>
+                    <Input
+                      value={d.note}
+                      onChange={(e) => patchDraft(d.key, { note: e.target.value })}
+                    />
+                  </div>
+                  {dirty && (
+                    <div className="flex justify-end">
+                      <Button size="sm" onClick={() => saveParcel(d)} disabled={upsertMutation.isPending}>
+                        <Save className="h-4 w-4 mr-1" /> 儲存
+                      </Button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-sm space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{methodTitle(d.deliveryMethodId)}</span>
+                    <span>{formatCurrency(parseFloat(d.fee) || 0)}</span>
+                  </div>
+                  {(d.trackingCompany || d.trackingNumber || d.trackingUrl) && (
+                    <div className="text-muted-foreground truncate">
+                      追蹤：{d.trackingCompany ? `${d.trackingCompany} / ` : ''}
+                      {d.trackingNumber}
+                      {d.trackingUrl ? `（${d.trackingUrl}）` : ''}
+                    </div>
+                  )}
+                  {d.note && <div className="text-muted-foreground">{d.note}</div>}
+                </div>
+              )}
+            </div>
+          );
       })}
+        </>
+      )}
     </div>
   );
 }

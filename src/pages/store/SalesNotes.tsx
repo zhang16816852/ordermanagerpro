@@ -32,6 +32,13 @@ interface SalesNoteWithItems {
   received_at: string | null;
   notes: string | null;
   created_at: string;
+  delivery_type?: string | null;
+  shipping_fee?: number | null;
+  shipping_cost?: number | null;
+  delivery_method_id?: string | null;
+  delivery_method_title?: string | null;
+  delivery_method_code?: string | null;
+  shipping_address?: Record<string, string | null> | null;
   sales_note_items: {
     id: string;
     quantity: number;
@@ -116,6 +123,13 @@ export default function StoreSalesNotes() {
           received_at,
           notes,
           created_at,
+          delivery_type,
+          shipping_fee,
+          shipping_cost,
+          delivery_method_id,
+          delivery_method_title,
+          delivery_method_code,
+          shipping_address,
           sales_note_items (
             id,
             quantity,
@@ -314,6 +328,13 @@ export default function StoreSalesNotes() {
       shipped_at: note.shipped_at,
       received_at: note.received_at,
       notes: note.notes,
+      delivery_type: note.delivery_type,
+      shipping_fee: note.shipping_fee,
+      shipping_cost: note.shipping_cost,
+      delivery_method_id: note.delivery_method_id,
+      delivery_method_title: note.delivery_method_title,
+      delivery_method_code: note.delivery_method_code,
+      shipping_address: note.shipping_address,
       items: [...note.sales_note_items]
         .sort((a, b) => ((a as any).sort_order ?? 0) - ((b as any).sort_order ?? 0))
         .map((item) => ({

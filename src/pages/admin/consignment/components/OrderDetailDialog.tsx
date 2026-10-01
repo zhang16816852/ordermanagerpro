@@ -171,7 +171,7 @@ export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
           {/* 配送 / 包裹（僅物流類型或已有包裹時顯示） */}
           {hasDelivery && (
             <div className="border rounded-md p-4">
-              <ParcelManager docType="consignment_order" docId={order.id} editable={!isSupplier} />
+              <ParcelManager docType="consignment_order" docId={order.id} editable={!isSupplier} deliveryType={order.delivery_type} />
             </div>
           )}
 

@@ -152,7 +152,7 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, on
                                 <span>運費：{formatCurrency(order.shipping_fee ?? 0)}</span>
                             </div>
                         )}
-                        <ParcelManager docType="order" docId={order.id} editable={parcelEditable} />
+                        <ParcelManager docType="order" docId={order.id} editable={parcelEditable} deliveryType={order.delivery_type} />
                     </div>
 
                     {/* Total Amount */}

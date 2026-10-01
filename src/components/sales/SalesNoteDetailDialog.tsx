@@ -50,6 +50,7 @@ export interface SalesNoteDetail {
     notes?: string | null;
     access_token?: string | null;
     items: SalesNoteItem[];
+    delivery_type?: string | null;
     shipping_fee?: number | null;
     shipping_cost?: number | null;
     delivery_method_id?: string | null;
@@ -485,9 +486,14 @@ export function SalesNoteDetailDialog({
                     </div>
 
                     {/* 配送 / 包裹 */}
-                    {(note.delivery_method_title || (note.shipping_fee ?? 0) > 0 || parcelEditable) && (
+                    {(note.delivery_type || note.delivery_method_title || (note.shipping_fee ?? 0) > 0 || parcelEditable) && (
                         <div className="rounded-lg border p-4 bg-muted/30">
-                            <ParcelManager docType="sales_note" docId={note.id} editable={parcelEditable} />
+                            <ParcelManager
+                                docType="sales_note"
+                                docId={note.id}
+                                editable={parcelEditable}
+                                deliveryType={note.delivery_type}
+                            />
                         </div>
                     )}
 

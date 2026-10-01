@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
+import type { DeliveryType } from '@/components/shipping/DeliveryMethodPicker';
 
 export type ShipmentDocType = 'order' | 'sales_note' | 'consignment_order';
 
@@ -115,5 +116,26 @@ export function useShipmentMutations(docType: ShipmentDocType, docId: string | n
     },
   });
 
-  return { upsertMutation, deleteMutation };
+  const setDeliveryTypeMutation = useMutation({
+    mutationFn: async (deliveryType: DeliveryType) => {
+      if (!docId) throw new Error('缺少單據，無法設定配送類型');
+      const { data, error } = await (supabase as any).rpc('set_doc_delivery_type', {
+        p_doc_type: docType,
+        p_doc_id: docId,
+        p_delivery_type: deliveryType,
+      });
+      if (error) throw error;
+      const result = (data || null) as { ok?: boolean; reason?: string } | null;
+      if (!result?.ok) throw new Error(result?.reason || '設定配送類型失敗');
+      return result;
+    },
+    onSuccess: () => {
+      invalidate();
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+
+  return { upsertMutation, deleteMutation, setDeliveryTypeMutation };
 }

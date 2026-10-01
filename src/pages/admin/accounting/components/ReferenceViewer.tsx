@@ -138,6 +138,13 @@ export function ReferenceViewer({ referenceType, referenceId, open, onOpenChange
         received_at: data.received_at,
         notes: data.notes,
         access_token: data.access_token,
+        delivery_type: data.delivery_type,
+        shipping_fee: data.shipping_fee,
+        shipping_cost: data.shipping_cost,
+        delivery_method_id: data.delivery_method_id,
+        delivery_method_title: data.delivery_method_title,
+        delivery_method_code: data.delivery_method_code,
+        shipping_address: data.shipping_address,
         items: [...(data.sales_note_items || [])]
           .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
           .map((item: any) => ({

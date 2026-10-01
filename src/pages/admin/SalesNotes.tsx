@@ -335,6 +335,13 @@ export default function AdminSalesNotes() {
       received_at: live.received_at,
       notes: live.notes,
       access_token: live.access_token,
+      delivery_type: live.delivery_type,
+      shipping_fee: live.shipping_fee,
+      shipping_cost: live.shipping_cost,
+      delivery_method_id: live.delivery_method_id,
+      delivery_method_title: live.delivery_method_title,
+      delivery_method_code: live.delivery_method_code,
+      shipping_address: live.shipping_address,
       items: [...(live.sales_note_items || [])]
         .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
         .map((item: any) => ({
