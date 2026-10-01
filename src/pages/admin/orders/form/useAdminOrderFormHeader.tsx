@@ -3,6 +3,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Lock, Unlock } from 'lucide-react';
 import { usePageHeader } from '@/components/layout/PageHeaderContext';
+import {
+  PO_STATUS_CLASSES,
+  PO_STATUS_LABELS,
+  type PurchaseOrderStatus,
+} from '@/pages/admin/purchase-orders/types';
 
 export const statusLabels: Record<string, { label: string; className: string }> = {
   pending: { label: '未確認', className: 'bg-warning text-warning-foreground' },
@@ -14,6 +19,8 @@ export const statusLabels: Record<string, { label: string; className: string }> 
 interface UseAdminOrderFormHeaderParams {
   isEditMode: boolean;
   orderType: 'sales' | 'purchase' | 'consignment_receive' | 'consignment_send';
+  /** 採購編輯（/admin/purchase-orders/:id/edit）：標題/返回/狀態列皆改採購語意 */
+  isPurchaseEdit?: boolean;
   orderIdVal?: string;
   orderCodeVal?: string;
   orderStatusVal?: string;
@@ -29,6 +36,7 @@ export function useAdminOrderFormHeader(params: UseAdminOrderFormHeaderParams) {
   const {
     isEditMode,
     orderType,
+    isPurchaseEdit = false,
     orderIdVal,
     orderCodeVal,
     orderStatusVal,
@@ -47,15 +55,16 @@ export function useAdminOrderFormHeader(params: UseAdminOrderFormHeaderParams) {
 
   // Sync title & back button & status actions into DesktopHeader / MobileHeader
   useLayoutEffect(() => {
-    const titleText = isEditMode ? '編輯訂單' : (
-      orderType === 'sales' ? '建立銷售訂單' :
+    const titleText = isEditMode
+      ? (isPurchaseEdit ? '編輯採購單' : '編輯訂單')
+      : (orderType === 'sales' ? '建立銷售訂單' :
         orderType === 'purchase' ? '建立採購單' :
           orderType === 'consignment_receive' ? '建立寄賣收貨單' :
             '建立寄賣出貨單'
-    );
+      );
     const { onToggleStatus: toggleStatus, navigate: goTo, navigateBack: goBack } = callbacksRef.current;
 
-    const typeBadgeElem = !isEditMode ? (
+    const typeBadgeElem = !isEditMode || isPurchaseEdit ? (
       <Badge variant="outline" className={
         orderType === 'purchase' ? 'border-blue-500 text-blue-500' :
           orderType === 'consignment_receive' ? 'border-purple-500 text-purple-500' :
@@ -68,7 +77,11 @@ export function useAdminOrderFormHeader(params: UseAdminOrderFormHeaderParams) {
       </Badge>
     ) : null;
 
-    const statusObj = orderStatusVal ? statusLabels[orderStatusVal] || { label: orderStatusVal, className: 'bg-muted text-muted-foreground' } : null;
+    const statusObj = orderStatusVal
+      ? (isPurchaseEdit
+        ? { label: PO_STATUS_LABELS[orderStatusVal as PurchaseOrderStatus] || orderStatusVal, className: PO_STATUS_CLASSES[orderStatusVal] || 'bg-muted text-muted-foreground' }
+        : statusLabels[orderStatusVal] || { label: orderStatusVal, className: 'bg-muted text-muted-foreground' })
+      : null;
 
     setPageHeader({
       title: (
@@ -83,13 +96,13 @@ export function useAdminOrderFormHeader(params: UseAdminOrderFormHeaderParams) {
           </span>
         </div>
       ),
-      onBack: isEditMode ? () => goTo('/admin/orders') : goBack,
+      onBack: isEditMode ? () => goTo(isPurchaseEdit ? '/admin/purchase-orders' : '/admin/orders') : goBack,
       actions: (
         <div className="flex items-center gap-2">
           {typeBadgeElem}
           {statusObj && <Badge className={statusObj.className}>{statusObj.label}</Badge>}
           {orderConsignmentMode && <Badge variant="secondary">寄賣</Badge>}
-          {isEditMode && orderStatusVal && orderStatusVal !== 'shipped' && (
+          {isEditMode && !isPurchaseEdit && orderStatusVal && orderStatusVal !== 'shipped' && (
             <Button
               variant="outline"
               size="sm"

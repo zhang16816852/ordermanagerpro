@@ -140,7 +140,12 @@ export function OrderItemsMobileList({
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Package className="h-3 w-3" /> 數量</label>
                                     {isEditable ? (
-                                        <Input type="number" value={displayQty(item)} onChange={(e) => onUpdateQuantity(index, Math.abs(parseInt(e.target.value) || 1))} onKeyDown={(e) => handleColumnNav(e, 'qty')} onFocus={selectOnFocus} data-col="qty" className="h-9" min={1} />
+                                        <>
+                                            <Input type="number" value={displayQty(item)} onChange={(e) => onUpdateQuantity(index, Math.abs(parseInt(e.target.value) || 1))} onKeyDown={(e) => handleColumnNav(e, 'qty')} onFocus={selectOnFocus} data-col="qty" className="h-9" min={Math.max(1, item.receivedQuantity || 0)} />
+                                            {(item.receivedQuantity || 0) > 0 && (
+                                                <p className="text-[10px] text-green-600">已收 {item.receivedQuantity}</p>
+                                            )}
+                                        </>
                                     ) : (
                                         <div className="font-medium p-1.5 text-sm">{displayQty(item)}</div>
                                     )}

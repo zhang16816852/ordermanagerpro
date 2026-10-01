@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { useStoreProductCache } from '@/hooks/useProductCache';
+import { useStoreProductCache, useProductCache } from '@/hooks/useProductCache';
+import type { ProductWithPricing } from '@/types/product';
 import { useStoreDraft, useOrderDraftStore } from '@/store/useOrderDraftStore';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -9,6 +10,7 @@ import { OrderItemRow, LineTypeOption } from '@/components/order/orderItemsTypes
 import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
 import { DeliveryType } from '@/components/shipping/DeliveryMethodPicker';
 import { useStoreDeliveryDefaults } from '@/hooks/useStoreDeliveryDefaults';
+import type { PurchaseOrderPurpose, PurchaseOrderStatus } from '@/pages/admin/purchase-orders/types';
 
 import { useOrderFormQueries } from './useOrderFormQueries';
 import { useCatalogFilters } from './useCatalogFilters';
@@ -21,21 +23,32 @@ export function useAdminOrderFormController() {
   const storeIdFromParam = searchParams.get('storeId') || '';
   const [selectedStoreId, setSelectedStoreId] = useState(storeIdFromParam);
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isRep } = useAuth();
 
   const isEditMode = !!orderId;
+  // 採購單編輯走獨立路由 /admin/purchase-orders/:orderId/edit（非 orders/:orderId/edit），
+  // 強制 orderType='purchase'，不受 ?type= 影響
+  const isPurchaseEdit = isEditMode && /^\/admin\/purchase-orders\/[^/]+\/edit\/?$/.test(location.pathname);
 
   // Unified order type
   const [orderType, setOrderType] = useState<'sales' | 'purchase' | 'consignment_receive' | 'consignment_send'>(
-    (searchParams.get('type') as any) || 'sales'
-  ); const [supplierId, setSupplierId] = useState('');
+    isPurchaseEdit ? 'purchase' : ((searchParams.get('type') as any) || 'sales')
+  );
+  const [supplierId, setSupplierId] = useState('');
   const [targetStoreId, setTargetStoreId] = useState('');
   const [expectedDate, setExpectedDate] = useState('');
   const [supplierOrderNumber, setSupplierOrderNumber] = useState('');
+  // 採購單表頭（僅 purchase 編輯模式使用；建立模式未提供日期欄位，order_date 由 RPC 落 CURRENT_DATE）
+  const [purchaseOrderDate, setPurchaseOrderDate] = useState('');
+  const [purchaseStatus, setPurchaseStatus] = useState<PurchaseOrderStatus>('draft');
+  const [purchasePurpose, setPurchasePurpose] = useState<PurchaseOrderPurpose>('general');
 
   const {
     order,
     orderLoading,
+    purchaseOrder,
+    purchaseLoading,
     storeInfo,
     displayStoreName,
     displayBrand,
@@ -54,6 +67,7 @@ export function useAdminOrderFormController() {
     user,
     supplierId,
     storeIdFromParam,
+    isPurchaseEdit,
   });
 
   const storeId = isEditMode ? (order?.store_id ?? '') : selectedStoreId;
@@ -65,6 +79,32 @@ export function useAdminOrderFormController() {
     displayBrand || null,
     { includeShipping: true },
   );
+
+  // 採購商品來源：整個商品目錄（不走 store_products 門市價）
+  // 採購需可挑「維修零件」與運費型商品，故不套用 useStoreProductCache 的 item_type／隱藏過濾；
+  // 單價一律以批發價（effective_wholesale_price）為預設成本，由供應商 mapping 於選供應商時覆寫。
+  const { products: allCachedProducts, isLoading: allProductsLoading } = useProductCache();
+  const purchaseProducts = useMemo<ProductWithPricing[]>(() => {
+    if (orderType !== 'purchase') return [];
+    return (allCachedProducts || []).map((p: any) => ({
+      ...p,
+      wholesale_price: p.wholesale_price ?? 0,
+      retail_price: 0,
+      has_store_price: false,
+      variants: (p.variants || []).map((v: any) => ({
+        ...v,
+        effective_wholesale_price: v.wholesale_price ?? 0,
+        effective_retail_price: v.retail_price ?? 0,
+        has_brand_price: false,
+        spec_values: v.spec_values,
+      })),
+    })) as ProductWithPricing[];
+  }, [orderType, allCachedProducts]);
+
+  // 採購走整個商品目錄，其餘類型走門市商品（useStoreProductCache）
+  const catalogProducts = orderType === 'purchase' ? purchaseProducts : storeProducts;
+  const catalogLoading = orderType === 'purchase' ? allProductsLoading : productsLoading;
+
   const draft = useStoreDraft(draftKey);
 
   // Local state
@@ -147,7 +187,7 @@ export function useAdminOrderFormController() {
     categories,
     categoryHierarchy,
     brandMap,
-    storeProducts,
+    storeProducts: catalogProducts,
     productSearch,
   });
 
@@ -212,6 +252,9 @@ export function useAdminOrderFormController() {
   const { itemsRef, notesRef, consignmentModeRef, orderRef, pendingDeletedIdsRef } = useOrderFormStateSync({
     isEditMode,
     order,
+    isPurchaseEdit,
+    purchaseOrder,
+    blockNewItems: isPurchaseEdit && purchaseOrder?.status === 'cancelled',
     draft,
     supplierMappings,
     items,
@@ -223,22 +266,55 @@ export function useAdminOrderFormController() {
     setPendingDeletedIds,
     setPriceSyncMap,
     setDeliveryType,
+    setSupplierId,
+    setExpectedDate,
+    setSupplierOrderNumber,
+    setPurchaseOrderDate,
+    setPurchaseStatus,
+    setPurchasePurpose,
   });
+
+  // 採購編輯模式品項守門（兩層，與 update_purchase_order_with_items 對齊）：
+  //  1) 已取消（cancelled）：全部品項異動（新增／數量／單價／刪除／排序／拆分）一律拒絕，僅可改備註與狀態
+  //  2) 已收貨品項：不可刪除、不可把數量降到已收貨以下（unit_cost 仍可更新）
+  const purchaseEditRef = useRef(false);
+  purchaseEditRef.current = isPurchaseEdit;
+  const purchaseCancelledRef = useRef(false);
+  purchaseCancelledRef.current = isPurchaseEdit && purchaseOrder?.status === 'cancelled';
+  const guardPurchaseCancelled = useCallback((action: string): boolean => {
+    if (!purchaseCancelledRef.current) return false;
+    toast.error(`此採購單已取消，不可${action}`);
+    return true;
+  }, []);
+  const handlePoLockGuard = useCallback((item: OrderItemRow | undefined, action: string): boolean => {
+    if (!purchaseEditRef.current || !item) return false;
+    if ((item.receivedQuantity ?? 0) <= 0) return false;
+    toast.error(`此品項已收貨 ${item.receivedQuantity} 件，不可${action}`);
+    return true;
+  }, []);
 
   // Handlers
   const handleQuantityChange = useCallback((index: number, value: number) => {
-    const itemId = itemsRef.current[index]?.id;
+    const row = itemsRef.current[index];
+    const itemId = row?.id;
+    if (guardPurchaseCancelled('修改數量')) return;
+    // 採購：不可低於已收貨數量
+    if (purchaseEditRef.current && (row?.receivedQuantity ?? 0) > 0 && value < (row?.receivedQuantity ?? 0)) {
+      handlePoLockGuard(row, '降低數量至已收貨數量以下');
+      return;
+    }
     setItems((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], quantity: Math.max(1, value) };
       return next;
     });
     if (itemId) draft.updateQuantity(itemId, Math.max(1, value));
-  }, [draft]);
+  }, [draft, handlePoLockGuard, guardPurchaseCancelled]);
 
   const handlePriceChange = useCallback((index: number, value: number) => {
     const item = itemsRef.current[index];
     const itemId = item?.id;
+    if (guardPurchaseCancelled('修改單價')) return;
     // 換貨/退貨/送修列不寫入價格表（換貨固定單價 0）
     if (item && (item.lineType ?? 'sale') !== 'sale') return;
     setItems((prev) => {
@@ -252,7 +328,7 @@ export function useAdminOrderFormController() {
       setPriceSyncMap(nextMap);
       draft.setPriceSyncMap(nextMap);
     }
-  }, [draft, priceSyncMap]);
+  }, [draft, priceSyncMap, guardPurchaseCancelled]);
 
   // 打單性質切換：一般/換貨→清退貨狀態；退貨→待處理；送修→退貨＋待處理＋isRepair
   // 換貨→單價歸 0 且不寫入價格表；非一般（退貨/送修/換貨）一律退出價格同步
@@ -283,6 +359,10 @@ export function useAdminOrderFormController() {
     const item = itemsRef.current[index];
     if (!item) return;
 
+    if (guardPurchaseCancelled('刪除品項')) return;
+    // 採購：已收貨品項不可刪除（RPC 亦會阻擋，此處提前擋下避免使用者困惑）
+    if (handlePoLockGuard(item, '刪除')) return;
+
     if (item.isNew) {
       // 本次新加的品項（來自商品目錄）→ 直接移除，無需還原
       setItems((prev) => prev.filter((_, i) => i !== index));
@@ -309,17 +389,23 @@ export function useAdminOrderFormController() {
       },
       duration: 8000,
     });
-  }, [draft]);
+  }, [draft, handlePoLockGuard, guardPurchaseCancelled]);
 
   const handleReorder = useCallback((newItems: OrderItemRow[]) => {
+    if (guardPurchaseCancelled('調整品項順序')) return;
     setItems(newItems);
-  }, []);
+  }, [guardPurchaseCancelled]);
 
   // 拆分行：原行減 1、插入數量 1 的新行（同變體多列，如單價 0 補寄/換貨）
+  // 採購語意為「同一商品一列」，不支援拆行；已收貨品項若拆分會使原列低於收貨量
   const handleSplitItem = useCallback((index: number) => {
     const item = itemsRef.current[index];
     if (!item || item.quantity <= 1) return;
-
+    if (guardPurchaseCancelled('拆分品項')) return;
+    if (purchaseEditRef.current) {
+      toast.error('採購單不支援拆分同一品項，請直接調整數量');
+      return;
+    }
     setItems((prev) => {
       const next = [...prev];
       const base = next[index];
@@ -339,7 +425,7 @@ export function useAdminOrderFormController() {
     // 同步草稿總量（合成 id 來自商品目錄才有對應草稿；編輯中 DB 列則為 no-op，無副作用）
     if (!item.id.startsWith(`${item.productId}-`)) return;
     draft.updateQuantity(item.id, Math.max(1, item.quantity - 1));
-  }, [draft]);
+  }, [draft, guardPurchaseCancelled]);
 
   const handleTogglePriceSync = useCallback((id: string, checked: boolean) => {
     const item = itemsRef.current.find(i => i.id === id);
@@ -365,6 +451,11 @@ export function useAdminOrderFormController() {
     user,
     isRep,
     isEditMode,
+    isPurchaseEdit,
+    purchaseOrder,
+    purchaseOrderDate,
+    purchaseStatus,
+    purchasePurpose,
     storeId,
     order,
     storeInfo,
@@ -381,13 +472,14 @@ export function useAdminOrderFormController() {
     consignmentModeRef,
     pendingDeletedIdsRef,
     priceSyncMap,
-itemsForSync: items,
+    itemsForSync: items,
     getDeliveryType: () => deliveryType,
     onDirectShipDialogClose: () => setDirectShipDialogOpen(false),
   });
 
   // 切換訂單類型分頁時同步 URL，重新整理後仍停留在同一分頁
   const handleOrderTypeChange = useCallback((next: string) => {
+    if (isPurchaseEdit) return;
     setOrderType(next as typeof orderType);
     setSearchParams(
       (prev) => {
@@ -397,7 +489,7 @@ itemsForSync: items,
       },
       { replace: true }
     );
-  }, [setSearchParams]);
+  }, [setSearchParams, isPurchaseEdit]);
 
   // 建立模式為一般表單欄位；編輯模式為立即執行的動作（update_order_with_items 不含 consignment_mode）
   const handleConsignmentModeChange = useCallback((next: boolean) => {
@@ -414,11 +506,24 @@ itemsForSync: items,
     else navigate('/admin/orders');
   }, [orderType, navigate]);
 
-  const orderIdVal = order?.id;
-  const orderCodeVal = order?.code;
-  const orderStatusVal = order?.status;
+  // 編輯模式的單據來源：採購走 purchase_orders，其餘走 orders
+  const editDoc = isPurchaseEdit ? purchaseOrder : order;
+  const editDocLoading = isPurchaseEdit ? purchaseLoading : orderLoading;
+  const orderIdVal = editDoc?.id;
+  const orderCodeVal = isPurchaseEdit
+    ? purchaseOrder?.supplier_order_number || purchaseOrder?.id?.slice(0, 8)
+    : order?.code;
+  const orderStatusVal = isPurchaseEdit ? purchaseStatus : order?.status;
   const orderConsignmentMode = order?.consignment_mode;
-  const isTogglePending = toggleStatusMutation.isPending;
+  const isTogglePending = isPurchaseEdit ? false : toggleStatusMutation.isPending;
+
+  // 採購編輯：已取消鎖定所有品項異動（仍可改備註／狀態）；已收貨者狀態由收貨決定
+  const purchaseHasReceived = (purchaseOrder?.purchase_order_items || []).some(
+    (i: any) => (i.received_quantity ?? 0) > 0
+  );
+  const purchaseCancelled = isPurchaseEdit && purchaseOrder?.status === 'cancelled';
+  const purchaseItemsLocked = purchaseCancelled || purchaseHasReceived;
+  const purchaseStatusLocked = purchaseHasReceived;
 
   return {
     orderId,
@@ -440,6 +545,19 @@ itemsForSync: items,
     setExpectedDate,
     supplierOrderNumber,
     setSupplierOrderNumber,
+    purchaseOrderDate,
+    setPurchaseOrderDate,
+    purchaseStatus,
+    setPurchaseStatus,
+    purchasePurpose,
+    setPurchasePurpose,
+    purchaseItemsLocked,
+    purchaseStatusLocked,
+    purchaseCancelled,
+    isPurchaseEdit,
+    purchaseOrder,
+    editDoc,
+    editDocLoading,
     order,
     orderLoading,
     storeInfo,
@@ -453,8 +571,8 @@ itemsForSync: items,
     supplierMappings,
     storeId,
     draftKey,
-    storeProducts,
-    productsLoading,
+    storeProducts: catalogProducts,
+    productsLoading: catalogLoading,
     draft,
     notes,
     setNotes,

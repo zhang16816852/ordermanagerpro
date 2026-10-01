@@ -22,6 +22,17 @@ import { LineTypeBadge, LineTypePicker } from './LineTypeBadge';
 import type { KeyOption, LineTypeOption, NameSort, OrderItemRow, ViewMode } from './orderItemsTypes';
 import { displayQty, lineAmount } from './orderItemsTypes';
 
+/** 採購單品項已收貨提示：數量不可低於已收數量（伺服端守門），此處先提示避免誤填 */
+function receivedHint(item: OrderItemRow) {
+    const received = item.receivedQuantity || 0;
+    if (received <= 0) return null;
+    return (
+        <p className="mt-0.5 text-[10px] text-green-600">
+            已收 {received}
+        </p>
+    );
+}
+
 interface OrderItemsDesktopTableProps {
     items: OrderItemRow[];
     sortedItems: OrderItemRow[];
@@ -142,16 +153,19 @@ export function OrderItemsDesktopTable({
                                         <SortableTableRow key={item.id} item={item} index={index} viewMode={viewMode} keyOptions={keyOptions} onUpdateLineType={onUpdateLineType}>
                                             <TableCell>
                                                 {isEditable ? (
-                                                    <Input
-                                                        type="number"
-                                                        value={displayQty(item)}
-                                                        onChange={(e) => onUpdateQuantity(index, Math.abs(parseInt(e.target.value) || 1))}
-                                                        onKeyDown={(e) => handleColumnNav(e, 'qty')}
-                                                        onFocus={selectOnFocus}
-                                                        data-col="qty"
-                                                        className="w-20 h-8"
-                                                        min={1}
-                                                    />
+                                                    <>
+                                                        <Input
+                                                            type="number"
+                                                            value={displayQty(item)}
+                                                            onChange={(e) => onUpdateQuantity(index, Math.abs(parseInt(e.target.value) || 1))}
+                                                            onKeyDown={(e) => handleColumnNav(e, 'qty')}
+                                                            onFocus={selectOnFocus}
+                                                            data-col="qty"
+                                                            className="w-20 h-8"
+                                                            min={Math.max(1, item.receivedQuantity || 0)}
+                                                        />
+                                                        {receivedHint(item)}
+                                                    </>
                                                 ) : (
                                                     <span>{displayQty(item)}</span>
                                                 )}
@@ -246,16 +260,19 @@ export function OrderItemsDesktopTable({
                                             )}
                                             <TableCell>
                                                 {isEditable ? (
-                                                    <Input
-                                                        type="number"
-                                                        value={displayQty(item)}
-                                                        onChange={(e) => onUpdateQuantity(index, Math.abs(parseInt(e.target.value) || 1))}
-                                                        onKeyDown={(e) => handleColumnNav(e, 'qty')}
-                                                        onFocus={selectOnFocus}
-                                                        data-col="qty"
-                                                        className="w-20 h-8"
-                                                        min={1}
-                                                    />
+                                                    <>
+                                                        <Input
+                                                            type="number"
+                                                            value={displayQty(item)}
+                                                            onChange={(e) => onUpdateQuantity(index, Math.abs(parseInt(e.target.value) || 1))}
+                                                            onKeyDown={(e) => handleColumnNav(e, 'qty')}
+                                                            onFocus={selectOnFocus}
+                                                            data-col="qty"
+                                                            className="w-20 h-8"
+                                                            min={Math.max(1, item.receivedQuantity || 0)}
+                                                        />
+                                                        {receivedHint(item)}
+                                                    </>
                                                 ) : (
                                                     <span>{displayQty(item)}</span>
                                                 )}

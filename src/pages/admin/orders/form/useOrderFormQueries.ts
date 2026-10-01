@@ -11,6 +11,7 @@ export interface OrderFormQueryParams {
   user: { id: string } | null;
   supplierId: string;
   storeIdFromParam: string;
+  isPurchaseEdit: boolean;
 }
 
 export function useOrderFormQueries({
@@ -22,6 +23,7 @@ export function useOrderFormQueries({
   user,
   supplierId,
   storeIdFromParam,
+  isPurchaseEdit,
 }: OrderFormQueryParams) {
   // Edit mode: fetch existing order
   const { data: order, isLoading: orderLoading } = useQuery({
@@ -57,7 +59,42 @@ export function useOrderFormQueries({
       if (error) throw error;
       return data;
     },
-    enabled: !!orderId,
+    enabled: !!orderId && !isPurchaseEdit,
+  });
+
+  // 採購編輯模式：查 purchase_orders（與銷售訂單不同表，欄位語意不同）
+  const { data: purchaseOrder, isLoading: purchaseLoading } = useQuery({
+    queryKey: ['purchase-order-detail', orderId],
+    queryFn: async () => {
+      if (!orderId) return null;
+      const { data, error } = await (supabase
+        .from('purchase_orders') as any)
+        .select(`
+          *,
+          purchase_order_items (
+            id,
+            product_id,
+            variant_id,
+            quantity,
+            received_quantity,
+            consumed_quantity,
+            returned_quantity,
+            unit_cost,
+            sort_order,
+            source_order_ids,
+            source_quantities,
+            products (name, code),
+            product_variants (name, sku, tracking_mode),
+            product_batches (id)
+          )
+        `)
+        .eq('id', orderId)
+        .order('sort_order', { foreignTable: 'purchase_order_items' })
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!orderId && isPurchaseEdit,
   });
 
   // Fetch store info (create mode)
@@ -76,8 +113,10 @@ export function useOrderFormQueries({
     enabled: !!storeId && !isEditMode,
   });
 
-  const displayStoreName = isEditMode ? order?.stores?.name : (storeInfo?.name || storeId);
-  const displayBrand = isEditMode ? order?.stores?.brand : storeInfo?.brand;
+  const displayStoreName = isPurchaseEdit
+    ? null
+    : isEditMode ? order?.stores?.name : (storeInfo?.name || storeId);
+  const displayBrand = isPurchaseEdit ? null : isEditMode ? order?.stores?.brand : storeInfo?.brand;
 
   // Categories for sidebar filter
   const { data: categories = [] } = useQuery<{ id: string; name: string }[]>({
@@ -114,7 +153,7 @@ export function useOrderFormQueries({
       if (error) throw error;
       return (data || []) as { id: string; name: string }[];
     },
-    enabled: (orderType === 'purchase' || orderType === 'consignment_receive') && !isEditMode,
+    enabled: (orderType === 'purchase' || orderType === 'consignment_receive') && (!isEditMode || isPurchaseEdit),
   });
 
   // Stores list (for consignment_send type)
@@ -154,12 +193,14 @@ export function useOrderFormQueries({
       if (error) throw error;
       return (data || []) as { internal_product_id: string; internal_variant_id: string | null; vendor_unit_cost: number | null }[];
     },
-    enabled: !!supplierId && orderType !== 'sales' && !isEditMode,
+    enabled: !!supplierId && orderType !== 'sales' && (!isEditMode || isPurchaseEdit),
   });
 
   return {
     order,
     orderLoading,
+    purchaseOrder,
+    purchaseLoading,
     storeInfo,
     displayStoreName,
     displayBrand,

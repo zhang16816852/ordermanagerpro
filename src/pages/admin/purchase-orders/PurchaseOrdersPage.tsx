@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { OrderListTab } from './components/OrderListTab';
 import { SupplierTab } from './components/SupplierTab';
 import { ReceivingTab } from './components/ReceivingTab';
-import { OrderForm } from './components/OrderForm';
 import { SupplierForm } from './components/SupplierForm';
 import { PurchaseOrderDetailDialog } from './components/PurchaseOrderDetailDialog';
+import { PurchaseDocImportDialog } from './components/PurchaseDocImportDialog';
 import { PurchaseOrder, Supplier } from './types';
 import { usePurchaseOrders, PurchaseOrderFilters } from './hooks/usePurchaseOrders';
 import { Button } from '@/components/ui/button';
@@ -30,15 +30,15 @@ import { cn } from '@/lib/utils';
 import { isSameDay } from 'date-fns';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
-import { ClipboardList, Users, Plus, PackageCheck, CalendarIcon, X, Trash2 } from 'lucide-react';
+import { ClipboardList, Users, Plus, PackageCheck, CalendarIcon, X, Trash2, FileUp } from 'lucide-react';
 
 export default function AdminPurchaseOrders() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'orders');
   const [viewingOrder, setViewingOrder] = useState<PurchaseOrder | null>(null);
-  const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null);
-  const [createOrderOpen, setCreateOrderOpen] = useState(false);
   const [createSupplierOpen, setCreateSupplierOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
 
   const [filters, setFilters] = useState<PurchaseOrderFilters>({
@@ -84,12 +84,10 @@ export default function AdminPurchaseOrders() {
     sourceOrderMap,
     supplierMappingMap,
     accounts,
-    createOrderMutation,
     updateOrderMutation,
     deleteOrderMutation,
     createSupplierMutation,
     updateSupplierMutation,
-    addItemMutation,
     updateItemMutation,
     deleteItemMutation,
     reorderItemsMutation,
@@ -110,7 +108,10 @@ export default function AdminPurchaseOrders() {
           <Button onClick={() => setCreateSupplierOpen(true)} variant="outline">
             <Plus className="h-4 w-4 mr-2" /> 新增供應商
           </Button>
-          <Button onClick={() => setCreateOrderOpen(true)}>
+          <Button onClick={() => setImportOpen(true)} variant="outline">
+            <FileUp className="h-4 w-4 mr-2" /> 匯入
+          </Button>
+          <Button onClick={() => navigate('/admin/orders/checkout?type=purchase')}>
             <Plus className="h-4 w-4 mr-2" /> 建立採購單
           </Button>
         </div>
@@ -250,7 +251,7 @@ export default function AdminPurchaseOrders() {
           <OrderListTab
             orders={orders}
             onView={(order) => setViewingOrder(order)}
-            onEdit={(order) => { setEditingOrder(order); setCreateOrderOpen(true); }}
+            onEdit={(order) => navigate(`/admin/purchase-orders/${order.id}/edit`)}
             onDelete={(id) => { if (confirm('確定要刪除此採購單嗎？')) deleteOrderMutation.mutate(id); }}
             onStatusChange={(id, status: any) => updateOrderMutation.mutate({ id, status })}
             isLoading={ordersLoading}
@@ -270,40 +271,6 @@ export default function AdminPurchaseOrders() {
           />
         </TabsContent>
       </Tabs>
-
-      {/* Create/Edit Order Dialog */}
-      <Dialog
-        open={createOrderOpen}
-        onOpenChange={(open) => {
-          setCreateOrderOpen(open);
-          if (!open) setEditingOrder(null);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingOrder ? '編輯採購單' : '建立採購單'}</DialogTitle>
-            <DialogDescription>
-              填寫採購單的基本資訊，包含供應商選擇與預期到貨日期。
-            </DialogDescription>
-          </DialogHeader>
-          <OrderForm
-            order={editingOrder}
-            suppliers={suppliers}
-            isLoading={createOrderMutation.isPending || updateOrderMutation.isPending}
-            onSubmit={(data) => {
-              if (editingOrder) {
-                updateOrderMutation.mutate({ id: editingOrder.id, ...data }, {
-                  onSuccess: () => setCreateOrderOpen(false)
-                });
-              } else {
-                createOrderMutation.mutate(data, {
-                  onSuccess: () => setCreateOrderOpen(false)
-                });
-              }
-            }}
-          />
-        </DialogContent>
-      </Dialog>
 
       {/* New Supplier Dialog */}
       <Dialog open={createSupplierOpen} onOpenChange={setCreateSupplierOpen}>
@@ -369,23 +336,31 @@ export default function AdminPurchaseOrders() {
               accounts={accounts}
               sourceOrderMap={sourceOrderMap}
               supplierMappingMap={supplierMappingMap}
-              isLoading={itemsLoading || addItemMutation.isPending || importItemsMutation.isPending || receiveItemsMutation.isPending || makePaymentMutation.isPending}
-              onAddItem={(data) => addItemMutation.mutate({ purchase_order_id: viewingOrder.id, ...data })}
-              onImportItems={(items) => importItemsMutation.mutate({ purchaseOrderId: viewingOrder.id, items })}
+              isLoading={itemsLoading || importItemsMutation.isPending || receiveItemsMutation.isPending || makePaymentMutation.isPending}
+              onImportItems={(data) => importItemsMutation.mutateAsync(data)}
               onReceiveItems={(items) => receiveItemsMutation.mutate(items)}
               onMakePayment={(data) => makePaymentMutation.mutate({ orderId: viewingOrder.id, ...data })}
-              onUpdateItem={(data) => updateItemMutation.mutate(data)}
-              onDeleteItem={(itemId) => deleteItemMutation.mutate(itemId)}
+              onEditOrder={() => navigate(`/admin/purchase-orders/${viewingOrder.id}/edit`)}
+              onUpdateItem={(data) => updateItemMutation.mutateAsync(data)}
+              onDeleteItem={(data) => deleteItemMutation.mutateAsync(data)}
               onUnlinkOrder={(orderId) => {
                 if (window.confirm(`確定要解除與此訂單（${sourceOrderMap[orderId] || orderId.slice(0, 8)}）的採購關聯嗎？\n未收貨的數量將從採購單中扣除，並可重新進行採購。`)) {
                   unlinkOrdersFromPurchaseMutation.mutate({ purchaseOrderId: viewingOrder.id, orderIds: [orderId] });
                 }
               }}
-              onReorder={(items) => reorderItemsMutation.mutate(items)}
+              onReorder={(items) => reorderItemsMutation.mutateAsync(items)}
             />
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Batch Import Dialog */}
+      <PurchaseDocImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        suppliers={suppliers}
+        defaultSupplierId={filters.supplierId}
+      />
     </div>
   );
 }

@@ -50,6 +50,7 @@ export const adminRoutes = [
     { path: "/admin/shipping-settlements", element: <Navigate to="/admin/logistics?tab=shipping-settlements" replace /> },
     { path: "/admin/delivery-methods", element: <Navigate to="/admin/logistics?tab=delivery-methods" replace /> },
     { path: "/admin/purchase-orders", element: <AdminPurchaseOrders /> },
+    { path: "/admin/purchase-orders/:orderId/edit", element: <AdminOrderForm /> },
     { path: "/admin/consignment", element: <AdminConsignment /> },
     { path: "/admin/audit-logs", element: <AdminAuditLogs /> },
     { path: "/admin/order-grid-templates", element: <AdminOrderGridTemplates /> },

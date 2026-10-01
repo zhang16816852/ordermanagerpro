@@ -1,9 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
-import { PurchaseOrder, Supplier, PurchaseOrderItem, ProductWithPrice, PurchaseOrderStatus } from '../types';
+import {
+  PurchaseOrder, Supplier, PurchaseOrderItem, ProductWithPrice, PurchaseOrderStatus,
+  type PoItemWritePayload, type PoUpdateItemsArgs, type PoWriteResult,
+} from '../types';
 import { LotInput } from '@/utils/lotTracking';
 
 export interface PurchaseOrderFilters {
@@ -12,6 +16,25 @@ export interface PurchaseOrderFilters {
   status?: string;
   dateFrom?: string;
   dateTo?: string;
+}
+
+/**
+ * 採購單表頭／品項寫入的唯一 RPC 入口（20260930000005）。
+ *
+ * 這裡是全站唯一需要把 optional 參數轉成「可傳 null」的地方：
+ * generated types 將 p_* 標為 `?: string`（省略即 DEFAULT NULL），
+ * 但語意上必須區分「明確傳 null ＝ 不變更」與「傳 '' ＝ 清空」，
+ * 欄位則由 PoUpdateItemsArgs 把關。回傳 { ok:false, reason } 一律轉為 throw，
+ * 讓呼叫端只需處理 throw 與成功兩種路徑。
+ */
+async function rpcUpdatePurchaseOrder(args: PoUpdateItemsArgs): Promise<PoWriteResult | null> {
+  const { data, error } = await supabase.rpc('update_purchase_order_with_items', {
+    ...args,
+  } as unknown as Database['public']['Functions']['update_purchase_order_with_items']['Args']);
+  if (error) throw error;
+  const res = data as PoWriteResult | null;
+  if (res && res.ok === false) throw new Error(res.reason || '更新失敗');
+  return res;
 }
 
 export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrderFilters) {
@@ -159,36 +182,29 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
   });
 
   // Mutations
-  const createOrderMutation = useMutation({
-    mutationFn: async (data: Partial<PurchaseOrder>) => {
-      const { data: result, error } = await (supabase as any)
-        .from('purchase_orders')
-        .insert({
-          ...data,
-          created_by: user?.id,
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      return result;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
-      toast.success('採購訂單已建立');
-    },
-    onError: () => toast.error('建立失敗'),
-  });
-
+  // 表頭更新一律走交易化 RPC（20260930000005）：內含狀態合法性、收貨鎖定、
+  // 已取消鎖品項與 total_amount 重算；不可用裸 insert/update 繞過守門。
   const updateOrderMutation = useMutation({
     mutationFn: async ({ id, ...data }: Partial<PurchaseOrder> & { id: string }) => {
-      const { error } = await (supabase as any).from('purchase_orders').update(data).eq('id', id);
-      if (error) throw error;
+      // null = 不變更（RPC 以 COALESCE 保留原值）；notes 需以原字串送出才能清空
+      return rpcUpdatePurchaseOrder({
+        p_purchase_order_id: id,
+        p_notes: data.notes === undefined ? null : data.notes,
+        p_items: [],
+        p_deleted_item_ids: [],
+        p_status: data.status ?? null,
+        p_order_date: data.order_date || null,
+        p_expected_date: data.expected_date || null,
+        p_purpose: data.purpose ?? null,
+        p_supplier_order_number: data.supplier_order_number ?? null,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-order'] });
       toast.success('採購訂單已更新');
     },
-    onError: () => toast.error('更新失敗'),
+    onError: (error: Error) => toast.error(error?.message || '更新失敗'),
   });
 
   const deleteOrderMutation = useMutation({
@@ -243,104 +259,56 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
     onError: () => toast.error('更新失敗'),
   });
 
-  const addItemMutation = useMutation({
-    mutationFn: async (data: Partial<PurchaseOrderItem>) => {
-      // Assign next sort_order so new items append at the end
-      const { data: last } = await (supabase as any)
-        .from('purchase_order_items')
-        .select('sort_order')
-        .eq('purchase_order_id', viewingOrderId)
-        .order('sort_order', { ascending: false })
-        .limit(1);
-      const nextSort = ((last?.[0]?.sort_order ?? 0) as number) + 1;
+  // 品項寫入唯一路徑：整單品項一次送出，伺服端依序重編 sort_order、重算 total_amount
+  // 並執行守門（已收貨不可降量／刪除／換商品、已取消單鎖品項）。不可用裸 insert/update 繞過。
+  const callWriteItems = async (
+    purchaseOrderId: string,
+    items: Array<Omit<PoItemWritePayload, 'id'> & { id: string | null }>,
+    deletedItemIds: string[] = [],
+  ) => {
+    return rpcUpdatePurchaseOrder({
+      p_purchase_order_id: purchaseOrderId,
+      p_notes: null,
+      p_items: items,
+      p_deleted_item_ids: deletedItemIds,
+      p_status: null,
+      p_order_date: null,
+      p_expected_date: null,
+      p_purpose: null,
+      p_supplier_order_number: null,
+    });
+  };
 
-      const { error } = await (supabase as any)
-        .from('purchase_order_items')
-        .insert({ ...data, sort_order: nextSort });
-      if (error) throw error;
-
-      if (viewingOrderId) {
-        // Need to fetch order total and update
-        const { data: order } = await (supabase as any).from('purchase_orders').select('total_amount').eq('id', viewingOrderId).single();
-        const newTotal = (order?.total_amount || 0) + (data.quantity || 0) * (data.unit_cost || 0);
-        await (supabase as any)
-          .from('purchase_orders')
-          .update({ total_amount: newTotal })
-          .eq('id', viewingOrderId);
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['purchase-order-items', viewingOrderId] });
-      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
-      toast.success('品項已新增');
-    },
-    onError: () => toast.error('新增失敗'),
-  });
+  const invalidateItemWrites = () => {
+    queryClient.invalidateQueries({ queryKey: ['purchase-order-items', viewingOrderId] });
+    queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+  };
 
   const updateItemMutation = useMutation({
-    mutationFn: async ({ itemId, quantity, unit_cost }: { itemId: string; quantity: number; unit_cost: number }) => {
-      const { error } = await (supabase as any)
-        .from('purchase_order_items')
-        .update({ quantity, unit_cost })
-        .eq('id', itemId);
-      if (error) throw error;
-
-      // Recalculate PO total
-      if (viewingOrderId) {
-        const { data: items } = await (supabase as any)
-          .from('purchase_order_items')
-          .select('quantity, unit_cost')
-          .eq('purchase_order_id', viewingOrderId);
-        const newTotal = (items || []).reduce((sum: number, i: any) => sum + (i.quantity || 0) * (i.unit_cost || 0), 0);
-        await (supabase as any)
-          .from('purchase_orders')
-          .update({ total_amount: newTotal })
-          .eq('id', viewingOrderId);
-      }
+    mutationFn: async ({ purchaseOrderId, items }: { purchaseOrderId: string; items: PoItemWritePayload[] }) => {
+      await callWriteItems(purchaseOrderId, items);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['purchase-order-items', viewingOrderId] });
-      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      invalidateItemWrites();
       toast.success('品項已更新');
     },
-    onError: () => toast.error('更新失敗'),
+    onError: (e) => toast.error(getErrorMessage(e, '更新失敗')),
   });
 
   const deleteItemMutation = useMutation({
-    mutationFn: async (itemId: string) => {
-      // Get item info before deleting for total recalculation
-      const { data: item } = await (supabase as any)
-        .from('purchase_order_items')
-        .select('quantity, unit_cost')
-        .eq('id', itemId)
-        .single();
-
-      const { error } = await (supabase as any)
-        .from('purchase_order_items')
-        .delete()
-        .eq('id', itemId);
-      if (error) throw error;
-
-      // Recalculate PO total
-      if (viewingOrderId) {
-        const { data: items } = await (supabase as any)
-          .from('purchase_order_items')
-          .select('quantity, unit_cost')
-          .eq('purchase_order_id', viewingOrderId);
-        const newTotal = (items || []).reduce((sum: number, i: any) => sum + (i.quantity || 0) * (i.unit_cost || 0), 0);
-        await (supabase as any)
-          .from('purchase_orders')
-          .update({ total_amount: newTotal })
-          .eq('id', viewingOrderId);
-      }
+    mutationFn: async ({ purchaseOrderId, items, deletedItemIds }: {
+      purchaseOrderId: string;
+      items: PoItemWritePayload[];
+      deletedItemIds: string[];
+    }) => {
+      await callWriteItems(purchaseOrderId, items, deletedItemIds);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['purchase-order-items', viewingOrderId] });
-      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      invalidateItemWrites();
       queryClient.invalidateQueries({ queryKey: ['purchase-order-links'] });
       toast.success('品項已刪除');
     },
-    onError: () => toast.error('刪除失敗'),
+    onError: (e) => toast.error(getErrorMessage(e, '刪除失敗')),
   });
 
   const reorderItemsMutation = useMutation({
@@ -354,55 +322,28 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['purchase-order-items', viewingOrderId] });
-      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      invalidateItemWrites();
       toast.success('品項順序已更新');
     },
-    onError: () => toast.error('更新順序失敗'),
+    onError: (e) => toast.error(getErrorMessage(e, '更新順序失敗')),
   });
 
   const importItemsMutation = useMutation({
-    mutationFn: async ({ purchaseOrderId, items }: { purchaseOrderId: string; items: Partial<PurchaseOrderItem>[] }) => {
+    mutationFn: async ({ purchaseOrderId, items }: {
+      purchaseOrderId: string;
+      /** 整單品項：既有品項帶 id，新品項 id 為 null */
+      items: Array<Omit<PoItemWritePayload, 'id'> & { id: string | null }>;
+    }) => {
       if (!items || items.length === 0) return;
-      const { data: last } = await (supabase as any)
-        .from('purchase_order_items')
-        .select('sort_order')
-        .eq('purchase_order_id', purchaseOrderId)
-        .order('sort_order', { ascending: false })
-        .limit(1);
-      const base = ((last?.[0]?.sort_order ?? 0) as number);
-
-      const rows = items.map((item, index) => ({
-        purchase_order_id: purchaseOrderId,
-        product_id: item.product_id,
-        variant_id: item.variant_id || null,
-        quantity: item.quantity || 0,
-        unit_cost: item.unit_cost || 0,
-        sort_order: base + index + 1,
-      }));
-
-      const { error } = await (supabase as any)
-        .from('purchase_order_items')
-        .insert(rows);
-      if (error) throw error;
-
-      const totalDelta = rows.reduce((sum, row) => sum + (row.quantity || 0) * (row.unit_cost || 0), 0);
-      const { data: order } = await (supabase as any)
-        .from('purchase_orders')
-        .select('total_amount')
-        .eq('id', purchaseOrderId)
-        .single();
-      await (supabase as any)
-        .from('purchase_orders')
-        .update({ total_amount: (order?.total_amount || 0) + totalDelta })
-        .eq('id', purchaseOrderId);
+      await callWriteItems(purchaseOrderId, items);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['purchase-order-items', viewingOrderId] });
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-items', variables.purchaseOrderId] });
       queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
-      toast.success(`採購品項已匯入`);
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-links'] });
+      toast.success('採購品項已匯入');
     },
-    onError: () => toast.error('匯入失敗'),
+    onError: (e) => toast.error(getErrorMessage(e, '匯入失敗')),
   });
 
   const receiveItemsMutation = useMutation({
@@ -524,12 +465,10 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
     sourceOrderMap,
     supplierMappingMap,
     accounts,
-    createOrderMutation,
     updateOrderMutation,
     deleteOrderMutation,
     createSupplierMutation,
     updateSupplierMutation,
-    addItemMutation,
     updateItemMutation,
     deleteItemMutation,
     reorderItemsMutation,

@@ -18,10 +18,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Plus, PackageCheck, CreditCard, Download, FileSpreadsheet, X, GripVertical, ArrowUpDown, ArrowUp, ArrowDown, Trash2, Search } from 'lucide-react';
+import { Plus, PackageCheck, CreditCard, Download, FileSpreadsheet, X, GripVertical, ArrowUpDown, ArrowUp, ArrowDown, Trash2, Search, Pencil } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
-import { PurchaseOrder, PurchaseOrderItem, ProductWithPrice } from '../types';
-import { ItemForm } from './ItemForm';
+import { toast } from 'sonner';
+import { PurchaseOrder, PurchaseOrderItem, ProductWithPrice, type PoItemWritePayload, type PoUpdateItemPayload } from '../types';
+import { PurchaseProductPicker } from './PurchaseProductPicker';
 import { ImportFromOrdersDialog } from './ImportFromOrdersDialog';
 import { ReceiveForm } from './ReceiveForm';
 import { PaymentForm } from './PaymentForm';
@@ -56,14 +57,18 @@ interface PurchaseOrderDetailDialogProps {
   accounts: any[];
   sourceOrderMap: Record<string, string>;
   supplierMappingMap: Record<string, { vendor_product_id: string; vendor_product_name: string }>;
-  onAddItem: (data: any) => void;
-  onImportItems: (items: any[]) => void;
+  /** 匯入／追加品項：items 為「既有品項 + 新品項（id: null）」的整單清單 */
+  onImportItems: (data: { purchaseOrderId: string; items: PoUpdateItemPayload[] }) => Promise<unknown>;
   onReceiveItems: (data: any) => void;
   onMakePayment: (data: any) => void;
   onUnlinkOrder: (orderId: string) => void;
-  onUpdateItem?: (data: { itemId: string; quantity: number; unit_cost: number }) => void;
-  onDeleteItem?: (itemId: string) => void;
-  onReorder?: (items: PurchaseOrderItem[]) => void;
+  /** 導向統一採購編輯頁（/admin/purchase-orders/:id/edit） */
+  onEditOrder?: () => void;
+  /** 品項數量／單價更新：items 為整單品項（已帶 id），由伺服端依序重編 sort_order 並重算總額 */
+  onUpdateItem?: (data: { purchaseOrderId: string; items: PoItemWritePayload[] }) => Promise<unknown>;
+  /** 刪除品項：items 為刪除後的整單品項，deletedItemIds 為要移除的品項 */
+  onDeleteItem?: (data: { purchaseOrderId: string; items: PoItemWritePayload[]; deletedItemIds: string[] }) => Promise<unknown>;
+  onReorder?: (items: PurchaseOrderItem[]) => Promise<unknown>;
   isLoading: boolean;
 }
 
@@ -74,11 +79,11 @@ export function PurchaseOrderDetailDialog({
   accounts,
   sourceOrderMap,
   supplierMappingMap,
-  onAddItem,
   onImportItems,
   onReceiveItems,
   onMakePayment,
   onUnlinkOrder,
+  onEditOrder,
   onUpdateItem,
   onDeleteItem,
   onReorder,
@@ -114,12 +119,64 @@ export function PurchaseOrderDetailDialog({
 
   const draftOf = (item: PurchaseOrderItem) => rowDrafts[item.id] || { quantity: item.quantity, unit_cost: Number(item.unit_cost) || 0 };
 
-  const commitRow = (id: string) => {
+  // 品項寫入一律送出整單品項：伺服端依收到的順序重編 sort_order 並重算 total_amount
+  const toWritePayload = (items: PurchaseOrderItem[]): PoItemWritePayload[] =>
+    items.map((i) => ({
+      id: i.id,
+      product_id: i.product_id || '',
+      variant_id: i.variant_id || null,
+      quantity: i.quantity,
+      unit_cost: Number(i.unit_cost) || 0,
+    }));
+
+  /** 本地先樂觀套用、伺服器拒絕時回滾，避免畫面停留在未存下的值（toast 由 mutation 顯示） */
+  const commitRow = async (id: string) => {
     if (!onUpdateItem || !editingId) return;
     const d = rowDrafts[id];
     if (!d) return;
-    onUpdateItem({ itemId: id, quantity: Math.max(1, d.quantity || 1), unit_cost: Math.max(0, d.unit_cost || 0) });
+    const prev = localItems;
+    const next = localItems.map((i) =>
+      i.id === id ? { ...i, quantity: Math.max(1, d.quantity || 1), unit_cost: Math.max(0, d.unit_cost || 0) } : i
+    );
+    setLocalItems(next);
     setEditingId(null);
+    try {
+      await onUpdateItem({ purchaseOrderId: order.id, items: toWritePayload(next) });
+    } catch {
+      setLocalItems(prev);
+    }
+  };
+
+  /** 追加新品項：既有品項在前（保留 id），新品項 id 為 null 由伺服端建立 */
+  const submitNewItems = async (newItems: Array<Omit<PoUpdateItemPayload, 'id'>>) => {
+    const merged: PoUpdateItemPayload[] = [
+      ...toWritePayload(localItems),
+      ...newItems.map((i) => ({ ...i, id: null })),
+    ];
+    // 成功後由 refetch 帶回真實 id 與 sort_order，這裡不先行樂觀寫入
+    try {
+      await onImportItems({ purchaseOrderId: order.id, items: merged });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleDeleteItem = async (item: PurchaseOrderItem) => {
+    if (!onDeleteItem) return;
+    if (item.received_quantity > 0 || (item.consumed_quantity || 0) > 0) {
+      toast.error('已收貨／已使用品項無法刪除，請改用採購退貨');
+      return;
+    }
+    if (!window.confirm('確定要從此採購單移除該品項嗎？')) return;
+    const prev = localItems;
+    const remaining = localItems.filter((i) => i.id !== item.id);
+    setLocalItems(remaining);
+    try {
+      await onDeleteItem({ purchaseOrderId: order.id, items: toWritePayload(remaining), deletedItemIds: [item.id] });
+    } catch {
+      setLocalItems(prev);
+    }
   };
 
   // 依目前行內編輯值（含未儲存的草稿）動態計算總額
@@ -167,8 +224,9 @@ export function PurchaseOrderDetailDialog({
   };
 
   const applyOrder = (next: PurchaseOrderItem[]) => {
+    const prev = localItems;
     setLocalItems(next);
-    onReorder?.(next);
+    onReorder?.(next).catch(() => setLocalItems(prev));
   };
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
@@ -287,11 +345,9 @@ export function PurchaseOrderDetailDialog({
               variant="ghost"
               size="icon"
               className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={() => {
-                if (window.confirm('確定要從此採購單移除該品項嗎？')) {
-                  onDeleteItem?.(item.id);
-                }
-              }}
+              disabled={item.received_quantity > 0 || (item.consumed_quantity || 0) > 0}
+              title={item.received_quantity > 0 || (item.consumed_quantity || 0) > 0 ? '已收貨／已使用品項不可刪除（請改用採購退貨）' : '刪除品項'}
+              onClick={() => handleDeleteItem(item)}
               aria-label="刪除品項"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -372,6 +428,9 @@ export function PurchaseOrderDetailDialog({
           <p className="text-sm text-muted-foreground">日期: {order.order_date}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button size="sm" variant="outline" onClick={onEditOrder}>
+            <Pencil className="h-4 w-4 mr-1" />編輯
+          </Button>
           <Button size="sm" variant="outline" onClick={handleExportCSV}>
             <Download className="h-4 w-4 mr-1" />匯出 CSV
           </Button>
@@ -382,14 +441,19 @@ export function PurchaseOrderDetailDialog({
             <DialogTrigger asChild>
               <Button size="sm" variant="outline"><Plus className="h-4 w-4 mr-1" />預算外品項</Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-5xl">
               <DialogHeader>
                 <DialogTitle>新增品項</DialogTitle>
                 <DialogDescription>
-                  請手動輸入產品與變體資訊，以新增預算外獲額外採購的品項。
+                  請挑選預算外需額外採購的品項，可調整數量與單價後一次加入。
                 </DialogDescription>
               </DialogHeader>
-              <ItemForm products={products} isLoading={isLoading} onSubmit={(data) => { onAddItem(data); setAddItemOpen(false); }} />
+              <PurchaseProductPicker
+                purchaseOrderId={order.id}
+                supplierId={order.supplier_id}
+                isLoading={isLoading}
+                onSubmit={async (items) => { if (await submitNewItems(items)) setAddItemOpen(false); }}
+              />
             </DialogContent>
           </Dialog>
 
@@ -404,7 +468,7 @@ export function PurchaseOrderDetailDialog({
                   從現有的銷售訂單中選取待採購的需求，自動填入採購清單。
                 </DialogDescription>
               </DialogHeader>
-              <ImportFromOrdersDialog products={products} isLoading={isLoading} onSubmit={(items) => { onImportItems(items); setImportOpen(false); }} />
+              <ImportFromOrdersDialog products={products} isLoading={isLoading} onSubmit={async (items) => { if (await submitNewItems(items)) setImportOpen(false); }} />
             </DialogContent>
           </Dialog>
 
@@ -432,7 +496,7 @@ export function PurchaseOrderDetailDialog({
                   supplierId={order.supplier_id} 
                   supplierName={order.supplier?.name || '未知供應商'}
                   isLoading={isLoading} 
-                  onImport={(items) => { onImportItems(items); setExcelImportOpen(false); }} 
+                  onImport={async (items) => { if (await submitNewItems(items)) setExcelImportOpen(false); }} 
                 />
               </DialogContent>
             )}

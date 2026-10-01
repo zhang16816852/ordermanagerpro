@@ -21,6 +21,8 @@ export interface OrderItemRow {
     lineNote?: string;
     returnStatus?: 'pending' | 'stock' | 'exchange' | 'repaired' | null;
     isRepair?: boolean;
+    /** 採購單品項已收貨數量：不可刪除／不可降低數量／不可換商品（僅採購編輯模式使用） */
+    receivedQuantity?: number;
 }
 
 export const DEFAULT_LINE_TYPE: 'sale' | 'exchange' | 'return' = 'sale';

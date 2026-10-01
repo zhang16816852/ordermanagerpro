@@ -42,12 +42,14 @@ const KIND_LABELS: Record<DocImportKind, string> = {
   orders: '訂單',
   sales: '銷貨單',
   consignment: '寄賣單',
+  purchase: '採購單',
 };
 
 const RESULT_CODE_FIELD: Record<DocImportKind, string> = {
   orders: 'order_code',
   sales: 'sales_code',
   consignment: 'consignment_code',
+  purchase: 'supplier_order_number',
 };
 
 export function DocImportDialog({ kind, open, onOpenChange, onImported }: DocImportDialogProps) {

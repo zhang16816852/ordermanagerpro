@@ -11,6 +11,7 @@ import { DeliveryTypeCard } from '@/components/shipping/DeliveryTypeCard';
 import { useAdminOrderFormController } from './orders/form/useAdminOrderFormController';
 import { useAdminOrderFormHeader, statusLabels } from './orders/form/useAdminOrderFormHeader';
 import { DirectShipDialog } from './orders/form/DirectShipDialog';
+import { PO_STATUS_LABELS, type PurchaseOrderStatus } from './purchase-orders/types';
 
 export default function AdminOrderForm() {
   const c = useAdminOrderFormController();
@@ -18,6 +19,7 @@ export default function AdminOrderForm() {
   useAdminOrderFormHeader({
     isEditMode: c.isEditMode,
     orderType: c.orderType,
+    isPurchaseEdit: c.isPurchaseEdit,
     orderIdVal: c.orderIdVal,
     orderCodeVal: c.orderCodeVal,
     orderStatusVal: c.orderStatusVal,
@@ -30,19 +32,26 @@ export default function AdminOrderForm() {
   });
 
   // Loading / empty states
-  if (c.isEditMode && c.orderLoading) {
+  if (c.isEditMode && c.editDocLoading) {
     return <div className="flex items-center justify-center h-64" role="status" aria-live="polite"><div className="text-muted-foreground">載入中…</div></div>;
   }
-  if (c.isEditMode && !c.order) {
+  if (c.isEditMode && !c.editDoc) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
-        <p className="text-muted-foreground">找不到訂單</p>
-        <Button onClick={() => navigate('/admin/orders')}><ArrowLeft className="mr-2 h-4 w-4" />返回訂單列表</Button>
+        <p className="text-muted-foreground">{c.isPurchaseEdit ? '找不到採購單' : '找不到訂單'}</p>
+        <Button onClick={() => navigate(c.isPurchaseEdit ? '/admin/purchase-orders' : '/admin/orders')}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          {c.isPurchaseEdit ? '返回採購單列表' : '返回訂單列表'}
+        </Button>
       </div>
     );
   }
 
-  const statusInfo = c.order ? statusLabels[c.order.status] || { label: c.order.status, className: 'bg-muted text-muted-foreground' } : null;
+  const statusInfo = c.isPurchaseEdit
+    ? { label: PO_STATUS_LABELS[(c.purchaseStatus as PurchaseOrderStatus)] || c.purchaseStatus, className: 'bg-muted text-muted-foreground' }
+    : c.order
+      ? statusLabels[c.order.status] || { label: c.order.status, className: 'bg-muted text-muted-foreground' }
+      : null;
 
   const renderOrderInfoCard = (collapsed: boolean = false) => (
     <OrderInfoCard
@@ -58,12 +67,20 @@ export default function AdminOrderForm() {
       onStoreChange={c.setSelectedStoreId}
       supplierId={c.supplierId}
       onSupplierChange={c.setSupplierId}
+      supplierLocked={c.isPurchaseEdit}
       targetStoreId={c.targetStoreId}
       onTargetStoreChange={c.setTargetStoreId}
       expectedDate={c.expectedDate}
       onExpectedDateChange={c.setExpectedDate}
       supplierOrderNumber={c.supplierOrderNumber}
       onSupplierOrderNumberChange={c.setSupplierOrderNumber}
+      purchaseOrderDate={c.purchaseOrderDate}
+      onPurchaseOrderDateChange={c.isPurchaseEdit ? c.setPurchaseOrderDate : undefined}
+      purchaseStatus={c.purchaseStatus}
+      onPurchaseStatusChange={c.isPurchaseEdit ? c.setPurchaseStatus : undefined}
+      purchaseStatusLocked={c.purchaseStatusLocked}
+      purchasePurpose={c.purchasePurpose}
+      onPurchasePurposeChange={c.isPurchaseEdit ? c.setPurchasePurpose : undefined}
       notes={c.notes}
       onNotesChange={c.setNotes}
       shippedAt={c.shippedAt}
@@ -84,31 +101,41 @@ export default function AdminOrderForm() {
     />
   );
 
-  const renderProductSelector = (bare: boolean = false, collapsed: boolean = false) => (
-    <ProductSelector
-      products={c.storeProducts}
-      productsLoading={c.productsLoading}
-      filteredProducts={c.filteredProducts}
-      storeId={c.draftKey}
-      viewMode={c.viewMode}
-      onViewModeChange={c.setViewMode}
-      productSearch={c.productSearch}
-      onSearchChange={c.setProductSearch}
-      filterSheetOpen={c.filterSheetOpen}
-      onFilterSheetToggle={() => c.setFilterSheetOpen((v) => !v)}
-      selectedCategory={c.selectedCategory}
-      onCategoryChange={c.handleCategoryChange}
-      selectedSpecs={c.selectedSpecs}
-      onSpecChange={c.handleSpecChange}
-      selectedBrands={c.selectedBrandsParam}
-      onBrandChange={c.handleBrandsChange}
-      onClearFilters={c.handleClearFilters}
-      activePanel={c.activePanel}
-      onTogglePanel={() => c.setActivePanel(c.activePanel === 'products' ? null : 'products')}
-      bare={bare}
-      collapsed={collapsed}
-    />
-  );
+  const renderProductSelector = (bare: boolean = false, collapsed: boolean = false) => {
+    // 已取消的採購單不可再挑選商品新增品項（RPC 亦拒絕任何 item payload），以唯讀提示取代商品目錄
+    if (c.purchaseCancelled) {
+      return (
+        <div className="flex h-full min-h-[120px] items-center justify-center rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+          此採購單已取消，無法新增品項
+        </div>
+      );
+    }
+    return (
+      <ProductSelector
+        products={c.storeProducts}
+        productsLoading={c.productsLoading}
+        filteredProducts={c.filteredProducts}
+        storeId={c.draftKey}
+        viewMode={c.viewMode}
+        onViewModeChange={c.setViewMode}
+        productSearch={c.productSearch}
+        onSearchChange={c.setProductSearch}
+        filterSheetOpen={c.filterSheetOpen}
+        onFilterSheetToggle={() => c.setFilterSheetOpen((v) => !v)}
+        selectedCategory={c.selectedCategory}
+        onCategoryChange={c.handleCategoryChange}
+        selectedSpecs={c.selectedSpecs}
+        onSpecChange={c.handleSpecChange}
+        selectedBrands={c.selectedBrandsParam}
+        onBrandChange={c.handleBrandsChange}
+        onClearFilters={c.handleClearFilters}
+        activePanel={c.activePanel}
+        onTogglePanel={() => c.setActivePanel(c.activePanel === 'products' ? null : 'products')}
+        bare={bare}
+        collapsed={collapsed}
+      />
+    );
+  };
 
   const renderDeliveryCard = (collapsed: boolean = false) =>
     c.orderType === 'sales' ? (
@@ -163,11 +190,23 @@ export default function AdminOrderForm() {
       )}
 
       {/* Warning for non-pending orders */}
-      {c.isEditMode && c.order!.status !== 'pending' && (
+      {c.isEditMode && !c.isPurchaseEdit && c.editDoc!.status !== 'pending' && (
         <Alert variant="default" className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
           <AlertTriangle className="h-4 w-4 text-yellow-600" />
           <AlertDescription className="text-yellow-800 dark:text-yellow-200">
             此訂單狀態為「{statusInfo?.label}」，部分品項可能已在出貨池或已出貨。修改時請謹慎操作，避免資料不一致。
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* 採購編輯：收貨／取消後的編輯限制提示 */}
+      {c.isPurchaseEdit && c.purchaseItemsLocked && (
+        <Alert variant="default" className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+          <AlertTriangle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+            {c.purchaseCancelled
+              ? '此採購單已取消，品項不可新增、修改、刪除或排序（仍可調整備註與狀態）。'
+              : '此採購單已有收貨品項：已收貨品項不可刪除或降低數量，狀態由收貨結果決定。'}
           </AlertDescription>
         </Alert>
       )}

@@ -2,9 +2,16 @@ import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { OrderItemRow, isReturnLine } from '@/components/order/orderItemsTypes';
+import type {
+  PoUpdateItemsArgs,
+  PoWriteResult,
+  PurchaseOrderPurpose,
+  PurchaseOrderStatus,
+} from '@/pages/admin/purchase-orders/types';
 import { useStoreDraft } from '@/store/useOrderDraftStore';
 import { DeliveryType } from '@/components/shipping/DeliveryMethodPicker';
 import type { ShippingAddressValue } from '@/components/shipping/ShippingAddressFields';
@@ -24,6 +31,11 @@ export interface OrderFormMutationParams {
   user: { id: string } | null;
   isRep: boolean;
   isEditMode: boolean;
+  isPurchaseEdit: boolean;
+  purchaseOrder?: any;
+  purchaseOrderDate: string;
+  purchaseStatus: PurchaseOrderStatus;
+  purchasePurpose: PurchaseOrderPurpose;
   storeId: string;
   order?: any;
   storeInfo?: any;
@@ -70,6 +82,11 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     user,
     isRep,
     isEditMode,
+    isPurchaseEdit,
+    purchaseOrder,
+    purchaseOrderDate,
+    purchaseStatus,
+    purchasePurpose,
     storeId,
     order,
     storeInfo,
@@ -106,6 +123,25 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       sort_order: index + 1,
       ...lineTypeFields(item),
     })), []);
+
+  // 採購品項 payload：unit_cost 即 UI 的單價欄位；id 為 null ＝ 新品項
+  const buildPoItemsPayload = useCallback((currentItems: OrderItemRow[]) =>
+    currentItems.map((item, index) => ({
+      id: item.isNew ? null : item.id,
+      product_id: item.productId,
+      variant_id: item.variantId || null,
+      quantity: item.quantity,
+      unit_cost: item.unitPrice ?? 0,
+      sort_order: index + 1,
+    })), []);
+
+  /** 丟出帶 reason 的守門錯誤（PO / 訂單共用呈現格式） */
+  const throwGuard = (reason: string, hint?: string) => {
+    const err = new Error(reason) as any;
+    if (hint) err.hint = hint;
+    err.reason = reason;
+    throw err;
+  };
 
   // 同步勾選品項的價格到品牌：auto 時（儲存送出自動執行）不顯示「無品牌/無勾選」提示
   const syncPrices = useCallback(async (opts?: { auto?: boolean }) => {
@@ -151,6 +187,37 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       const currentDeletedIds = pendingDeletedIdsRef.current;
       if (!orderId) throw new Error('訂單不存在');
 
+      // --- 採購單：交易化更新（20260930000005）---
+      if (isPurchaseEdit) {
+        const poItems = purchaseOrder?.purchase_order_items || [];
+        const poHasReceived = poItems.some((i: any) => (i.received_quantity ?? 0) > 0);
+        // 已取消單：RPC 以「儲存狀態」為準鎖定品項，故送空 payload 讓備註／狀態可更新
+        const poLocked = purchaseOrder?.status === 'cancelled';
+        const poArgs: PoUpdateItemsArgs = {
+          p_purchase_order_id: orderId,
+          // 直接傳原字串：RPC 以 COALESCE(p_notes, notes) 處理，傳 '' 才能清空
+          p_notes: currentNotes,
+          p_items: poLocked ? [] : buildPoItemsPayload(currentItems),
+          p_deleted_item_ids: poLocked ? [] : currentDeletedIds,
+          // 已收貨的單狀態由收貨結果決定，不可手動指定
+          p_status: poHasReceived ? null : purchaseStatus,
+          p_order_date: purchaseOrderDate || null,
+          p_expected_date: expectedDate || null,
+          p_purpose: purchasePurpose,
+          p_supplier_order_number: supplierOrderNumber || null,
+        };
+        const { data, error } = await supabase.rpc(
+          'update_purchase_order_with_items',
+          poArgs as unknown as Database['public']['Functions']['update_purchase_order_with_items']['Args'],
+        );
+        if (error) throw error;
+        const result = data as PoWriteResult | null;
+        if (result && result.ok === false) {
+          throwGuard(result.reason || '儲存採購單失敗');
+        }
+        return;
+      }
+
       const payload = buildItemsPayload(currentItems);
 
       const { data, error } = await supabase.rpc('update_order_with_items', {
@@ -179,8 +246,15 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       await syncPrices({ auto: true });
     },
     onSuccess: () => {
-      toast.success('訂單已更新');
       pendingDeletedIdsRef.current = [];
+      if (isPurchaseEdit) {
+        toast.success('採購單已更新');
+        queryClient.invalidateQueries({ queryKey: ['purchase-order-detail', orderId] });
+        queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+        navigate('/admin/purchase-orders');
+        return;
+      }
+      toast.success('訂單已更新');
       queryClient.invalidateQueries({ queryKey: ['order-detail'] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       navigate('/admin/orders');
@@ -509,36 +583,22 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       if (currentItems.length === 0) throw new Error('請至少新增一項產品');
       if (!supplierId) throw new Error('請選擇供應商');
 
-      const totalAmount = currentItems.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
-
-      const { data: newPO, error: poError } = await (supabase as any)
-        .from('purchase_orders')
-        .insert({
-          supplier_id: supplierId,
-          status: 'draft',
-          order_date: new Date().toISOString().split('T')[0],
-          expected_date: expectedDate || null,
-          supplier_order_number: supplierOrderNumber || null,
-          total_amount: totalAmount,
-          notes: currentNotes.trim() || null,
-          created_by: user?.id,
-        })
-        .select('id')
-        .single();
-      if (poError) throw poError;
-
-      const poItems = currentItems.map((item) => ({
-        purchase_order_id: newPO.id,
-        product_id: item.productId,
-        variant_id: item.variantId || null,
-        quantity: item.quantity,
-        received_quantity: 0,
-        unit_cost: item.unitPrice,
-      }));
-      const { error: itemsError } = await (supabase as any).from('purchase_order_items').insert(poItems);
-      if (itemsError) throw itemsError;
-
-      return newPO;
+      // 交易化建立：PO header + items + sort_order + total_amount 於單一交易內完成
+      const { data, error } = await (supabase.rpc as any)('create_purchase_order_with_items', {
+        p_supplier_id: supplierId,
+        p_order_date: purchaseOrderDate || null,
+        p_items: buildPoItemsPayload(currentItems).map(({ id: _id, ...rest }) => rest),
+        p_status: 'draft',
+        p_purpose: purchasePurpose,
+        p_expected_date: expectedDate || null,
+        p_supplier_order_number: supplierOrderNumber || null,
+        p_notes: currentNotes,
+        p_created_by: user?.id ?? null,
+      });
+      if (error) throw error;
+      const result = data as PoWriteResult | null;
+      if (result && result.ok === false) throwGuard(result.reason || '建立採購單失敗');
+      return result;
     },
     onSuccess: () => {
       toast.success('採購單已建立');
@@ -546,7 +606,10 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
       navigate('/admin/purchase-orders');
     },
-    onError: (error: Error) => toast.error(getErrorMessage(error, '建立採購單失敗')),
+    onError: (error: any) => {
+      if (error?.reason) toast.error(`建立採購單失敗：${error.reason}`);
+      else toast.error(getErrorMessage(error, '建立採購單失敗'));
+    },
   });
 
   // --- Consignment Order mutations ---

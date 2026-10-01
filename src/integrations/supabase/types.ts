@@ -4899,6 +4899,29 @@ export type Database = {
       }
     }
     Functions: {
+      _po_create_with_items: {
+        Args: {
+          p_created_by: string
+          p_expected_date: string
+          p_items: Json
+          p_notes: string
+          p_order_date: string
+          p_purpose: string
+          p_status: string
+          p_supplier_id: string
+          p_supplier_order_number: string
+        }
+        Returns: Json
+      }
+      _po_resolve_item: {
+        Args: {
+          p_item_name?: string
+          p_sku?: string
+          p_supplier_id?: string
+          p_vendor_product_id?: string
+        }
+        Returns: Json
+      }
       _receive_return_to_stock: {
         Args: {
           p_created_by?: string
@@ -5085,6 +5108,20 @@ export type Database = {
         }
         Returns: Json
       }
+      create_purchase_order_with_items: {
+        Args: {
+          p_created_by?: string
+          p_expected_date?: string
+          p_items?: Json
+          p_notes?: string
+          p_order_date?: string
+          p_purpose?: string
+          p_status?: string
+          p_supplier_id: string
+          p_supplier_order_number?: string
+        }
+        Returns: Json
+      }
       deduct_repair_part_stock: {
         Args: {
           p_created_by: string
@@ -5106,6 +5143,10 @@ export type Database = {
       delete_product_if_safe: { Args: { p_product_id: string }; Returns: Json }
       delete_purchase_order_if_empty: {
         Args: { p_purchase_order_id: string }
+        Returns: Json
+      }
+      delete_purchase_order_item_if_safe: {
+        Args: { p_item_id: string }
         Returns: Json
       }
       delete_repair_order_if_safe: {
@@ -5215,6 +5256,15 @@ export type Database = {
         Returns: Json
       }
       import_product_batch: { Args: { p_items: Json }; Returns: Json }
+      import_purchase_orders_batch: {
+        Args: {
+          p_created_by?: string
+          p_groups: Json
+          p_supplier_id: string
+          p_warehouse_id?: string
+        }
+        Returns: Json
+      }
       import_resolve_item: {
         Args: { p_item_name?: string; p_sku: string }
         Returns: Json
@@ -5416,6 +5466,10 @@ export type Database = {
         }
         Returns: Json
       }
+      revert_order_return_line: {
+        Args: { p_created_by?: string; p_order_item_id: string }
+        Returns: Json
+      }
       revoke_rep_commission_payout: {
         Args: { p_payout_id: string }
         Returns: undefined
@@ -5423,6 +5477,10 @@ export type Database = {
       revoke_shipping_settlement: {
         Args: { p_period_id: string }
         Returns: undefined
+      }
+      set_doc_delivery_type: {
+        Args: { p_delivery_type: string; p_doc_id: string; p_doc_type: string }
+        Returns: Json
       }
       settle_consignment: {
         Args: {
@@ -5489,6 +5547,20 @@ export type Database = {
           p_items?: Json
           p_notes?: string
           p_order_id: string
+        }
+        Returns: Json
+      }
+      update_purchase_order_with_items: {
+        Args: {
+          p_deleted_item_ids?: string[]
+          p_expected_date?: string
+          p_items?: Json
+          p_notes?: string
+          p_order_date?: string
+          p_purchase_order_id: string
+          p_purpose?: string
+          p_status?: string
+          p_supplier_order_number?: string
         }
         Returns: Json
       }
