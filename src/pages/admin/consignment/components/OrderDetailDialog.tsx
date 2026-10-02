@@ -44,7 +44,7 @@ interface OrderDetailDialogProps {
 type ActionType = 'receive' | 'ship' | 'return' | 'settle' | 'reverse' | 'edit';
 
 export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
-  const { useOrderDetail, accounts, cancelOrderMutation, warehouses } = useConsignment();
+  const { useOrderDetail, accounts, cancelOrderMutation, restoreOrderMutation, warehouses } = useConsignment();
   const detail = useOrderDetail(order?.id || null);
   const shipmentsQuery = useShipments('consignment_order', order?.id || null);
   const hasShipments = (shipmentsQuery.data?.length || 0) > 0;
@@ -172,6 +172,22 @@ export function OrderDetailDialog({ order, onClose }: OrderDetailDialogProps) {
           {hasDelivery && (
             <div className="border rounded-md p-4">
               <ParcelManager docType="consignment_order" docId={order.id} editable={!isSupplier} deliveryType={order.delivery_type} />
+            </div>
+          )}
+
+          {/* 已取消單：僅提供復原（草稿為硬刪除故無此狀態） */}
+          {order.status === 'cancelled' && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                disabled={restoreOrderMutation.isPending}
+                onClick={() => {
+                  if (confirm('確定要復原這筆已取消的寄賣單嗎？'))
+                    restoreOrderMutation.mutate(order.id);
+                }}
+              >
+                <RotateCcw className="h-4 w-4 mr-1" /> 復原
+              </Button>
             </div>
           )}
 

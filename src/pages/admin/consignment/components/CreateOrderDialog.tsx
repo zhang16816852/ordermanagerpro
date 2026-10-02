@@ -33,7 +33,7 @@ interface LineItem extends NewConsignmentItem {
 }
 
 export function CreateOrderDialog({ open, onOpenChange }: CreateOrderDialogProps) {
-  const { suppliers, stores, products, createOrderMutation, addItemMutation } = useConsignment();
+  const { suppliers, stores, products, createOrderMutation } = useConsignment();
   const [direction, setDirection] = useState<ConsignmentDirection>('receive_from_supplier');
   const [partnerId, setPartnerId] = useState('');
   const [note, setNote] = useState('');
@@ -77,10 +77,7 @@ export function CreateOrderDialog({ open, onOpenChange }: CreateOrderDialogProps
     }
     setSubmitting(true);
     try {
-      const order = await createOrderMutation.mutateAsync({ direction, partnerId, note });
-      for (const item of validLines) {
-        await addItemMutation.mutateAsync({ orderId: order.id, item });
-      }
+      await createOrderMutation.mutateAsync({ direction, partnerId, note, items: validLines });
       toast.success('寄賣單建立完成');
       reset();
       onOpenChange(false);

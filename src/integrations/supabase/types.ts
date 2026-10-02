@@ -5052,6 +5052,15 @@ export type Database = {
         }
         Returns: Json
       }
+      create_consignment_send_draft: {
+        Args: {
+          p_created_by?: string
+          p_items: Json
+          p_notes?: string
+          p_store_id: string
+        }
+        Returns: Json
+      }
       create_consignment_shipment: {
         Args: {
           p_consignment_order_id: string
@@ -5139,7 +5148,10 @@ export type Database = {
         Args: { p_consignment_order_id: string }
         Returns: Json
       }
-      delete_order_if_unadopted: { Args: { p_order_id: string }; Returns: Json }
+      delete_order_if_unadopted: {
+        Args: { p_allow_consignment_mirror?: boolean; p_order_id: string }
+        Returns: Json
+      }
       delete_product_if_safe: { Args: { p_product_id: string }; Returns: Json }
       delete_purchase_order_if_empty: {
         Args: { p_purchase_order_id: string }

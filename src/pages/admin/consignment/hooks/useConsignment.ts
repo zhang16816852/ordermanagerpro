@@ -166,15 +166,45 @@ export function useConsignment() {
     });
   }
 
-  const createOrderMutation = useSupabaseAction<{ id: string }, { direction: ConsignmentDirection; partnerId: string; note?: string }>(
-    async ({ direction, partnerId, note }) => {
+  const createOrderMutation = useSupabaseAction<
+    { id: string },
+    { direction: ConsignmentDirection; partnerId: string; note?: string; items?: NewConsignmentItem[] }
+  >(
+    async ({ direction, partnerId, note, items }) => {
+      const lines = items ?? [];
+
+      // 店家寄賣（send_to_store）：交由單一交易 RPC 建立來源訂單 + 寄賣單 + 鏡像品項，
+      // 避免先建無來源的空寄賣單（中途失敗會留下孤兒）。
+      if (direction === 'send_to_store') {
+        const { data, error } = await supabase.rpc('create_consignment_send_draft', {
+          p_store_id: partnerId,
+          p_items: lines.map((i) => ({
+            product_id: i.product_id,
+            variant_id: i.variant_id || null,
+            quantity: i.quantity,
+            unit_price: i.unit_price,
+            unit_cost: i.unit_cost,
+          })),
+          p_notes: note || undefined,
+          p_created_by: user?.id,
+        });
+        if (error) throw error;
+
+        const result = data as { ok?: boolean; reason?: string; consignment_order_id?: string } | null;
+        if (!result || result.ok !== true || !result.consignment_order_id) {
+          throw new Error(result?.reason || '建立寄賣出貨單失敗');
+        }
+        return { id: result.consignment_order_id };
+      }
+
+      // 廠商寄賣（receive_from_supplier）：不需要來源訂單，直接建立草稿 + 批次建立品項
       const { data, error } = await (supabase as any)
         .from('consignment_orders')
         .insert({
           code: 'TMP',
           direction,
-          supplier_id: direction === 'receive_from_supplier' ? partnerId : null,
-          store_id: direction === 'send_to_store' ? partnerId : null,
+          supplier_id: partnerId,
+          store_id: null,
           note: note || null,
           status: 'draft',
           created_by: user?.id,
@@ -183,27 +213,20 @@ export function useConsignment() {
         .single();
       if (error) throw error;
 
-      // 店家寄賣（send_to_store）：同步建立真實來源訂單，讓「所有訂單」可勾選/出貨
-      if (direction === 'send_to_store') {
-        const { data: sourceOrder, error: orderError } = await (supabase as any)
-          .from('orders')
-          .insert({
-            store_id: partnerId,
-            created_by: user?.id,
-            notes: note || null,
-            source_type: 'consignment',
-            status: 'pending',
-            consignment_mode: true,
-          })
-          .select('id')
-          .single();
-        if (orderError) throw orderError;
-
-        const { error: linkError } = await (supabase as any)
-          .from('consignment_orders')
-          .update({ source_order_id: sourceOrder.id })
-          .eq('id', data.id);
-        if (linkError) throw linkError;
+      if (lines.length > 0) {
+        const { error: itemsError } = await (supabase as any)
+          .from('consignment_order_items')
+          .insert(
+            lines.map((item) => ({
+              consignment_order_id: data.id,
+              product_id: item.product_id,
+              variant_id: item.variant_id || null,
+              quantity: item.quantity,
+              unit_price: item.unit_price,
+              unit_cost: item.unit_cost,
+            }))
+          );
+        if (itemsError) throw itemsError;
       }
 
       return data as { id: string };
@@ -242,6 +265,7 @@ export function useConsignment() {
             store_id: co.store_id,
             quantity: item.quantity,
             unit_price: item.unit_price,
+            unit_cost: item.unit_cost,
             shipped_quantity: 0,
             status: 'waiting',
             sort_order: maxSort + 1,
@@ -280,7 +304,25 @@ export function useConsignment() {
         .select('order_item_id')
         .eq('id', itemId)
         .single();
+
+// 刪除順序：先刪鏡像 order_items，再刪寄賣品項（單一交易外兩段，故順序有意義）。
+      // 相關 FK 實際行為（勿誤記為 RESTRICT）：
+      //   consignment_order_items.order_item_id → ON DELETE SET NULL
+      //   sales_note_items.order_item_id        → NO ACTION（唯一會擋下刪除的）
+      //   shipping_pool.order_item_id           → ON DELETE CASCADE（會靜默刪掉出貨池列）
+      //   inventory_movements / consignment_sales → ON DELETE SET NULL
+      // ① 先刪鏡像：寄賣品項仍存在，若中途失敗可整筆重試；反序（先刪寄賣品項）
+      //    會在來源訂單留下一筆無寄賣品項的孤兒 order_items，污染訂單列表/採購/需求計算。
+      // ② 出貨池列為 CASCADE，刪鏡像會靜默連帶刪除 → 送出前先擋下，要求先移出出貨池。
       if (item?.order_item_id) {
+        const { data: pooled } = await (supabase as any)
+          .from('shipping_pool')
+          .select('id')
+          .eq('order_item_id', item.order_item_id)
+          .limit(1)
+          .maybeSingle();
+        if (pooled) throw new Error('此品項仍在出貨池中，請先將其移出出貨池後再移除');
+
         const { error: oiError } = await (supabase as any)
           .from('order_items')
           .delete()
@@ -326,6 +368,7 @@ export function useConsignment() {
         const oiPatch: Record<string, number> = {};
         if (patch.quantity != null) oiPatch.quantity = patch.quantity;
         if (patch.unit_price != null) oiPatch.unit_price = patch.unit_price;
+        if (patch.unit_cost != null) oiPatch.unit_cost = patch.unit_cost;
         if (Object.keys(oiPatch).length > 0) {
           const { error: oiError } = await (supabase as any)
             .from('order_items')
@@ -404,6 +447,29 @@ export function useConsignment() {
             description: error?.hint || undefined,
           });
         }
+      },
+    }
+  );
+
+  // 復原已取消的寄賣單。⚠️ 草稿走 delete_consignment_draft_if_clean 硬刪除，
+  // 寄賣單本身與品項皆已不存在，故「復原」僅適用非草稿被取消（status='cancelled'）者。
+  // 守門與理由字串皆在 restore_cancelled_consignment_order 內，後端為唯一真值來源。
+  const restoreOrderMutation = useSupabaseAction<void, string>(
+    async (orderId) => {
+      const { data, error } = await (supabase as any).rpc('restore_cancelled_consignment_order', {
+        p_consignment_order_id: orderId,
+      });
+      if (error) throw error;
+      const result = data as { ok?: boolean; reason?: string } | null;
+      if (!result || result.ok !== true) {
+        throw new Error(result?.reason || '復原寄賣單失敗');
+      }
+    },
+    {
+      successMessage: '寄賣單已復原',
+      invalidateKeys: [['consignment-orders'], ['admin-orders']],
+      onError: (error: any) => {
+        toast.error(error?.message || '復原失敗');
       },
     }
   );
@@ -615,6 +681,7 @@ export function useConsignment() {
     removeItemMutation,
     updateItemMutation,
     cancelOrderMutation,
+    restoreOrderMutation,
     receiveItemsMutation,
     shipMutation,
     reverseShipmentMutation,

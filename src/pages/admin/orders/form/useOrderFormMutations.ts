@@ -662,35 +662,35 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       if (currentItems.length === 0) throw new Error('請至少新增一項產品');
       if (!targetStoreId) throw new Error('請選擇目標門市');
 
-      // send_to_store 的 CHECK 約束要求 supplier_id IS NULL（結算對象為店家）
-      const { data: newCO, error: coError } = await (supabase as any)
-        .from('consignment_orders')
-        .insert({
-          direction: 'send_to_store',
-          store_id: targetStoreId,
-          status: 'draft',
-          note: currentNotes.trim() || null,
-          created_by: user?.id,
-        })
-        .select('id, code')
-        .single();
-      if (coError) throw coError;
+      // 由單一交易建立來源訂單 + 寄賣單 + 鏡像品項，避免產生無來源訂單的孤兒寄賣單
+      const { data, error } = await supabase.rpc('create_consignment_send_draft', {
+        p_store_id: targetStoreId,
+        p_items: currentItems.map((item) => ({
+          product_id: item.productId,
+          variant_id: item.variantId || null,
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          unit_cost: item.unitPrice,
+        })),
+        p_notes: currentNotes.trim() || undefined,
+        p_created_by: user?.id,
+      });
+      if (error) throw error;
 
-      const coItems = currentItems.map((item) => ({
-        consignment_order_id: newCO.id,
-        product_id: item.productId,
-        variant_id: item.variantId || null,
-        quantity: item.quantity,
-        unit_price: item.unitPrice,
-        unit_cost: item.unitPrice,
-      }));
-      const { error: itemsError } = await (supabase as any).from('consignment_order_items').insert(coItems);
-      if (itemsError) throw itemsError;
-
-      return newCO;
+      const result = data as {
+        ok?: boolean;
+        reason?: string;
+        consignment_code?: string | null;
+      } | null;
+      if (!result || result.ok !== true) {
+        throw new Error(result?.reason || '建立寄賣出貨單失敗');
+      }
+      return result;
     },
-    onSuccess: () => {
-      toast.success('寄賣出貨單已建立');
+    onSuccess: (result) => {
+      toast.success(
+        result.consignment_code ? `寄賣出貨單已建立：${result.consignment_code}` : '寄賣出貨單已建立',
+      );
       draft.clearDraft();
       queryClient.invalidateQueries({ queryKey: ['consignment-orders'] });
       navigate('/admin/consignment');
