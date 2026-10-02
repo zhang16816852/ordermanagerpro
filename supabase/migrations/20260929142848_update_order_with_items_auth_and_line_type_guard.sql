@@ -1,4 +1,10 @@
--- 20260930000003_update_order_with_items_auth_and_line_type_guard.sql
+-- 20260929142848_update_order_with_items_auth_and_line_type_guard.sql
+--
+-- 檔名對齊說明：本檔原名為 20260930000003_...，實際套用遠端的時間為
+--   2026-09-29 14:28:48 UTC，故遠端 ledger 記為 version=20260929142848。
+--   本檔改名與 ledger 對齊；ledger 該列原本記錄的是「未含下方第 1 項修正」的
+--   版本，本次已將 statements 更新為本檔內容，使三者一致：
+--     本機檔案 == 遠端 ledger.statements == pg_proc.prosrc
 --
 -- 兩項修正（皆為 CREATE OR REPLACE，簽名不變，前端零改動）：
 --
@@ -28,10 +34,12 @@
 -- 對應前端：useOrderFormMutations 的 lineTypeFields() 固定成組送出
 -- line_type / line_note / return_status / is_repair。
 --
--- 套用紀錄：本檔首版套用遠端後才於測試中發現 COALESCE 修正需求，故
--- **遠端最終 body 由直接 CREATE OR REPLACE 覆寫為本檔內容**（現行
--- prosrc md5 = 42a999a0068cb706b7c455f8a4765048）。本檔為權威來源，
--- 新環境 `supabase db push` 會一次套用正確版本。
+-- 套用紀錄：本檔首版套用遠端後才於測試中發現 COALESCE 修正需求，故遠端 body
+--   先以直接 CREATE OR REPLACE 覆寫（該次覆寫遺漏本檔第 120–121 行的兩行
+--   註解，僅註解差異、SQL 行為完全相同）。本次已再以本檔內容覆寫遠端，並
+--   修正遠端 ledger 的 statements，使本檔成為唯一權威來源。
+--   ⚠️ 本專案一律以 MCP 直接套用並自行維護 ledger，**不使用 supabase db push**
+--      （本機檔名與 MCP 套用時間戳不同，db push 會把全部 migration 視為未套用）。
 
 CREATE OR REPLACE FUNCTION public.update_order_with_items(
   p_order_id UUID,
