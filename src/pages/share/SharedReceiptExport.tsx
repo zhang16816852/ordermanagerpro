@@ -161,7 +161,7 @@ function ReceiptPage({
   children?: ReactNode;
 }) {
   const showQrBlock = showQR && !!qrValue;
-  // 右欄：配送方式 + 物流單號（物流類型才顯示單號），QR 置於其右
+  // 中欄（靠左）：配送方式 + 物流單號（物流類型才顯示單號）；右欄固定預留 QR 槽
   const deliveryLines: string[] = [];
   if (deliveryMethodTitle) deliveryLines.push(`配送方式：${deliveryMethodTitle}`);
   if (deliveryType === "logistics" && trackingNumbers && trackingNumbers.length > 0) {
@@ -178,22 +178,22 @@ function ReceiptPage({
             日期：{new Date(createdAt).toLocaleString("zh-TW", { hour12: false })}
             {status ? <><br />狀態：{status}</> : null}
           </div>
-          {(showQrBlock || deliveryLines.length > 0) && (
-            <div className="doc-side">
-              {deliveryLines.length > 0 && (
-                <div className="doc-side-info">
-                  {deliveryLines.map((line) => (
-                    <div key={line} className="doc-side-line">{line}</div>
-                  ))}
-                </div>
-              )}
+          {deliveryLines.length > 0 && (
+            <div className="doc-logistics">
+              {deliveryLines.map((line) => (
+                <div key={line} className="doc-logistics-line">{line}</div>
+              ))}
+            </div>
+          )}
+          <div className="doc-side">
+            <div className="doc-qr-slot">
               {showQrBlock && (
                 <div className="doc-qr">
                   <QRCodeSVG value={qrValue!} size={72} />
                 </div>
               )}
             </div>
-          )}
+          </div>
         </div>
       </div>
       <table className="doc-table">

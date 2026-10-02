@@ -424,6 +424,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
   border-top: 1px solid #333;
   border-bottom: 1px solid #333;
   padding: 6px 2px;
@@ -578,21 +579,38 @@
   height: 60px;
 }
 
-/* 收據表頭右欄：配送方式／物流單號 + QR */
+/* 收據表頭右欄：固定預留 QR 槽（未來可放追蹤網址），不與物流資訊同欄 */
 .doc-side {
   display: flex;
   align-items: center;
-  gap: 14px;
   padding-right: 12px;
 }
 
-.doc-side-info {
-  font-size: 12px;
-  line-height: 1.6;
-  text-align: right;
+.doc-qr-slot {
+  width: 72px;
+  height: 72px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.doc-side-line {
+/* 收據表頭中欄：配送方式／物流單號，靠左緊接 meta，QR 仍推至最右
+   align-self: stretch 讓虛線分隔由上框線貫穿至下框線 */
+.doc-logistics {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin-right: auto;
+  padding-left: 16px;
+  border-left: 1px dashed #999;
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: left;
+}
+
+.doc-logistics-line {
   max-width: 70mm;
   overflow-wrap: anywhere;
 }
