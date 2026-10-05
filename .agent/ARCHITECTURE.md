@@ -6,10 +6,13 @@
 ## 1. 入口與初始化（src/App.tsx）
 
 ```
-App 掛載 → CacheService.init() 完成前顯示「載入中...」
-  → 就緒後渲染 QueryClientProvider → TooltipProvider → Toaster/Sonner → BrowserRouter → AuthProvider → AppRoutes
+App 掛載 → QueryClientProvider → TooltipProvider → Toaster/Sonner → BrowserRouter → AuthProvider → CacheGate → AppRoutes
 ```
 
+- **`CacheGate`（src/components/CacheGate.tsx）取代原本的全域載入閘門**（2026-10-03）：
+  - 公開路徑（`/`、`/shop*`）**立即渲染**頁面，並在背景 `CacheService.init()`（不 await），故訪客不會因 ERP 離線快取的 IndexedDB 初始化而白畫面等待。
+  - 其餘既有路徑維持原本的全屏「載入中...」閘門，行為與過往一致。
+  - ⚠️ **必須位於 `BrowserRouter` 內**（它用 `useLocation` 判斷路徑），不可提到 router 外層。
 - `CacheService.init()`（src/services/cacheService.ts）是單例 Promise，初始化流程：
   1. 清理 legacy localStorage keys
   2. `versionCache.preload()`：從 Supabase `data_versions` 表預載所有版本對照（src/services/versionCache.ts）
@@ -19,10 +22,22 @@ App 掛載 → CacheService.init() 完成前顯示「載入中...」
 
 | 檔案 | 路由 | 權限包裝 |
 |---|---|---|
-| `index.tsx` | `/`、`/market`、`/market/:id` + 組合以下所有路由 | `RootRedirect`（依 isAdmin 跳轉）、`ProtectedRoute` |
+| `index.tsx` | `/`（**公開首頁**，2026-10-03）、`/market`、`/market/:id` + 組合以下所有路由 | `/` = 無權限包裝（`PublicLayout` + `StorefrontPage`）；`/market*` = `ProtectedRoute`。⚠️ 原 `RootRedirect`（依 isAdmin 跳 `/admin` 或 `/dashboard`）**已刪除** |
 | `admin.tsx` | `/admin/*`（約 21 條，含 `/admin/consignment`、`/admin/repair-parts`） | `ProtectedRoute requireAdmin` + `AppLayout` |
 | `store.tsx` | `/dashboard`、`/orders`、`/cart`、`/catalog`、`/sales-notes`、`/receiving`、`/accounting`、`/team`、`/audit`、`/notifications`、`/market/create`、`/market/my-listings`、`/consignment-sales`、維修單 4 條 | `ProtectedRoute` + `AppLayout` |
 | `shared.tsx` | `/auth`、`/invite/:token`、`/share/order/:orderId`、`/share/sale/:salesNoteId`、`/share/consignment/:consignmentId`、`/share/statement/:statementId`、`*`（404） | 無（公開） |
+| `workshop.tsx` | `/workshop`、`/workshop/new`、`/workshop/:id`、`/workshop/:id/edit`（維修人員工作台） | `ProtectedRoute requireFixEngineer` |
+
+### 2b. 公開店面首頁（2026-10-03）
+
+`/` 為**所有訪客免登入**可看的公開首頁（Awwwards／Webby／FWA 級 image-first 方向）；購物車、下單與既有 ERP 路徑維持登入保護。
+
+- **資料流**：`StorefrontPage` 讀 `storefrontBlocks`（`src/config/site.ts`，經 zod `safeParse`）→ `BlockRenderer` 依 `type` 分派到 `Hero`／`CategoryRail`／`FeaturedProducts`／`Statement` → 商品資料走 `usePublicCatalog`（React Query）→ **安全匿名 RPC** `get_public_categories()` / `get_public_products(...)`（`SECURITY DEFINER`、欄位白名單、`REVOKE ... FROM PUBLIC` 後 `GRANT` 給 `anon`/`authenticated`）。**前台完全不繞過既有 RLS 讀 `products`／`store_products`**，只打這兩支 RPC。
+- **⚠️ 首頁必須去重**：`storefront_items` 是**產品 × 變體 × 機型矩陣**（3,159 列），直接取「前 N 列」會讓字母序最前的單一產品占滿全部卡片。故 RPC 提供 `p_distinct_products`：**首頁預設 `true`**（`DISTINCT ON` 每產品取一個代表列），**未來 `/shop` 要顯示完整變體／機型矩陣時必須顯式傳 `false`**。代表列仍同時回傳 `product_name`/`variant_name`/`model_name`，不會把變體資訊抹掉。
+- **錨點（config-driven）**：每種 block schema 共用 optional `anchor`，由 **`StorefrontPage` 統一套在 wrapper div**（非 block 內部——`CategoryRail` 會 `return null`，id 放裡面會變死連結；且區塊順序可被編輯器改動）。加 `scroll-mt-16` 對齊 sticky header（`h-16`）。`<main id="main" tabIndex={-1}>` 讓 skip-link 的 `focus()` 生效。
+- `PublicLayout`（src/components/layout/PublicLayout.tsx）：公開 header/footer、skip-link、`/` 快速聚焦主內容、登入態顯示進入工作台（Lenis 平滑捲動**僅在此啟用**且尊重 `prefers-reduced-motion`）。
+- **設定槽位**：`src/config/site.ts` 為唯一內容來源（品牌＋block 清單），日後換成後台/DB JSON 時**只改這一處**，renderer 與 block 元件不動。`sf-*` 色票只影響公開店面，不動既有 ERP 色票。
+- ⚠️ 全站僅 1 個產品有圖片，故 `ProductMedia.tsx` 刻意提供低對比紙感漸層 placeholder，缺圖不等於版面壞掉。
 
 - `ProtectedRoute`（src/components/ProtectedRoute.tsx）+ `AppLayout`（src/components/layout/AppLayout.tsx）
 - **三支出貨 Dialog 配送＋同步至店鋪（2026-09-23）**：① 寄賣 ShipDialog（`src/pages/admin/consignment/components/ShipDialog.tsx`）重寫為自含 form——`['store-info', storeId]`（`staleTime: Infinity`）查店家（含 `default_delivery_*`）、`ShippingDeliveryFields`（類型＋物流方式/追蹤）、logistics 展開 `ShippingAddressFields`＋「套用店家最新地址」＋「同步至店鋪」checkbox（配送地址與店家異動自動勾選、套用店家地址後不勾）；初始化 effect 用 `didInitRef`＋deps `[storeId, storeInfo?.id]`（訂單快照只套一次、storeInfo 非同步到達後才補店家預設/地址，不覆寫使用者輸入）。② 出貨池 `ShipDialog`（`src/pages/admin/shippingPool/`）：`useShipDelivery.setStoreSync`，每店家 logistics 地址區下方「出貨後將配送地址同步至店鋪」checkbox（不一致自動勾選、不主動取消）。③ 訂單列表/表單共用 `DirectShipDialog`（`src/components/orders/DirectShipDialog.tsx`）繼承訂單既有配送並同步至店鋪。**同步至店鋪僅回寫 `stores` 收件人/電話/郵區/縣市/鄉鎮/地址六欄，不回寫 `default_delivery_*`**（配送為單據層、預設為店家層）。成功皆 invalidate `['stores']/['store-info']`。
@@ -95,6 +110,7 @@ App 掛載 → CacheService.init() 完成前顯示「載入中...」
 | `useRepairParts.ts` | **維修零件型錄（2026-09-27）**：零件/links/標籤 CRUD ＋ `useRepairPartProductOptions()`（links 編輯器與批次建立共用）＋ `partLabelOf`／`resolveLinkOf`。管理頁 `/admin/repair-parts` |
 | `useShipments.ts` | 包裹（`shipments`）讀取與 mutations：`useShipments(docType, docId)`、**`useShipmentMutations(docType, docId)`**（`upsertMutation`／`deleteMutation`／**`setDeliveryTypeMutation`（2026-10-01，呼叫 `set_doc_delivery_type` 切換 order/sales_note/consignment_order 的配送類型，`{ok:false}` 轉為例外走統一 toast）**），共用於三層單據的 `ParcelManager` |
 | `useSupabaseAction.ts` | 通用 supabase action（含錯誤訊息） |
+| `useProductCost.ts` / `useBusinessProfit.ts` / `useDocumentProfit.ts` / `useRepStoreAssignments.ts` | **利潤與真實成本計算層（2026-10-03）**：毛利成本、業務成本、單據彙總、業務單據判定。詳見 7c.1 |
 | `useBrands.ts`、`useProductColors.ts`、`useProductSearch.ts`、`useNotifications.ts`、`useTableTemplates.ts` | 各自領域資料 |
 
 ## 6. 產品快取同步細節（useProductCache.ts）
@@ -172,6 +188,40 @@ App 掛載 → CacheService.init() 完成前顯示「載入中...」
   - **無 query／migration／RLS／後端改動**
 
 - **變體名稱單一顯示（全站 UI 慣例，2026-09-12）**：品項名稱一律「有變體只顯示變體名（`variant?.name`），無變體才回退產品名」；**商品卡容器（代表整支商品：商品卡片、Dialog 標題、BrandPricing、AddProductCard 的 `code - name` 等）保留產品名**。共改 15+ 處：`OrderItemsTable`（getComponentInfo 已 variant 優先，移除 compact「name - variant」重複與詳情/卡片子列）、`ItemsTableView`、orders/list `ItemTableView`/`AggregateTableView`/`AggregateCardsView`、store `SalesNotes` 寄賣回報表、PO `PurchaseOrderDetailDialog`/`ReceivingTab`/`ImportFromOrdersDialog`、consignment `OrderDetailDialog`（明細＋編輯品項）/`ReportsTab`、`OrderReviewPanel`、`CartPanel`、`OrderGridProductPicker` 已選 badge、`useInventory`（name＝variant、specs 欄改顯示所屬產品名）、`ProductDetailDialog` 加購物車 toast、accounting `ReferenceViewer`。天然已合規：`SharedReceiptExport`（`variant ?? name`）、`SalesNoteDetailDialog`、維修零件名（`part_name || variant?.name || product?.name`）、repair detail 兩頁、`PurchaseReturnDialog`
+
+## 7c. 利潤／成本計算層 ＋ 供應商對照多目標（2026-10-03）
+
+### 7c.1 真實成本與業務利潤（純前端計算層，無 migration）
+
+| 檔案 | 職責 |
+|---|---|
+| `src/hooks/useProductCost.ts` | **毛利成本**解析：`order_items.unit_cost` → `supplier_product_mappings.vendor_unit_cost` → 最近有效 `purchase_order_items.unit_cost`（含 supplier 過濾）。回傳 `costOf()` 與是否全數已知；**不得 fallback 批發價／`rep_product_costs`**，未知即為未知（不可當 0） |
+| `src/hooks/useRepStoreAssignments.ts` | 由 `rep_store_assignments` 判定店家是否為業務單據（**不使用 `orders.sales_rep_id`**），提供 `hasBusiness(storeId)` 與篩選用的店家 ID 集合 |
+| `src/hooks/useBusinessProfit.ts` | **業務利潤成本**解析：`order_items.unit_cost` → 該業務 `rep_product_costs`（先變體後產品層）→ 變體批發價。`costOf(storeId,item)`／`businessProfitSummary(...)`；退貨列（`line_type='return'`）成本／利潤／佣金貢獻為 `0` |
+| `src/hooks/useDocumentProfit.ts` | 訂單／銷貨單層級彙總（營業額、毛利、業務利潤、估佣、未知成本旗標） |
+| `src/utils/grossProfit.ts` | 純函式：毛利／毛利率、成本優先序共用片段、格式化（「成本未知」「部分品項成本未知」） |
+| `src/components/shared/ProfitCell.tsx` | 單據列表的利潤儲存格：依 `withBusiness` 分流顯示毛利／毛利率或業務利潤／估佣 |
+
+- **顯示規則**：有業務單據 → 業務利潤／估佣；無 → 毛利／毛利率。佣金維持 `Math.max(0, profit) * commission_rate / 100`（與後端發放 RPC 一致）。
+- **`businessFilter`（`"all" | "with" | "without"`）** 同步 URL `business=with|without`（`all` 移除參數），訂單列表（`OrderFilters`／`OrderListPage`）與銷貨單（admin＋store）皆支援。
+- **接線點**：`components/order/OrderDetailDialog`、`OrderDetailItemsTable`／`OrderDetailItemsCards`、`OrdersCardView`、`pages/admin/orders/list/{OrderTableView,useOrderListDerived,useOrderListPageController,useOrdersList}`、`components/sales/SalesNoteDetailDialog`／`SalesNoteListTable`、`pages/admin/SalesNotes`、`pages/store/SalesNotes`、`pages/admin/accounting/components/ReferenceViewer`（需 select `order_items.unit_cost` 與 `line_type`）。
+
+### 7c.2 供應商對照多目標＋主對照（前端）
+
+- **對照鍵**：一律以 `internal_product_id` ＋ `internal_variant_id` 對照（非名稱／非品項字串）。批次① 起 `PurchaseProductPicker` 與 `AggregateToPODialog` 的成本／價格改讀統一價格欄位。
+- **型別與 hooks**：`pages/admin/purchase-orders/hooks/useSupplierMappings.ts` 為唯一寫入層——
+  - `saveMappingMutation`：**有 `id` 走 update、無 `id` 走 insert**；update 時若未指定 `is_primary` **完全不帶該欄**（保留 DB 現值，避免誤降級）；insert 時未指定且該料號無既有對照才自動 primary。
+  - `setPrimaryMutation`：先將同料號其他 `is_primary=false`，再將目標設為 `true`（對應 partial unique index）。
+  - `deleteMappingMutation`：刪除主對照後自動提升同料號 `updated_at` 最新的剩餘對照。
+  - `batchSaveMappingsMutation`：批次 `onConflict` 改 4 欄位（`supplier_id,vendor_product_id,internal_product_id,internal_variant_id`），⚠️ 勿改回 `supplier_id`。
+- **主對照優先序（匯入）**：既有 DB 主對照（且出現在檔案中）> 檔案內明確 `is_primary` > 檔案內第一個目標自動為主。**DB 已有主對照時，檔案的明確指定不會覆蓋它**（防匯入意外降級）。
+- **UI**（`components/mapping/`）：
+  - `MappedRulesList.tsx`：表格新增「主對照」欄與 star 按鈕（`onSetPrimary`／`isSettingPrimary`）、顯示同料號 target 數、新增對話框含「設為主對照」checkbox、編輯帶 `id` 與原 `is_primary`；匯入完成**不再 `window.location.reload()`**（mutation 已 invalidate `['supplier-mappings']`）。
+  - `MappingImportDialog.tsx`：**同料號不同目標不算衝突**；只有「同料號＋相同內部目標」是「將更新既有對照」；其他顯示「將新增為第 N 筆」；含檔案內重複檢測與 `主對照` 欄位解析（是/否、true/false、1/0、Y/N、primary/secondary）；**未匹配內部產品一律視為未匹配**（避免 `matched_product!.id` 潛在崩潰）。
+  - `MappingExportDialog.tsx`：輸出 `主對照` 是／否，匯出檔可 round-trip 回匯入。
+- **PO 反查**：`usePurchaseOrders.ts` 由內部目標反查供應商料號時 `.order('is_primary', {ascending:false})` ＋ primary 優先 reduce，避免多筆對照時最後一筆覆蓋。
+- **後端解析**：`_po_resolve_item`（簽名不變）以 `is_primary DESC, updated_at DESC NULLS LAST, created_at DESC, id` 決定性選取，回傳 `mapping_id/is_primary/candidate_count/ambiguous`。⚠️ 該 helper 為內部函式（`REVOKE ALL ... FROM public, anon, authenticated`），**前端不可直接呼叫**；且非 `SECURITY DEFINER`（`prosecdef = false`，預設 INVOKER）。
+- **採購匯入歧義提示（前端計算）**：`components/PurchaseDocImportDialog.tsx` 的模組層純函式 `ambiguousCodesOf(items, stats)` 以**與 `_po_resolve_item` 相同**的定義（同料號 `total > 1` 且 `primaryCount === 0`）計算歧義料號；資料以 `supplier_product_mappings`（RLS `authenticated` 可讀）依 `supplier_id` 取回 `vendor_product_id, is_primary` 後於客戶端過濾檔案料號。預覽表的「檢查」欄顯示 amber「料號歧義 N 個」、標頭顯示「料號歧義 N 個料號／M 張」、底部列出各張的具體料號。⚠️ **非錯誤**（伺服端仍決定性選一筆），且**刻意不重發 `import_purchase_orders_batch`**，避免動到已驗證的匯入交易。
 
 ## 8. 組件架構重點
 
