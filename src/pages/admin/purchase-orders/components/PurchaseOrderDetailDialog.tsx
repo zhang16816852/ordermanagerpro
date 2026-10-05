@@ -604,7 +604,7 @@ export function PurchaseOrderDetailDialog({
                 <PackageCheck className="h-4 w-4 mr-2" /> 收貨錄入
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>記錄收貨</DialogTitle>
                 <DialogDescription>
@@ -621,7 +621,7 @@ export function PurchaseOrderDetailDialog({
                 <CreditCard className="h-4 w-4 mr-2" /> 付款對帳
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>記錄付款</DialogTitle>
                 <DialogDescription>
