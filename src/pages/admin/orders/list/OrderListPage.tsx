@@ -58,6 +58,7 @@ export default function AdminOrderList() {
     allCancelledItems,
     aggregatedItems,
     commissionByOrder,
+    profitByOrderId,
     orderPoolGroupedItems,
     poItemsSource,
     selectedOrderIds,
@@ -130,6 +131,8 @@ export default function AdminOrderList() {
         onDateToChange={setDateTo}
         poFilter={poFilter}
         onPoFilterChange={setPoFilter}
+        businessFilter={c.businessFilter}
+        onBusinessFilterChange={c.handleBusinessFilterChange}
         repFilter={repFilter}
         onRepFilterChange={setRepFilter}
         reps={repsData}
@@ -168,6 +171,7 @@ export default function AdminOrderList() {
                   poLinkMap={poLinkMap}
                   consignmentBySourceOrder={consignmentBySourceOrderId}
                   commissionByOrder={commissionByOrder}
+                  profitByOrderId={isRep ? undefined : profitByOrderId}
                 />
               </div>
             </div>
@@ -184,6 +188,7 @@ export default function AdminOrderList() {
                 getOrderShipmentStatus={getOrderShipmentStatus}
                 getOrderTotal={getOrderTotal}
                 commissionByOrder={commissionByOrder}
+                profitByOrderId={isRep ? undefined : profitByOrderId}
               />
             </div>
           </>

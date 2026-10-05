@@ -17,6 +17,11 @@ import { Check, Share2, Trash2, RotateCcw, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/formatters';
 import { useRepCommission } from '@/hooks/useRepCommission';
+import { useRepStoreAssignments } from '@/hooks/useRepStoreAssignments';
+import { useBusinessProfitCalculator, businessProfitSummary } from '@/hooks/useBusinessProfit';
+import { useDocumentProfit, type DocProfitInputItem } from '@/hooks/useDocumentProfit';
+import { sumProfit } from '@/utils/grossProfit';
+import { ProfitCell } from '@/components/shared/ProfitCell';
 import { ParcelManager } from '@/components/shipping/ParcelManager';
 
 interface OrderDetailDialogProps {
@@ -46,6 +51,75 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, on
     const hasAnyReturns = (order?.order_items ?? []).some(
         (item) => item.line_type === 'return'
     );
+
+    // 業務身分：維持既有（業務利潤／估佣）；非業務身分：有業務門市看業務利潤，無業務門市看毛利
+    const { assignments, isRepStore } = useRepStoreAssignments();
+    const { calcForStore, costOf } = useBusinessProfitCalculator(assignments.map((a) => a.rep_id));
+
+    const detailProfitInput = useMemo<DocProfitInputItem[]>(() =>
+        (order?.order_items ?? []).map((item) => {
+            const isReturn = item.line_type === 'return';
+            return {
+                key: `${order?.id ?? 'order'}:${item.id}`,
+                productId: item.product_id,
+                variantId: item.variant_id ?? null,
+                quantity: isReturn ? -(item.quantity || 0) : item.quantity || 0,
+                unitPrice: item.unit_price || 0,
+                snapshotCost: item.unit_cost ?? null,
+                lineType: item.line_type ?? null,
+            };
+        }),
+    [order?.id, order?.order_items]);
+
+    const detailDocProfit = useDocumentProfit(detailProfitInput);
+
+    const storeProfit = useMemo(() => {
+        if (!order) return null;
+        const lines: DocProfitInputItem[] = [];
+        void lines;
+        const grossLines = detailProfitInput
+            .map((row) => detailDocProfit.byKey.get(row.key))
+            .filter((l): l is NonNullable<typeof l> => !!l);
+        const gross = grossLines.length > 0 ? sumProfit(grossLines) : null;
+        const biz = calcForStore(
+            order.store_id,
+            detailProfitInput.map((r) => ({
+                productId: r.productId,
+                variantId: r.variantId,
+                quantity: r.quantity,
+                unitPrice: r.unitPrice,
+                snapshotCost: r.snapshotCost,
+                lineType: r.lineType,
+            }))
+        );
+        if (biz) return { mode: 'business' as const, summary: businessProfitSummary(gross?.revenue ?? 0, biz), biz };
+        return { mode: 'gross' as const, summary: gross, biz: null };
+    }, [order, detailProfitInput, detailDocProfit.byKey, calcForStore]);
+
+    // 品項成本：業務身分維持空（業務利潤由 repSummary 顯示）；其餘依單據口徑（業務門市用業務口徑）
+    const costByItem = useMemo(() => {
+        if (!order || isRep) return undefined;
+        const map = new Map<string, { unitCost: number | null; costKnown: boolean }>();
+        const biz = isRepStore(order.store_id);
+        for (const row of detailProfitInput) {
+            const itemId = row.key.slice(row.key.lastIndexOf(':') + 1);
+            const line = detailDocProfit.byKey.get(row.key);
+            if (biz) {
+                const resolved = costOf(order.store_id, {
+                    productId: row.productId,
+                    variantId: row.variantId,
+                    quantity: row.quantity,
+                    unitPrice: row.unitPrice,
+                    snapshotCost: row.snapshotCost,
+                    lineType: row.lineType,
+                });
+                map.set(itemId, { unitCost: resolved.unitCost, costKnown: resolved.costKnown });
+            } else {
+                map.set(itemId, { unitCost: line?.cost ?? null, costKnown: line?.costKnown ?? false });
+            }
+        }
+        return map;
+    }, [order, isRep, isRepStore, detailProfitInput, detailDocProfit.byKey, costOf]);
 
     if (!order) return null;
 
@@ -137,10 +211,10 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, on
                     />
 
                     {/* Order Items - Desktop Table */}
-                    <OrderDetailItemsTable items={sortedOrderItems} />
+                    <OrderDetailItemsTable items={sortedOrderItems} costByItem={costByItem} />
 
                     {/* Order Items - Mobile Cards */}
-                    <OrderDetailItemsCards items={sortedOrderItems} />
+                    <OrderDetailItemsCards items={sortedOrderItems} costByItem={costByItem} />
 
                     {/* Shipping / Parcels */}
                     <div className="border-t pt-2 mt-1 space-y-2">
@@ -160,8 +234,8 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, on
                         總計：{formatCurrency(getTotalAmount())}
                     </div>
 
-                    {/* 業務利潤 / 佣金 */}
-                    {repSummary && (
+                    {/* 利潤：業務身分看業務利潤／估佣；非業務身分「有業務門市看業務利潤、無業務門市看毛利」（互斥） */}
+                    {isRep && repSummary ? (
                         <div className="flex justify-end gap-6 text-sm border-t pt-2 mt-1">
                             <span className="text-muted-foreground">
                                 業務利潤：<span className="font-semibold text-emerald-600">{formatCurrency(repSummary.totalProfit)}</span>
@@ -170,7 +244,16 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, on
                                 估佣：<span className="font-semibold text-amber-600">{formatCurrency(repSummary.totalCommission)}</span>
                             </span>
                         </div>
-                    )}
+                    ) : storeProfit?.summary ? (
+                        <div className="flex justify-end text-sm border-t pt-2 mt-1">
+                            <ProfitCell
+                                summary={storeProfit.summary}
+                                mode={storeProfit.mode}
+                                commission={storeProfit.mode === 'business' ? storeProfit.biz?.commission ?? null : null}
+                                repName={storeProfit.mode === 'business' ? storeProfit.biz?.repName ?? null : null}
+                            />
+                        </div>
+                    ) : null}
                 </div>
             </DialogContent>
         </Dialog>

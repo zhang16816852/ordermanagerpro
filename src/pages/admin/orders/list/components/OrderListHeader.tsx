@@ -8,6 +8,7 @@ import type {
   OrderStatusTab,
   OrderViewMode,
 } from '../orderListTypes';
+import type { BusinessFilter } from '../useOrderListDerived';
 
 interface OrderListHeaderProps {
   isRep: boolean;
@@ -28,6 +29,9 @@ interface OrderListHeaderProps {
   onDateToChange: (v: string) => void;
   poFilter: 'all' | 'has_po' | 'no_po';
   onPoFilterChange: (v: 'all' | 'has_po' | 'no_po') => void;
+  /** 有業務／無業務門市篩選（以 rep_store_assignments 判定） */
+  businessFilter: BusinessFilter;
+  onBusinessFilterChange: (v: BusinessFilter) => void;
   repFilter: string;
   onRepFilterChange: (v: string) => void;
   reps: any[];
@@ -56,6 +60,8 @@ export function OrderListHeader({
   onDateToChange,
   poFilter,
   onPoFilterChange,
+  businessFilter,
+  onBusinessFilterChange,
   repFilter,
   onRepFilterChange,
   reps,
@@ -110,6 +116,8 @@ export function OrderListHeader({
         onDateToChange={onDateToChange}
         poFilter={poFilter}
         onPoFilterChange={onPoFilterChange}
+        businessFilter={businessFilter}
+        onBusinessFilterChange={onBusinessFilterChange}
         repFilter={repFilter}
         onRepFilterChange={onRepFilterChange}
         reps={reps}

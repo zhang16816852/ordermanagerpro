@@ -179,6 +179,8 @@ export function ReferenceViewer({ referenceType, referenceId, open, onOpenChange
             quantity,
             shipped_quantity,
             unit_price,
+            unit_cost,
+            line_type,
             status,
             store_id,
             product_id,

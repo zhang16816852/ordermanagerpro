@@ -3,6 +3,20 @@ import { Order, OrderItem } from '@/types/order';
 import { AggregatedItem } from './components/AggregateTableView';
 import { getDisplayProductName, getOrderShipmentStatus, getOrderTotal, isReturnLine } from './orderListUtils';
 import type { AggregateFilterMode, AggregateSelectionItem, OrderViewMode } from './orderListTypes';
+import { useDocumentProfit, type DocProfitInputItem } from '@/hooks/useDocumentProfit';
+import { useRepStoreAssignments } from '@/hooks/useRepStoreAssignments';
+import { useBusinessProfitCalculator, type BusinessProfitLineInput } from '@/hooks/useBusinessProfit';
+import { sumProfit, type ProfitLine, type ProfitSummary } from '@/utils/grossProfit';
+
+export type BusinessFilter = 'all' | 'with' | 'without';
+
+export interface OrderProfitView {
+  summary: ProfitSummary | null;
+  /** business=有業務門市（顯示業務利潤／估佣）；gross=無業務門市（顯示毛利／毛利率） */
+  mode: 'business' | 'gross';
+  commission: number | null;
+  repName: string | null;
+}
 
 export interface PoProductStats {
   orderedQty: number;
@@ -17,6 +31,7 @@ export interface UseOrderListDerivedParams {
   dateFrom: string;
   dateTo: string;
   poFilter: 'all' | 'has_po' | 'no_po';
+  businessFilter: BusinessFilter;
   poLinkMap: Map<string, { poCount: number; poIds: string[] }>;
   sortField: string;
   sortDirection: 'asc' | 'desc';
@@ -44,6 +59,9 @@ export interface UseOrderListDerivedResult {
   allCancelledItems: any[];
   aggregatedItems: AggregatedItem[];
   commissionByOrder: Map<string, { totalProfit: number; totalCommission: number }> | undefined;
+  profitByOrderId: Map<string, OrderProfitView>;
+  /** 門市是否為某業務負責（rep_store_assignments） */
+  isRepStore: (storeId: string | null | undefined) => boolean;
   orderPoolGroupedItems: Record<string, { storeName: string; items: any[] }>;
   poItemsFromOrders: AggregateSelectionItem[];
   poItemsSource: AggregateSelectionItem[];
@@ -59,6 +77,7 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
     dateFrom,
     dateTo,
     poFilter,
+    businessFilter,
     poLinkMap,
     sortField,
     sortDirection,
@@ -91,6 +110,85 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
     }
     return map;
   }, [isRep, orders, computeRepOrder]);
+
+  // 真實成本毛利／業務利潤（單一批量成本查詢後分組，避免每張訂單各打一次）
+  const { assignments, isRepStore } = useRepStoreAssignments();
+  const { calcForStore } = useBusinessProfitCalculator(assignments.map((a) => a.rep_id));
+
+  const profitInput = useMemo<DocProfitInputItem[]>(() => {
+    const rows: DocProfitInputItem[] = [];
+    for (const order of orders || []) {
+      for (const item of order.order_items || []) {
+        const sign = isReturnLine(item) ? -1 : 1;
+        rows.push({
+          key: `${order.id}:${item.id}`,
+          productId: item.product_id,
+          variantId: item.variant_id ?? null,
+          quantity: sign * (item.quantity || 0),
+          unitPrice: item.unit_price || 0,
+          snapshotCost: item.unit_cost ?? null,
+          lineType: item.line_type ?? null,
+        });
+      }
+    }
+    return rows;
+  }, [orders]);
+
+  const orderProfit = useDocumentProfit(profitInput);
+
+const profitByOrderId = useMemo(() => {
+    const linesByOrder = new Map<string, ProfitLine[]>();
+    const inputByOrder = new Map<string, BusinessProfitLineInput[]>();
+    for (const row of profitInput) {
+      const orderId = row.key.slice(0, row.key.lastIndexOf(':'));
+      const line = orderProfit.byKey.get(row.key);
+      if (line) {
+        const list = linesByOrder.get(orderId);
+        if (list) list.push(line);
+        else linesByOrder.set(orderId, [line]);
+      }
+      const input = {
+        productId: row.productId,
+        variantId: row.variantId,
+        quantity: row.quantity,
+        unitPrice: row.unitPrice,
+        snapshotCost: row.snapshotCost,
+        lineType: row.lineType,
+      };
+      const ilist = inputByOrder.get(orderId);
+      if (ilist) ilist.push(input);
+      else inputByOrder.set(orderId, [input]);
+    }
+
+    const out = new Map<string, OrderProfitView>();
+    for (const order of orders || []) {
+      const lines = linesByOrder.get(order.id);
+      if (!lines || lines.length === 0) continue;
+      const gross = sumProfit(lines);
+      const biz = calcForStore(order.store_id, inputByOrder.get(order.id) ?? []);
+      if (biz) {
+        const revenue = gross.revenue;
+        out.set(order.id, {
+          summary: {
+            revenue,
+            costAmount: revenue - biz.profit,
+            knownRevenue: revenue - biz.unknownRevenue,
+            profit: biz.profit,
+            marginRate: revenue !== 0 ? biz.profit / revenue : null,
+            unknownCount: biz.unknownCount,
+            unknownRevenue: biz.unknownRevenue,
+            complete: biz.unknownCount === 0 && !biz.fullyUnknown,
+          },
+          mode: 'business',
+          commission: biz.commission,
+          repName: biz.repName,
+        });
+      } else {
+        out.set(order.id, { summary: gross, mode: 'gross', commission: null, repName: null });
+      }
+    }
+    return out;
+  }, [orders, profitInput, orderProfit.byKey, calcForStore]);
 
   // Filtering Logic (Orders)
   const itemMatchesSearch = useCallback((item: OrderItem) => {
@@ -138,9 +236,15 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
         if (poFilter === 'has_po' && !hasPO) return false;
         if (poFilter === 'no_po' && hasPO) return false;
       }
+      // 有業務／無業務篩選（以 rep_store_assignments 判定，非 orders.sales_rep_id）
+      if (businessFilter !== 'all') {
+        const hasRep = isRepStore(order.store_id);
+        if (businessFilter === 'with' && !hasRep) return false;
+        if (businessFilter === 'without' && hasRep) return false;
+      }
       return true;
     }) || [];
-  }, [orders, viewMode, matchesSearch, dateFrom, dateTo, poFilter, poLinkMap]);
+  }, [orders, viewMode, matchesSearch, dateFrom, dateTo, poFilter, poLinkMap, businessFilter, isRepStore]);
 
   const sortedOrders = useMemo(() => {
     const arr = [...filteredOrders];
@@ -159,13 +263,16 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
         case 'total_amount':
           cmp = getOrderTotal(a.order_items, a.shipping_fee) - getOrderTotal(b.order_items, b.shipping_fee);
           break;
+        case 'profit':
+          cmp = (profitByOrderId.get(a.id)?.summary?.profit ?? 0) - (profitByOrderId.get(b.id)?.summary?.profit ?? 0);
+          break;
         default:
           cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       }
       return sortDirection === 'asc' ? cmp : -cmp;
     });
     return arr;
-  }, [filteredOrders, sortField, sortDirection]);
+  }, [filteredOrders, sortField, sortDirection, profitByOrderId]);
 
   // Filtering Logic (Items - Flattened)
   const allPendingItems = useMemo(() => {
@@ -406,6 +513,8 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
     allCancelledItems,
     aggregatedItems,
     commissionByOrder,
+    profitByOrderId,
+    isRepStore,
     orderPoolGroupedItems,
     poItemsFromOrders,
     poItemsSource,

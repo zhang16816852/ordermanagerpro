@@ -16,6 +16,10 @@ import { Package, PackageCheck, Send } from 'lucide-react';
 import { SalesNoteListTable } from '@/components/sales/SalesNoteListTable';
 import { SalesNoteDetailDialog } from '@/components/sales/SalesNoteDetailDialog';
 import type { SalesNoteDetail } from '@/components/sales/SalesNoteDetailDialog';
+import { useDocumentProfit, type DocProfitInputItem } from '@/hooks/useDocumentProfit';
+import { useRepStoreAssignments } from '@/hooks/useRepStoreAssignments';
+import { useBusinessProfitCalculator, businessProfitSummary } from '@/hooks/useBusinessProfit';
+import { sumProfit, type ProfitLine, type ProfitSummary } from '@/utils/grossProfit';
 import { ConsignmentGroupedView } from '@/components/consignment/ConsignmentGroupedView';
 import type {
   ConsignmentViewOrder,
@@ -140,7 +144,10 @@ export default function StoreSalesNotes() {
               order_id,
               order:orders (code),
               sort_order,
+              product_id,
+              variant_id,
               unit_price,
+              unit_cost,
               line_type,
               line_note,
               product:products (name, code),
@@ -313,6 +320,66 @@ export default function StoreSalesNotes() {
     }));
   }, [salesNotes]);
 
+  const selectedNote = selectedNoteId ? salesNotes?.find((n) => n.id === selectedNoteId) : undefined;
+
+  // 毛利／業務利潤（單一門市，只需為目前開啟的單據計算）
+  const detailProfitInput = useMemo<DocProfitInputItem[]>(() => {
+    if (!selectedNote) return [];
+    return [...selectedNote.sales_note_items].map((item) => {
+      const oi = (item as any).order_items;
+      return {
+        key: `${selectedNote.id}:${item.id}`,
+        productId: oi?.product_id,
+        variantId: oi?.variant_id ?? null,
+        // 退貨列以負數傳入，營業額與成本同為負自然對沖
+        quantity: oi?.line_type === 'return' ? -(item.quantity || 0) : item.quantity || 0,
+        unitPrice: oi?.unit_price || 0,
+        snapshotCost: oi?.unit_cost ?? null,
+        lineType: oi?.line_type ?? null,
+      };
+    });
+  }, [selectedNote]);
+
+  const detailDocProfit = useDocumentProfit(detailProfitInput);
+  const { assignments, isRepStore } = useRepStoreAssignments();
+  const { calcForStore, costOf } = useBusinessProfitCalculator(assignments.map((a) => a.rep_id));
+
+  const detailProfit = useMemo<{
+    summary: ProfitSummary | null;
+    mode: "business" | "gross";
+    commission: number | null;
+    repName: string | null;
+  }>(() => {
+    if (!selectedNote) return { summary: null, mode: "gross", commission: null, repName: null };
+    const lines: ProfitLine[] = [];
+    for (const row of detailProfitInput) {
+      const l = detailDocProfit.byKey.get(row.key);
+      if (l) lines.push(l);
+    }
+    const gross = lines.length > 0 ? sumProfit(lines) : null;
+    const biz = calcForStore(
+      selectedNote.store_id,
+      detailProfitInput.map((r) => ({
+        productId: r.productId,
+        variantId: r.variantId,
+        quantity: r.quantity,
+        unitPrice: r.unitPrice,
+        snapshotCost: r.snapshotCost,
+        lineType: r.lineType,
+      }))
+    );
+    if (biz) {
+      const revenue = gross?.revenue ?? 0;
+      return {
+        summary: businessProfitSummary(revenue, biz),
+        mode: 'business',
+        commission: biz.commission,
+        repName: biz.repName,
+      };
+    }
+    return { summary: gross, mode: 'gross', commission: null, repName: null };
+  }, [selectedNote, detailProfitInput, detailDocProfit.byKey, calcForStore]);
+
   const selectedNoteDetail = useMemo<SalesNoteDetail | null>(() => {
     if (!selectedNoteId || !salesNotes) return null;
     const note = salesNotes.find((n) => n.id === selectedNoteId);
@@ -335,24 +402,45 @@ export default function StoreSalesNotes() {
       delivery_method_title: note.delivery_method_title,
       delivery_method_code: note.delivery_method_code,
       shipping_address: note.shipping_address,
+      profit: detailProfit.summary,
+      profitMode: detailProfit.mode,
+      commission: detailProfit.commission,
+      repName: detailProfit.repName,
       items: [...note.sales_note_items]
         .sort((a, b) => ((a as any).sort_order ?? 0) - ((b as any).sort_order ?? 0))
-        .map((item) => ({
-          id: item.id,
-          orderItemId: (item as any).order_items?.id,
-          orderCode: (item as any).order_items?.order?.code,
-          quantity: item.quantity,
-          returnedQuantity: (item as any).returned_quantity ?? 0,
-          productSku: item.order_items?.product?.code || '',
-          productName: item.order_items?.product?.name || '',
-          variantName: item.order_items?.product_variant?.name || null,
-          unitPrice: (item as any).order_items?.unit_price,
-          lineType: (item as any).order_items?.line_type,
-          lineNote: (item as any).order_items?.line_note,
-          sortOrder: (item as any).sort_order ?? 0,
-        })),
+        .map((item) => {
+          const line = detailDocProfit.byKey.get(`${note.id}:${item.id}`);
+          const oi = (item as any).order_items;
+          // 有業務門市時逐列成本改用「業務口徑」，避免總額是業務利潤但明細成本是毛利口徑
+          const bizLine = isRepStore(note.store_id)
+            ? costOf(note.store_id, {
+                productId: oi?.product_id,
+                variantId: oi?.variant_id ?? null,
+                quantity: item.quantity || 0,
+                unitPrice: oi?.unit_price || 0,
+                snapshotCost: oi?.unit_cost ?? null,
+                lineType: oi?.line_type,
+              })
+            : null;
+          return {
+            id: item.id,
+            orderItemId: (item as any).order_items?.id,
+            orderCode: (item as any).order_items?.order?.code,
+            quantity: item.quantity,
+            returnedQuantity: (item as any).returned_quantity ?? 0,
+            productSku: item.order_items?.product?.code || '',
+            productName: item.order_items?.product?.name || '',
+            variantName: item.order_items?.product_variant?.name || null,
+            unitPrice: (item as any).order_items?.unit_price,
+            unitCost: bizLine ? bizLine.unitCost : line?.cost ?? null,
+            costKnown: bizLine ? bizLine.costKnown : line?.costKnown ?? false,
+            lineType: (item as any).order_items?.line_type,
+            lineNote: (item as any).order_items?.line_note,
+            sortOrder: (item as any).sort_order ?? 0,
+          };
+        }),
     };
-  }, [selectedNoteId, salesNotes]);
+  }, [selectedNoteId, salesNotes, detailProfit, detailDocProfit.byKey, costOf, isRepStore]);
 
   const handleConfirmReceive = (noteId: string) => {
     confirmReceiveMutation.mutate(noteId);

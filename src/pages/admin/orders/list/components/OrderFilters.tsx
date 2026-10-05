@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { StorePicker } from '@/components/ui/StorePicker';
 import { Search, Package, Truck, CheckSquare, List, LayoutGrid, ClipboardList, Calendar } from 'lucide-react';
 import type { AggregateFilterMode } from '../orderListTypes';
+import type { BusinessFilter } from '../useOrderListDerived';
 
 interface OrderFiltersProps {
   statusTab: 'pending' | 'processing' | 'shipped';
@@ -24,6 +25,9 @@ interface OrderFiltersProps {
   onDateToChange: (v: string) => void;
   poFilter: 'all' | 'has_po' | 'no_po';
   onPoFilterChange: (v: 'all' | 'has_po' | 'no_po') => void;
+  /** 有業務／無業務門市篩選（以 rep_store_assignments 判定） */
+  businessFilter: BusinessFilter;
+  onBusinessFilterChange: (v: BusinessFilter) => void;
   repFilter: string;
   onRepFilterChange: (v: string) => void;
   reps: { user_id: string; full_name: string | null; email: string }[];
@@ -47,6 +51,8 @@ export function OrderFilters({
   onDateToChange,
   poFilter,
   onPoFilterChange,
+  businessFilter,
+  onBusinessFilterChange,
   repFilter,
   onRepFilterChange,
   reps,
@@ -182,6 +188,16 @@ export function OrderFilters({
                 <SelectItem value="all">全部</SelectItem>
                 <SelectItem value="has_po">已轉採購</SelectItem>
                 <SelectItem value="no_po">未轉採購</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={businessFilter} onValueChange={(v) => onBusinessFilterChange(v as BusinessFilter)}>
+              <SelectTrigger className="w-40 h-10 border-muted">
+                <SelectValue placeholder="業務狀態" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">業務：全部</SelectItem>
+                <SelectItem value="with">有業務（看業務利潤）</SelectItem>
+                <SelectItem value="without">無業務（看毛利）</SelectItem>
               </SelectContent>
             </Select>
           </>

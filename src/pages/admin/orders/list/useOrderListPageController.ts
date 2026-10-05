@@ -8,7 +8,7 @@ import { Order } from '@/types/order';
 import { useOrdersList } from './hooks/useOrdersList';
 import { useRepCommission } from '@/hooks/useRepCommission';
 import { useOrderListQueries } from './useOrderListQueries';
-import { useOrderListDerived } from './useOrderListDerived';
+import { useOrderListDerived, type BusinessFilter } from './useOrderListDerived';
 import { useOrderListMutations } from './useOrderListMutations';
 import { useOrderListSelections } from './useOrderListSelections';
 import { useOrderListExports } from './useOrderListExports';
@@ -38,6 +38,11 @@ export function useOrderListPageController() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [poFilter, setPoFilter] = useState<'all' | 'has_po' | 'no_po'>('all');
+  const [businessFilter, setBusinessFilter] = useState<BusinessFilter>(
+    (searchParams.get('business') === 'with' || searchParams.get('business') === 'without')
+      ? searchParams.get('business') as BusinessFilter
+      : 'all'
+  );
   const [repFilter, setRepFilter] = useState<string>('all');
   const [aggStatus, setAggStatus] = useState<AggregateFilterMode>(
     searchParams.get('agg') === 'outstanding' ? 'outstanding'
@@ -125,6 +130,7 @@ export function useOrderListPageController() {
     dateFrom,
     dateTo,
     poFilter,
+    businessFilter,
     poLinkMap,
     sortField,
     sortDirection,
@@ -147,6 +153,7 @@ export function useOrderListPageController() {
     allCancelledItems,
     aggregatedItems,
     commissionByOrder,
+    profitByOrderId,
     orderPoolGroupedItems,
     poItemsSource,
   } = derived;
@@ -303,6 +310,16 @@ export function useOrderListPageController() {
     }, { replace: true });
   };
 
+  const handleBusinessFilterChange = (v: BusinessFilter) => {
+    setBusinessFilter(v);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (v && v !== "all") next.set("business", v);
+      else next.delete("business");
+      return next;
+    }, { replace: true });
+  };
+
   const { handleExportAggregateCSV, handleExportAggregateExcel, handleExportOrdersCSV } =
     useOrderListExports({
       filteredOrders,
@@ -337,6 +354,8 @@ export function useOrderListPageController() {
     setDateTo,
     poFilter,
     setPoFilter,
+    businessFilter,
+    handleBusinessFilterChange,
     repFilter,
     setRepFilter,
     repsData,
@@ -357,6 +376,7 @@ export function useOrderListPageController() {
     allCancelledItems,
     aggregatedItems,
     commissionByOrder,
+    profitByOrderId,
     orderPoolGroupedItems,
     poItemsSource,
     selectedOrderIds,

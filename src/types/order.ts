@@ -16,6 +16,8 @@ export interface OrderItem {
     quantity: number;
     shipped_quantity: number;
     unit_price: number;
+    /** 真實進貨成本快照（>0 時為毛利計算最優先來源） */
+    unit_cost?: number | null;
     status: OrderItemStatus;
     store_id: string;
     sort_order?: number;

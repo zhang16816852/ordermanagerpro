@@ -16,6 +16,8 @@ import { formatCurrency } from '@/lib/formatters';
 import { zhTW } from 'date-fns/locale';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import { Order, OrderItem } from '@/types/order';
+import { ProfitCell } from '@/components/shared/ProfitCell';
+import type { OrderProfitView } from '../useOrderListDerived';
 
 interface OrderTableViewProps {
   orders: Order[];
@@ -33,6 +35,8 @@ interface OrderTableViewProps {
   poLinkMap: Map<string, { poCount: number; poIds: string[] }>;
   consignmentBySourceOrder: Map<string, any>;
   commissionByOrder?: Map<string, { totalProfit: number; totalCommission: number }>;
+  /** 擁有者視圖：有業務門市顯示業務利潤／估佣，無業務門市顯示毛利／毛利率（互斥） */
+  profitByOrderId?: Map<string, OrderProfitView>;
 }
 
 export function OrderTableView({
@@ -51,6 +55,7 @@ export function OrderTableView({
   poLinkMap,
   consignmentBySourceOrder,
   commissionByOrder,
+  profitByOrderId,
 }: OrderTableViewProps) {
   const getOrderShipmentStatus = (items: OrderItem[]) => {
     if (items.length === 0) return 'waiting';
@@ -115,7 +120,9 @@ export function OrderTableView({
             <SortableHead field="store_name">店鋪</SortableHead>
             <SortableHead field="item_count">品項數（數量）</SortableHead>
             <TableHead className="text-right">金額</TableHead>
-            {commissionByOrder && <TableHead className="text-right">估佣（利潤）</TableHead>}
+            {profitByOrderId
+              ? <SortableHead field="profit">利潤</SortableHead>
+              : commissionByOrder && <TableHead className="text-right">估佣（利潤）</TableHead>}
             <TableHead>來源</TableHead>
             <TableHead>訂單狀態</TableHead>
             <TableHead>出貨狀態</TableHead>
@@ -132,7 +139,7 @@ export function OrderTableView({
                 <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-8" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
-                {commissionByOrder && <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>}
+                {(profitByOrderId || commissionByOrder) && <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>}
                 <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-12" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-16" /></TableCell>
@@ -142,7 +149,11 @@ export function OrderTableView({
             ))
           ) : orders.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={(statusTab === 'pending' || statusTab === 'processing') ? (commissionByOrder ? 11 : 10) : (commissionByOrder ? 10 : 9)} className="text-center py-12 text-muted-foreground italic">
+              <TableCell colSpan={
+                (statusTab === 'pending' || statusTab === 'processing' ? 1 : 0) +
+                (profitByOrderId || commissionByOrder ? 1 : 0) +
+                (statusTab === 'pending' || statusTab === 'processing' ? 10 : 9)
+              } className="text-center py-12 text-muted-foreground italic">
                 沒有找到符合條件的訂單
               </TableCell>
             </TableRow>
@@ -184,21 +195,39 @@ export function OrderTableView({
                     </span>
                   </TableCell>
                   <TableCell className="text-right font-bold">{formatCurrency(getOrderTotal(order.order_items, order.shipping_fee))}</TableCell>
-                  {commissionByOrder && (() => {
-                    const c = commissionByOrder.get(order.id);
-                    return (
-                      <TableCell className="text-right">
-                        {c ? (
-                          <div className="text-xs">
-                            <div className="font-semibold text-amber-600">{formatCurrency(c.totalCommission)}</div>
-                            <div className="text-muted-foreground">利潤 {formatCurrency(c.totalProfit)}</div>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
-                      </TableCell>
-                    );
-                  })()}
+                  {profitByOrderId
+                    ? (() => {
+                        const p = profitByOrderId.get(order.id);
+                        return (
+                          <TableCell className="text-right">
+                            {p?.summary ? (
+                              <ProfitCell
+                                summary={p.summary}
+                                mode={p.mode}
+                                commission={p.commission}
+                                repName={p.repName}
+                              />
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </TableCell>
+                        );
+                      })()
+                    : commissionByOrder && (() => {
+                        const c = commissionByOrder.get(order.id);
+                        return (
+                          <TableCell className="text-right">
+                            {c ? (
+                              <div className="text-xs">
+                                <div className="font-semibold text-amber-600">{formatCurrency(c.totalCommission)}</div>
+                                <div className="text-muted-foreground">利潤 {formatCurrency(c.totalProfit)}</div>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </TableCell>
+                        );
+                      })()}
                     <TableCell>
                       <Badge variant="outline">{getSourceLabel(order.source_type)}</Badge>
                     </TableCell>

@@ -4,6 +4,10 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useRepCommission } from "@/hooks/useRepCommission";
+import { useRepStoreAssignments } from "@/hooks/useRepStoreAssignments";
+import { useDocumentProfit, type DocProfitInputItem } from "@/hooks/useDocumentProfit";
+import { useBusinessProfitCalculator, businessProfitSummary } from "@/hooks/useBusinessProfit";
+import { sumProfit, type ProfitLine, type ProfitSummary } from "@/utils/grossProfit";
 import { DocImportDialog } from "@/components/orders/DocImportDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -48,6 +52,7 @@ export default function AdminSalesNotes() {
   });
   const [statusFilter, setStatusFilter] = useState<string>(searchParams.get("status") || "all");
   const [repFilter, setRepFilter] = useState<string>(searchParams.get("rep") || "all");
+  const [businessFilter, setBusinessFilter] = useState<string>(searchParams.get("business") || "all");
   const [selectedNote, setSelectedNote] = useState<typeof salesNotes[number] | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
   const [importOpen, setImportOpen] = useState(false);
@@ -128,6 +133,7 @@ export default function AdminSalesNotes() {
               order_id,
               quantity,
               unit_price,
+              unit_cost,
               sort_order,
               product_id,
               variant_id,
@@ -135,7 +141,7 @@ export default function AdminSalesNotes() {
               line_note,
               order:orders(code),
               product:products(name, code),
-              product_variant:product_variants(name)
+              product_variant:product_variants(name, sku)
             )
           )
         `)
@@ -171,13 +177,20 @@ export default function AdminSalesNotes() {
     },
   });
 
+const { isRepStore, repNameOf } = useRepStoreAssignments();
+
   const filteredNotes = salesNotes?.filter((note) => {
     const searchLower = search.toLowerCase();
+    if (businessFilter !== "all") {
+      const hasBusiness = isRepStore(note.store_id);
+      if (businessFilter === "with" && !hasBusiness) return false;
+      if (businessFilter === "without" && hasBusiness) return false;
+    }
     return (
       note.id.toLowerCase().includes(searchLower) ||
       (note.code && note.code.toLowerCase().includes(searchLower)) ||
-      note.store?.name?.toLowerCase().includes(searchLower) ||
-      note.store?.code?.toLowerCase().includes(searchLower)
+      (note.store?.name?.toLowerCase().includes(searchLower)) ||
+      (note.store?.code?.toLowerCase().includes(searchLower))
     );
   });
 
@@ -237,7 +250,7 @@ export default function AdminSalesNotes() {
     return products;
   }, [salesNotes, search]);
 
-  const visibleNotes = filteredNotes ?? [];
+  const visibleNotes = useMemo(() => filteredNotes ?? [], [filteredNotes]);
 
   const unreceivedCount = visibleNotes.filter(n => n.payment_status !== "paid").length;
   const receivedCount = visibleNotes.filter(n => n.payment_status === "paid").length;
@@ -249,6 +262,75 @@ export default function AdminSalesNotes() {
 
   const productTotalQty = aggregatedProducts.reduce((s, p) => s + p.totalQuantity, 0);
   const productTotalAmount = aggregatedProducts.reduce((s, p) => s + p.totalAmount, 0);
+
+  // 利潤／毛利：把全部可見單據的品項攤平後一次計算，再依 noteId 分組
+  // （單一 useDocumentProfit 呼叫 → 只有一份成本查詢）
+  const profitInput = useMemo<DocProfitInputItem[]>(() => {
+    const rows: DocProfitInputItem[] = [];
+    for (const note of visibleNotes) {
+      for (const item of note.sales_note_items || []) {
+        const oi = item.order_item;
+        if (!oi) continue;
+        rows.push({
+          key: `${note.id}:${item.id}`,
+          productId: oi.product_id,
+          variantId: oi.variant_id ?? null,
+          // 退貨列以負數傳入，營業額與成本同為負自然對沖
+          quantity: oi.line_type === 'return' ? -(item.quantity || 0) : item.quantity || 0,
+          unitPrice: oi.unit_price || 0,
+          snapshotCost: oi.unit_cost ?? null,
+          lineType: oi.line_type ?? null,
+        });
+      }
+    }
+    return rows;
+  }, [visibleNotes]);
+
+  const docProfit = useDocumentProfit(profitInput);
+
+  const profitByNoteId = useMemo(() => {
+    const grouped = new Map<string, ProfitLine[]>();
+    for (const row of profitInput) {
+      const noteId = row.key.slice(0, row.key.lastIndexOf(':'));
+      const line = docProfit.byKey.get(row.key);
+      if (!line) continue;
+      const list = grouped.get(noteId);
+      if (list) list.push(line);
+      else grouped.set(noteId, [line]);
+    }
+    const out = new Map<string, ProfitSummary>();
+    for (const [noteId, lines] of grouped) out.set(noteId, sumProfit(lines));
+    return out;
+  }, [profitInput, docProfit.byKey]);
+
+  // 有業務門市的單據改顯示「業務利潤／估佣」（與毛利互斥）
+  // 業務口徑：快照 → rep_product_costs → 變體批發價（與 useRepCommission 一致）
+  const { assignments } = useRepStoreAssignments();
+  const { calcForStore, costOf } = useBusinessProfitCalculator(assignments.map((a) => a.rep_id));
+  const businessProfitByNoteId = useMemo(() => {
+    const map = new Map<string, { profit: number; commission: number; repName: string; summary: ProfitSummary }>();
+    for (const note of visibleNotes) {
+      if (!isRepStore(note.store_id)) continue;
+      const items = (note.sales_note_items || []).map((item: any) => ({
+        productId: item.order_item?.product_id,
+        variantId: item.order_item?.variant_id ?? null,
+        quantity: item.order_item?.line_type === 'return' ? -(item.quantity || 0) : item.quantity || 0,
+        unitPrice: item.order_item?.unit_price || 0,
+        snapshotCost: item.order_item?.unit_cost ?? null,
+        lineType: item.order_item?.line_type,
+      }));
+      const res = calcForStore(note.store_id, items);
+      if (!res) continue;
+      const gross = profitByNoteId.get(note.id);
+      map.set(note.id, {
+        profit: res.profit,
+        commission: res.commission,
+        repName: res.repName ?? '未命名業務',
+        summary: businessProfitSummary(gross?.revenue ?? 0, res),
+      });
+    }
+    return map;
+  }, [visibleNotes, isRepStore, calcForStore, profitByNoteId]);
 
   // 業務佣金彙總（僅業務身分顯示）
   const { isRep, computeOrder: computeRepOrder } = useRepCommission();
@@ -316,7 +398,16 @@ export default function AdminSalesNotes() {
     hasReturned: (note.sales_note_items || []).some((i: any) => (i.returned_quantity || 0) > 0),
     created_at: note.created_at,
     shipped_at: note.shipped_at,
-    received_at: note.received_at
+    received_at: note.received_at,
+    // 有業務門市 → 只顯示業務利潤／估佣；無業務門市 → 只顯示毛利／毛利率（互斥）
+    profit: (() => {
+      const biz = businessProfitByNoteId.get(note.id);
+      if (biz) return biz.summary;
+      return profitByNoteId.get(note.id) || null;
+    })(),
+    profitMode: (isRepStore(note.store_id) ? "business" : "gross") as "business" | "gross",
+    commission: businessProfitByNoteId.get(note.id)?.commission ?? null,
+    repName: repNameOf(note.store_id),
   }));
 
   // Map data for the dialog component — use live query data so edits refresh immediately
@@ -342,22 +433,47 @@ export default function AdminSalesNotes() {
       delivery_method_title: live.delivery_method_title,
       delivery_method_code: live.delivery_method_code,
       shipping_address: live.shipping_address,
+      // 利潤／毛利：有業務門市顯示業務利潤與估佣，無業務門市顯示毛利（互斥）
+      profit: (() => {
+        const biz = businessProfitByNoteId.get(live.id);
+        if (biz) return biz.summary;
+        return profitByNoteId.get(live.id) || null;
+      })(),
+      profitMode: (isRepStore(live.store_id) ? "business" : "gross") as "business" | "gross",
+      commission: businessProfitByNoteId.get(live.id)?.commission ?? null,
+      repName: repNameOf(live.store_id),
       items: [...(live.sales_note_items || [])]
         .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-        .map((item: any) => ({
-          id: item.id,
-          orderItemId: item.order_item?.id,
-          orderCode: item.order_item?.order?.code,
-          quantity: item.quantity,
-          returnedQuantity: item.returned_quantity ?? 0,
-          productName: item.order_item?.product?.name || "未知產品",
-          productSku: item.order_item?.product?.code || "-",
-          variantName: item.order_item?.product_variant?.name,
-          unitPrice: item.order_item?.unit_price,
-          lineType: item.order_item?.line_type,
-          lineNote: item.order_item?.line_note,
-          sortOrder: item.sort_order ?? 0
-        }))
+        .map((item: any) => {
+          const line = docProfit.byKey.get(`${live.id}:${item.id}`);
+          // 有業務門市時逐列成本改用「業務口徑」，避免總額是業務利潤但明細成本是毛利口徑
+          const bizLine = isRepStore(live.store_id)
+            ? costOf(live.store_id, {
+                productId: item.order_item?.product_id,
+                variantId: item.order_item?.variant_id ?? null,
+                quantity: item.quantity || 0,
+                unitPrice: item.order_item?.unit_price || 0,
+                snapshotCost: item.order_item?.unit_cost ?? null,
+                lineType: item.order_item?.line_type,
+              })
+            : null;
+          return {
+            id: item.id,
+            orderItemId: item.order_item?.id,
+            orderCode: item.order_item?.order?.code,
+            quantity: item.quantity,
+            returnedQuantity: item.returned_quantity ?? 0,
+            productName: item.order_item?.product?.name || "未知產品",
+            productSku: item.order_item?.product?.code || "-",
+            variantName: item.order_item?.product_variant?.name,
+            unitPrice: item.order_item?.unit_price,
+            unitCost: bizLine ? bizLine.unitCost : line?.cost ?? null,
+            costKnown: bizLine ? bizLine.costKnown : line?.costKnown ?? false,
+            lineType: item.order_item?.line_type,
+            lineNote: item.order_item?.line_note,
+            sortOrder: item.sort_order ?? 0,
+          };
+        })
     };
   })() : null;
 
@@ -376,7 +492,7 @@ export default function AdminSalesNotes() {
       const items = [...(note.sales_note_items || [])].sort(
         (a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
       );
-      rows.push([`銷貨單 ${note.code || note.id.slice(0, 8)}`, "", "", ""]);
+      rows.push([`銷貨單 ${note.code || note.id.slice(0, 8)}`, "", "", "", ""]);
       rows.push([
         "店家",
         note.store?.name || "-",
@@ -384,8 +500,9 @@ export default function AdminSalesNotes() {
         note.shipped_at
           ? format(new Date(note.shipped_at), "yyyy/MM/dd")
           : format(new Date(note.created_at), "yyyy/MM/dd"),
+        "",
       ]);
-      rows.push(["商品名稱", "數量", "單價", "銷售金額"]);
+      rows.push(["變體編號", "商品名稱", "數量", "單價", "銷售金額"]);
 
       let subtotal = 0;
       let qty = 0;
@@ -394,22 +511,24 @@ export default function AdminSalesNotes() {
           item.order_item?.product_variant?.name ||
           item.order_item?.product?.name ||
           "未知產品";
+        // 優先取變體 SKU（變體編號）；無變體的品項回退產品編號
+        const code = item.order_item?.product_variant?.sku || item.order_item?.product?.code || "-";
         const unit = Number(item.order_item?.unit_price || 0);
         const amt = Number(item.quantity || 0) * unit;
-        rows.push([name, Number(item.quantity || 0), unit, amt]);
+        rows.push([code, name, Number(item.quantity || 0), unit, amt]);
         subtotal += amt;
         qty += Number(item.quantity || 0);
       }
-      rows.push(["小計", qty, "", subtotal]);
+      rows.push(["小計", "", qty, "", subtotal]);
       rows.push([]);
       grandTotal += subtotal;
       grandQty += qty;
     }
 
-    rows.push(["總計", `${notesToExport.length} 張 · 共 ${grandQty} 件`, "", grandTotal]);
+    rows.push(["總計", `${notesToExport.length} 張 · 共 ${grandQty} 件`, "", "", grandTotal]);
 
     const ws = xlsx.utils.aoa_to_sheet(rows);
-    ws["!cols"] = [{ wch: 44 }, { wch: 14 }, { wch: 12 }, { wch: 14 }];
+    ws["!cols"] = [{ wch: 18 }, { wch: 44 }, { wch: 10 }, { wch: 12 }, { wch: 14 }];
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, "銷貨單");
     xlsx.writeFile(wb, `銷貨單匯出_${format(new Date(), "yyyyMMdd")}.xlsx`);
@@ -564,6 +683,26 @@ export default function AdminSalesNotes() {
               </SelectContent>
             </Select>
 
+            {/* 有業務 / 無業務 篩選（決定該單顯示「業務利潤」或「毛利」） */}
+            <Select value={businessFilter} onValueChange={(v) => {
+              setBusinessFilter(v);
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                if (v && v !== "all") next.set("business", v);
+                else next.delete("business");
+                return next;
+              }, { replace: true });
+            }}>
+              <SelectTrigger className="flex-1 min-w-[120px]">
+                <SelectValue placeholder="全部單據" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部單據</SelectItem>
+                <SelectItem value="with">有業務</SelectItem>
+                <SelectItem value="without">無業務</SelectItem>
+              </SelectContent>
+            </Select>
+
             {/* Date range filter */}
             <Popover>
               <PopoverTrigger asChild>
@@ -713,6 +852,7 @@ export default function AdminSalesNotes() {
                 }
               }}
               showStoreColumn={true}
+              showProfit={!isRep}
               selectable={true}
               selectedIds={selectedNoteIds}
               onSelectionChange={setSelectedNoteIds}

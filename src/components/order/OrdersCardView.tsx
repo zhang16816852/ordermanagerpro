@@ -8,6 +8,8 @@ import { zhTW } from 'date-fns/locale';
 import { OrderStatusBadge } from './OrderStatusBadge';
 import { Order, OrderItem } from '@/types/order';
 import { formatCurrency } from '@/lib/formatters';
+import { ProfitCell } from '@/components/shared/ProfitCell';
+import type { OrderProfitView } from '@/pages/admin/orders/list/useOrderListDerived';
 
 interface OrdersCardViewProps {
     orders: Order[] | undefined;
@@ -20,6 +22,8 @@ interface OrdersCardViewProps {
     getOrderShipmentStatus: (items: OrderItem[]) => string;
     getOrderTotal: (items: OrderItem[], shippingFee?: number | null) => number;
     commissionByOrder?: Map<string, { totalProfit: number; totalCommission: number }>;
+  /** 擁有者視圖：有業務門市顯示業務利潤／估佣，無業務門市顯示毛利／毛利率（互斥） */
+  profitByOrderId?: Map<string, OrderProfitView>;
 }
 
 export function OrdersCardView({
@@ -33,6 +37,7 @@ export function OrdersCardView({
     getOrderShipmentStatus,
     getOrderTotal,
     commissionByOrder,
+  profitByOrderId,
 }: OrdersCardViewProps) {
     return (
         <div className="md:hidden flex-1 overflow-y-auto space-y-3 pr-1">
@@ -108,21 +113,40 @@ export function OrdersCardView({
                                     <span className="text-xs text-muted-foreground">訂單金額</span>
                                     <span className="text-lg font-bold text-primary">{formatCurrency(getOrderTotal(order.order_items, order.shipping_fee))}</span>
                                 </div>
-                                {commissionByOrder && (() => {
-                                    const c = commissionByOrder.get(order.id);
-                                    return (
-                                        <div className="flex justify-between items-center text-xs">
-                                            <span className="text-muted-foreground">估佣（利潤）</span>
-                                            {c ? (
-                                                <span className="font-semibold text-amber-600">
-                                                    {formatCurrency(c.totalCommission)} / 利潤 {formatCurrency(c.totalProfit)}
+                                {profitByOrderId
+                                    ? (() => {
+                                        const p = profitByOrderId.get(order.id);
+                                        if (!p?.summary) return null;
+                                        return (
+                                            <div className="flex justify-between items-start text-xs gap-2">
+                                                <span className="text-muted-foreground shrink-0">
+                                                    {p.mode === 'business' ? '業務利潤' : '毛利'}
                                                 </span>
-                                            ) : (
-                                                <span className="text-muted-foreground">—</span>
-                                            )}
-                                        </div>
-                                    );
-                                })()}
+                                                <ProfitCell
+                                                    summary={p.summary}
+                                                    mode={p.mode}
+                                                    commission={p.commission}
+                                                    repName={p.repName}
+                                                    className="text-right"
+                                                />
+                                            </div>
+                                        );
+                                    })()
+                                    : commissionByOrder && (() => {
+                                        const c = commissionByOrder.get(order.id);
+                                        return (
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="text-muted-foreground">估佣（利潤）</span>
+                                                {c ? (
+                                                    <span className="font-semibold text-amber-600">
+                                                        {formatCurrency(c.totalCommission)} / 利潤 {formatCurrency(c.totalProfit)}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-muted-foreground">—</span>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
                             </CardContent>
                         </Card>
                     );

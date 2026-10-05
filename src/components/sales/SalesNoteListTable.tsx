@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import { Json } from "@/integrations/supabase/types";
 import { formatCurrency } from "@/lib/formatters";
 import { Eye, Trash2, Copy, Package, Store, CheckCircle2, Clock } from "lucide-react";
+import { ProfitCell, type ProfitMode } from "@/components/shared/ProfitCell";
+import type { ProfitSummary } from "@/utils/grossProfit";
 interface SalesNoteSummary {
     id: string;
     code?: string;
@@ -24,6 +26,14 @@ interface SalesNoteSummary {
     created_at: string;
     shipped_at?: string | null;
     received_at?: string | null;
+    /** 利潤／毛利呈現資料（無則不顯示該欄） */
+    profit?: ProfitSummary | null;
+    /** 'business'＝業務利潤／估佣；'gross'＝毛利／毛利率 */
+    profitMode?: ProfitMode;
+    /** 業務模式的估佣金額 */
+    commission?: number | null;
+    /** 業務模式的負責業務（多筆時為「A 等 N 位」） */
+    repName?: string | null;
 }
 
 const PaymentStatusBadge = ({ status }: { status?: string }) => {
@@ -39,6 +49,8 @@ interface SalesNoteListTableProps {
     onView: (note: any) => void; // Using any for now as the specialized data object might differ, but we pass the original object back
     onDelete?: (id: string) => void;
     showStoreColumn?: boolean;
+    /** 顯示利潤／毛利欄（有業務門市＝業務利潤＋估佣，無業務＝毛利＋毛利率） */
+    showProfit?: boolean;
     selectable?: boolean;
     selectedIds?: string[];
     onSelectionChange?: (ids: string[]) => void;
@@ -50,6 +62,7 @@ export function SalesNoteListTable({
     onView,
     onDelete,
     showStoreColumn = true,
+    showProfit = false,
     selectable = false,
     selectedIds = [],
     onSelectionChange
@@ -157,6 +170,7 @@ export function SalesNoteListTable({
                             <TableHead>狀態</TableHead>
                             <TableHead className="text-right">項目數（件數）</TableHead>
                             <TableHead className="text-right">金額</TableHead>
+                            {showProfit && <TableHead className="text-right">利潤 / 毛利</TableHead>}
                             <TableHead>出貨 / 收貨時間</TableHead>
                             <TableHead>操作</TableHead>
                             <TableHead className="w-12"></TableHead>
@@ -200,6 +214,21 @@ export function SalesNoteListTable({
                                     {note.totalQty ? <div className="text-xs text-muted-foreground">共 {note.totalQty} 件</div> : null}
                                 </TableCell>
                                 <TableCell className="text-right font-semibold">{formatCurrency(note.amount || 0)}</TableCell>
+                                {showProfit && (
+                                    <TableCell>
+                                        {note.profit ? (
+                                            <ProfitCell
+                                                summary={note.profit}
+                                                mode={note.profitMode || 'gross'}
+                                                commission={note.commission}
+                                                repName={note.repName}
+                                                compact
+                                            />
+                                        ) : (
+                                            <span className="text-xs text-muted-foreground">—</span>
+                                        )}
+                                    </TableCell>
+                                )}
                                 <TableCell className="text-xs">
                                     {note.received_at ? (
                                         <span className="text-green-600 font-medium flex items-center gap-1">
@@ -313,6 +342,19 @@ export function SalesNoteListTable({
                             <div className="flex items-center justify-end gap-2 font-semibold">
                                 金額: {formatCurrency(note.amount || 0)}
                             </div>
+                            {showProfit && note.profit && (
+                                <div className="col-span-2 flex items-center justify-between gap-2 border-t pt-2">
+                                    <span className="text-xs text-muted-foreground">
+                                        {note.profitMode === 'business' ? '業務利潤 / 估佣' : '毛利'}
+                                    </span>
+                                    <ProfitCell
+                                        summary={note.profit}
+                                        mode={note.profitMode || 'gross'}
+                                        commission={note.commission}
+                                        repName={note.repName}
+                                    />
+                                </div>
+                            )}
                         </div>
 
                         {/* 底部：時間狀態與分享連結 */}

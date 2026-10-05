@@ -20,6 +20,8 @@ import { SharedReceiptExport } from "@/pages/share/SharedReceiptExport";
 import { EntryDialog } from "@/pages/admin/accounting/components/EntryDialog";
 import { AccountingEntry, AccountingEntryReference, Account, AccountingCategory } from "@/pages/admin/accounting/types";
 import { ParcelManager } from "@/components/shipping/ParcelManager";
+import { ProfitCell, type ProfitMode } from "@/components/shared/ProfitCell";
+import type { ProfitSummary } from "@/utils/grossProfit";
 
 export interface SalesNoteItem {
     id: string;
@@ -30,6 +32,10 @@ export interface SalesNoteItem {
     productSku: string;
     variantName?: string | null;
     unitPrice?: number;
+    /** 真實進貨成本（快照優先，其次廠商對照／採購單） */
+    unitCost?: number | null;
+    /** 該品項成本是否已知（false 時毛利不可計算） */
+    costKnown?: boolean;
     sortOrder?: number;
     returnedQuantity?: number;
     lineType?: "sale" | "exchange" | "return" | null;
@@ -56,6 +62,11 @@ export interface SalesNoteDetail {
     delivery_method_id?: string | null;
     delivery_method_title?: string | null;
     delivery_method_code?: string | null;
+    /** 利潤／毛利區塊資料（由呼叫端注入，null 時不顯示） */
+    profit?: ProfitSummary | null;
+    profitMode?: ProfitMode;
+    commission?: number | null;
+    repName?: string | null;
     shipping_address?: {
         recipient?: string | null;
         phone?: string | null;
@@ -419,6 +430,9 @@ export function SalesNoteDetailDialog({
                                         {sortedItems[0]?.unitPrice !== undefined && (
                                             <TableHead className="text-right">單價</TableHead>
                                         )}
+                                        {sortedItems[0]?.unitCost !== undefined && (
+                                            <TableHead className="text-right">成本</TableHead>
+                                        )}
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -445,6 +459,15 @@ export function SalesNoteDetailDialog({
                                             <TableCell className="text-right font-medium">{item.quantity}</TableCell>
                                             {item.unitPrice !== undefined && (
                                                 <TableCell className="text-right text-muted-foreground">${item.unitPrice}</TableCell>
+                                            )}
+                                            {item.unitCost !== undefined && (
+                                                <TableCell className="text-right text-muted-foreground">
+                                                    {item.costKnown === false ? (
+                                                        <span className="text-amber-600" title="查無對照廠商或有效採購單，無法計算毛利">成本未知</span>
+                                                    ) : (
+                                                        `$${item.unitCost}`
+                                                    )}
+                                                </TableCell>
                                             )}
                                         </TableRow>
                                     ))}
@@ -479,6 +502,16 @@ export function SalesNoteDetailDialog({
                                             <div><span className="text-muted-foreground">數量：</span>{item.quantity}</div>
                                             {item.unitPrice !== undefined && <div className="font-semibold">${item.unitPrice}</div>}
                                         </div>
+                                        {item.unitCost !== undefined && (
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-muted-foreground">成本：</span>
+                                                {item.costKnown === false ? (
+                                                    <span className="text-amber-600">成本未知</span>
+                                                ) : (
+                                                    <span>${item.unitCost}</span>
+                                                )}
+                                            </div>
+                                        )}
                                     </CardContent>
                                 </Card>
                             ))}
@@ -501,6 +534,28 @@ export function SalesNoteDetailDialog({
                         <div className="flex justify-end items-baseline gap-2 pt-2">
                             <span className="text-sm text-muted-foreground">總計</span>
                             <span className="text-xl font-bold text-primary">{formatCurrency(totalAmount)}</span>
+                        </div>
+                    )}
+
+                    {/* 利潤／毛利（與總計互斥顯示：有業務門市看業務利潤，無業務看毛利） */}
+                    {note.profit && (
+                        <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2 print:hidden">
+                            <div className="text-sm">
+                                <div className="font-medium">
+                                    {note.profitMode === 'business' ? '業務利潤' : '毛利'}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                    {note.profitMode === 'business'
+                                        ? `成本口徑：業務成本（含${note.repName || '業務'}分潤）`
+                                        : '成本口徑：真實進貨成本（廠商對照／採購單）'}
+                                </div>
+                            </div>
+                            <ProfitCell
+                                summary={note.profit}
+                                mode={note.profitMode || 'gross'}
+                                commission={note.commission}
+                                repName={note.repName}
+                            />
                         </div>
                     )}
 
