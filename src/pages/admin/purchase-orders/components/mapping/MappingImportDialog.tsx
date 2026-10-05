@@ -32,7 +32,6 @@ interface ProductWithVariants {
 interface MatchedProductSummary {
   id: string;
   name: string;
-  sku: string;
 }
 
 interface MatchedVariantSummary {
@@ -40,6 +39,16 @@ interface MatchedVariantSummary {
   name: string | null;
   sku: string;
 }
+
+/** 比對索引的命中項：同時帶出變體本身與其所屬產品，供跨欄位交叉驗證 */
+interface VariantHit {
+  variant: ProductVariant;
+  product: ProductWithVariants;
+}
+
+/** 衝突／歧義訊息用的可讀標示：變體名稱（變體 SKU・所屬產品） */
+const hitLabel = (hit: VariantHit) =>
+  `${hit.variant.name || '（無名稱）'}（${hit.variant.sku}・${hit.product.name}）`;
 
 interface MappingImportDialogProps {
   open: boolean;
@@ -49,16 +58,28 @@ interface MappingImportDialogProps {
   onImportComplete: () => void;
 }
 
+/** 導致此列無法匯入的原因；所有情況皆為硬擋，必須回檔案修正後重上 */
+type MatchIssue =
+  /** 同一列的變體 SKU 與變體名稱解析出不同變體 */
+  | 'field_conflict'
+  /** 變體名稱同時對應到多個變體，無法唯一判定（DB 無名稱唯一約束） */
+  | 'variant_name_ambiguous'
+  /** 完全查無對應變體（含未提供任何可匹配欄位） */
+  | 'no_variant_matched';
+
 interface ParsedMappingRow {
   row_index: number;
   vendor_product_id: string;
   vendor_product_name: string;
   internal_sku: string;
-  internal_product_name: string;
   internal_variant_name: string;
   unit_cost: number | null;
   match_status: 'matched' | 'unmatched' | 'conflict';
-  match_method?: 'variant_sku' | 'product_sku' | 'product_name';
+  match_method?: 'variant_sku' | 'variant_name';
+  /** 硬擋原因；已成功匹配時為 undefined */
+  match_issue?: MatchIssue;
+  /** match_issue 對應的人類可讀說明，用於列內顯示與底部問題清單 */
+  match_issue_text?: string;
   matched_product?: MatchedProductSummary;
   matched_variant?: MatchedVariantSummary;
   /** 將更新的既有對照（原始資料）；僅「同料號 + 相同內部目標」時存在 */
@@ -74,14 +95,23 @@ interface ParsedMappingRow {
 }
 
 /** 預覽列的互斥分類，同時作為狀態篩選器的篩選值 */
-type RowCategory = 'new' | 'new_target' | 'update' | 'duplicate' | 'unmatched';
+type RowCategory =
+  | 'new'
+  | 'new_target'
+  | 'update'
+  | 'duplicate'
+  | 'unmatched'
+  | 'field_conflict'
+  | 'ambiguous_variant';
 /** no_change 為「將更新但實際無變動」的疊加篩選值 */
 type StatusFilter = RowCategory | 'no_change' | 'all';
 
-/** 分類優先序：檔案內重複 > 未匹配 > 將更新 > 新增對照目標 > 新增對照 */
+/** 分類優先序：檔案內重複 > 欄位矛盾 > 名稱歧義 > 未匹配 > 將更新 > 新增對照目標 > 新增對照 */
 const categoryOf = (row: ParsedMappingRow): RowCategory => {
   if (row.duplicate_in_file) return 'duplicate';
-  if (!row.matched_product || row.match_status === 'unmatched') return 'unmatched';
+  if (row.match_issue === 'field_conflict') return 'field_conflict';
+  if (row.match_issue === 'variant_name_ambiguous') return 'ambiguous_variant';
+  if (row.match_issue || !row.matched_product || row.match_status === 'unmatched') return 'unmatched';
   if (row.match_status === 'conflict') return 'update';
   return (row.existing_target_count || 0) > 0 ? 'new_target' : 'new';
 };
@@ -94,6 +124,8 @@ const CATEGORY_LABEL: Record<StatusFilter, string> = {
   no_change: '完全相同（不需匯入）',
   duplicate: '檔案內重複',
   unmatched: '未匹配',
+  field_conflict: '欄位矛盾',
+  ambiguous_variant: '變體名稱歧義',
 };
 
 /** 可匯入的分類（新增對照 / 新增對照目標 / 將更新） */
@@ -126,7 +158,7 @@ export function MappingImportDialog({
       const { data, error } = await supabase
         .from('products')
         .select(`
-          id, name, code,
+          id, name,
           variants:product_variants(id, name, sku)
         `)
         .limit(5000);
@@ -151,47 +183,101 @@ export function MappingImportDialog({
     onOpenChange(isOpen);
   };
 
-  const findMatch = useCallback((variantSku: string, productSku: string, productName: string) => {
-    let matchedProduct: ProductWithVariants | null = null;
-    let matchedVariant: ProductVariant | null = null;
-    let matchMethod: 'variant_sku' | 'product_sku' | 'product_name' | null = null;
-
+  /** 比對一律落在變體層級；產品代碼與產品名稱不再參與比對 */
+  const variantSkuIndex = useMemo(() => {
+    const index = new Map<string, VariantHit[]>();
     for (const p of allProducts) {
-      if (p.variants && p.variants.length > 0) {
-        for (const v of p.variants) {
-          if (variantSku && v.sku && v.sku.toLowerCase() === variantSku.toLowerCase()) {
-            matchedProduct = p;
-            matchedVariant = v;
-            matchMethod = 'variant_sku';
-            return { matched_product: matchedProduct, matched_variant: matchedVariant, match_method: matchMethod };
-          }
-        }
-      }
-      if (productSku && p.code && p.code.toLowerCase() === productSku.toLowerCase()) {
-        matchedProduct = p;
-        if (p.variants && p.variants.length === 1) {
-          matchedVariant = p.variants[0];
-        }
-        matchMethod = 'product_sku';
-        return { matched_product: matchedProduct, matched_variant: matchedVariant, match_method: matchMethod };
+      for (const v of p.variants || []) {
+        const key = v.sku?.trim().toLowerCase();
+        if (!key) continue;
+        const bucket = index.get(key);
+        if (bucket) bucket.push({ variant: v, product: p });
+        else index.set(key, [{ variant: v, product: p }]);
       }
     }
-
-    if (productName) {
-      for (const p of allProducts) {
-        if (p.name.toLowerCase() === productName.toLowerCase()) {
-          matchedProduct = p;
-          if (p.variants && p.variants.length === 1) {
-            matchedVariant = p.variants[0];
-          }
-          matchMethod = 'product_name';
-          return { matched_product: matchedProduct, matched_variant: matchedVariant, match_method: matchMethod };
-        }
-      }
-    }
-
-    return { matched_product: null, matched_variant: null, match_method: null };
+    return index;
   }, [allProducts]);
+
+  const variantNameIndex = useMemo(() => {
+    const index = new Map<string, VariantHit[]>();
+    for (const p of allProducts) {
+      for (const v of p.variants || []) {
+        const key = v.name?.trim().toLowerCase();
+        if (!key) continue;
+        const bucket = index.get(key);
+        if (bucket) bucket.push({ variant: v, product: p });
+        else index.set(key, [{ variant: v, product: p }]);
+      }
+    }
+    return index;
+  }, [allProducts]);
+
+  /**
+   * 以「變體 SKU」與「變體名稱」兩個欄位交叉驗證，兩者皆須唯一命中且指向同一變體。
+   * 任一欄位無法唯一判定、或兩者互相矛盾，一律回傳 match_issue 硬擋該列。
+   */
+  const findMatch = useCallback((variantSku: string, variantName: string) => {
+    const skuKey = variantSku.trim().toLowerCase();
+    const nameKey = variantName.trim().toLowerCase();
+    const skuHits = skuKey ? variantSkuIndex.get(skuKey) || [] : [];
+    const nameHits = nameKey ? variantNameIndex.get(nameKey) || [] : [];
+
+    const base = { matched_product: undefined, matched_variant: undefined, match_method: undefined };
+
+    if (!skuKey && !nameKey) {
+      return {
+        ...base,
+        match_issue: 'no_variant_matched' as const,
+        match_issue_text: '未提供可匹配的欄位（需填寫變體 SKU 或變體名稱）',
+      };
+    }
+
+    // 變體名稱對應到多個變體：即使 SKU 命中也擋下（檔案宣稱了一個不唯一的事實）
+    if (nameHits.length > 1) {
+      return {
+        ...base,
+        match_issue: 'variant_name_ambiguous' as const,
+        match_issue_text: `變體名稱「${variantName.trim()}」對應到 ${nameHits.length} 個變體（${nameHits
+          .map(h => h.variant.sku)
+          .join('／')}），無法唯一判定`,
+      };
+    }
+
+    const skuHit = skuHits.length === 1 ? skuHits[0] : null;
+    const nameHit = nameHits.length === 1 ? nameHits[0] : null;
+
+    // SKU 與變體名稱都命中但指向不同變體 → 欄位互相矛盾
+    if (skuHit && nameHit && skuHit.variant.id !== nameHit.variant.id) {
+      return {
+        matched_product: { id: skuHit.product.id, name: skuHit.product.name },
+        matched_variant: { id: skuHit.variant.id, name: skuHit.variant.name, sku: skuHit.variant.sku },
+        match_method: undefined,
+        match_issue: 'field_conflict' as const,
+        match_issue_text: `變體 SKU「${variantSku.trim()}」對應 ${hitLabel(skuHit)}，但變體名稱「${variantName.trim()}」對應 ${hitLabel(nameHit)}，兩者不一致`,
+      };
+    }
+
+    const hit = skuHit || nameHit;
+    if (!hit) {
+      const provided = [
+        skuKey ? `變體 SKU「${variantSku.trim()}」` : null,
+        nameKey ? `變體名稱「${variantName.trim()}」` : null,
+      ].filter(Boolean).join('、');
+      return {
+        ...base,
+        match_issue: 'no_variant_matched' as const,
+        match_issue_text: `${provided} 皆查無對應的變體`,
+      };
+    }
+
+    return {
+      matched_product: { id: hit.product.id, name: hit.product.name },
+      matched_variant: { id: hit.variant.id, name: hit.variant.name, sku: hit.variant.sku },
+      match_method: skuHit ? ('variant_sku' as const) : ('variant_name' as const),
+      match_issue: undefined,
+      match_issue_text: undefined,
+    };
+  }, [variantSkuIndex, variantNameIndex]);
 
   /** 同一廠商代號可有多筆對照（多目標），因此改為列出全部既有對照 */
   const findExistingMappings = (vendorProductId: string) =>
@@ -239,19 +325,14 @@ export function MappingImportDialog({
       const rows = rawData.slice(1);
 
       const vendorIdIdx = headers.findIndex((h) =>
-        h === '廠商代號' || h === 'vendor_product_id' || h === '廠商代號'
+        h === '廠商代號' || h === 'vendor_product_id' || h === '廠商料號'
       );
       const vendorNameIdx = headers.findIndex((h) =>
         h === '廠商品名' || h === 'vendor_product_name' || h === '廠商品名稱'
       );
+      // 舊檔的「內部SKU」等別名一律以「變體 SKU」語意解讀；產品代碼與產品名稱不再作為匹配欄位
       const skuIdx = headers.findIndex((h) =>
-        h === '內部SKU' || h === 'internal_sku' || h === '變體 SKU' || h === 'SKU'
-      );
-      const productSkuIdx = headers.findIndex((h) =>
-        h === '內部SKU' || h === 'internal_sku' || h === 'SKU'
-      );
-      const productNameIdx = headers.findIndex((h) =>
-        h === '內部產品名稱' || h === 'internal_product_name' || h === '產品名稱'
+        h === '內部SKU' || h === 'internal_sku' || h === '變體 SKU' || h === '變體SKU' || h === 'SKU'
       );
       const variantNameIdx = headers.findIndex((h) =>
         h === '內部變體名稱' || h === 'internal_variant_name' || h === '變體名稱'
@@ -274,9 +355,9 @@ export function MappingImportDialog({
         .filter(({ row }) => row[vendorIdIdx] && String(row[vendorIdIdx]).trim() !== '')
         .map(({ row, rowIndex }) => {
           const variantSku = skuIdx !== -1 ? String(row[skuIdx] || '').trim() : '';
-          const productSku = productSkuIdx !== -1 ? String(row[productSkuIdx] || '').trim() : '';
-          const productName = productNameIdx !== -1 ? String(row[productNameIdx] || '').trim() : '';
-          const { matched_product, matched_variant, match_method } = findMatch(variantSku || productSku, productSku, productName);
+          const variantName = variantNameIdx !== -1 ? String(row[variantNameIdx] || '').trim() : '';
+          const { matched_product, matched_variant, match_method, match_issue, match_issue_text } =
+            findMatch(variantSku, variantName);
           const vendorProductId = String(row[vendorIdIdx]).trim();
           const existingForCode = findExistingMappings(vendorProductId);
 
@@ -289,22 +370,23 @@ export function MappingImportDialog({
               )
             : undefined;
 
-          // 未匹配到內部產品時一律視為未匹配（此類列不會被匯入）
+          // 有 match_issue 即為硬擋（欄位矛盾／名稱歧義／查無變體），一律不視為可匯入
           let matchStatus: 'matched' | 'unmatched' | 'conflict' = 'unmatched';
-          if (matched_product) matchStatus = exactExisting ? 'conflict' : 'matched';
+          if (matched_product && !match_issue) matchStatus = exactExisting ? 'conflict' : 'matched';
 
           return {
             row_index: rowIndex,
             vendor_product_id: vendorProductId,
             vendor_product_name: vendorNameIdx !== -1 ? String(row[vendorNameIdx] || '').trim() : '',
-            internal_sku: variantSku || productSku,
-            internal_product_name: productName,
-            internal_variant_name: variantNameIdx !== -1 ? String(row[variantNameIdx] || '').trim() : '',
+            internal_sku: variantSku,
+            internal_variant_name: variantName,
             unit_cost: unitCostIdx !== -1 ? Number(row[unitCostIdx]) || null : null,
             match_status: matchStatus,
-            match_method: match_method || undefined,
-            matched_product: matched_product ? { id: matched_product.id, name: matched_product.name, sku: matched_product.code } : undefined,
-            matched_variant: matched_variant ? { id: matched_variant.id, name: matched_variant.name, sku: matched_variant.sku } : undefined,
+            match_method,
+            match_issue,
+            match_issue_text,
+            matched_product,
+            matched_variant,
             conflict_existing: exactExisting || undefined,
             existing_rows: existingForCode,
             existing_target_count: existingForCode.length,
@@ -315,7 +397,7 @@ export function MappingImportDialog({
       // 檔案內重複檢查：同一「料號 + 相同內部目標」只保留第一列，後續標記為重複不予匯入
       const seenInFile = new Map<string, number>();
       parsed.forEach((row) => {
-        if (!row.matched_product) return;
+        if (row.match_issue || !row.matched_product) return;
         const key = `${row.vendor_product_id}|${row.matched_product.id}|${row.matched_variant?.id || 'null'}`;
         if (seenInFile.has(key)) {
           row.duplicate_in_file = true;
@@ -350,7 +432,8 @@ export function MappingImportDialog({
         vendor_product_id: item.vendor_product_id,
         vendor_product_name: item.vendor_product_name || null,
         internal_product_id: item.matched_product!.id,
-        internal_variant_id: item.matched_variant?.id || null,
+        // 可匯入列必定已解析到變體（產品代碼比對已移除）
+        internal_variant_id: item.matched_variant!.id,
         vendor_unit_cost: item.unit_cost ?? null,
         is_primary: item.is_primary,
         row_index: item.row_index,
@@ -388,6 +471,8 @@ export function MappingImportDialog({
       no_change: 0,
       duplicate: 0,
       unmatched: 0,
+      field_conflict: 0,
+      ambiguous_variant: 0,
     };
     rowViews.forEach(v => {
       base[v.category] += 1;
@@ -413,6 +498,9 @@ export function MappingImportDialog({
     [rowViews],
   );
 
+  /** 因欄位矛盾／名稱歧義／查無變體而被硬擋的列，需回檔案修正 */
+  const blockedRows = useMemo(() => rowViews.filter(v => !!v.row.match_issue), [rowViews]);
+
   const toggleFilter = (value: StatusFilter) =>
     setStatusFilter(prev => (prev === value ? 'all' : value));
 
@@ -425,7 +513,7 @@ export function MappingImportDialog({
             匯入產品對照 - {supplierName}
           </DialogTitle>
           <DialogDescription>
-            上傳 CSV 或 Excel 檔案，系統將自動匹配內部產品並建立對照關係；已存在的對照會顯示原始資料與變更後內容供確認
+            上傳 CSV 或 Excel 檔案，系統將自動匹配內部變體並建立對照關係；已存在的對照會顯示原始資料與變更後內容供確認
           </DialogDescription>
         </DialogHeader>
 
@@ -457,8 +545,13 @@ export function MappingImportDialog({
                 <p className="font-medium mb-2">檔案格式說明：</p>
                 <ul className="list-disc list-inside space-y-1 text-muted-foreground">
                   <li>必要欄位：<span className="font-medium text-foreground">廠商代號</span></li>
-                  <li>匹配欄位（擇一）：<span className="font-medium text-foreground">內部SKU</span>、<span className="font-medium text-foreground">變體 SKU</span>、<span className="font-medium text-foreground">SKU</span> 或 <span className="font-medium text-foreground">內部產品名稱</span> / <span className="font-medium text-foreground">產品名稱</span></li>
-                  <li>可選欄位：廠商品名、內部變體名稱 / 變體名稱、單價</li>
+                  <li>匹配欄位（擇一，僅比對<span className="font-medium text-foreground">變體</span>層級）：
+                    <span className="font-medium text-foreground">變體 SKU</span>（舊檔欄名「內部SKU」亦可）、
+                    <span className="font-medium text-foreground">內部變體名稱</span>
+                  </li>
+                  <li>比對方式為<span className="font-medium text-foreground">去除頭尾空白後完全相同、忽略英文大小寫</span>；產品代碼與產品名稱<span className="font-medium text-foreground">不參與比對</span></li>
+                  <li>兩個匹配欄位若指向<span className="font-medium text-foreground">不同變體</span>，或變體名稱對應到多個變體，該列會標示為<span className="font-medium text-foreground">欄位矛盾</span>／<span className="font-medium text-foreground">變體名稱歧義</span>並<span className="font-medium text-foreground">不予匯入</span>，需修正後重新上傳</li>
+                  <li>可選欄位：廠商品名、單價</li>
                   <li>可選欄位：<span className="font-medium text-foreground">主對照</span>（是／否；未提供時該料號第一個目標會自動成為主對照）</li>
                   <li>同一個「廠商代號」可對應多個內部產品／變體，系統不再視為重複資料</li>
                   <li>已存在對照時，預覽表會顯示<span className="font-medium text-foreground">原始資料 → 變更後</span>的差異，<span className="font-medium text-foreground">只列出有變動的欄位</span>（沒變動的不會被覆寫）</li>
@@ -539,6 +632,26 @@ export function MappingImportDialog({
                     未匹配 {counts.unmatched}
                   </FilterChip>
                 )}
+                {counts.field_conflict > 0 && (
+                  <FilterChip
+                    tone="destructive"
+                    active={statusFilter === 'field_conflict'}
+                    onClick={() => toggleFilter('field_conflict')}
+                    icon={<XCircle className="h-3 w-3 mr-1" aria-hidden="true" />}
+                  >
+                    欄位矛盾 {counts.field_conflict}
+                  </FilterChip>
+                )}
+                {counts.ambiguous_variant > 0 && (
+                  <FilterChip
+                    tone="destructive"
+                    active={statusFilter === 'ambiguous_variant'}
+                    onClick={() => toggleFilter('ambiguous_variant')}
+                    icon={<XCircle className="h-3 w-3 mr-1" aria-hidden="true" />}
+                  >
+                    變體名稱歧義 {counts.ambiguous_variant}
+                  </FilterChip>
+                )}
                 {statusFilter !== 'all' && (
                   <span className="text-xs text-muted-foreground">
                     顯示 {visibleViews.length} / {counts.all} 筆（點選同一狀態可取消篩選）
@@ -558,7 +671,8 @@ export function MappingImportDialog({
                       <TableHead className="w-14 text-center">列號</TableHead>
                       <TableHead>廠商代號</TableHead>
                       <TableHead>廠商品名</TableHead>
-                      <TableHead>SKU</TableHead>
+                      <TableHead>變體 SKU</TableHead>
+                      <TableHead>變體名稱</TableHead>
                       <TableHead>匹配結果</TableHead>
                       <TableHead>既有對照 / 變更內容</TableHead>
                       <TableHead className="text-right">單價</TableHead>
@@ -567,7 +681,7 @@ export function MappingImportDialog({
                   <TableBody>
                     {visibleViews.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">
+                        <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-8">
                           此檔案沒有符合「{CATEGORY_LABEL[statusFilter]}」的資料
                         </TableCell>
                       </TableRow>
@@ -585,10 +699,25 @@ export function MappingImportDialog({
                             {row.internal_sku || <span className="text-muted-foreground">-</span>}
                           </TableCell>
                           <TableCell>
+                            {row.internal_variant_name || <span className="text-muted-foreground">-</span>}
+                          </TableCell>
+                          <TableCell>
                             {category === 'duplicate' ? (
                               <div className="flex items-center text-destructive text-sm">
                                 <XCircle className="h-4 w-4 mr-1" aria-hidden="true" />
                                 檔案內重複，不予匯入
+                              </div>
+                            ) : row.match_issue ? (
+                              <div className="text-destructive text-sm">
+                                <div className="flex items-center">
+                                  <XCircle className="h-4 w-4 mr-1" aria-hidden="true" />
+                                  {row.match_issue === 'field_conflict'
+                                    ? '欄位矛盾，不予匯入'
+                                    : row.match_issue === 'variant_name_ambiguous'
+                                      ? '變體名稱歧義，不予匯入'
+                                      : '未找到匹配變體'}
+                                </div>
+                                <p className="text-xs mt-1 text-destructive/90">{row.match_issue_text}</p>
                               </div>
                             ) : category === 'new' || category === 'new_target' ? (
                               <div className="flex items-center text-green-600 text-sm flex-wrap">
@@ -598,9 +727,7 @@ export function MappingImportDialog({
                                   <span className="text-muted-foreground ml-1">({row.matched_variant.name})</span>
                                 )}
                                 <Badge variant="outline" className="ml-2 text-xs">
-                                  {row.match_method === 'variant_sku' && '變體SKU'}
-                                  {row.match_method === 'product_sku' && '產品SKU'}
-                                  {row.match_method === 'product_name' && '產品名稱'}
+                                  {row.match_method === 'variant_sku' ? '變體SKU' : '變體名稱'}
                                 </Badge>
                                 {category === 'new_target' && (
                                   <Badge variant="secondary" className="ml-1 text-xs">
@@ -623,7 +750,7 @@ export function MappingImportDialog({
                             ) : (
                               <div className="flex items-center text-destructive text-sm">
                                 <XCircle className="h-4 w-4 mr-1" aria-hidden="true" />
-                                未找到匹配產品
+                                未找到匹配變體
                               </div>
                             )}
                           </TableCell>
@@ -672,6 +799,23 @@ export function MappingImportDialog({
               </div>
             </div>
           )}
+        {parsedData.length > 0 && blockedRows.length > 0 && (
+          <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+            <div className="flex-1 space-y-1">
+              <span className="text-destructive">
+                有 {blockedRows.length} 筆因無法唯一判定內部變體而不予匯入，請修正後重新上傳：
+              </span>
+              <ul className="space-y-0.5 text-xs text-destructive/90 list-disc list-inside">
+                {blockedRows.map(({ row }) => (
+                  <li key={row.row_index}>
+                    第 {row.row_index} 列（{row.vendor_product_id}）：{row.match_issue_text}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
         {parsedData.length > 0 && counts.no_change > 0 && (
             <div className="flex items-start gap-2 rounded-md border border-muted-foreground/20 bg-muted/50 p-3 text-sm text-muted-foreground">
               <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />

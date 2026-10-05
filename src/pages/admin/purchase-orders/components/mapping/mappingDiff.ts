@@ -3,7 +3,6 @@ import { SupplierProductMapping } from '../../hooks/useSupplierMappings';
 interface MatchedProductSummary {
   id: string;
   name: string;
-  sku: string;
 }
 
 interface MatchedVariantSummary {
@@ -53,7 +52,7 @@ export const diffRowsOf = (row: MappingDiffInput): MappingFieldDiff[] => {
     existing.internal_variant?.name,
     existing.internal_product?.code,
   );
-  const afterTarget = targetTextOf(row.matched_product?.name, row.matched_variant?.name, row.matched_product?.sku);
+  const afterTarget = targetTextOf(row.matched_product?.name, row.matched_variant?.name);
   const beforeName = existing.vendor_product_name?.trim() || '（空白）';
   const afterName = row.vendor_product_name?.trim() || '（空白）';
   const beforeCost = costTextOf(existing.vendor_unit_cost);

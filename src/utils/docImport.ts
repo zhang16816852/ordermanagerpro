@@ -81,6 +81,16 @@ const HEADER_ALIASES: Record<string, string[]> = {
   quantity: ['quantity', 'qty', '數量', '件數'],
   unit_price: ['unit_price', '單價', '售價', '價錢', '單價（元）'],
   unit_cost: ['unit_cost', '成本', '進貨價', '成本價', '成本（元）'],
+  // 採購退貨專用欄位（僅供 returnImport 使用，共用 parser 一併辨識）
+  supplier_return_number: [
+    'supplier_return_number', '退貨單號', '廠商退貨單號', '供應商退貨單號', '退貨編號', '退貨單編號',
+  ],
+  // 使用者填寫的是「原採購單」的單號或 UUID，實際 id 由對話框解析後填入 source_purchase_order_id
+  source_purchase_order_ref: [
+    'source_purchase_order_id', 'source_po', '原採購單', '原採購單號', '來源採購單', '來源採購單號',
+    '原po', '原po單號', '原採購po',
+  ],
+  warehouse_id: ['warehouse_id', 'warehouse', '出貨倉', '入庫倉', '倉庫', '退貨倉'],
 };
 
 const HEADER_KEYS = Object.keys(HEADER_ALIASES);

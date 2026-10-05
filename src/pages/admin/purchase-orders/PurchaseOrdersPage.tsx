@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { OrderListTab } from './components/OrderListTab';
+import { OrderFilterBar } from './components/OrderFilterBar';
 import { SupplierTab } from './components/SupplierTab';
 import { ReceivingTab } from './components/ReceivingTab';
 import { SupplierForm } from './components/SupplierForm';
@@ -8,6 +9,13 @@ import { PurchaseOrderDetailDialog } from './components/PurchaseOrderDetailDialo
 import { PurchaseDocImportDialog } from './components/PurchaseDocImportDialog';
 import { PurchaseOrder, Supplier } from './types';
 import { usePurchaseOrders, PurchaseOrderFilters } from './hooks/usePurchaseOrders';
+import { poPaymentSummary } from './paymentSummary';
+import {
+  parsePoSort,
+  sortPurchaseOrders,
+  defaultPoSortDir,
+  type PoSortField,
+} from './orderSort';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -17,20 +25,8 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { cn } from '@/lib/utils';
-import { isSameDay } from 'date-fns';
-import { format } from 'date-fns';
-import { zhTW } from 'date-fns/locale';
-import { ClipboardList, Users, Plus, PackageCheck, CalendarIcon, X, Trash2, FileUp } from 'lucide-react';
+import { formatCurrency } from '@/lib/formatters';
+import { ClipboardList, Users, Plus, PackageCheck, FileUp, Undo2 } from 'lucide-react';
 
 export default function AdminPurchaseOrders() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -39,6 +35,7 @@ export default function AdminPurchaseOrders() {
   const [viewingOrder, setViewingOrder] = useState<PurchaseOrder | null>(null);
   const [createSupplierOpen, setCreateSupplierOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [importMode, setImportMode] = useState<'purchase' | 'returns'>('purchase');
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
 
   const [filters, setFilters] = useState<PurchaseOrderFilters>({
@@ -48,11 +45,39 @@ export default function AdminPurchaseOrders() {
     dateFrom: searchParams.get('from') || undefined,
     dateTo: searchParams.get('to') || undefined,
   });
-  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>(
-    filters.dateFrom && filters.dateTo
-      ? { from: new Date(filters.dateFrom), to: new Date(filters.dateTo) }
-      : {}
-  );
+
+  // 排列狀態直接以網址為單一真值（不另存 useState），避免與網址不同步
+  const { sortField, sortDir } = useMemo(() => parsePoSort(searchParams), [searchParams]);
+
+  const writeSortUrl = (patch: { sortField?: PoSortField; sortDir?: 'asc' | 'desc' }) => {
+    setSearchParams((prevParams) => {
+      const sp = new URLSearchParams(prevParams);
+      const nextField = patch.sortField ?? sortField;
+      const nextDir = patch.sortDir ?? sortDir;
+      sp.set('sort', nextField);
+      sp.set('dir', nextDir);
+      return sp;
+    }, { replace: true });
+  };
+
+  /** 表頭點擊：同一欄翻轉方向；換欄位則取該欄預設方向（數值／日期由大到小） */
+  const handleSort = (field: PoSortField) => {
+    if (field === sortField) {
+      writeSortUrl({ sortDir: sortDir === 'asc' ? 'desc' : 'asc' });
+    } else {
+      writeSortUrl({ sortField: field, sortDir: defaultPoSortDir(field) });
+    }
+  };
+
+  /** 手機版排序下拉：只換欄位，方向取預設 */
+  const handleSortFieldChange = (field: PoSortField) => {
+    writeSortUrl({ sortField: field, sortDir: defaultPoSortDir(field) });
+  };
+
+  /** 手機版方向鈕：只翻轉方向 */
+  const handleToggleSortDir = () => {
+    writeSortUrl({ sortDir: sortDir === 'asc' ? 'desc' : 'asc' });
+  };
 
   const updateFilterUrl = (patch: PurchaseOrderFilters) => {
     setFilters((prev) => {
@@ -84,6 +109,8 @@ export default function AdminPurchaseOrders() {
     sourceOrderMap,
     supplierMappingMap,
     accounts,
+    paidAmountMap,
+    canSeePayments,
     updateOrderMutation,
     deleteOrderMutation,
     createSupplierMutation,
@@ -97,6 +124,31 @@ export default function AdminPurchaseOrders() {
     unlinkOrdersFromPurchaseMutation,
   } = usePurchaseOrders(viewingOrder?.id, filters);
 
+  // 金額摘要直接由「已套用篩選後的 orders」推導，因此篩選條件一變動即同步更新。
+  // 採購退貨單為負數金額，此處帶正負號回加，讓 總金額 = 已付 + 未付 恆成立。
+  const paymentSummary = useMemo(() => {
+    let total = 0;
+    let paid = 0;
+    let unpaid = 0;
+    let unpaidCount = 0;
+    for (const order of orders) {
+      const s = poPaymentSummary(order.total_amount, paidAmountMap[order.id]);
+      const sign = s.isCredit ? -1 : 1;
+      total += sign * s.payable;
+      paid += sign * s.paid;
+      unpaid += sign * s.unpaid;
+      if (s.unpaid > 0) unpaidCount += 1;
+    }
+    return { total, paid, unpaid, unpaidCount };
+  }, [orders, paidAmountMap]);
+
+  // 列表排列（純顯示層）。刻意不併入 filters —— filters 同時是 usePurchaseOrders 的
+  // queryKey 與 PostgREST 條件，放排序進去會讓切換排列時重新打 DB。
+  const sortedOrders = useMemo(
+    () => sortPurchaseOrders(orders, sortField, sortDir),
+    [orders, sortField, sortDir],
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -108,8 +160,11 @@ export default function AdminPurchaseOrders() {
           <Button onClick={() => setCreateSupplierOpen(true)} variant="outline">
             <Plus className="h-4 w-4 mr-2" /> 新增供應商
           </Button>
-          <Button onClick={() => setImportOpen(true)} variant="outline">
-            <FileUp className="h-4 w-4 mr-2" /> 匯入
+          <Button onClick={() => { setImportMode('purchase'); setImportOpen(true); }} variant="outline">
+            <FileUp className="h-4 w-4 mr-2" /> 匯入採購單
+          </Button>
+          <Button onClick={() => { setImportMode('returns'); setImportOpen(true); }} variant="outline">
+            <Undo2 className="h-4 w-4 mr-2" /> 匯入退貨單
           </Button>
           <Button onClick={() => navigate('/admin/orders/checkout?type=purchase')}>
             <Plus className="h-4 w-4 mr-2" /> 建立採購單
@@ -138,123 +193,57 @@ export default function AdminPurchaseOrders() {
         </TabsList>
 
         <TabsContent value="orders" className="space-y-4">
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={filters.supplierId || 'all'} onValueChange={(v) => updateFilterUrl({ supplierId: v })}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="全部供應商" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部供應商</SelectItem>
-                {suppliers.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Filters + 排列入口 */}
+          <OrderFilterBar
+            suppliers={suppliers}
+            filters={filters}
+            onFiltersChange={updateFilterUrl}
+            onClearFilters={() =>
+              updateFilterUrl({
+                supplierId: undefined,
+                purpose: undefined,
+                status: undefined,
+                dateFrom: undefined,
+                dateTo: undefined,
+              })
+            }
+            sortField={sortField}
+            sortDir={sortDir}
+            onSortFieldChange={handleSortFieldChange}
+            onToggleSortDir={handleToggleSortDir}
+          />
 
-            <Select value={filters.purpose || 'all'} onValueChange={(v) => updateFilterUrl({ purpose: v })}>
-              <SelectTrigger className="w-32">
-                <SelectValue placeholder="全部類型" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部類型</SelectItem>
-                <SelectItem value="general">一般進貨</SelectItem>
-                <SelectItem value="repair_parts">維修叫料</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={filters.status || 'all'} onValueChange={(v) => updateFilterUrl({ status: v })}>
-              <SelectTrigger className="w-32">
-                <SelectValue placeholder="全部狀態" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部狀態</SelectItem>
-                <SelectItem value="draft">草稿</SelectItem>
-                <SelectItem value="ordered">已下單</SelectItem>
-                <SelectItem value="partial_received">部分收貨</SelectItem>
-                <SelectItem value="received">已收貨</SelectItem>
-                <SelectItem value="cancelled">已取消</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Date range filter */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "w-[260px] justify-start text-left font-normal",
-                    !dateRange.from && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateRange?.from ? (
-                    dateRange.to && !isSameDay(dateRange.from, dateRange.to) ? (
-                      <>
-                        {format(dateRange.from, "yyyy/MM/dd")} ~ {format(dateRange.to, "yyyy/MM/dd")}
-                      </>
-                    ) : (
-                      format(dateRange.from, "yyyy/MM/dd")
-                    )
-                  ) : (
-                    <span>選擇日期範圍</span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="range"
-                  selected={dateRange as any}
-                  onSelect={(range) => {
-                    const resolved: { from?: Date; to?: Date } = range?.from && !range.to
-                      ? { from: range.from, to: range.from }
-                      : range || {};
-                    setDateRange(resolved);
-                    updateFilterUrl({
-                      dateFrom: resolved.from ? format(resolved.from, "yyyy-MM-dd") : undefined,
-                      dateTo: resolved.to ? format(resolved.to, "yyyy-MM-dd") : undefined,
-                    });
-                  }}
-                  numberOfMonths={2}
-                  locale={zhTW}
-                />
-              </PopoverContent>
-            </Popover>
-            {(filters.dateFrom || filters.dateTo) && (
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="清除日期篩選"
-                onClick={() => {
-                  setDateRange({});
-                  updateFilterUrl({ dateFrom: undefined, dateTo: undefined });
-                }}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-            {(filters.supplierId || filters.purpose || filters.status || filters.dateFrom || filters.dateTo) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground"
-                onClick={() => {
-                  setDateRange({});
-                  updateFilterUrl({ supplierId: undefined, purpose: undefined, status: undefined, dateFrom: undefined, dateTo: undefined });
-                }}
-              >
-                <Trash2 className="h-3.5 w-3.5 mr-1" />清除篩選
-              </Button>
-            )}
-          </div>
+          {/* 金額摘要：依目前篩選條件計算 */}
+          {!ordersLoading && orders.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-xs sm:text-sm leading-4">
+              <span>採購單: <strong>{orders.length}</strong> 張</span>
+              <span className="text-muted-foreground">|</span>
+              <span>總金額: <strong>{formatCurrency(paymentSummary.total)}</strong></span>
+              {canSeePayments && (
+                <>
+                  <span className="text-muted-foreground">|</span>
+                  <span className="text-green-600">已付: <strong>{formatCurrency(paymentSummary.paid)}</strong></span>
+                  <span className="text-muted-foreground">|</span>
+                  <span className="text-amber-600">
+                    未付: <strong>{formatCurrency(paymentSummary.unpaid)}</strong>
+                    <span className="text-muted-foreground">（{paymentSummary.unpaidCount} 張未付清）</span>
+                  </span>
+                </>
+              )}
+            </div>
+          )}
 
           <OrderListTab
-            orders={orders}
+            orders={sortedOrders}
             onView={(order) => setViewingOrder(order)}
             onEdit={(order) => navigate(`/admin/purchase-orders/${order.id}/edit`)}
             onDelete={(id) => { if (confirm('確定要刪除此採購單嗎？')) deleteOrderMutation.mutate(id); }}
             onStatusChange={(id, status: any) => updateOrderMutation.mutate({ id, status })}
             isLoading={ordersLoading}
+            paidAmountMap={canSeePayments ? paidAmountMap : undefined}
+            sortField={sortField}
+            sortDir={sortDir}
+            onSort={handleSort}
           />
         </TabsContent>
 
@@ -360,6 +349,7 @@ export default function AdminPurchaseOrders() {
         onOpenChange={setImportOpen}
         suppliers={suppliers}
         defaultSupplierId={filters.supplierId}
+        mode={importMode}
       />
     </div>
   );

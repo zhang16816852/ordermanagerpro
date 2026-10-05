@@ -21,6 +21,7 @@ export const PO_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
 export const PO_PURPOSE_LABELS: Record<PurchaseOrderPurpose, string> = {
   general: '一般進貨',
   repair_parts: '維修零件',
+  purchase_return: '採購退貨',
 };
 
 /** 狀態徽章配色（與訂單列表 OrderListTab 的 getStatusBadge 色系一致） */
@@ -56,7 +57,7 @@ export interface Supplier {
   is_logistics_company: boolean;
 }
 
-export type PurchaseOrderPurpose = 'general' | 'repair_parts';
+export type PurchaseOrderPurpose = 'general' | 'repair_parts' | 'purchase_return';
 
 export interface PurchaseOrder {
   id: string;

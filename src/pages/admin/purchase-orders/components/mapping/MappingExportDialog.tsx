@@ -25,9 +25,7 @@ export function MappingExportDialog({
 
   const handleExport = async () => {
     const data = mappings.map(m => ({
-      '類型': m.internal_variant_id ? '變體' : '產品',
-      '內部SKU': m.internal_variant?.sku || m.internal_product?.code || '',
-      '內部產品名稱': m.internal_product?.name || '',
+      '變體 SKU': m.internal_variant?.sku || '',
       '內部變體名稱': m.internal_variant?.name || '',
       '廠商代號': m.vendor_product_id,
       '廠商品名': m.vendor_product_name || '',
@@ -87,8 +85,8 @@ export function MappingExportDialog({
 
           <div className="text-sm text-muted-foreground bg-muted/50 rounded-md p-3">
             <p className="font-medium mb-1">匯出欄位：</p>
-            <p>類型、內部SKU、內部產品名稱、內部變體名稱、廠商代號、廠商品名、單價、主對照</p>
-            <p className="text-xs mt-1">匯出的檔案可用於重新匯入對照資料（同一廠商代號可有多列，代表對應多個內部產品／變體）</p>
+            <p>變體 SKU、內部變體名稱、廠商代號、廠商品名、單價、主對照</p>
+            <p className="text-xs mt-1">匯入時以「變體 SKU」或「變體名稱」比對內部變體（去除頭尾空白、忽略英文大小寫）；同一廠商代號可有多列，代表對應多個內部變體</p>
           </div>
         </div>
 

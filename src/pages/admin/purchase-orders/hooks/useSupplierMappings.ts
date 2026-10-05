@@ -410,3 +410,122 @@ export function useSupplierMappings(supplierId?: string) {
     saveConfigMutation,
   };
 }
+
+/**
+ * 匯入預覽的手動指定：確保「廠商料號 → 內部變體」存在且為唯一主對照。
+ *
+ * ⚠️ 刻意做成獨立 hook（而非放進 `useSupplierMappings` 的回傳值）：該 hook 會連帶
+ * 啟動 `['supplier-mappings']`／`['supplier-import-config']` 兩支查詢，而匯入預覽
+ * 自己已有專屬的對照與商品目錄查詢，用它會造成重複抓取同一份資料。
+ *
+ * 與 `saveMappingMutation` 的差異：
+ * - 目標必定是變體層級（`internal_variant_id` 必填），因為對照單位就是變體。
+ * - 冪等：目標已存在則只補料號名稱，**不覆寫既有 `vendor_unit_cost`**
+ *   （成本不該被一次指定清掉，也避免單張單價變成此料號往後的固定成本）。
+ * - 一定切成主對照：先降級同料號其他列再升本筆（順序不可顛倒，partial unique index 會擋）。
+ */
+export function useEnsureVariantMappingMutation(supplierId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      supplier_id: string;
+      vendor_product_id: string;
+      vendor_product_name?: string | null;
+      internal_product_id: string;
+      internal_variant_id: string;
+    }) => {
+      const vendorProductId = (input.vendor_product_id || '').trim();
+      if (!vendorProductId) throw new Error('廠商產品代號不可為空白');
+      if (!input.internal_variant_id) throw new Error('請選擇要對應的內部變體');
+
+      const query = supabase.from('supplier_product_mappings') as any;
+      const { data: existingRows, error: readError } = await query
+        .select('id, internal_product_id, internal_variant_id, is_primary')
+        .eq('supplier_id', input.supplier_id)
+        .eq('vendor_product_id', vendorProductId);
+      if (readError) throw readError;
+
+      const sameTarget = ((existingRows || []) as any[]).find(
+        (row) => row.internal_product_id === input.internal_product_id
+          && (row.internal_variant_id ?? null) === input.internal_variant_id,
+      );
+
+      let mappingId: string;
+      if (sameTarget) {
+        mappingId = sameTarget.id;
+      } else {
+        const { data: inserted, error: insertError } = await query
+          .insert({
+            supplier_id: input.supplier_id,
+            vendor_product_id: vendorProductId,
+            vendor_product_name: input.vendor_product_name?.trim() || null,
+            internal_product_id: input.internal_product_id,
+            internal_variant_id: input.internal_variant_id,
+            // 成本刻意留 null
+            vendor_unit_cost: null,
+            is_primary: false,
+            updated_at: new Date().toISOString(),
+          })
+          .select('id')
+          .single();
+        if (insertError) {
+          // select→insert 之間有 race：同一 (supplier, 料號, 目標) 可能被另一個分頁/分頁重送
+          // 先建立。唯一鍵為 (supplier_id, vendor_product_id, internal_product_id, internal_variant_id)
+          // （NULLS NOT DISTINCT），故此時重讀一次即可冪等收斂，而非直接報錯。
+          if (insertError.code === '23505') {
+            const { data: retryRows, error: retryError } = await query
+              .select('id, internal_product_id, internal_variant_id')
+              .eq('supplier_id', input.supplier_id)
+              .eq('vendor_product_id', vendorProductId);
+            if (retryError) throw retryError;
+            const retryHit = ((retryRows || []) as any[]).find(
+              (row) => row.internal_product_id === input.internal_product_id
+                && (row.internal_variant_id ?? null) === input.internal_variant_id,
+            );
+            if (!retryHit) throw new Error(describeMappingError(insertError, vendorProductId));
+            mappingId = retryHit.id;
+          } else {
+            throw new Error(describeMappingError(insertError, vendorProductId));
+          }
+        } else {
+          mappingId = (inserted as any).id as string;
+        }
+      }
+
+      // 補廠商料號名稱（既有對照不覆寫 vendor_unit_cost：成本不該被一次指定清掉）
+      const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+      const vendorName = input.vendor_product_name?.trim();
+      if (vendorName) patch.vendor_product_name = vendorName;
+      const { error: updateError } = await query.update(patch).eq('id', mappingId);
+      if (updateError) throw new Error(describeMappingError(updateError, vendorProductId));
+
+      // 先降級同料號其他列，再升本筆為主對照（partial unique index: 每料號至多一筆 primary）
+      const { error: clearError } = await query
+        .update({ is_primary: false })
+        .eq('supplier_id', input.supplier_id)
+        .eq('vendor_product_id', vendorProductId)
+        .neq('id', mappingId);
+      if (clearError) throw clearError;
+
+      const { error: setError } = await query
+        .update({ is_primary: true, updated_at: new Date().toISOString() })
+        .eq('id', mappingId);
+      if (setError) throw new Error(describeMappingError(setError, vendorProductId));
+
+      return {
+        mapping_id: mappingId,
+        vendor_product_id: vendorProductId,
+        internal_product_id: input.internal_product_id,
+        internal_variant_id: input.internal_variant_id,
+      };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['supplier-mappings', supplierId] });
+      queryClient.invalidateQueries({ queryKey: ['supplier-mappings-export', supplierId] });
+      // 匯入預覽自建的對照查詢（見 PurchaseDocImportDialog）
+      queryClient.invalidateQueries({ queryKey: ['po-import-mappings', supplierId] });
+    },
+    // 刻意不跳 toast：由呼叫端（匯入預覽）統一回報成功／失敗，避免同一動作出現兩個提示
+  });
+}

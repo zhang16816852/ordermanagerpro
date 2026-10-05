@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
@@ -38,7 +39,7 @@ async function rpcUpdatePurchaseOrder(args: PoUpdateItemsArgs): Promise<PoWriteR
 }
 
 export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrderFilters) {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const queryClient = useQueryClient();
 
   // Queries
@@ -85,6 +86,61 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
       })) as PurchaseOrder[];
     },
     enabled: suppliers.length >= 0,
+  });
+
+  // 付款彙總：purchase_orders 沒有 payment_status／paid_amount，已付金額只能來自會計模組。
+  //
+  // 同一筆分錄可能同時出現在兩條參照路徑（會計分錄「清單」模式會把第一張單據寫進
+  // accounting_entries.reference_id，同時把全部單據寫進 accounting_entry_references
+  // 子表，見 entrySubmitData.buildSubmitData），因此以「採購單 + 分錄 id」為鍵去重，
+  // 否則該單的已付金額會被重複加總。
+  const visibleOrderIds = useMemo(() => orders.map((o) => o.id), [orders]);
+
+  const { data: paidAmountMap = {}, isLoading: paidAmountsLoading } = useQuery({
+    queryKey: ['purchase-order-paid-amounts', visibleOrderIds],
+    queryFn: async () => {
+      const empty: Record<string, number> = {};
+      if (visibleOrderIds.length === 0) return empty;
+
+      const [entryRes, refRes] = await Promise.all([
+        (supabase as any)
+          .from('accounting_entries')
+          .select('id, reference_id, paid_amount')
+          .eq('reference_type', 'purchase_order')
+          .in('reference_id', visibleOrderIds),
+        (supabase as any)
+          .from('accounting_entry_references')
+          .select('entry_id, reference_id')
+          .eq('reference_type', 'purchase_order')
+          .in('reference_id', visibleOrderIds),
+      ]);
+      if (entryRes.error) throw entryRes.error;
+      if (refRes.error) throw refRes.error;
+
+      const entries = (entryRes.data || []) as Array<{ id: string; reference_id: string; paid_amount: number | null }>;
+      const refRows = (refRes.data || []) as Array<{ entry_id: string; reference_id: string }>;
+
+      const paidByEntry = new Map<string, number>();
+      entries.forEach((e) => paidByEntry.set(e.id, Number(e.paid_amount) || 0));
+
+      const countedPairs = new Set<string>();
+      const sum: Record<string, number> = {};
+      const count = (poId: string, entryId: string) => {
+        if (!poId || !entryId) return;
+        const pair = `${poId}:${entryId}`;
+        if (countedPairs.has(pair)) return;
+        countedPairs.add(pair);
+        sum[poId] = (sum[poId] || 0) + (paidByEntry.get(entryId) || 0);
+      };
+
+      entries.forEach((e) => count(e.reference_id, e.id));
+      refRows.forEach((r) => count(r.reference_id, r.entry_id));
+
+      return sum;
+    },
+    // accounting_entries 的 RLS 僅 admin 可讀；業務身分看不到付款資料，
+    // 與其顯示「全部未付」的假象，不如不查也不顯示。
+    enabled: isAdmin === true && visibleOrderIds.length > 0,
   });
 
   const { data: products = [] } = useQuery({
@@ -434,6 +490,9 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
     sourceOrderMap,
     supplierMappingMap,
     accounts,
+    paidAmountMap,
+    paidAmountsLoading,
+    canSeePayments: isAdmin === true,
     updateOrderMutation,
     deleteOrderMutation,
     createSupplierMutation,

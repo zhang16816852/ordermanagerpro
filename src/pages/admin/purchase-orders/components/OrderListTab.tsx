@@ -8,9 +8,11 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Eye, Edit, Trash2, Send } from 'lucide-react';
+import { Eye, Edit, Trash2, Send, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { PurchaseOrder } from '../types';
+import { poPaymentSummary } from '../paymentSummary';
 import { formatCurrency } from '@/lib/formatters';
+import type { PoSortDir, PoSortField } from '../orderSort';
 
 interface OrderListTabProps {
   orders: PurchaseOrder[];
@@ -19,6 +21,13 @@ interface OrderListTabProps {
   onDelete: (id: string) => void;
   onStatusChange: (orderId: string, status: string) => void;
   isLoading: boolean;
+  /** 採購單 id → 已付金額；未提供（業務身分或載入中）則不顯示付款資訊 */
+  paidAmountMap?: Record<string, number>;
+  /** 目前排列欄位與方向（由上層自網址還原） */
+  sortField: PoSortField;
+  sortDir: PoSortDir;
+  /** 點擊表頭：同一欄翻轉方向、換欄位則取該欄預設方向 */
+  onSort: (field: PoSortField) => void;
 }
 
 export function OrderListTab({
@@ -27,11 +36,71 @@ export function OrderListTab({
   onEdit,
   onDelete,
   onStatusChange,
-  isLoading
+  isLoading,
+  paidAmountMap,
+  sortField,
+  sortDir,
+  onSort,
 }: OrderListTabProps) {
+  // 與 ShippingPoolGroups / admin 訂單列表 OrderTableView 相同的表頭排序寫法
+  const SortableHead = ({
+    field,
+    label,
+    className,
+  }: {
+    field: PoSortField;
+    label: string;
+    className?: string;
+  }) => {
+    const active = sortField === field;
+    return (
+      <TableHead
+        className={className}
+        aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      >
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 px-1 -ml-1 font-medium text-muted-foreground hover:text-foreground"
+          onClick={() => onSort(field)}
+          aria-label={`依「${label}」${active && sortDir === 'asc' ? '改為由大到小' : '由小到大'}排列`}
+        >
+          {label}
+          {active ? (
+            sortDir === 'asc' ? (
+              <ArrowUp className="ml-1 h-3 w-3" aria-hidden="true" />
+            ) : (
+              <ArrowDown className="ml-1 h-3 w-3" aria-hidden="true" />
+            )
+          ) : (
+            <ArrowUpDown className="ml-1 h-3 w-3 opacity-30" aria-hidden="true" />
+          )}
+        </Button>
+      </TableHead>
+    );
+  };
+  const getPaymentLine = (order: PurchaseOrder) => {
+    if (!paidAmountMap) return null;
+    const { unpaid, isCredit } = poPaymentSummary(order.total_amount, paidAmountMap[order.id]);
+    if (unpaid > 0) {
+      return (
+        <span className="block text-xs font-normal text-amber-600">
+          {isCredit ? '待沖帳' : '未付'} {formatCurrency(unpaid)}
+        </span>
+      );
+    }
+    return (
+      <span className="block text-xs font-normal text-green-600">
+        {isCredit ? '已沖帳' : '已付清'}
+      </span>
+    );
+  };
   const getTypeBadge = (purpose?: string) => {
     if (purpose === 'repair_parts') {
       return <Badge variant="outline" className="border-violet-500 text-violet-600 whitespace-nowrap">維修叫料</Badge>;
+    }
+    if (purpose === 'purchase_return') {
+      return <Badge variant="outline" className="border-red-500 text-red-600 whitespace-nowrap">採購退貨</Badge>;
     }
     return <Badge variant="secondary" className="whitespace-nowrap">一般進貨</Badge>;
   };
@@ -70,13 +139,13 @@ export function OrderListTab({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>編號</TableHead>
-              <TableHead>供應商</TableHead>
-              <TableHead>類型</TableHead>
-              <TableHead>廠商單號</TableHead>
-              <TableHead>日期</TableHead>
-              <TableHead className="text-right">總額</TableHead>
-              <TableHead>狀態</TableHead>
+              <SortableHead field="id" label="編號" />
+              <SortableHead field="supplier" label="供應商" />
+              <SortableHead field="purpose" label="類型" />
+              <SortableHead field="supplier_order_number" label="廠商單號" />
+              <SortableHead field="order_date" label="日期" />
+              <SortableHead field="total_amount" label="總額" className="text-right" />
+              <SortableHead field="status" label="狀態" />
               <TableHead className="text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -88,7 +157,10 @@ export function OrderListTab({
                 <TableCell>{getTypeBadge(order.purpose)}</TableCell>
                 <TableCell className="text-sm">{order.supplier_order_number || '-'}</TableCell>
                 <TableCell>{order.order_date}</TableCell>
-                <TableCell className="text-right font-medium">{formatCurrency(order.total_amount)}</TableCell>
+                <TableCell className="text-right font-medium">
+                  {formatCurrency(order.total_amount)}
+                  {getPaymentLine(order)}
+                </TableCell>
                 <TableCell>{getStatusBadge(order.status)}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
@@ -133,7 +205,10 @@ export function OrderListTab({
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">{order.order_date}</span>
-              <span className="font-bold">{formatCurrency(order.total_amount)}</span>
+              <div className="text-right">
+                <span className="font-bold">{formatCurrency(order.total_amount)}</span>
+                {getPaymentLine(order)}
+              </div>
             </div>
             {order.supplier_order_number && (
               <p className="text-xs text-muted-foreground">廠商單號：{order.supplier_order_number}</p>
