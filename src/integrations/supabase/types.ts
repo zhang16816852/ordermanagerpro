@@ -4440,6 +4440,7 @@ export type Database = {
           id: string
           internal_product_id: string
           internal_variant_id: string | null
+          is_primary: boolean
           supplier_id: string
           updated_at: string | null
           vendor_product_id: string
@@ -4451,6 +4452,7 @@ export type Database = {
           id?: string
           internal_product_id: string
           internal_variant_id?: string | null
+          is_primary?: boolean
           supplier_id: string
           updated_at?: string | null
           vendor_product_id: string
@@ -4462,6 +4464,7 @@ export type Database = {
           id?: string
           internal_product_id?: string
           internal_variant_id?: string | null
+          is_primary?: boolean
           supplier_id?: string
           updated_at?: string | null
           vendor_product_id?: string
@@ -5221,6 +5224,37 @@ export type Database = {
         Args: { p_variant_id: string }
         Returns: string[]
       }
+      get_public_categories: {
+        Args: never
+        Returns: {
+          id: string
+          name: string
+          product_count: number
+          slug: string
+        }[]
+      }
+      get_public_products: {
+        Args: {
+          p_category_id?: string
+          p_distinct_products?: boolean
+          p_limit?: number
+          p_offset?: number
+          p_product_ids?: string[]
+        }
+        Returns: {
+          brand_name: string
+          category_id: string
+          category_name: string
+          category_slug: string
+          image_url: string
+          item_id: string
+          item_slug: string
+          model_name: string
+          product_name: string
+          retail_price: number
+          variant_name: string
+        }[]
+      }
       get_rep_commission_rate: { Args: { _user_id: string }; Returns: number }
       get_shared_consignment_details: {
         Args: { p_identifier: string; p_token: string }
@@ -5460,6 +5494,10 @@ export type Database = {
           p_variant_id?: string
         }
         Returns: number
+      }
+      restore_cancelled_consignment_order: {
+        Args: { p_consignment_order_id: string }
+        Returns: Json
       }
       return_consignment_items: {
         Args: {
