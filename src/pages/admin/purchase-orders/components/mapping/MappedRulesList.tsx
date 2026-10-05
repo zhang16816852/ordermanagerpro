@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
-import { Trash2, Pencil, Check, X, Download, Plus, Upload, Search } from 'lucide-react';
+import { Trash2, Pencil, Check, X, Download, Plus, Upload, Search, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -16,13 +17,16 @@ interface MappedRulesListProps {
   mappings: SupplierProductMapping[];
   onDelete: (id: string) => void;
   onSave: (data: Partial<SupplierProductMapping> & { supplier_id: string; vendor_product_id: string }) => void;
+  /** 將指定對照設為該廠商代號的主對照（採購匯入與成本查詢的預設目標） */
+  onSetPrimary: (id: string) => void;
   isSaving?: boolean;
+  isSettingPrimary?: boolean;
   isLoading?: boolean;
   supplierId: string;
   supplierName: string;
 }
 
-export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoading, supplierId, supplierName }: MappedRulesListProps) {
+export function MappedRulesList({ mappings, onDelete, onSave, onSetPrimary, isSaving, isSettingPrimary, isLoading, supplierId, supplierName }: MappedRulesListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<{ vendor_product_id: string; vendor_product_name: string; vendor_unit_cost: string }>({
     vendor_product_id: '',
@@ -40,6 +44,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
     internal_product_id: string;
     internal_variant_id: string | null;
     internal_label: string;
+    is_primary: boolean;
   }>({
     vendor_product_id: '',
     vendor_product_name: '',
@@ -47,7 +52,18 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
     internal_product_id: '',
     internal_variant_id: null,
     internal_label: '',
+    is_primary: true,
   });
+
+  /** 同一廠商代號已對應的目標數量（>1 時代表一料號對多商品／變體） */
+  const targetCountByCode = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const m of mappings) {
+      const key = m.vendor_product_id.trim();
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return counts;
+  }, [mappings]);
 
   const startEdit = (rule: SupplierProductMapping) => {
     setEditingId(rule.id);
@@ -60,12 +76,14 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
 
   const saveEdit = (rule: SupplierProductMapping) => {
     onSave({
+      id: rule.id,
       supplier_id: rule.supplier_id,
       vendor_product_id: editValues.vendor_product_id,
       vendor_product_name: editValues.vendor_product_name || null,
       internal_product_id: rule.internal_product_id,
       internal_variant_id: rule.internal_variant_id,
       vendor_unit_cost: editValues.vendor_unit_cost ? Number(editValues.vendor_unit_cost) : null,
+      is_primary: rule.is_primary,
     });
     setEditingId(null);
   };
@@ -78,7 +96,15 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
       internal_product_id: '',
       internal_variant_id: null,
       internal_label: '',
+      is_primary: true,
     });
+  };
+
+  /** 新增時若此廠商代號已有其他對照目標，一律以次要對照加入（主對照請用列表上的星號切換） */
+  const addCodeAlreadyMapped = (targetCode: string) => {
+    const code = targetCode.trim();
+    if (!code) return false;
+    return mappings.some((m) => m.vendor_product_id.trim() === code);
   };
 
   const handleAdd = () => {
@@ -90,6 +116,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
       internal_product_id: addValues.internal_product_id,
       internal_variant_id: addValues.internal_variant_id,
       vendor_unit_cost: addValues.vendor_unit_cost ? Number(addValues.vendor_unit_cost) : null,
+      is_primary: addValues.is_primary && !addCodeAlreadyMapped(addValues.vendor_product_id),
     });
     resetAddForm();
     setAddOpen(false);
@@ -179,18 +206,31 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
                     </Button>
                   </div>
                 ) : (
-                  <InternalProductSelector
-                    onSelect={(productId, variantId, productName, variantName) => {
-                      const label = variantName || productName;
-                      setAddValues(prev => ({ ...prev, internal_product_id: productId, internal_variant_id: variantId, internal_label: label }));
-                    }}
-                    onClose={() => {}}
-                  />
-                )}
+<InternalProductSelector
+                  onSelect={(productId, variantId, productName, variantName) => {
+                    const label = variantName || productName;
+                    setAddValues(prev => ({ ...prev, internal_product_id: productId, internal_variant_id: variantId, internal_label: label }));
+                  }}
+                  onClose={() => {}}
+                />
+              )}
+            </div>
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="add-is-primary"
+                checked={addValues.is_primary}
+                onCheckedChange={(checked) => setAddValues(prev => ({ ...prev, is_primary: checked === true }))}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="add-is-primary" className="cursor-pointer">設為主對照</Label>
+                <p className="text-xs text-muted-foreground">
+                  同一廠商代號可對應多個內部產品／變體，採購匯入與成本查詢預設採用主對照；若此代號已有其他對照，本筆會自動以次要對照加入。
+                </p>
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setAddOpen(false)}>取消</Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>取消</Button>
               <Button
                 onClick={handleAdd}
                 disabled={!addValues.vendor_product_id || !addValues.internal_product_id || isSaving}
@@ -246,6 +286,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
                 <TableHead>廠商產品代號</TableHead>
                 <TableHead>廠商產品名稱</TableHead>
                 <TableHead>系統內部產品</TableHead>
+                <TableHead className="w-[90px] text-center">主對照</TableHead>
                 <TableHead className="w-[100px] text-right">單價</TableHead>
                 <TableHead className="w-[100px] text-right">操作</TableHead>
               </TableRow>
@@ -253,7 +294,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
             <TableBody>
               {filteredMappings.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  <TableCell className="text-center py-8 text-muted-foreground" colSpan={6}>
                     查無符合「{search}」的對照規則
                   </TableCell>
                 </TableRow>
@@ -263,6 +304,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
                   const internalVar = rule.internal_variant?.name || '';
                   const internalLabel = internalVar || internalProd;
                   const isEditing = editingId === rule.id;
+                  const codeTargetCount = targetCountByCode.get(rule.vendor_product_id.trim()) || 1;
 
                   return (
                 <TableRow key={rule.id}>
@@ -290,6 +332,28 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
                     )}
                   </TableCell>
                   <TableCell>{internalLabel}</TableCell>
+                  <TableCell className="text-center">
+                    {rule.is_primary ? (
+                      <Star
+                        className="h-4 w-4 inline fill-amber-400 text-amber-500"
+                        aria-label={`主對照${codeTargetCount > 1 ? `（此料號共 ${codeTargetCount} 個對應目標）` : ''}`}
+                      />
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => onSetPrimary(rule.id)}
+                        disabled={isSettingPrimary}
+                        title={codeTargetCount > 1
+                          ? `設為主對照（此料號共 ${codeTargetCount} 個對應目標）`
+                          : '設為主對照'}
+                        aria-label={`設為主對照：${internalLabel}`}
+                      >
+                        <Star className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
                     {isEditing ? (
                       <Input
@@ -374,7 +438,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
         supplierId={supplierId}
         supplierName={supplierName}
         onImportComplete={() => {
-          window.location.reload();
+          // 批次寫入已失效 ['supplier-mappings'] 查詢，直接重整畫面會流失 SPA 狀態
         }}
       />
 
@@ -436,6 +500,19 @@ export function MappedRulesList({ mappings, onDelete, onSave, isSaving, isLoadin
                   onClose={() => {}}
                 />
               )}
+            </div>
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="add-is-primary"
+                checked={addValues.is_primary}
+                onCheckedChange={(checked) => setAddValues(prev => ({ ...prev, is_primary: checked === true }))}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="add-is-primary" className="cursor-pointer">設為主對照</Label>
+                <p className="text-xs text-muted-foreground">
+                  同一廠商代號可對應多個內部產品／變體，採購匯入與成本查詢預設採用主對照；若此代號已有其他對照，本筆會自動以次要對照加入。
+                </p>
+              </div>
             </div>
           </div>
           <DialogFooter>

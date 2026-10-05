@@ -18,6 +18,7 @@ export function SupplierMappingManager({ supplierId, supplierName, unmappedItems
     isLoadingMappings,
     isLoadingConfig,
     saveMappingMutation,
+    setPrimaryMutation,
     deleteMappingMutation,
     saveConfigMutation,
   } = useSupplierMappings(supplierId);
@@ -60,7 +61,9 @@ export function SupplierMappingManager({ supplierId, supplierName, unmappedItems
             mappings={mappings}
             onDelete={(id) => deleteMappingMutation.mutate(id)}
             onSave={(data) => saveMappingMutation.mutate(data)}
+            onSetPrimary={(id) => setPrimaryMutation.mutate(id)}
             isSaving={saveMappingMutation.isPending}
+            isSettingPrimary={setPrimaryMutation.isPending}
             isLoading={isLoadingMappings}
             supplierId={supplierId}
             supplierName={supplierName}

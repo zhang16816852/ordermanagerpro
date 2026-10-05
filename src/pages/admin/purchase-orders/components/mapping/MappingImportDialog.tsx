@@ -1,10 +1,10 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Upload, AlertTriangle, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
+import { Upload, AlertTriangle, CheckCircle2, XCircle, RefreshCw, Plus, Info } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
@@ -12,6 +12,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { useSupplierMappings, SupplierProductMapping, BatchMappingItem } from '../../hooks/useSupplierMappings';
+import { MappingDiffList, ExistingTargetsList } from './mappingDiffView';
+import { diffRowsOf } from './mappingDiff';
+import { FilterChip } from './mappingFilterChips';
 
 interface ProductVariant {
   id: string;
@@ -58,8 +61,48 @@ interface ParsedMappingRow {
   match_method?: 'variant_sku' | 'product_sku' | 'product_name';
   matched_product?: MatchedProductSummary;
   matched_variant?: MatchedVariantSummary;
+  /** 將更新的既有對照（原始資料）；僅「同料號 + 相同內部目標」時存在 */
   conflict_existing?: SupplierProductMapping;
+  /** 此廠商代號在資料庫中已存在的全部對照（原始資料） */
+  existing_rows?: SupplierProductMapping[];
+  /** 此廠商代號已存在的對照筆數（>0 表示本次是新增對照目標，而非新建料號） */
+  existing_target_count?: number;
+  /** 同一檔案內出現重複的「料號 + 相同內部目標」，此列不會被匯入 */
+  duplicate_in_file?: boolean;
+  /** 檔案若提供「主對照」欄位則依欄位指定；未提供時留空由寫入邏輯自動判定 */
+  is_primary?: boolean;
 }
+
+/** 預覽列的互斥分類，同時作為狀態篩選器的篩選值 */
+type RowCategory = 'new' | 'new_target' | 'update' | 'duplicate' | 'unmatched';
+/** no_change 為「將更新但實際無變動」的疊加篩選值 */
+type StatusFilter = RowCategory | 'no_change' | 'all';
+
+/** 分類優先序：檔案內重複 > 未匹配 > 將更新 > 新增對照目標 > 新增對照 */
+const categoryOf = (row: ParsedMappingRow): RowCategory => {
+  if (row.duplicate_in_file) return 'duplicate';
+  if (!row.matched_product || row.match_status === 'unmatched') return 'unmatched';
+  if (row.match_status === 'conflict') return 'update';
+  return (row.existing_target_count || 0) > 0 ? 'new_target' : 'new';
+};
+
+const CATEGORY_LABEL: Record<StatusFilter, string> = {
+  all: '全部',
+  new: '已匹配（新增對照）',
+  new_target: '新增對照目標',
+  update: '將更新',
+  no_change: '完全相同（不需匯入）',
+  duplicate: '檔案內重複',
+  unmatched: '未匹配',
+};
+
+/** 可匯入的分類（新增對照 / 新增對照目標 / 將更新） */
+const isImportableCategory = (category: RowCategory) =>
+  category === 'new' || category === 'new_target' || category === 'update';
+
+/** 既有對照且四個欄位都沒變動 → 不需再次匯入，只提醒 */
+const isNoChangeRow = (row: ParsedMappingRow) =>
+  categoryOf(row) === 'update' && diffRowsOf(row).filter(d => d.changed).length === 0;
 
 export function MappingImportDialog({
   open,
@@ -73,6 +116,7 @@ export function MappingImportDialog({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const { mappings: existingMappings, batchSaveMappingsMutation } = useSupplierMappings(supplierId);
 
@@ -98,6 +142,7 @@ export function MappingImportDialog({
     setIsProcessing(false);
     setIsImporting(false);
     setError(null);
+    setStatusFilter('all');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -148,8 +193,17 @@ export function MappingImportDialog({
     return { matched_product: null, matched_variant: null, match_method: null };
   }, [allProducts]);
 
-  const checkConflict = (vendorProductId: string) => {
-    return existingMappings.find(m => m.vendor_product_id === vendorProductId);
+  /** 同一廠商代號可有多筆對照（多目標），因此改為列出全部既有對照 */
+  const findExistingMappings = (vendorProductId: string) =>
+    existingMappings.filter(m => m.vendor_product_id.trim() === vendorProductId.trim());
+
+  /** 解析「主對照」欄位：是/否、true/false、Y/N、primary/secondary */
+  const parsePrimaryFlag = (raw: unknown): boolean | undefined => {
+    const text = String(raw ?? '').trim().toLowerCase();
+    if (!text) return undefined;
+    if (['是', 'y', 'yes', 'true', '1', 'primary', '主'].includes(text)) return true;
+    if (['否', 'n', 'no', 'false', '0', 'secondary', '次'].includes(text)) return false;
+    return undefined;
   };
 
   const processFile = async (file: File) => {
@@ -205,6 +259,9 @@ export function MappingImportDialog({
       const unitCostIdx = headers.findIndex((h) =>
         h === '單價' || h === 'unit_cost' || h === 'vendor_unit_cost'
       );
+      const primaryIdx = headers.findIndex((h) =>
+        h === '主對照' || h === 'is_primary' || h === 'primary' || h === '是否主對照'
+      );
 
       if (vendorIdIdx === -1) {
         setError(`找不到「廠商代號」欄位。檔案欄位: ${headers.join(', ')}`);
@@ -221,11 +278,20 @@ export function MappingImportDialog({
           const productName = productNameIdx !== -1 ? String(row[productNameIdx] || '').trim() : '';
           const { matched_product, matched_variant, match_method } = findMatch(variantSku || productSku, productSku, productName);
           const vendorProductId = String(row[vendorIdIdx]).trim();
-          const conflict = checkConflict(vendorProductId);
+          const existingForCode = findExistingMappings(vendorProductId);
 
+          // 完全相同的內部目標（產品＋變體）才算「更新既有對照」；
+          // 同料號但指向其他目標是合法的多目標情境，屬於「新增對照目標」
+          const exactExisting = matched_product
+            ? existingForCode.find(m =>
+                m.internal_product_id === matched_product.id &&
+                (m.internal_variant_id ?? null) === (matched_variant?.id ?? null)
+              )
+            : undefined;
+
+          // 未匹配到內部產品時一律視為未匹配（此類列不會被匯入）
           let matchStatus: 'matched' | 'unmatched' | 'conflict' = 'unmatched';
-          if (conflict) matchStatus = 'conflict';
-          else if (matched_product) matchStatus = 'matched';
+          if (matched_product) matchStatus = exactExisting ? 'conflict' : 'matched';
 
           return {
             row_index: rowIndex,
@@ -239,9 +305,24 @@ export function MappingImportDialog({
             match_method: match_method || undefined,
             matched_product: matched_product ? { id: matched_product.id, name: matched_product.name, sku: matched_product.code } : undefined,
             matched_variant: matched_variant ? { id: matched_variant.id, name: matched_variant.name, sku: matched_variant.sku } : undefined,
-            conflict_existing: conflict || undefined,
+            conflict_existing: exactExisting || undefined,
+            existing_rows: existingForCode,
+            existing_target_count: existingForCode.length,
+            is_primary: primaryIdx !== -1 ? parsePrimaryFlag(row[primaryIdx]) : undefined,
           };
         });
+
+      // 檔案內重複檢查：同一「料號 + 相同內部目標」只保留第一列，後續標記為重複不予匯入
+      const seenInFile = new Map<string, number>();
+      parsed.forEach((row) => {
+        if (!row.matched_product) return;
+        const key = `${row.vendor_product_id}|${row.matched_product.id}|${row.matched_variant?.id || 'null'}`;
+        if (seenInFile.has(key)) {
+          row.duplicate_in_file = true;
+        } else {
+          seenInFile.set(key, row.row_index);
+        }
+      });
 
       setParsedData(parsed);
     } catch (err: unknown) {
@@ -258,7 +339,7 @@ export function MappingImportDialog({
   };
 
   const handleImport = async () => {
-    const validItems = parsedData.filter(r => r.match_status === 'matched' || r.match_status === 'conflict');
+    const validItems = parsedData.filter(r => isImportableCategory(categoryOf(r)) && !isNoChangeRow(r));
     if (validItems.length === 0) return;
 
     setIsImporting(true);
@@ -271,6 +352,7 @@ export function MappingImportDialog({
         internal_product_id: item.matched_product!.id,
         internal_variant_id: item.matched_variant?.id || null,
         vendor_unit_cost: item.unit_cost ?? null,
+        is_primary: item.is_primary,
         row_index: item.row_index,
       }));
 
@@ -286,20 +368,64 @@ export function MappingImportDialog({
     }
   };
 
-  const matchedCount = parsedData.filter(r => r.match_status === 'matched').length;
-  const conflictCount = parsedData.filter(r => r.match_status === 'conflict').length;
-  const unmatchedCount = parsedData.filter(r => r.match_status === 'unmatched').length;
+  const rowViews = useMemo(
+    () =>
+      parsedData.map(row => {
+        const category = categoryOf(row);
+        // 既有對照只顯示「實際會被改寫」的欄位，沒變動的不顯示
+        const diffs = diffRowsOf(row).filter(d => d.changed);
+        return { row, category, diffs, noChange: category === 'update' && diffs.length === 0 };
+      }),
+    [parsedData],
+  );
+
+  const counts = useMemo(() => {
+    const base: Record<StatusFilter, number> = {
+      all: rowViews.length,
+      new: 0,
+      new_target: 0,
+      update: 0,
+      no_change: 0,
+      duplicate: 0,
+      unmatched: 0,
+    };
+    rowViews.forEach(v => {
+      base[v.category] += 1;
+      if (v.noChange) base.no_change += 1;
+    });
+    return base;
+  }, [rowViews]);
+
+  const visibleViews = useMemo(() => {
+    if (statusFilter === 'all') return rowViews;
+    if (statusFilter === 'no_change') return rowViews.filter(v => v.noChange);
+    return rowViews.filter(v => v.category === statusFilter);
+  }, [rowViews, statusFilter]);
+
+  /** 可匯入的列（新增對照 / 新增對照目標 / 實際有變動的將更新），不受畫面篩選影響 */
+  const importableRows = useMemo(
+    () => rowViews.filter(v => isImportableCategory(v.category) && !v.noChange),
+    [rowViews],
+  );
+  /** 既有對照中，實際有欄位會被改寫的列數 */
+  const changedFieldCount = useMemo(
+    () => rowViews.filter(v => v.category === 'update' && !v.noChange).length,
+    [rowViews],
+  );
+
+  const toggleFilter = (value: StatusFilter) =>
+    setStatusFilter(prev => (prev === value ? 'all' : value));
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
             匯入產品對照 - {supplierName}
           </DialogTitle>
           <DialogDescription>
-            上傳 CSV 或 Excel 檔案，系統將自動匹配內部產品並建立對照關係
+            上傳 CSV 或 Excel 檔案，系統將自動匹配內部產品並建立對照關係；已存在的對照會顯示原始資料與變更後內容供確認
           </DialogDescription>
         </DialogHeader>
 
@@ -333,6 +459,11 @@ export function MappingImportDialog({
                   <li>必要欄位：<span className="font-medium text-foreground">廠商代號</span></li>
                   <li>匹配欄位（擇一）：<span className="font-medium text-foreground">內部SKU</span>、<span className="font-medium text-foreground">變體 SKU</span>、<span className="font-medium text-foreground">SKU</span> 或 <span className="font-medium text-foreground">內部產品名稱</span> / <span className="font-medium text-foreground">產品名稱</span></li>
                   <li>可選欄位：廠商品名、內部變體名稱 / 變體名稱、單價</li>
+                  <li>可選欄位：<span className="font-medium text-foreground">主對照</span>（是／否；未提供時該料號第一個目標會自動成為主對照）</li>
+                  <li>同一個「廠商代號」可對應多個內部產品／變體，系統不再視為重複資料</li>
+                  <li>已存在對照時，預覽表會顯示<span className="font-medium text-foreground">原始資料 → 變更後</span>的差異，<span className="font-medium text-foreground">只列出有變動的欄位</span>（沒變動的不會被覆寫）</li>
+                  <li>若檔案內容與資料庫<span className="font-medium text-foreground">完全相同</span>，該筆會標示「完全相同，不需匯入」並<span className="font-medium text-foreground">略過不寫入</span></li>
+                  <li>上排統計標籤可點擊篩選預覽資料（再點一次取消篩選）</li>
                   <li>建議先匯出現有對照，修改後再匯入</li>
                   <li>也可使用產品管理頁面的匯出檔案作為對照資料來源</li>
                 </ul>
@@ -340,27 +471,78 @@ export function MappingImportDialog({
             </div>
           ) : (
             <div className="flex-1 overflow-hidden flex flex-col space-y-4">
-              <div className="flex items-center gap-3 flex-wrap">
-                <Badge variant="secondary" className="text-sm">
-                  共 {parsedData.length} 筆
-                </Badge>
-                {matchedCount > 0 && (
-                  <Badge variant="default" className="text-sm bg-green-600">
-                    <CheckCircle2 className="h-3 w-3 mr-1" aria-hidden="true" />
-                    已匹配 {matchedCount}
+              <div className="flex items-center gap-2 flex-wrap">
+                <FilterChip active={statusFilter === 'all'} onClick={() => setStatusFilter('all')}>
+                  共 {counts.all} 筆
+                </FilterChip>
+                {counts.new > 0 && (
+                  <FilterChip
+                    tone="green"
+                    active={statusFilter === 'new'}
+                    onClick={() => toggleFilter('new')}
+                    icon={<CheckCircle2 className="h-3 w-3 mr-1" aria-hidden="true" />}
+                  >
+                    已匹配 {counts.new}
+                  </FilterChip>
+                )}
+                {counts.new_target > 0 && (
+                  <FilterChip
+                    active={statusFilter === 'new_target'}
+                    onClick={() => toggleFilter('new_target')}
+                    icon={<Plus className="h-3 w-3 mr-1" aria-hidden="true" />}
+                  >
+                    新增對照目標 {counts.new_target}
+                  </FilterChip>
+                )}
+                {counts.update > 0 && (
+                  <FilterChip
+                    tone="amber"
+                    active={statusFilter === 'update'}
+                    onClick={() => toggleFilter('update')}
+                    icon={<AlertTriangle className="h-3 w-3 mr-1" aria-hidden="true" />}
+                  >
+                    將更新 {counts.update}
+                  </FilterChip>
+                )}
+                {changedFieldCount > 0 && (
+                  <Badge variant="outline" className="text-sm border-amber-500/50 text-amber-600 dark:text-amber-400">
+                    實際變更 {changedFieldCount}
                   </Badge>
                 )}
-                {conflictCount > 0 && (
-                  <Badge variant="default" className="text-sm bg-amber-500">
-                    <AlertTriangle className="h-3 w-3 mr-1" aria-hidden="true" />
-                    有衝突 {conflictCount}
-                  </Badge>
+                {counts.no_change > 0 && (
+                  <FilterChip
+                    tone="outline"
+                    active={statusFilter === 'no_change'}
+                    onClick={() => toggleFilter('no_change')}
+                    icon={<Info className="h-3 w-3 mr-1" aria-hidden="true" />}
+                  >
+                    完全相同不需匯入 {counts.no_change}
+                  </FilterChip>
                 )}
-                {unmatchedCount > 0 && (
-                  <Badge variant="destructive" className="text-sm">
-                    <XCircle className="h-3 w-3 mr-1" aria-hidden="true" />
-                    未匹配 {unmatchedCount}
-                  </Badge>
+                {counts.duplicate > 0 && (
+                  <FilterChip
+                    tone="destructive"
+                    active={statusFilter === 'duplicate'}
+                    onClick={() => toggleFilter('duplicate')}
+                    icon={<XCircle className="h-3 w-3 mr-1" aria-hidden="true" />}
+                  >
+                    檔案內重複 {counts.duplicate}
+                  </FilterChip>
+                )}
+                {counts.unmatched > 0 && (
+                  <FilterChip
+                    tone="destructive"
+                    active={statusFilter === 'unmatched'}
+                    onClick={() => toggleFilter('unmatched')}
+                    icon={<XCircle className="h-3 w-3 mr-1" aria-hidden="true" />}
+                  >
+                    未匹配 {counts.unmatched}
+                  </FilterChip>
+                )}
+                {statusFilter !== 'all' && (
+                  <span className="text-xs text-muted-foreground">
+                    顯示 {visibleViews.length} / {counts.all} 筆（點選同一狀態可取消篩選）
+                  </span>
                 )}
                 <div className="ml-auto">
                   <Button variant="outline" size="sm" onClick={resetState}>
@@ -378,56 +560,104 @@ export function MappingImportDialog({
                       <TableHead>廠商品名</TableHead>
                       <TableHead>SKU</TableHead>
                       <TableHead>匹配結果</TableHead>
+                      <TableHead>既有對照 / 變更內容</TableHead>
                       <TableHead className="text-right">單價</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {parsedData.map((row, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell className="text-center font-mono text-xs text-muted-foreground">
-                          {row.row_index}
-                        </TableCell>
-                        <TableCell className="font-medium font-mono text-xs">
-                          {row.vendor_product_id}
-                        </TableCell>
-                        <TableCell>{row.vendor_product_name || '-'}</TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {row.internal_sku || <span className="text-muted-foreground">-</span>}
-                        </TableCell>
-                        <TableCell>
-                          {row.match_status === 'matched' && (
-                            <div className="flex items-center text-green-600 text-sm">
-                              <CheckCircle2 className="h-4 w-4 mr-1" aria-hidden="true" />
-                              {row.matched_product?.name}
-                              {row.matched_variant && (
-                                <span className="text-muted-foreground ml-1">({row.matched_variant.name})</span>
-                              )}
-                              <Badge variant="outline" className="ml-2 text-xs">
-                                {row.match_method === 'variant_sku' && '變體SKU'}
-                                {row.match_method === 'product_sku' && '產品SKU'}
-                                {row.match_method === 'product_name' && '產品名稱'}
-                              </Badge>
-                            </div>
-                          )}
-                          {row.match_status === 'conflict' && (
-                            <div className="flex items-center text-amber-600 text-sm">
-                              <AlertTriangle className="h-4 w-4 mr-1" aria-hidden="true" />
-                              已有對照：{row.conflict_existing?.internal_product?.name || '未知'}
-                              <span className="text-muted-foreground ml-1">（將覆蓋）</span>
-                            </div>
-                          )}
-                          {row.match_status === 'unmatched' && (
-                            <div className="flex items-center text-destructive text-sm">
-                              <XCircle className="h-4 w-4 mr-1" aria-hidden="true" />
-                              未找到匹配產品
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {row.unit_cost != null ? `$${row.unit_cost}` : '-'}
+                    {visibleViews.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">
+                          此檔案沒有符合「{CATEGORY_LABEL[statusFilter]}」的資料
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      visibleViews.map(({ row, category, diffs, noChange }, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell className="text-center font-mono text-xs text-muted-foreground">
+                            {row.row_index}
+                          </TableCell>
+                          <TableCell className="font-medium font-mono text-xs">
+                            {row.vendor_product_id}
+                          </TableCell>
+                          <TableCell>{row.vendor_product_name || '-'}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {row.internal_sku || <span className="text-muted-foreground">-</span>}
+                          </TableCell>
+                          <TableCell>
+                            {category === 'duplicate' ? (
+                              <div className="flex items-center text-destructive text-sm">
+                                <XCircle className="h-4 w-4 mr-1" aria-hidden="true" />
+                                檔案內重複，不予匯入
+                              </div>
+                            ) : category === 'new' || category === 'new_target' ? (
+                              <div className="flex items-center text-green-600 text-sm flex-wrap">
+                                <CheckCircle2 className="h-4 w-4 mr-1" aria-hidden="true" />
+                                {row.matched_product?.name}
+                                {row.matched_variant && (
+                                  <span className="text-muted-foreground ml-1">({row.matched_variant.name})</span>
+                                )}
+                                <Badge variant="outline" className="ml-2 text-xs">
+                                  {row.match_method === 'variant_sku' && '變體SKU'}
+                                  {row.match_method === 'product_sku' && '產品SKU'}
+                                  {row.match_method === 'product_name' && '產品名稱'}
+                                </Badge>
+                                {category === 'new_target' && (
+                                  <Badge variant="secondary" className="ml-1 text-xs">
+                                    此料號已有 {row.existing_target_count} 筆對照，將新增為第 {row.existing_target_count! + 1} 筆
+                                  </Badge>
+                                )}
+                              </div>
+                            ) : category === 'update' ? (
+                              noChange ? (
+                                <div className="flex items-center text-muted-foreground text-sm">
+                                  <Info className="h-4 w-4 mr-1" aria-hidden="true" />
+                                  完全相同，不需匯入
+                                </div>
+                              ) : (
+                                <div className="text-amber-600 text-sm flex items-center flex-wrap">
+                                  <AlertTriangle className="h-4 w-4 mr-1" aria-hidden="true" />
+                                  已有對照，將更新
+                                </div>
+                              )
+                            ) : (
+                              <div className="flex items-center text-destructive text-sm">
+                                <XCircle className="h-4 w-4 mr-1" aria-hidden="true" />
+                                未找到匹配產品
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {category === 'update' ? (
+                              <>
+                                {noChange ? (
+                                  <p className="text-xs text-muted-foreground">
+                                    與資料庫完全相同，本次不會寫入（僅提醒）
+                                  </p>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground">原始資料 → 變更後（僅列出有變動的欄位）</p>
+                                )}
+                                <MappingDiffList rows={diffs} />
+                              </>
+                            ) : category === 'new_target' ? (
+                              <>
+                                <p className="text-xs text-muted-foreground">
+                                  原始資料（資料庫既有對照），本次將新增上方目標
+                                </p>
+                                <ExistingTargetsList rows={row.existing_rows!} />
+                              </>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                {category === 'new' ? '資料庫無既有對照，將新增' : '-'}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {row.unit_cost != null ? `$${row.unit_cost}` : '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -442,6 +672,15 @@ export function MappingImportDialog({
               </div>
             </div>
           )}
+        {parsedData.length > 0 && counts.no_change > 0 && (
+            <div className="flex items-start gap-2 rounded-md border border-muted-foreground/20 bg-muted/50 p-3 text-sm text-muted-foreground">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>
+                提醒：有 {counts.no_change} 筆與資料庫現有對照<strong className="font-medium text-foreground">完全相同</strong>
+                ，不會重複匯入（本次將匯入 {importableRows.length} 筆）。
+              </span>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
@@ -451,9 +690,9 @@ export function MappingImportDialog({
           {parsedData.length > 0 && (
             <Button
               onClick={handleImport}
-              disabled={isImporting || (matchedCount === 0 && conflictCount === 0)}
+              disabled={isImporting || importableRows.length === 0}
             >
-              {isImporting ? '匯入中...' : `確認匯入 (${matchedCount + conflictCount} 筆)`}
+              {isImporting ? '匯入中...' : `確認匯入 (${importableRows.length} 筆)`}
             </Button>
           )}
         </DialogFooter>

@@ -62,8 +62,8 @@ export function PurchaseProductPicker({
     () =>
       (rawProducts ?? []).map((p) => ({
         ...p,
-        wholesale_price: (p as any).wholesale_price ?? 0,
-        retail_price: (p as any).retail_price ?? 0,
+        wholesale_price: p.unified_wholesale_price ?? 0,
+        retail_price: p.unified_retail_price ?? 0,
         has_store_price: false,
         variants: (p.variants ?? []).map((v) => ({
           ...v,
@@ -100,12 +100,12 @@ export function PurchaseProductPicker({
       if (!supplierId) return {} as Record<string, number>;
       const { data, error } = await (supabase as any)
         .from('supplier_product_mappings')
-        .select('product_id, variant_id, vendor_unit_cost')
+        .select('internal_product_id, internal_variant_id, vendor_unit_cost')
         .eq('supplier_id', supplierId);
       if (error) throw error;
       return ((data as any[]) ?? []).reduce<Record<string, number>>((acc, m) => {
         if (m.vendor_unit_cost != null) {
-          acc[mappingKey(m.product_id, m.variant_id)] = m.vendor_unit_cost;
+          acc[mappingKey(m.internal_product_id, m.internal_variant_id)] = m.vendor_unit_cost;
         }
         return acc;
       }, {});
