@@ -150,12 +150,16 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
       if (!viewingOrder?.supplier_id) return {};
       const { data, error } = await (supabase as any)
         .from('supplier_product_mappings')
-        .select('internal_product_id, internal_variant_id, vendor_product_id, vendor_product_name')
-        .eq('supplier_id', viewingOrder.supplier_id);
+        .select('internal_product_id, internal_variant_id, vendor_product_id, vendor_product_name, is_primary')
+        .eq('supplier_id', viewingOrder.supplier_id)
+        .order('is_primary', { ascending: false });
       if (error) throw error;
-      return (data || []).reduce((acc: Record<string, { vendor_product_id: string; vendor_product_name: string }>, m: any) => {
+      // 同一料號可對多個內部目標，反向查詢（目標 → 料號）時以主對照優先
+      return (data || []).reduce((acc: Record<string, { vendor_product_id: string; vendor_product_name: string; is_primary: boolean }>, m: any) => {
         const key = `${m.internal_product_id}_${m.internal_variant_id || 'null'}`;
-        acc[key] = { vendor_product_id: m.vendor_product_id, vendor_product_name: m.vendor_product_name };
+        const existing = acc[key];
+        if (existing && existing.is_primary) return acc;
+        acc[key] = { vendor_product_id: m.vendor_product_id, vendor_product_name: m.vendor_product_name, is_primary: !!m.is_primary };
         return acc;
       }, {});
     },
@@ -389,41 +393,6 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
     onError: () => toast.error('記錄失敗'),
   });
 
-  const returnItemsMutation = useMutation({
-    mutationFn: async (params: {
-      items: { id: string; quantity: number }[];
-      warehouseId?: string;
-      creditAccountId?: string;
-      reason?: string;
-    }) => {
-      const { items, warehouseId, creditAccountId, reason } = params;
-
-      const rpcItems = items.map((item) => ({
-        purchase_order_item_id: item.id,
-        quantity: item.quantity,
-      }));
-
-      const { error } = await (supabase as any).rpc('process_purchase_return', {
-        p_purchase_order_id: viewingOrderId,
-        p_items: rpcItems,
-        p_warehouse_id: warehouseId || null,
-        p_credit_account_id: creditAccountId || null,
-        p_reason: reason || '',
-        p_created_by: user?.id,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['purchase-order-items', viewingOrderId] });
-      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
-      queryClient.invalidateQueries({ queryKey: ['accounts'] });
-      queryClient.invalidateQueries({ queryKey: ['accounting-entries'] });
-      toast.success('廠商退貨已完成');
-    },
-    onError: () => toast.error('退貨失敗'),
-  });
-
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
     queryFn: async () => {
@@ -474,7 +443,6 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
     reorderItemsMutation,
     importItemsMutation,
     receiveItemsMutation,
-    returnItemsMutation,
     unlinkOrdersFromPurchaseMutation,
     // Provide a way to record payment
     makePaymentMutation: useMutation({

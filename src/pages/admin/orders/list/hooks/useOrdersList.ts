@@ -62,13 +62,16 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
     queryFn: async () => {
       const { data, error } = await (supabase
         .from('purchase_order_items') as any)
-        .select('source_order_ids, source_quantities, purchase_order_id, product_id, variant_id, quantity, received_quantity, purchase_orders(status)');
+        .select('source_order_ids, source_quantities, purchase_order_id, product_id, variant_id, quantity, received_quantity, purchase_orders(status, purpose)');
       if (error) throw error;
       return (data || []) as {
         source_order_ids: string[] | null;
         source_quantities: Record<string, number> | null;
         purchase_order_id: string;
-        purchase_orders?: { status: string | null } | { status: string | null }[] | null;
+        purchase_orders?:
+          | { status: string | null; purpose: string | null }
+          | { status: string | null; purpose: string | null }[]
+          | null;
         product_id: string | null;
         variant_id: string | null;
         quantity: number;
@@ -83,10 +86,11 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
   // key: `${productId}_${variantId ?? 'null'}` → 已下單/在途/已收
   const poProductStats = new Map<string, { orderedQty: number; receivedQty: number; inTransitQty: number }>();
   for (const poi of poLinkItems) {
-    const poStatus = Array.isArray(poi.purchase_orders)
-      ? poi.purchase_orders?.[0]?.status
-      : poi.purchase_orders?.status;
-    if (!isActivePO(poStatus)) continue;
+    const poOrder = Array.isArray(poi.purchase_orders) ? poi.purchase_orders?.[0] : poi.purchase_orders;
+    // ⚠️ 退貨單（purpose='purchase_return'）的 status 也是 received，會通過上面的 active 判定，
+    //    但其品項 quantity 為負數會反過來扣減 orderedQty，必須排除。
+    if (poOrder?.purpose === 'purchase_return') continue;
+    if (!isActivePO(poOrder?.status)) continue;
     if (poi.source_order_ids) {
       for (const orderId of poi.source_order_ids) {
         const existing = poLinkMap.get(orderId);
@@ -164,6 +168,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
             quantity,
             shipped_quantity,
             unit_price,
+            unit_cost,
             status,
             store_id,
             product_id,

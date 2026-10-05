@@ -105,6 +105,7 @@ export function AggregateToPODialog({
         .select('id, order_date, notes, total_amount')
         .eq('status', 'draft')
         .eq('supplier_id', supplierId)
+        .neq('purpose', 'purchase_return') // 退貨單不可作為追加品項的目標
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data || [];
@@ -132,7 +133,7 @@ export function AggregateToPODialog({
     queryFn: async () => {
       const { data, error } = await (supabase
         .from('products') as any)
-        .select('id, name, code, wholesale_price')
+        .select('id, name, code, unified_wholesale_price')
         .order('name');
       if (error) throw error;
       return data || [];
@@ -170,7 +171,7 @@ export function AggregateToPODialog({
       if (selectedProductIds.length === 0) return [];
       const { data, error } = await (supabase as any)
         .from('products')
-        .select('id, wholesale_price')
+        .select('id, unified_wholesale_price')
         .in('id', selectedProductIds);
       if (error) throw error;
       return data || [];
@@ -193,7 +194,7 @@ export function AggregateToPODialog({
   });
 
   const productWholesaleMap = useMemo(
-    () => new Map<string, number>(selectedProductPrices.map((p: any) => [p.id, Number(p.wholesale_price) || 0] as [string, number])),
+    () => new Map<string, number>(selectedProductPrices.map((p: any) => [p.id, Number(p.unified_wholesale_price) || 0] as [string, number])),
     [selectedProductPrices]
   );
   const variantWholesaleMap = useMemo(
@@ -243,7 +244,7 @@ export function AggregateToPODialog({
     const product = allProducts.find((p: any) => p.id === addProductId);
     const variant = addVariants.find((v: any) => v.id === addVariantId);
     const qty = parseInt(addQuantity) || 1;
-    const cost = parseFloat(addUnitCost) || variant?.wholesale_price || product?.wholesale_price || 0;
+    const cost = parseFloat(addUnitCost) || variant?.wholesale_price || product?.unified_wholesale_price || 0;
 
     const newItem: EditableItem = {
       key: `add-${Date.now()}-${addProductId}-${addVariantId || 'base'}`,

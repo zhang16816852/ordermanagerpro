@@ -23,6 +23,7 @@ export function parseSerials(text: string): string[] {
 }
 
 export function isLotValid(input: LotInput | null | undefined, trackingMode: TrackingMode, quantity: number): boolean {
+  if (trackingMode === 'none') return true;
   if (!input) return false;
   if (trackingMode === 'serial') {
     return input.mode === 'serial' && Array.isArray(input.serials) && input.serials.length === quantity && input.serials.every((s) => s.trim().length > 0);
