@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+/* 字體改由 index.html 以 <link rel="preconnect"> + stylesheet 載入，
+   避免 CSS @import 造成的 render-blocking（見 AGENTS.md「首頁重構」） */
 
 @tailwind base;
 @tailwind components;
@@ -128,6 +129,58 @@
 }
 
 @layer base {
+  /*
+    Storefront 專屬設計 token（sf-* 前綴）
+    ------------------------------------------------------------
+    刻意與既有 ERP 的 HSL 變數體系分離：既有 token 服務 /admin、/dashboard
+    等營運頁（藍 + 橘的系統配色），sf-* 服務公開店面。
+    兩套並存、互不覆寫，日後要換品牌色只改這一組。
+  */
+  :root {
+    /* 基底 */
+    --sf-paper: #faf9f6;
+    --sf-surface: #ffffff;
+    --sf-ink: #0b0b0c;
+    --sf-ink-soft: #1c1c1e;
+
+    /* 文字 */
+    --sf-text: #0b0b0c;
+    --sf-muted: #6b6b6b;
+    --sf-faint: #9a9a97;
+
+    /* 描邊 */
+    --sf-line: rgb(11 11 12 / 0.1);
+    --sf-line-strong: rgb(11 11 12 / 0.2);
+
+    /* 點綴 */
+    --sf-accent: #c2410c;
+    --sf-accent-soft: #fdf1e9;
+
+    /* 反白（深色區塊） */
+    --sf-inverse: #0b0b0c;
+    --sf-inverse-text: #faf9f6;
+    --sf-inverse-muted: rgb(250 249 246 / 0.6);
+    --sf-inverse-line: rgb(250 249 246 / 0.16);
+
+    /* 骨架／無圖狀態 */
+    --sf-placeholder-a: #eceae4;
+    --sf-placeholder-b: #e2dfd7;
+    --sf-placeholder-c: #f4f2ed;
+
+    /* 排版尺度（fluid，無 media query） */
+    --sf-text-display: clamp(2.75rem, 1.6rem + 5.2vw, 6.5rem);
+    --sf-text-h2: clamp(1.75rem, 1.2rem + 2.2vw, 3rem);
+    --sf-text-h3: clamp(1.25rem, 1rem + 1vw, 1.75rem);
+    --sf-text-lead: clamp(1rem, 0.95rem + 0.35vw, 1.25rem);
+    --sf-text-meta: 0.8125rem;
+
+    /* 間距 */
+    --sf-section-y: clamp(4rem, 2.5rem + 7vw, 9rem);
+    --sf-gutter: clamp(1.25rem, 0.5rem + 3.4vw, 4rem);
+  }
+}
+
+@layer base {
   * {
     @apply border-border;
   }
@@ -216,6 +269,114 @@
   /* Page entrance animation */
   .page-enter {
     animation: page-enter 0.35s ease-out both;
+  }
+
+  /* ============================================================
+     Storefront（公開店面）專用 utilities
+     ============================================================ */
+
+  /* 內容容器：統一 gutter，置中 */
+  .sf-container {
+    width: 100%;
+    margin-inline: auto;
+    max-width: 96rem;
+    padding-inline: var(--sf-gutter);
+  }
+
+  /* 區塊垂直間距 */
+  .sf-section {
+    padding-block: var(--sf-section-y);
+  }
+
+  /* 極細描邊（editorial 風格，不用卡片陰影） */
+  .sf-rule {
+    border-top: 1px solid var(--sf-line);
+  }
+
+  /* 區塊標題的小標（eyebrow） */
+  .sf-eyebrow {
+    font-size: 0.6875rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--sf-muted);
+    font-weight: 500;
+  }
+
+  /* 顯示級標題：緊湊字距 + optical sizing */
+  .sf-display {
+    font-family: 'Inter', 'Noto Sans TC', system-ui, sans-serif;
+    font-size: var(--sf-text-display);
+    line-height: 0.94;
+    letter-spacing: -0.035em;
+    font-weight: 600;
+    text-wrap: balance;
+  }
+
+  .sf-h2 {
+    font-family: 'Inter', 'Noto Sans TC', system-ui, sans-serif;
+    font-size: var(--sf-text-h2);
+    line-height: 1.06;
+    letter-spacing: -0.025em;
+    font-weight: 600;
+    text-wrap: balance;
+  }
+
+  .sf-h3 {
+    font-size: var(--sf-text-h3);
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+    font-weight: 600;
+    text-wrap: balance;
+  }
+
+  .sf-lead {
+    font-size: var(--sf-text-lead);
+    line-height: 1.65;
+    color: var(--sf-muted);
+    max-width: 42ch;
+  }
+
+  /* 商品網格的圖像比例 */
+  .sf-media {
+    aspect-ratio: 4 / 5;
+    overflow: hidden;
+    background: var(--sf-placeholder-a);
+  }
+
+  .sf-media-wide {
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    background: var(--sf-placeholder-a);
+  }
+
+  /* 連結底線動畫（取代整卡 hover 效果，更克制） */
+  .sf-link-underline {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-size: 0% 1px;
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    transition: background-size 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .sf-link-underline:hover {
+    background-size: 100% 1px;
+  }
+
+  /* 圖片 hover：極輕微放大 */
+  .sf-media-zoom img {
+    transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+
+  .sf-media-zoom:hover img {
+    transform: scale(1.035);
+  }
+
+  /* sticky blur header */
+  .sf-header-blur {
+    background: color-mix(in srgb, var(--sf-paper) 72%, transparent);
+    backdrop-filter: saturate(1.4) blur(14px);
+    -webkit-backdrop-filter: saturate(1.4) blur(14px);
   }
 }
 

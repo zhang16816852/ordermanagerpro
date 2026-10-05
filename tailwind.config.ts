@@ -29,6 +29,28 @@ export default {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        /*
+          Storefront 專屬色票（公開店面）。
+          刻意與上方 ERP token 分開：sf-* 只服務公開頁。
+          定義於 src/index.css 的 :root。
+        */
+        sf: {
+          paper: "var(--sf-paper)",
+          surface: "var(--sf-surface)",
+          ink: "var(--sf-ink)",
+          "ink-soft": "var(--sf-ink-soft)",
+          text: "var(--sf-text)",
+          muted: "var(--sf-muted)",
+          faint: "var(--sf-faint)",
+          line: "var(--sf-line)",
+          "line-strong": "var(--sf-line-strong)",
+          accent: "var(--sf-accent)",
+          "accent-soft": "var(--sf-accent-soft)",
+          inverse: "var(--sf-inverse)",
+          "inverse-text": "var(--sf-inverse-text)",
+          "inverse-muted": "var(--sf-inverse-muted)",
+          "inverse-line": "var(--sf-inverse-line)",
+        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",

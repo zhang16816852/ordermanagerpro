@@ -1,8 +1,8 @@
-import { Routes, Route, Navigate } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
+import { Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Loader2 } from "lucide-react";
+import { PublicLayout } from "@/components/layout/PublicLayout";
+import StorefrontPage from "@/storefront/StorefrontPage";
 
 import { adminRoutes } from "./admin";
 import { storeRoutes } from "./store";
@@ -11,35 +11,18 @@ import { workshopRoutes } from "./workshop";
 import MarketPage from "@/pages/market/index";
 import MarketDetailPage from "@/pages/market/detail";
 
-function RootRedirect() {
-    const { user, isAdmin, isRep, isFixEngineer, loading } = useAuth();
-
-    if (loading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        );
-    }
-
-    if (!user) {
-        return <Navigate to="/auth" replace />;
-    }
-
-    if (isFixEngineer) {
-        return <Navigate to="/workshop" replace />;
-    }
-
-    return (isAdmin || isRep) ?
-        <Navigate to="/admin" replace /> :
-        <Navigate to="/dashboard" replace />;
-}
-
 export function AppRoutes() {
     return (
         <Routes>
-            {/* 根路徑與重定向 */}
-            <Route path="/" element={<RootRedirect />} />
+            {/* 公開首頁：所有訪客（含未登入）都看得到，不做 redirect */}
+            <Route
+                path="/"
+                element={
+                    <PublicLayout>
+                        <StorefrontPage />
+                    </PublicLayout>
+                }
+            />
 
             {/* 公開但使用 Layout 的路由 (如：媒合市場) */}
             <Route

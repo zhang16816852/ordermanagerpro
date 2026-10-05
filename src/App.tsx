@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,45 +5,28 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { AppRoutes } from "./routes";
-import { CacheService } from "@/services/cacheService";
+import { CacheGate } from "@/components/CacheGate";
 
 const queryClient = new QueryClient();
 
 const App = () => {
-    const [cacheReady, setCacheReady] = useState(false);
-
-    useEffect(() => {
-        CacheService.init().then(() => setCacheReady(true));
-    }, []);
-
-    if (!cacheReady) {
-        return (
-            <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                height: '100vh',
-                fontFamily: 'system-ui',
-                color: '#666',
-            }}>
-                載入中...
-            </div>
-        );
-    }
-
-    return (
-        <QueryClientProvider client={queryClient}>
-            <TooltipProvider>
-                <Toaster />
-                <Sonner />
-                <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                    <AuthProvider>
-                        <AppRoutes />
-                    </AuthProvider>
-                </BrowserRouter>
-            </TooltipProvider>
-        </QueryClientProvider>
-    );
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <AuthProvider>
+            {/* 公開頁面不等 ERP 離線快取；其餘路徑維持原本的載入 gate。
+                放在 BrowserRouter 內是因為 CacheGate 需要 useLocation。 */}
+            <CacheGate>
+              <AppRoutes />
+            </CacheGate>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
 };
 
 export default App;
