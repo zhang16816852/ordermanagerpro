@@ -15,6 +15,7 @@ import {
   DocImportKind,
   ImportGroup,
   ImportParseResult,
+  ImportDateIssue,
   IMPORT_QUERY_KEYS,
   IMPORT_RPC_NAMES,
   downloadImportTemplate,
@@ -52,6 +53,22 @@ const RESULT_CODE_FIELD: Record<DocImportKind, string> = {
   purchase: 'supplier_order_number',
 };
 
+const DATE_ISSUE_LABELS: Record<ImportDateIssue['field'], string> = {
+  order_date: '單據日期',
+  expected_date: '預計到貨日',
+  shipped_date: '出貨日期',
+};
+
+// 本對話框沒有日期選擇器，故日期無法辨識一律視為錯誤擋下（不可靜默帶入今天／空值）
+function errorsOf(g: ImportGroup): string[] {
+  const errs = [...g.errors];
+  for (const issue of g.dateIssues ?? []) {
+    const label = DATE_ISSUE_LABELS[issue.field];
+    errs.push(`第 ${issue.row + 1} 列${label}「${issue.raw}」無法辨識，請於檔案中修正後重新上傳`);
+  }
+  return errs;
+}
+
 export function DocImportDialog({ kind, open, onOpenChange, onImported }: DocImportDialogProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -65,7 +82,7 @@ export function DocImportDialog({ kind, open, onOpenChange, onImported }: DocImp
     () => (parseResult ? rowsToImportGroups(kind, parseResult.rows) : []),
     [parseResult, kind],
   );
-  const hasValidationError = groups.some((g) => g.errors.length > 0);
+  const hasValidationError = groups.some((g) => errorsOf(g).length > 0);
   const totalItems = groups.reduce((sum, g) => sum + g.items.length, 0);
 
   const reset = () => {
@@ -211,7 +228,7 @@ export function DocImportDialog({ kind, open, onOpenChange, onImported }: DocImp
               {parseResult.errors.length > 0 && (
                 <Badge variant="destructive">解析錯誤 {parseResult.errors.length}</Badge>
               )}
-              {hasValidationError && <Badge variant="destructive">需修正 {groups.filter(g => g.errors.length).length} 組</Badge>}
+              {hasValidationError && <Badge variant="destructive">需修正 {groups.filter(g => errorsOf(g).length).length} 組</Badge>}
             </div>
 
             {parseResult.errors.length > 0 && (
@@ -241,8 +258,10 @@ export function DocImportDialog({ kind, open, onOpenChange, onImported }: DocImp
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {groups.map((g) => (
-                      <tr key={g.index} className={g.errors.length ? 'bg-destructive/5' : ''}>
+                    {groups.map((g) => {
+                      const gErrors = errorsOf(g);
+                      return (
+                      <tr key={g.index} className={gErrors.length ? 'bg-destructive/5' : ''}>
                         <td className="px-3 py-2 text-muted-foreground">{g.index + 1}</td>
                         <td className="px-3 py-2 font-medium">{g[codeField] || '自動生成'}</td>
                         <td className="px-3 py-2">{g.store_code || g.supplier_code || '-'}</td>
@@ -251,9 +270,9 @@ export function DocImportDialog({ kind, open, onOpenChange, onImported }: DocImp
                         </td>
                         <td className="px-3 py-2">{g.items.length} 列</td>
                         <td className="px-3 py-2">
-                          {g.errors.length ? (
+                          {gErrors.length ? (
                             <span className="flex items-center gap-1 text-destructive text-xs">
-                              <AlertTriangle className="h-3.5 w-3.5" /> {g.errors.length} 個錯誤
+                              <AlertTriangle className="h-3.5 w-3.5" /> {gErrors.length} 個錯誤
                             </span>
                           ) : (
                             <span className="flex items-center gap-1 text-emerald-600 text-xs">
@@ -262,18 +281,19 @@ export function DocImportDialog({ kind, open, onOpenChange, onImported }: DocImp
                           )}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
             </ScrollArea>
 
-            {groups.filter((g) => g.errors.length > 0).length > 0 && (
+            {groups.filter((g) => errorsOf(g).length > 0).length > 0 && (
               <div className="rounded-lg border p-2 text-xs space-y-1 shrink-0 max-h-40 overflow-y-auto">
-                {groups.filter((g) => g.errors.length > 0).map((g) => (
+                {groups.filter((g) => errorsOf(g).length > 0).map((g) => (
                   <div key={g.index}>
                     <span className="font-medium">第 {g.index + 1} 組（{g[codeField] || '自動生成'}）：</span>
-                    {g.errors.join('；')}
+                    {errorsOf(g).join('；')}
                   </div>
                 ))}
               </div>

@@ -20,6 +20,14 @@ export interface ImportItemRow {
   batch_unit_cost?: number;
 }
 
+export type ImportDateField = 'order_date' | 'expected_date' | 'shipped_date';
+
+export interface ImportDateIssue {
+  field: ImportDateField;
+  raw: string;
+  row: number;
+}
+
 export interface ImportGroup {
   index: number;
   sourceRow: number;
@@ -40,6 +48,8 @@ export interface ImportGroup {
   notes?: string;
   items: ImportItemRow[];
   errors: string[];
+  /** 原始日期欄非空但無法辨識（軟性）：由前端提示並讓使用者手動選日期，不直接擋下匯入 */
+  dateIssues: ImportDateIssue[];
 }
 
 export interface ImportParseResult {
@@ -89,24 +99,67 @@ function toTrimmed(value: unknown): string {
   return String(value).trim();
 }
 
+// Excel 1900 日期系統的基準：序號 1 = 1900-01-01，以 UTC 計算可免除時區偏移
+const EXCEL_EPOCH_UTC = Date.UTC(1899, 11, 30);
+const EXCEL_SERIAL_MAX = 2958465; // 9999-12-31
+const EXCEL_SERIAL_RE = /^\d{5,}(?:\.\d+)?$/; // 至少 5 位，避免把「2026」這類手打年份當序號
+const PLAIN_YEAR_MIN = 1900;
+const PLAIN_YEAR_MAX = 2999;
+
+function formatYmd(year: number, month1: number, day: number): string {
+  return `${year}-${String(month1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/** 真實日曆日檢查：擋掉 2026-13-45、2026-02-31 等，否則伺服端 ::date 會整張回退 */
+function isRealYmd(year: number, month1: number, day: number): boolean {
+  if (year < PLAIN_YEAR_MIN || year > PLAIN_YEAR_MAX) return false;
+  if (!Number.isInteger(year) || !Number.isInteger(month1) || !Number.isInteger(day)) return false;
+  if (month1 < 1 || month1 > 12 || day < 1 || day > 31) return false;
+  const probe = new Date(Date.UTC(year, month1 - 1, day));
+  return probe.getUTCFullYear() === year && probe.getUTCMonth() === month1 - 1 && probe.getUTCDate() === day;
+}
+
 export function normalizeDate(value: unknown): string | undefined {
   if (value === null || value === undefined) return undefined;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return undefined;
+    const y = value.getFullYear();
+    const mo = value.getMonth() + 1;
+    const d = value.getDate();
+    return isRealYmd(y, mo, d) ? formatYmd(y, mo, d) : undefined;
+  }
   const s = String(value).trim();
   if (!s) return undefined;
   let m: RegExpMatchArray | null;
   if ((m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/))) {
-    const [_, y, mo, d] = m;
-    return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    return isRealYmd(y, mo, d) ? formatYmd(y, mo, d) : undefined;
   }
   if ((m = s.match(/^(\d{4})(\d{2})(\d{2})$/))) {
-    const [_, y, mo, d] = m;
-    return `${y}-${mo}-${d}`;
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    return isRealYmd(y, mo, d) ? formatYmd(y, mo, d) : undefined;
   }
+  // Excel 日期儲存格在未開 cellDates 時會讀成日期序號（如 46266 = 2026-09-01）。
+  // 直接 new Date('46266') 會被解析成「46266 年」而得到 46266-01-01，故必須先轉序號。
+  if (EXCEL_SERIAL_RE.test(s)) {
+    const serial = Math.floor(Number(s));
+    if (serial < 1 || serial > EXCEL_SERIAL_MAX) return undefined;
+    const d = new Date(EXCEL_EPOCH_UTC + serial * 86400000);
+    return formatYmd(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+  }
+  // 其餘純數字字串不做猜測：new Date 會把 '1' 當成 2001 年、'2026' 當成 2026 年
+  if (/^\d+(?:\.\d+)?$/.test(s)) return undefined;
   const parsed = new Date(s);
-  if (!Number.isNaN(parsed.getTime())) {
-    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
-  }
-  return undefined;
+  // 守門：new Date 的 fallback 仍可能推出離譜年份，一律視為無法辨識
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  const y = parsed.getFullYear();
+  const mo = parsed.getMonth() + 1;
+  const d = parsed.getDate();
+  return isRealYmd(y, mo, d) ? formatYmd(y, mo, d) : undefined;
 }
 
 export function toPositiveInt(value: unknown, label: string, errors: string[]): number | undefined {
@@ -246,6 +299,19 @@ function validateQuantity(value: string | number | undefined, errors: string[]):
   return toPositiveInt(value, '數量', errors);
 }
 
+const DATE_FIELDS: ImportDateField[] = ['order_date', 'expected_date', 'shipped_date'];
+
+/** 原始日期欄有值但無法辨識時回報；空值不算（order_date 空值由伺服端補今天） */
+function collectDateIssues(row: DocImportRow): ImportDateIssue[] {
+  const issues: ImportDateIssue[] = [];
+  for (const field of DATE_FIELDS) {
+    const raw = toTrimmed(row[field]);
+    if (!raw) continue;
+    if (!normalizeDate(raw)) issues.push({ field, raw, row: row.sourceRow });
+  }
+  return issues;
+}
+
 export function rowsToImportGroups(kind: DocImportKind, rows: DocImportRow[]): ImportGroup[] {
   const groups: ImportGroup[] = [];
   const codeField = groupKey(kind);
@@ -280,10 +346,14 @@ export function rowsToImportGroups(kind: DocImportKind, rows: DocImportRow[]): I
         notes: toTrimmed(row.notes) || undefined,
         items: [],
         errors: [],
+        dateIssues: [],
       };
       groups.push(group);
       if (code) groupByCode.set(code, group);
     }
+
+    // 同一單號的多列各自檢查日期欄，任一列的日期無法辨識都要能提示
+    group.dateIssues.push(...collectDateIssues(row));
 
     const itemErrors: string[] = [];
     const item: ImportItemRow = {
