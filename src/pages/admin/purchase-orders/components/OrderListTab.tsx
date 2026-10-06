@@ -8,9 +8,11 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Eye, Edit, Trash2, Send, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { PurchaseOrder } from '../types';
 import { poPaymentSummary } from '../paymentSummary';
+import { isBatchOrderable, isBatchReceivable } from '../batchActions';
 import { formatCurrency } from '@/lib/formatters';
 import type { PoSortDir, PoSortField } from '../orderSort';
 
@@ -28,6 +30,13 @@ interface OrderListTabProps {
   sortDir: PoSortDir;
   /** 點擊表頭：同一欄翻轉方向、換欄位則取該欄預設方向 */
   onSort: (field: PoSortField) => void;
+  /** 批次模式開啟（由上層持有，預設關閉）；開啟後才顯示選取欄位 */
+  batchMode?: boolean;
+  /** 批次模式鎖定（mutation 進行中），鎖住所有選取與勾選框 */
+  batchLocked?: boolean;
+  selectedIds?: string[];
+  onToggleSelect?: (id: string) => void;
+  onToggleSelectAll?: (ids: string[]) => void;
 }
 
 export function OrderListTab({
@@ -41,7 +50,40 @@ export function OrderListTab({
   sortField,
   sortDir,
   onSort,
+  batchMode = false,
+  batchLocked = false,
+  selectedIds,
+  onToggleSelect,
+  onToggleSelectAll,
 }: OrderListTabProps) {
+  const selected = selectedIds ?? [];
+  const selectableIds = batchMode
+    ? orders.filter((o) => isBatchOrderable(o) || isBatchReceivable(o)).map((o) => o.id)
+    : [];
+  const selectableSet = new Set(selectableIds);
+  const selectedCount = selected.filter((id) => selectableSet.has(id)).length;
+  const allSelected = selectableIds.length > 0 && selectedCount === selectableIds.length;
+  const someSelected = selectedCount > 0 && !allSelected;
+
+  const handleSelectAll = () => {
+    if (!onToggleSelectAll || batchLocked) return;
+    onToggleSelectAll(allSelected ? [] : selectableIds);
+  };
+
+  /** 不可批次處理的單仍要顯示勾選框但停用，並以 title 說明原因 */
+  const selectCell = (order: PurchaseOrder) => {
+    const selectable = selectableSet.has(order.id);
+    return (
+      <TableCell className="w-10">
+        <Checkbox
+          checked={selected.includes(order.id)}
+          disabled={batchLocked || !selectable}
+          onCheckedChange={() => onToggleSelect?.(order.id)}
+          aria-label={`選取採購單 ${order.supplier_order_number || order.id.slice(0, 8)}`}
+        />
+      </TableCell>
+    );
+  };
   // 與 ShippingPoolGroups / admin 訂單列表 OrderTableView 相同的表頭排序寫法
   const SortableHead = ({
     field,
@@ -139,6 +181,16 @@ export function OrderListTab({
         <Table>
           <TableHeader>
             <TableRow>
+              {batchMode && (
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                    disabled={batchLocked || selectableIds.length === 0}
+                    onCheckedChange={handleSelectAll}
+                    aria-label="全選可批次處理的採購單"
+                  />
+                </TableHead>
+              )}
               <SortableHead field="id" label="編號" />
               <SortableHead field="supplier" label="供應商" />
               <SortableHead field="purpose" label="類型" />
@@ -151,7 +203,8 @@ export function OrderListTab({
           </TableHeader>
           <TableBody>
             {orders.map((order) => (
-              <TableRow key={order.id}>
+              <TableRow key={order.id} className={batchMode && selected.includes(order.id) ? 'bg-muted/50' : undefined}>
+                {batchMode && selectCell(order)}
                 <TableCell className="font-mono text-xs">{order.id.slice(0, 8)}</TableCell>
                 <TableCell>{order.supplier?.name || '-'}</TableCell>
                 <TableCell>{getTypeBadge(order.purpose)}</TableCell>
@@ -193,13 +246,29 @@ export function OrderListTab({
 
       {/* Mobile: Cards */}
       <div className="md:hidden space-y-3">
-        {orders.map((order) => (
-          <div key={order.id} className="border rounded-lg p-4 bg-card shadow-soft space-y-3">
-            <div className="flex items-start justify-between">
-              <div className="min-w-0">
-                <p className="font-mono text-xs text-muted-foreground">{order.id.slice(0, 8)}</p>
-                <p className="font-medium truncate">{order.supplier?.name || '-'}</p>
-                <div className="mt-1">{getTypeBadge(order.purpose)}</div>
+        {orders.map((order) => {
+          const cardSelectable = selectableSet.has(order.id);
+          return (
+          <div
+            key={order.id}
+            className={`border rounded-lg p-4 bg-card shadow-soft space-y-3 ${batchMode && selected.includes(order.id) ? 'ring-2 ring-primary/40' : ''}`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-3 min-w-0">
+                {batchMode && (
+                  <Checkbox
+                    className="mt-1"
+                    checked={selected.includes(order.id)}
+                    disabled={batchLocked || !cardSelectable}
+                    onCheckedChange={() => onToggleSelect?.(order.id)}
+                    aria-label={`選取採購單 ${order.supplier_order_number || order.id.slice(0, 8)}`}
+                  />
+                )}
+                <div className="min-w-0">
+                  <p className="font-mono text-xs text-muted-foreground">{order.id.slice(0, 8)}</p>
+                  <p className="font-medium truncate">{order.supplier?.name || '-'}</p>
+                  <div className="mt-1">{getTypeBadge(order.purpose)}</div>
+                </div>
               </div>
               {getStatusBadge(order.status)}
             </div>
@@ -235,7 +304,8 @@ export function OrderListTab({
               </Button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );
