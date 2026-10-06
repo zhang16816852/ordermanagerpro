@@ -279,7 +279,7 @@ const profitByOrderId = useMemo(() => {
     if (viewMode !== 'items') return [];
     return orders?.flatMap(order =>
       order.order_items
-        .filter(item => !isReturnLine(item) && getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued' && item.status !== 'out_of_stock')
+        .filter(item => getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued' && item.status !== 'out_of_stock')
         .filter(item => itemMatchesSearch(item))
         .map(item => ({
           ...item,
@@ -485,7 +485,6 @@ const profitByOrderId = useMemo(() => {
         const pending = getPendingQuantity(item);
         if (pending <= 0) continue;
         if (item.status === 'cancelled' || item.status === 'discontinued' || item.status === 'out_of_stock') continue;
-        if (isReturnLine(item)) continue;
         if (!grouped[order.store_id]) {
           grouped[order.store_id] = { storeName: order.stores?.name || '', items: [] };
         }

@@ -53,19 +53,23 @@ export function CorrectAddTable({
                                     {poolItems.map((p) => {
                                         const oi = p.order_item;
                                         const qty = addedFromPool[oi.id] || 0;
-                                        // 退貨列（line_type='return'）不可追加出貨：
-                                        // 整包 correct_sales_note 會被後端守門擋下，提示改用訂單層「撤銷退貨」
+                                        // 退貨列（line_type='return'）可追加：送出時以負數量進銷貨單並回補庫存
                                         const isReturn = (oi?.line_type ?? 'sale') === 'return';
                                         return (
-                                            <TableRow key={p.id} className={isReturn ? "opacity-70" : undefined}>
+                                            <TableRow key={p.id}>
                                                 <TableCell>
-                                                    <div className="font-medium text-sm">{itemLabel(oi?.product?.name, oi?.product_variant?.name)}</div>
+                                                    <div className="font-medium text-sm flex items-center gap-1.5">
+                                                        {itemLabel(oi?.product?.name, oi?.product_variant?.name)}
+                                                        {isReturn && (
+                                                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">退貨</span>
+                                                        )}
+                                                    </div>
                                                     {oi?.order?.code && (
                                                         <div className="text-xs text-muted-foreground">訂單 {oi.order.code}</div>
                                                     )}
                                                     {isReturn && (
-                                                        <div className="text-xs text-orange-600 mt-0.5">
-                                                            退貨品項不可追加出貨
+                                                        <div className="text-xs text-muted-foreground mt-0.5">
+                                                            追加後以負數量出貨並回補庫存
                                                         </div>
                                                     )}
                                                 </TableCell>
@@ -78,8 +82,7 @@ export function CorrectAddTable({
                                                         max={p.quantity}
                                                         className="h-8 w-20 text-right ml-auto"
                                                         value={qty || ""}
-                                                        placeholder={isReturn ? "—" : "0"}
-                                                        disabled={isReturn}
+                                                        placeholder="0"
                                                         onChange={(e) => {
                                                             const val = Math.max(0, Math.min(p.quantity, Number(e.target.value) || 0));
                                                             setAddedFromPool((prev) => ({ ...prev, [oi.id]: val }));
@@ -111,10 +114,16 @@ export function CorrectAddTable({
                                 <TableBody>
                                     {orderCandidates.map((c) => {
                                         const qty = addedFromOrder[c.id] || 0;
+                                        const isReturn = (c.line_type ?? 'sale') === 'return';
                                         return (
                                             <TableRow key={c.id}>
                                                 <TableCell>
-                                                    <div className="font-medium text-sm">{itemLabel(c.product?.name, c.product_variant?.name)}</div>
+                                                    <div className="font-medium text-sm flex items-center gap-1.5">
+                                                        {itemLabel(c.product?.name, c.product_variant?.name)}
+                                                        {isReturn && (
+                                                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">退貨</span>
+                                                        )}
+                                                    </div>
                                                     <div className="text-xs text-muted-foreground">訂單 {c.code}</div>
                                                 </TableCell>
                                                 <TableCell className="text-right">{c.available}</TableCell>

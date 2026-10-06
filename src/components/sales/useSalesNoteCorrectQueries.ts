@@ -100,7 +100,7 @@ export function useSalesNoteCorrectQueries(note: SalesNoteDetail | null, open: b
             (data || []).forEach((o: any) => {
                 (o.order_items || []).forEach((oi: any) => {
                     const available = (oi.quantity || 0) - (oi.shipped_quantity || 0);
-                    if (available > 0 && (oi.line_type ?? 'sale') !== 'return') {
+                    if (available > 0) {
                         candidates.push({
                             id: oi.id,
                             order_id: oi.order_id,
@@ -111,6 +111,7 @@ export function useSalesNoteCorrectQueries(note: SalesNoteDetail | null, open: b
                             unit_price: oi.unit_price,
                             available,
                             code: o.code || "",
+                            line_type: oi.line_type,
                             product: oi.product,
                             product_variant: oi.product_variant,
                         });

@@ -49,6 +49,7 @@ export interface OrderItemCandidate {
     unit_price: number;
     available: number;
     code: string;
+    line_type?: 'sale' | 'exchange' | 'return' | null;
     product: { name: string; code: string } | null;
     product_variant: { name: string; sku: string } | null;
 }
