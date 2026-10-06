@@ -178,7 +178,13 @@ export function OrderFilterBar({
           variant="ghost"
           size="sm"
           className="text-muted-foreground"
-          onClick={onClearFilters}
+          onClick={() => {
+            // dateRange 是本元件持有的視覺狀態（只在 mount 時由 filters 還原一次），
+            // 上層 onClearFilters 只會清網址參數。故必須一併清掉本地狀態，
+            // 否則「清除篩選」後日期欄仍顯示舊區間，看起來像沒清掉。
+            setDateRange({});
+            onClearFilters();
+          }}
         >
           <Trash2 className="mr-1 h-3.5 w-3.5" />清除篩選
         </Button>
