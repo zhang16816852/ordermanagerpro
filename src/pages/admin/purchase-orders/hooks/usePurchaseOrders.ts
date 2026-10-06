@@ -15,6 +15,8 @@ import {
   type PurchasePaidEntry,
   type PurchasePaidRef,
 } from '../paymentSummary';
+import { PO_ORDER_SKIP_LABELS, poOrderSkipReason } from '../batchActions';
+import { loadBatchReceiveItems, loadPoHeaders, toReceivePlanRow } from '../batchReceiveData';
 import type { Account, AccountingCategory, AccountingEntry, AccountingEntryReference } from '@/pages/admin/accounting/types';
 
 /** 記錄付款的 payload：`orderIds` 為權威單據清單，references 由 EntryForm 產生 */
@@ -618,6 +620,139 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
     onError: (e) => toast.error(getErrorMessage(e, '記錄付款失敗')),
   });
 
+  // -------------------------------------------------------------------------
+  // 批次操作
+  // -------------------------------------------------------------------------
+
+  /**
+   * 批次下單（draft → ordered）。
+   *
+   * 只改表頭狀態（`p_items: []` 讓伺服器走 header-only 分支、跳過品項守門與重算）。
+   * ⚠️ 可省略欄位一律傳 `null`：RPC 端為 `COALESCE(p_notes, notes)` /
+   * `CASE WHEN p_expected_date IS NULL THEN expected_date ...` 語意，
+   * 傳 null 代表「不動」，不會清掉既有值。
+   *
+   * 送出前重新拉取最新表頭再驗一次 `draft`——畫面快取可能是舊的
+   * （另一個分頁／另一台裝置已改狀態），而 `p_status` 若與庫內不同會被
+   * 「已有收貨品項不可手動變更」擋下，浪費一次往返。
+   */
+  const batchOrderMutation = useMutation({
+    mutationFn: async (orderIds: string[]) => {
+      if (orderIds.length === 0) return { done: 0, skipped: 0 };
+      const headers = await loadPoHeaders(orderIds);
+      const headerOf = new Map(headers.map((h) => [h.id, h]));
+
+      let done = 0;
+      let skipped = 0;
+      // 逐張送，避免單一張的守門錯誤讓整批失敗；update_purchase_order_with_items
+      // 為單張交易，無法用同一個 p_items 批次提交。
+      for (const id of orderIds) {
+        const header = headerOf.get(id);
+        if (!header || header.status !== 'draft') {
+          skipped += 1;
+          continue;
+        }
+        try {
+          await rpcUpdatePurchaseOrder({
+            p_purchase_order_id: id,
+            p_items: [],
+            p_deleted_item_ids: [],
+            p_status: 'ordered',
+          });
+          done += 1;
+        } catch (e) {
+          skipped += 1;
+          console.warn('批次下單失敗', id, e);
+        }
+      }
+      return { done, skipped };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-order'] });
+      if (result.done > 0) {
+        toast.success(`已下單 ${result.done} 張採購單`);
+      }
+      if (result.skipped > 0) {
+        toast.error(`${result.skipped} 張採購單未能下單`);
+      }
+    },
+  });
+
+  /**
+   * 批次收貨（多張 PO 一次呼叫 receive_purchase_items，原子提交）。
+   *
+   * 送出前重新拉取**表頭 + 品項**（server truth），只送 receivable 的品項。
+   * ⚠️ `receive_purchase_items` 沒有狀態守門且會重算 status，故只取
+   * `poOrderSkipReason()` 為 null 的單；已取消單若被送進去會被「復活」，
+   * 採購退貨單（數量為負、已在匯入時回沖庫存）也不走這條路徑。
+   */
+  const batchReceiveItemsMutation = useMutation({
+    mutationFn: async ({ orderIds, warehouseId }: { orderIds: string[]; warehouseId?: string | null }) => {
+      if (orderIds.length === 0) return { receivedCount: 0, skippedCount: 0, excludedOrders: [] as { code: string; reason: string }[] };
+
+      const headers = await loadPoHeaders(orderIds);
+      const excludedOrders: { code: string; reason: string }[] = [];
+      const targetIds: string[] = [];
+      for (const id of orderIds) {
+        const header = headers.find((h) => h.id === id);
+        if (!header) continue;
+        const reason = poOrderSkipReason(header);
+        if (reason) {
+          excludedOrders.push({
+            code: header.supplier_order_number || id.slice(0, 8),
+            reason: PO_ORDER_SKIP_LABELS[reason],
+          });
+          continue;
+        }
+        targetIds.push(id);
+      }
+      if (targetIds.length === 0) {
+        throw new Error('選取的採購單皆不可批次收貨（已取消、已收貨或屬採購退貨）');
+      }
+
+      const codeOf = new Map(headers.map((h) => [h.id, h.supplier_order_number || h.id.slice(0, 8)]));
+      const freshItems = await loadBatchReceiveItems(targetIds);
+      const receivable = freshItems.map(toReceivePlanRow).filter((r) => r.receivable);
+      const skippedCount = freshItems.length - receivable.length;
+      if (receivable.length === 0) {
+        throw new Error('沒有可批次收貨的品項（可能已全部收貨或需序號／批號）');
+      }
+
+      const rpcItems = receivable.map((r) => ({
+        id: r.itemId,
+        product_id: r.productId,
+        variant_id: r.variantId || null,
+        received_quantity: r.quantity,
+        purchase_order_id: r.purchaseOrderId,
+        purchase_order_code: codeOf.get(r.purchaseOrderId) || r.purchaseOrderId.slice(0, 8),
+        warehouse_id: warehouseId || null,
+      }));
+
+      const { error: rpcError } = await (supabase as any).rpc('receive_purchase_items', {
+        p_items: rpcItems,
+        p_warehouse_id: warehouseId || null,
+        p_lots: null,
+      });
+      if (rpcError) throw rpcError;
+
+      return { receivedCount: receivable.length, skippedCount, excludedOrders };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-items'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
+      toast.success(`已收貨 ${result.receivedCount} 筆品項`);
+      const notes: string[] = [];
+      if (result.skippedCount > 0) notes.push(`已跳過 ${result.skippedCount} 筆品項（已收貨或需序號／批號）`);
+      if (result.excludedOrders.length > 0) {
+        notes.push(`已排除 ${result.excludedOrders.length} 張採購單（${result.excludedOrders.map((e) => `${e.code}：${e.reason}`).join('、')}）`);
+      }
+      if (notes.length > 0) toast.warning(notes.join('；'));
+    },
+    onError: (e) => toast.error(getErrorMessage(e, '批次收貨失敗')),
+  });
+
   const unlinkOrdersFromPurchaseMutation = useMutation({
     mutationFn: async ({ purchaseOrderId, orderIds }: { purchaseOrderId: string; orderIds: string[] }) => {
       const { data, error } = await (supabase as any)
@@ -665,5 +800,7 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
     receiveItemsMutation,
     recordPaymentMutation,
     unlinkOrdersFromPurchaseMutation,
+    batchOrderMutation,
+    batchReceiveItemsMutation,
   };
 }

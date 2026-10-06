@@ -7,9 +7,21 @@ import { ReceivingTab } from './components/ReceivingTab';
 import { SupplierForm } from './components/SupplierForm';
 import { PurchaseOrderDetailDialog } from './components/PurchaseOrderDetailDialog';
 import { PurchaseDocImportDialog } from './components/PurchaseDocImportDialog';
+import { PurchaseOrderBatchBar } from './components/PurchaseOrderBatchBar';
+import { BatchReceiveDialog } from './components/BatchReceiveDialog';
+import { EntryDialog } from '@/pages/admin/accounting/components/EntryDialog';
+import type { DocItem } from '@/pages/admin/accounting/components/EntryFormTypes';
+import type { AccountingEntry, AccountingEntryReference } from '@/pages/admin/accounting/types';
 import { PurchaseOrder, Supplier } from './types';
 import { usePurchaseOrders, PurchaseOrderFilters } from './hooks/usePurchaseOrders';
 import { poPaymentSummary } from './paymentSummary';
+import {
+  canSubmitBatchPayment,
+  isBatchOrderable,
+  isBatchReceivable,
+  poBatchPaymentPlan,
+  poPaymentDocLine,
+} from './batchActions';
 import {
   parsePoSort,
   sortPurchaseOrders,
@@ -38,6 +50,11 @@ export default function AdminPurchaseOrders() {
   const [importMode, setImportMode] = useState<'purchase' | 'returns'>('purchase');
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
 
+  // 批次操作（batchMode 預設關閉；選擇集合以 id 保存，切換篩選時另行過濾掉已消失的單）
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [batchReceiveOpen, setBatchReceiveOpen] = useState(false);
+  const [batchPayOpen, setBatchPayOpen] = useState(false);
 
   const [filters, setFilters] = useState<PurchaseOrderFilters>({
     supplierId: searchParams.get('supplier') || undefined,
@@ -124,6 +141,8 @@ export default function AdminPurchaseOrders() {
     receiveItemsMutation,
     recordPaymentMutation,
     unlinkOrdersFromPurchaseMutation,
+    batchOrderMutation,
+    batchReceiveItemsMutation,
   } = usePurchaseOrders(viewingOrder?.id, filters);
 
   // 金額摘要直接由「已套用篩選後的 orders」推導，因此篩選條件一變動即同步更新。
@@ -149,6 +168,103 @@ export default function AdminPurchaseOrders() {
   const sortedOrders = useMemo(
     () => sortPurchaseOrders(orders, sortField, sortDir),
     [orders, sortField, sortDir],
+  );
+
+  // --- 批次操作衍生狀態 -----------------------------------------------------
+  // 選擇集合以 id 保存，但**計數一律由目前篩選結果重新推導**：某張單可能因為
+  // 別人在另一視窗改成已取消／已收貨而離開可處理範圍，若直接信任 selectedIds
+  // 會讓操作列顯示「可批次下單 3 張」而實際送出時被 mutation 擋掉。
+  const selectedOrders = useMemo(() => {
+    const set = new Set(selectedIds);
+    return orders.filter((o) => set.has(o.id));
+  }, [orders, selectedIds]);
+
+  const orderableOrders = useMemo(() => selectedOrders.filter(isBatchOrderable), [selectedOrders]);
+  const receivableOrders = useMemo(() => selectedOrders.filter(isBatchReceivable), [selectedOrders]);
+
+  const batchPaymentPlan = useMemo(
+    () => poBatchPaymentPlan(selectedOrders, paidAmountMap),
+    [selectedOrders, paidAmountMap],
+  );
+  const canBatchPay = canSeePayments && canSubmitBatchPayment(batchPaymentPlan);
+
+  const batchPending =
+    batchOrderMutation.isPending || batchReceiveItemsMutation.isPending || recordPaymentMutation.isPending;
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const clearSelection = () => setSelectedIds([]);
+
+  const handleBatchModeChange = (on: boolean) => {
+    setBatchMode(on);
+    if (!on) clearSelection();
+  };
+
+  const handleBatchOrder = () => {
+    const ids = orderableOrders.map((o) => o.id);
+    batchOrderMutation.mutate(ids, { onSuccess: clearSelection });
+  };
+
+  // 收貨必須先進 BatchReceiveDialog 選倉庫並確認預覽，不可直接呼叫 mutation。
+  const handleBatchReceive = () => {
+    if (receivableOrders.length === 0) return;
+    setBatchReceiveOpen(true);
+  };
+
+  const handleBatchReceiveConfirm = (orderIds: string[], warehouseId: string) => {
+    batchReceiveItemsMutation.mutate(
+      { orderIds, warehouseId },
+      {
+        onSuccess: () => {
+          clearSelection();
+          setBatchReceiveOpen(false);
+        },
+      },
+    );
+  };
+
+  const handleBatchPay = () => {
+    if (!canBatchPay) return;
+    setBatchPayOpen(true);
+  };
+
+  const handleBatchPaySubmit = (
+    data: Partial<AccountingEntry>,
+    references?: AccountingEntryReference[],
+  ) => {
+    recordPaymentMutation.mutate(
+      {
+        orderIds: batchPaymentPlan.lines.map((l) => l.orderId),
+        data,
+        references,
+      },
+      {
+        onSuccess: () => {
+          setBatchPayOpen(false);
+          clearSelection();
+        },
+      },
+    );
+  };
+
+  /** 合併付款的 docItems：以「未付餘額 × 原單號」逐張列示，退貨為正、一般採購為負 */
+  const batchPaymentDocItems: DocItem[] = useMemo(
+    () =>
+      batchPaymentPlan.lines.map((l) => {
+        const order = selectedOrders.find((o) => o.id === l.orderId);
+        return {
+          docType: 'purchase_order',
+          docId: l.orderId,
+          code: l.supplierOrderNumber || l.orderId.slice(0, 8),
+          name: order?.supplier?.name || batchPaymentPlan.supplierName || '未知供應商',
+          date: order?.order_date || order?.created_at || '',
+          originalAmount: l.totalAmount,
+          amountApplied: l.amountApplied,
+        };
+      }),
+    [batchPaymentPlan, selectedOrders],
   );
 
   return (
@@ -235,6 +351,23 @@ export default function AdminPurchaseOrders() {
             </div>
           )}
 
+          <PurchaseOrderBatchBar
+            batchMode={batchMode}
+            onBatchModeChange={handleBatchModeChange}
+            selectedCount={selectedOrders.length}
+            orderableCount={orderableOrders.length}
+            receivableCount={receivableOrders.length}
+            payableCount={batchPaymentPlan.lines.length}
+            canPay={canBatchPay}
+            isOrdering={batchOrderMutation.isPending}
+            isReceiving={batchReceiveItemsMutation.isPending}
+            isPaying={recordPaymentMutation.isPending}
+            onOrder={handleBatchOrder}
+            onReceive={handleBatchReceive}
+            onPay={handleBatchPay}
+            onClear={clearSelection}
+          />
+
           <OrderListTab
             orders={sortedOrders}
             onView={(order) => setViewingOrder(order)}
@@ -246,6 +379,11 @@ export default function AdminPurchaseOrders() {
             sortField={sortField}
             sortDir={sortDir}
             onSort={handleSort}
+            batchMode={batchMode}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onToggleSelectAll={setSelectedIds}
+            batchLocked={batchPending}
           />
         </TabsContent>
 
@@ -361,6 +499,41 @@ export default function AdminPurchaseOrders() {
         mode={importMode}
       />
 
+      {/* Batch Receive Dialog */}
+      <BatchReceiveDialog
+        open={batchReceiveOpen}
+        onOpenChange={(open) => { if (!batchReceiveItemsMutation.isPending) setBatchReceiveOpen(open); }}
+        orders={receivableOrders}
+        isPending={batchReceiveItemsMutation.isPending}
+        onConfirm={handleBatchReceiveConfirm}
+      />
+
+      {/* Batch Payment Dialog — 同供應商合併付款，退貨正收入／一般採購負支出 */}
+      {batchPayOpen && (
+        <EntryDialog
+          open={batchPayOpen}
+          onOpenChange={(open) => { if (!recordPaymentMutation.isPending) setBatchPayOpen(open); }}
+          categories={categories}
+          accounts={accounts}
+          isLoading={recordPaymentMutation.isPending}
+          prefill={{
+            amount: Math.abs(batchPaymentPlan.netApplied),
+            categoryId: (() => {
+              const wantType = batchPaymentPlan.netApplied < 0 ? 'expense' : 'income';
+              const hit = categories.find(
+                (c) => c.type === wantType && (c.name.includes('採購') || c.name.includes('供應商')),
+              );
+              return hit?.id || categories.find((c) => c.type === wantType)?.id;
+            })(),
+            description: `採購合併付款（${batchPaymentPlan.lines.length} 張）: ${batchPaymentPlan.supplierName}`,
+            referenceType: 'purchase_order',
+            referenceId: batchPaymentPlan.lines[0]?.orderId,
+            markAsPaid: true,
+            docItems: batchPaymentDocItems,
+          }}
+          onSubmit={handleBatchPaySubmit}
+        />
+      )}
     </div>
   );
 }
