@@ -10,6 +10,19 @@ import {
   type PoItemWritePayload, type PoUpdateItemsArgs, type PoWriteResult,
 } from '../types';
 import { LotInput } from '@/utils/lotTracking';
+import {
+  computePurchasePaidTotals,
+  type PurchasePaidEntry,
+  type PurchasePaidRef,
+} from '../paymentSummary';
+import type { Account, AccountingCategory, AccountingEntry, AccountingEntryReference } from '@/pages/admin/accounting/types';
+
+/** 記錄付款的 payload：`orderIds` 為權威單據清單，references 由 EntryForm 產生 */
+export interface RecordPaymentPayload {
+  orderIds: string[];
+  data: Partial<AccountingEntry>;
+  references?: AccountingEntryReference[];
+}
 
 export interface PurchaseOrderFilters {
   supplierId?: string;
@@ -90,53 +103,57 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
 
   // 付款彙總：purchase_orders 沒有 payment_status／paid_amount，已付金額只能來自會計模組。
   //
-  // 同一筆分錄可能同時出現在兩條參照路徑（會計分錄「清單」模式會把第一張單據寫進
-  // accounting_entries.reference_id，同時把全部單據寫進 accounting_entry_references
-  // 子表，見 entrySubmitData.buildSubmitData），因此以「採購單 + 分錄 id」為鍵去重，
-  // 否則該單的已付金額會被重複加總。
+  // 分攤規則（見 computePurchasePaidTotals）：
+  //   1. 一筆分錄的 paid_amount 對應「整張分錄」，不是每張單據，故須依該分錄
+  //      對每張參照單據的 amount_applied 比例分攤。
+  //   2. 同一筆分錄可能同時出現在兩條參照路徑（會計分錄「清單」模式會把第一張單據寫進
+  //      accounting_entries.reference_id，同時把全部單據寫進 accounting_entry_references
+  //      子表，見 entrySubmitData.buildSubmitData），因此以「採購單 + 分錄 id」為鍵去重，
+  //      否則該單的已付金額會被重複加總。
   const visibleOrderIds = useMemo(() => orders.map((o) => o.id), [orders]);
 
   const { data: paidAmountMap = {}, isLoading: paidAmountsLoading } = useQuery({
     queryKey: ['purchase-order-paid-amounts', visibleOrderIds],
     queryFn: async () => {
-      const empty: Record<string, number> = {};
-      if (visibleOrderIds.length === 0) return empty;
+      if (visibleOrderIds.length === 0) return {};
 
       const [entryRes, refRes] = await Promise.all([
         (supabase as any)
           .from('accounting_entries')
-          .select('id, reference_id, paid_amount')
+          .select('id, reference_id, amount, paid_amount')
           .eq('reference_type', 'purchase_order')
           .in('reference_id', visibleOrderIds),
         (supabase as any)
           .from('accounting_entry_references')
-          .select('entry_id, reference_id')
+          .select('entry_id, reference_id, amount_applied')
           .eq('reference_type', 'purchase_order')
           .in('reference_id', visibleOrderIds),
       ]);
       if (entryRes.error) throw entryRes.error;
       if (refRes.error) throw refRes.error;
 
-      const entries = (entryRes.data || []) as Array<{ id: string; reference_id: string; paid_amount: number | null }>;
-      const refRows = (refRes.data || []) as Array<{ entry_id: string; reference_id: string }>;
+      const entryRows = (entryRes.data || []) as PurchasePaidRef[];
+      const subRefs = (refRes.data || []) as PurchasePaidRef[];
 
-      const paidByEntry = new Map<string, number>();
-      entries.forEach((e) => paidByEntry.set(e.id, Number(e.paid_amount) || 0));
+      // 跨單結帳時，採購單可能不是該分錄的第一張單據，分錄的 reference_type 就不會是
+      // purchase_order，上面的查詢撈不到它的 amount／paid_amount，該單會被誤判為未付。
+      // 故補撈這些「只出現在子表」的分錄。
+      const knownEntryIds = new Set(entryRows.map((r) => r.entry_id));
+      const missingEntryIds = [...new Set(
+        subRefs.map((r) => r.entry_id).filter((id): id is string => !!id && !knownEntryIds.has(id)),
+      )];
 
-      const countedPairs = new Set<string>();
-      const sum: Record<string, number> = {};
-      const count = (poId: string, entryId: string) => {
-        if (!poId || !entryId) return;
-        const pair = `${poId}:${entryId}`;
-        if (countedPairs.has(pair)) return;
-        countedPairs.add(pair);
-        sum[poId] = (sum[poId] || 0) + (paidByEntry.get(entryId) || 0);
-      };
+      let entries = (entryRes.data || []) as PurchasePaidEntry[];
+      if (missingEntryIds.length > 0) {
+        const { data, error } = await (supabase as any)
+          .from('accounting_entries')
+          .select('id, amount, paid_amount')
+          .in('id', missingEntryIds);
+        if (error) throw error;
+        entries = [...entries, ...((data || []) as PurchasePaidEntry[])];
+      }
 
-      entries.forEach((e) => count(e.reference_id, e.id));
-      refRows.forEach((r) => count(r.reference_id, r.entry_id));
-
-      return sum;
+      return computePurchasePaidTotals(entries, entryRows, subRefs);
     },
     // accounting_entries 的 RLS 僅 admin 可讀；業務身分看不到付款資料，
     // 與其顯示「全部未付」的假象，不如不查也不顯示。
@@ -449,6 +466,14 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
     onError: () => toast.error('記錄失敗'),
   });
 
+  /**
+   * 付款帳戶（含目前的 balance）。
+   *
+   * ⚠️ 這支 query 不能只在付款視窗開啟時才 enabled：`recordPaymentMutation`
+   * 需要用 `account.balance` 做餘額增減，若此刻帳戶尚未載入就會拿不到帳戶，
+   * 造成「分錄與 references 都建立、餘額卻沒動」的靜默錯誤。
+   * 付款本來就限管理員（`canSeePayments: isAdmin === true`），故以角色開關。
+   */
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
     queryFn: async () => {
@@ -456,6 +481,141 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
       if (error) throw error;
       return data || [];
     },
+    enabled: isAdmin === true,
+  });
+
+  /**
+   * 會計分類（EntryDialog 選單用）。
+   *
+   * ⚠️ queryKey 刻意與 `useAccounting`／`SalesNoteDetailDialog` 的
+   * `['accounting-categories']` 共用，讓 react-query 去重、避免同一份分類
+   * 打兩次 DB（不同 key 會各自快取一份，切換頁面時還會不同步）。
+   */
+  const { data: categories = [] } = useQuery({
+    queryKey: ['accounting-categories'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('accounting_categories')
+        .select('*')
+        .eq('is_active', true)
+        .order('type')
+        .order('name');
+      if (error) throw error;
+      return (data || []) as AccountingCategory[];
+    },
+    enabled: isAdmin === true,
+  });
+
+  /**
+   * 記錄付款／退貨沖帳（取代舊 `makePaymentMutation`）。
+   *
+   * 舊路徑寫入**不存在的 `transactions` 表**，既不建會計分錄、也不關聯
+   * `purchase_orders`，付款金額完全不會進帳戶餘額；且沒有任何單據欄位可供
+   * `paidAmountMap` 回讀，等於付款紀錄是孤立的。現改為建立真正的
+   * `accounting_entries` ＋ `accounting_entry_references`，與銷貨單／維修單
+   * 收款共用同一套資料模型（見 `useAccounting.createEntryMutation`）。
+   *
+   * `references` 由 `EntryForm` 依 docItems 產生，`amount_applied` 為帶正負號的
+   * 金額：一般採購為負（支出）、採購退貨為正（收入）。
+   */
+  const recordPaymentMutation = useMutation({
+    mutationFn: async ({ orderIds, data, references }: RecordPaymentPayload) => {
+      if (orderIds.length === 0) throw new Error('請先選擇要記錄付款的採購單');
+      if (!data.account_id) throw new Error('請選擇付款帳戶');
+      if (!data.category_id) throw new Error('請選擇會計分類');
+
+      // ⚠️ 以下檢查必須全部「在任何寫入之前」完成。
+      //
+      // 這個 mutation 是 entry → references → 帳戶餘額三段寫入（非單一交易，
+      // 與既有的 `useAccounting.createEntryMutation` 同一套做法）。若在
+      // references 寫入前就建立 entry，一旦後段失敗就會留下一筆「有金額、
+      // 卻沒掛到任何採購單」的分錄：付款金額不會被計入任何採購單的已付金額，
+      // 等於錢付了但單據上查不到，且沒有任何機會自動復原。
+      //
+      // `orderIds` 是權威清單（畫面上被選取的採購單），`references` 則由
+      // EntryForm 依 docItems 產生。使用者可在 EntryForm 中刪掉部分單據，
+      // 若不檢查就會送出「金額涵蓋 N 張單、reference 只剩 M 筆」的分錄。
+      const orderSet = new Set(orderIds);
+      const keptRefs = (references ?? []).filter(
+        (r) => r.reference_type === 'purchase_order' && orderSet.has(r.reference_id),
+      );
+
+      if (keptRefs.length !== orderIds.length) {
+        const covered = new Set(keptRefs.map((r) => r.reference_id));
+        const missing = orderIds.filter((id) => !covered.has(id));
+        throw new Error(
+          `付款分單與採購單不一致，請重新開啟付款視窗（未建立單據參考：${missing.length} 張）`,
+        );
+      }
+
+      const refIds = keptRefs.map((r) => r.reference_id);
+      if (new Set(refIds).size !== refIds.length) {
+        throw new Error('同一張採購單出現重複的單據參考，請重新開啟付款視窗');
+      }
+
+      const zeroRefs = keptRefs.filter((r) => !Number(r.amount_applied));
+      if (zeroRefs.length > 0) {
+        throw new Error('有採購單的付款金額為 0，請確認後再送出');
+      }
+
+      // 支出 → 帳戶餘額減少；收入（退貨沖帳）→ 增加。
+      // ⚠️ 與 `useAccounting.createEntryMutation` 同一套 signed 語意，
+      // 不可改成 `-Math.abs(...)`，否則退貨沖帳會反向扣款。
+      if (data.type !== 'income' && data.type !== 'expense') {
+        throw new Error('付款分錄類型僅能是支出或收入');
+      }
+      if (!data.amount) {
+        throw new Error('付款金額為 0，請確認後再送出');
+      }
+
+      // 帳戶必須在此刻就解析得到：`accounts` 來自 React Query，
+      // 若 accounts query 尚未 enabled／仍在載入，原本的 `if (account)` 會靜默
+      // 跳過餘額更新 —— 分錄與 references 都已建立、錢卻完全沒動，且沒有任何錯誤。
+      const account = accounts.find((a: Account) => a.id === data.account_id);
+      if (!account) {
+        throw new Error('無法讀取付款帳戶餘額，請稍後再試');
+      }
+      const signedAmount = data.type === 'income' ? data.amount : -data.amount;
+
+      const { data: newEntry, error: entryError } = await (supabase as any)
+        .from('accounting_entries')
+        .insert({ ...data, created_by: user?.id })
+        .select('id')
+        .single();
+      if (entryError) throw entryError;
+
+      {
+        const { error: refError } = await (supabase as any)
+          .from('accounting_entry_references')
+          .insert(
+            keptRefs.map((ref) => ({
+              entry_id: newEntry.id,
+              reference_type: ref.reference_type,
+              reference_id: ref.reference_id,
+              item_name: ref.item_name,
+              amount_applied: ref.amount_applied,
+            })),
+          );
+        if (refError) throw refError;
+      }
+
+      const { error: accError } = await (supabase as any)
+        .from('accounts')
+        .update({ balance: account.balance + signedAmount })
+        .eq('id', data.account_id);
+      if (accError) throw accError;
+
+      return { entryId: newEntry.id, orderCount: orderIds.length, refCount: keptRefs.length };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['accounting-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['accounting-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-paid-amounts'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      toast.success(`已記錄 ${result.orderCount} 張採購單的付款`);
+    },
+    onError: (e) => toast.error(getErrorMessage(e, '記錄付款失敗')),
   });
 
   const unlinkOrdersFromPurchaseMutation = useMutation({
@@ -490,6 +650,7 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
     sourceOrderMap,
     supplierMappingMap,
     accounts,
+    categories,
     paidAmountMap,
     paidAmountsLoading,
     canSeePayments: isAdmin === true,
@@ -502,34 +663,7 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
     reorderItemsMutation,
     importItemsMutation,
     receiveItemsMutation,
+    recordPaymentMutation,
     unlinkOrdersFromPurchaseMutation,
-    // Provide a way to record payment
-    makePaymentMutation: useMutation({
-      mutationFn: async (data: { orderId: string; accountId: string; amount: number; date: string }) => {
-        // 1. Create transaction
-        const { error: txError } = await (supabase as any).from('transactions').insert({
-          account_id: data.accountId,
-          amount: -data.amount,
-          type: 'expense',
-          category: '採購付款',
-          description: `採購單付款 #${data.orderId.slice(0, 8)}`,
-          date: data.date,
-        });
-        if (txError) throw txError;
-
-        // 2. Update account balance
-        const { data: acc } = await (supabase as any).from('accounts').select('balance').eq('id', data.accountId).single();
-        await (supabase as any).from('accounts').update({ balance: (acc?.balance || 0) - data.amount }).eq('id', data.accountId);
-
-        // 3. Mark PO as paid (optional, depends on schema, let's assume we update a flag or just log it)
-        // In current schema, we don't have a specific 'paid' field, but we've recorded the transaction.
-      },
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['accounts'] });
-        queryClient.invalidateQueries({ queryKey: ['transactions'] });
-        toast.success('付款已記錄');
-      },
-      onError: () => toast.error('付款失敗'),
-    }),
   };
 }

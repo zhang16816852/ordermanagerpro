@@ -38,6 +38,7 @@ export default function AdminPurchaseOrders() {
   const [importMode, setImportMode] = useState<'purchase' | 'returns'>('purchase');
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
 
+
   const [filters, setFilters] = useState<PurchaseOrderFilters>({
     supplierId: searchParams.get('supplier') || undefined,
     purpose: searchParams.get('purpose') || undefined,
@@ -109,6 +110,7 @@ export default function AdminPurchaseOrders() {
     sourceOrderMap,
     supplierMappingMap,
     accounts,
+    categories,
     paidAmountMap,
     canSeePayments,
     updateOrderMutation,
@@ -120,7 +122,7 @@ export default function AdminPurchaseOrders() {
     reorderItemsMutation,
     importItemsMutation,
     receiveItemsMutation,
-    makePaymentMutation,
+    recordPaymentMutation,
     unlinkOrdersFromPurchaseMutation,
   } = usePurchaseOrders(viewingOrder?.id, filters);
 
@@ -323,12 +325,19 @@ export default function AdminPurchaseOrders() {
               orderItems={orderItems}
               products={products}
               accounts={accounts}
+              categories={categories}
+              paidAmount={canSeePayments ? paidAmountMap[viewingOrder.id] : undefined}
               sourceOrderMap={sourceOrderMap}
               supplierMappingMap={supplierMappingMap}
-              isLoading={itemsLoading || importItemsMutation.isPending || receiveItemsMutation.isPending || makePaymentMutation.isPending}
+              isLoading={itemsLoading || importItemsMutation.isPending || receiveItemsMutation.isPending || recordPaymentMutation.isPending}
               onImportItems={(data) => importItemsMutation.mutateAsync(data)}
               onReceiveItems={(items) => receiveItemsMutation.mutate(items)}
-              onMakePayment={(data) => makePaymentMutation.mutate({ orderId: viewingOrder.id, ...data })}
+              onMakePayment={(data, references) => {
+                recordPaymentMutation.mutate(
+                  { orderIds: [viewingOrder.id], data, references },
+                  { onSuccess: () => setViewingOrder(null) },
+                );
+              }}
               onEditOrder={() => navigate(`/admin/purchase-orders/${viewingOrder.id}/edit`)}
               onUpdateItem={(data) => updateItemMutation.mutateAsync(data)}
               onDeleteItem={(data) => deleteItemMutation.mutateAsync(data)}
@@ -351,6 +360,7 @@ export default function AdminPurchaseOrders() {
         defaultSupplierId={filters.supplierId}
         mode={importMode}
       />
+
     </div>
   );
 }

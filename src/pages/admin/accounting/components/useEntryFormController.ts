@@ -362,7 +362,12 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
       name: item.name,
       date: item.date,
       originalAmount: item.amount || 0,
-      amountApplied: isPurchase ? -Math.abs(item.amount || 0) : (item.amount || 0),
+      // 採購單的 total_amount 已帶方向：正常採購為正、採購退貨為負。
+      // 一律取「訂單金額的相反數」作為分錄參照金額（amountApplied），
+      // 與後端退貨沖帳（amount_applied = +v_credit，total_amount = -v_sum）一致，
+      // 讓後續依合計符號判定 income／expense 時可正確分流。
+      // 不可用 Math.abs：會把退貨單翻成與正常採購相同的支出方向。
+      amountApplied: isPurchase ? -(item.amount || 0) : (item.amount || 0),
     }];
     setDocItems(next);
     setDescription(prev => isAutoDescription(prev) ? buildDocItemsDescription(next) : prev);

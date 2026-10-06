@@ -25,7 +25,9 @@ import { PurchaseOrder, PurchaseOrderItem, ProductWithPrice, type PoItemWritePay
 import { PurchaseProductPicker } from './PurchaseProductPicker';
 import { ImportFromOrdersDialog } from './ImportFromOrdersDialog';
 import { ReceiveForm } from './ReceiveForm';
-import { PaymentForm } from './PaymentForm';
+import { EntryDialog } from '@/pages/admin/accounting/components/EntryDialog';
+import { poPaymentDocLine } from '../batchActions';
+import type { AccountingEntry, AccountingEntryReference, AccountingCategory, Account } from '@/pages/admin/accounting/types';
 import { ExcelImportDialog } from './ExcelImportDialog';
 import { exportToCSV } from '@/lib/exportUtils';
 import {
@@ -54,13 +56,17 @@ interface PurchaseOrderDetailDialogProps {
   order: PurchaseOrder;
   orderItems: PurchaseOrderItem[];
   products: ProductWithPrice[];
-  accounts: any[];
+  accounts: Account[];
+  categories: AccountingCategory[];
+  /** 該單已付金額（絕對值）；未提供則視為 0 */
+  paidAmount?: number;
   sourceOrderMap: Record<string, string>;
   supplierMappingMap: Record<string, { vendor_product_id: string; vendor_product_name: string }>;
   /** 匯入／追加品項：items 為「既有品項 + 新品項（id: null）」的整單清單 */
   onImportItems: (data: { purchaseOrderId: string; items: PoUpdateItemPayload[] }) => Promise<unknown>;
   onReceiveItems: (data: any) => void;
-  onMakePayment: (data: any) => void;
+  /** 記錄付款：改走統一會計 EntryDialog（data + references 一起建立分錄與單據關聯） */
+  onMakePayment: (data: Partial<AccountingEntry>, references?: AccountingEntryReference[]) => void;
   onUnlinkOrder: (orderId: string) => void;
   /** 導向統一採購編輯頁（/admin/purchase-orders/:id/edit） */
   onEditOrder?: () => void;
@@ -77,6 +83,8 @@ export function PurchaseOrderDetailDialog({
   orderItems,
   products,
   accounts,
+  categories,
+  paidAmount,
   sourceOrderMap,
   supplierMappingMap,
   onImportItems,
@@ -189,6 +197,26 @@ export function PurchaseOrderDetailDialog({
   }, [localItems, rowDrafts]);
 
   const isFiltering = searchQuery.trim() !== '';
+
+  /**
+   * 付款對帳的單據行。
+   *
+   * ⚠️ 以**資料庫的 `total_amount`** 為分攤基礎（而非 `liveTotal`），因為已過帳的
+   * 會計分錄與 `poPaymentSummary` 都以落庫金額為準；若用未儲存的行內編輯值會與
+   * 既有 `paidAmountMap` 不同基準而算出錯誤的未付餘額。
+   */
+  const paymentLine = useMemo(
+    () =>
+      poPaymentDocLine(
+        {
+          id: order.id,
+          supplier_order_number: order.supplier_order_number,
+          total_amount: order.total_amount,
+        },
+        paidAmount,
+      ),
+    [order.id, order.total_amount, order.supplier_order_number, paidAmount],
+  );
 
   const getMappingKey = (item: PurchaseOrderItem) => `${item.product_id}_${item.variant_id || 'null'}`;
 
@@ -615,22 +643,15 @@ export function PurchaseOrderDetailDialog({
             </DialogContent>
           </Dialog>
 
-          <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="border-blue-500 text-blue-500 hover:bg-blue-50">
-                <CreditCard className="h-4 w-4 mr-2" /> 付款對帳
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>記錄付款</DialogTitle>
-                <DialogDescription>
-                  記錄對供應商的付款流水，關聯至特定帳戶以進行對帳。
-                </DialogDescription>
-              </DialogHeader>
-              <PaymentForm accounts={accounts} amount={order.total_amount} isLoading={isLoading} onSubmit={(data) => { onMakePayment(data); setPaymentOpen(false); }} />
-            </DialogContent>
-          </Dialog>
+          {/* 付款對帳 — 統一走會計 EntryDialog，建立真正的會計分錄與單據關聯 */}
+          <Button
+            variant="outline"
+            className="border-blue-500 text-blue-500 hover:bg-blue-50"
+            onClick={() => setPaymentOpen(true)}
+            disabled={!paymentLine}
+          >
+            <CreditCard className="h-4 w-4 mr-2" /> 付款對帳
+          </Button>
         </div>
 
         <div className="text-right space-y-1">
@@ -638,6 +659,52 @@ export function PurchaseOrderDetailDialog({
           <p className="text-3xl font-bold text-primary">{formatCurrency(liveTotal)}</p>
         </div>
       </div>
+
+      <EntryDialog
+        open={paymentOpen}
+        onOpenChange={setPaymentOpen}
+        categories={categories}
+        accounts={accounts}
+        isLoading={isLoading}
+        prefill={
+          paymentLine
+            ? {
+                amount: Math.abs(paymentLine.amountApplied),
+                categoryId: (() => {
+                  const wantType = paymentLine.amountApplied < 0 ? 'expense' : 'income';
+                  const wantName = paymentLine.amountApplied < 0 ? '採購' : '退貨';
+                  const hit = categories.find(
+                    (c) => c.type === wantType && (c.name.includes(wantName) || c.name.includes('供應商')),
+                  );
+                  return hit?.id || categories.find((c) => c.type === wantType)?.id;
+                })(),
+                description: paymentLine.isCredit
+                  ? `採購退貨沖帳: ${paymentLine.supplierOrderNumber || order.id.slice(0, 8)}`
+                  : `採購單付款: ${paymentLine.supplierOrderNumber || order.id.slice(0, 8)}`,
+                referenceType: 'purchase_order',
+                referenceId: order.id,
+                transactionDate: order.order_date || undefined,
+                markAsPaid: true,
+                docItems: [
+                  {
+                    docType: 'purchase_order',
+                    docId: order.id,
+                    code: paymentLine.supplierOrderNumber || order.id.slice(0, 8),
+                    name: order.supplier?.name || '未知供應商',
+                    date: order.order_date || order.created_at,
+                    originalAmount: paymentLine.totalAmount,
+                    // 退貨為正收入、一般採購為負支出，與 batchActions 同一規則
+                    amountApplied: paymentLine.amountApplied,
+                  },
+                ],
+              }
+            : undefined
+        }
+        onSubmit={(data, references) => {
+          onMakePayment(data, references);
+          setPaymentOpen(false);
+        }}
+      />
     </div>
   );
 }
