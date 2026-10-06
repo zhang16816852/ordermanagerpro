@@ -2,6 +2,33 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（採購單批次下單／跨 PO 原子收貨／同供應商合併付款，2026-10-06）
+
+- **目的**：採購單列表加入 **batchMode**（預設關閉），可一次對多張採購單「批次下單／批次收貨／批次記錄付款」；並讓**單張與批次付款共用同一套會計分錄建立路徑**（`EntryDialog`）。**零後端改動、零 migration、零 RPC 簽名變更**，不需重生 `types.ts`。
+- **資格判定（純函式 `batchActions.ts`）**：`isBatchOrderable`（僅 `draft`）＋ `isBatchReceivable`（`status ∈ {draft, ordered, partial_received}` 且 `purpose !== 'purchase_return'`）；下單／收貨各自有 `skipReason` 與中文 label（`PO_ORDER_SKIP_LABELS`／`PO_RECEIVE_SKIP_LABELS`），不合法品項在預覽中**顯示被跳過的原因**而非靜默消失。
+- **`batchReceiveData.ts`**：`loadPoHeaders(orderIds)`／`loadBatchReceiveItems(orderIds)` 以 `server truth` 重新讀 headers＋items（**不使用列表快取**），`toReceivePlanRow()` 轉成預覽列。
+- **批次下單**：固定 **header-only update**（`p_items: []`、`p_deleted_item_ids: []`、`p_status: 'ordered'`）——這會讓 `update_purchase_order_with_items` 走 `jsonb_array_length(...) = 0` 的表頭分支、跳過品項守門與總額重算；`p_notes`／`p_order_date`／`p_expected_date`／`p_purpose`／`p_supplier_order_number` 一律**省略或傳 null**（`COALESCE` 語意＝不動）。逐張送（該 RPC 為單張交易），單張失敗只計入 `skipped` 不拖垮整批。
+- **批次收貨**（`BatchReceiveDialog.tsx`）：品項僅納入 `quantity > 0`＋`received_quantity === 0`＋`tracking_mode === 'none'`；tracked／部分或已收貨／零數量品項顯示跳過原因。**預設倉庫優先 `code = 'own'`，不存在才回退 `defaultWarehouse`**，下拉僅列 `is_active !== false`。
+  - ⚠️ **預覽與倉庫無關，因此 query key 維持 `['po-batch-receive-preview', orderIds]`、切換倉庫不刻意 refetch**（收貨結果本來就只與品項／倉庫有關，不需重算計畫）；已於程式碼加註解說明，避免日後有人「顺手」把 warehouse 加進 key 造成無謂請求。
+  - 缺失／已刪除的 headers **排除於預覽並明確回報**，不靜默消失。
+  - 提交為**單一跨 PO `receive_purchase_items` 呼叫**（該 RPC 本身即跨 PO 原子、逐 PO 重算狀態；tracked 品項缺 lot／serial 時整次回滾）。
+- **批次付款**：僅允許**同供應商且有未付餘額**（`poBatchPaymentPlan`／`canSubmitBatchPayment`）；**完全無付款列或混供應商一律拒絕**。每個 `orderId` 必須恰有一筆有效 `purchase_order` reference。
+  - `DocItem` 語意：`originalAmount = order.total_amount`、`amountApplied = -signedUnpaid`（正常採購為負支出、採購退貨為正收入）。`useEntryFormController.addDocItem` 已移除 `Math.abs`——採購單 `total_amount` **已帶方向**，用 `Math.abs` 會把退貨單翻成與正常採購相同的支出方向。
+  - `computePurchasePaidTotals`（`paymentSummary.ts`）以 `|amount_applied| × min(1, paid_amount / amount)` 分攤、保留 `(poId, entryId)` 去重、**子表 reference 優先於 entry-level fallback**。
+- **`recordPaymentMutation`（`usePurchaseOrders.ts`）**：舊 `makePaymentMutation` 寫入不存在的 `transactions` 表，已移除；改為建立 `accounting_entries` ＋ `accounting_entry_references` 並調整 `accounts.balance`（**與既有 `useAccounting.createEntryMutation` 同一套 signed 語意**，不可改成 `-Math.abs(...)`）。
+  - ⚠️ **寫入前驗證**（本次修掉兩個會靜默毀損資料的 bug）：① reference 必須**帶齊且不重複**對應 `orderIds`——原本只做 filter，使用者在 EntryForm 刪掉部分單據後仍會送出「金額涵蓋 N 單、reference 只剩 M 筆」的分錄；② 帳戶必須**當下就解析得到**——原本 `if (account)` 會在 `accounts` 尚未載入時**靜默跳過餘額更新**，造成「分錄與 references 都建立、錢卻沒動」且無任何錯誤。兩者皆改為寫入前 `throw`。
+  - ⚠️ **原子性缺口為既有專案-wide 問題**（`createEntryMutation` 同樣是 entry → references → 餘額三段非交易寫入），本次刻意**不另立專用 RPC**，以免採購付款與其他付款路徑產生兩套會計語意。
+  - `['accounts']`／`['accounting-categories']` query 以 `enabled: isAdmin === true` 開啟（付款本來就限管理員，`canSeePayments: isAdmin === true`）。⚠️ **`accounts` 不可只在付款視窗開啟時才 enabled**，否則餘額增減會取不到帳戶。
+- **UI**：`OrderListTab`（桌面／手機 checkbox、全選 indeterminate、disabled、選取高亮）、`PurchaseOrderBatchBar`（含 `isPaying`，與 ordering／receiving 合成**共同 pending lock**）、`PurchaseOrdersPage`（selection state、eligible orders、三個 handlers、兩個 dialogs、單張與批次付款接線）。所有 mutation pending 時鎖住 selection、切換模式與清除。
+- **死碼移除**：`components/PaymentForm.tsx`（舊付款表單）已**刪除**——單張與批次付款都改走 `EntryDialog` 後它已無任何呼叫端，且它只支援「帳戶／金額／日期」三欄、沒有會計分類與單據參考。⚠️ 保留它有實質風險：日後有人誤重用舊路徑，會繞過 references 與 signed 金額語意。
+- **其他修正**：`OrderFilterBar`「清除篩選」原本只呼叫 `onClearFilters()`（父層更新 URL），**本機 `dateRange` state 未清**→ 補 `setDateRange({})`；批次付款 `DocItem.date` 補 `|| ''` fallback。批次排序為**純顯示層**，刻意不併入 filters／DB query。
+- **測試**：`paymentSummary.ts` 與 `batchActions.ts` 的純邏輯以 `node --experimental-strip-types` 斷言（temp 目錄各 **19 passed, 0 failed**）。⚠️ `batchActions.ts` 會 import extensionless 的 `./paymentSummary`，**Node ESM 無法直接載入**，須先用 esbuild `--bundle --format=esm --platform=node` 打包再跑。⚠️ 測試檔刻意只放 temp 目錄、未進 repo（此專案無 test runner／無 `__tests__` 慣例）。
+- **驗證**：`npm run typecheck` 0 errors（app ＋ node 雙專案）、本批 10 檔 targeted `eslint` 0 problems、`npm run lint` 0 errors（70 warnings 皆既有）、`npm run build` 通過（1m27s，僅既有 chunk-size warning）。全部 11 個改動／新增檔經位元組檢查為 **UTF-8 no BOM、無 U+FFFD**。
+- **跨 PO 原子性（以**唯讀**方式驗證，未寫任何正式資料）**：`receive_purchase_items` 為 `SECURITY DEFINER`＋`RETURNS void`＋**單一簽名** `(p_items jsonb, p_warehouse_id uuid, p_lots jsonb)`（`anon` 無 EXECUTE、`authenticated` 有）。遠端 `pg_proc` 實測：全函式共 **7 處 `RAISE EXCEPTION`、但 `EXCEPTION WHEN` 與 `WHEN others` 皆為 0、`COMMIT` 為 0**（先前以為有 exception handler，實為 `RAISE EXCEPTION` 字串造成誤判）。⇒ **沒有任何吞掉錯誤的路徑**，任一品項不符即 RAISE 冒泡、整次呼叫回滾；又因是「單一 RPC 呼叫」＝ 單一 transaction，故多 PO 原子性由 transaction 語意保證，無 partial 成功回報。
+  - ⚠️ 教訓：`RETURNS void` + 出現 `EXCEPTION` 字樣**不等於**有 catch handler——`RAISE EXCEPTION` 本身即含該字。判定必須分辨 `EXCEPTION WHEN`／`WHEN others`（本例為 0）與 `COMMIT` 次數，否則會誤判為「錯誤被吞、部分寫入被 commit」。
+  - ⚠️ **仍未執行**寫入型 2-PO harness（會在正式庫產生 inventory_movements）：本次改動純為**前端編排**（重用同一支 RPC），且 `AGENTS.md` 記載的 harness 注意事項（多語句被包成單一 implicit transaction、勿在串內建 temp table、改用專屬鍵自我清理）仍適用。
+- ⚠️ **未做瀏覽器實測**：`/admin/purchase-orders` 需登入，本對話無憑證。
+
 ## 近期變更（供應商對照改為純變體單位 ＋ 匯入預覽即時比對 ＋ 未匹配可手動指定，2026-10-06）
 
 - **目的**：對照的單位從「內部商品」收斂為「**內部變體**」（一個料號對多個變體本來就允許，但下游真正需要的是變體），並在採購／退貨匯入預覽階段就顯示每個品項會被解析成哪個變體；**比不上的品項可手動指定內部變體，並永久建立為該料號的主對照**。**零後端改動、零 migration、零 RPC 簽名變更**，不需重生 `types.ts`。
