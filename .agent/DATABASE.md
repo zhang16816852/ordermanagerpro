@@ -125,7 +125,10 @@
 | `data_snapshots` | 全量快照 | table_name、data_json(JSONB)、last_sequence_id |
 | `system_sequences` | 流水號計數器 | name PK、current_value |
 | `audit_logs` | 稽核紀錄 | entity_type、entity_id、action、old_value、new_value、performed_by、store_id |
-| `notifications` | 通知 | user_id、store_id、title、message、link、read |
+| `notifications` | 通知（**2026-10-08 已加入 realtime publication**） | user_id、store_id、title、message、link、read |
+| `notification_outbox` | **Telegram 派送佇列（2026-10-08）** | event_type、ref_type、ref_id、payload(JSONB)、status、attempts、last_error、chat_id、message_id、processed_at、**bot_id FK→notification_bots (ON DELETE SET NULL)**（2026-10-08 追加） |
+| `notification_bots` | **Telegram 多 bot 設定（2026-10-08）** | name、channel(default `telegram`)、bot_token、chat_id、event_types text[](default `{}`=通用)、is_default、is_active；partial UNIQUE(channel) WHERE is_default；RLS admin ALL |
+| `app_secrets` | 內部密鑰（RLS 僅 admin） | key PK、value；seed `share_token_v1`（決定性 token）、`telegram_webhook_secret`（2026-10-08，webhook 共享密鑰） |
 | `market_listings` | 媒合市場刊登 | author_id、listing_type(`market_listing_type`)、main_category、price、status、contact_method |
 | `filter_groups` / `filter_group_items` | 前台篩選群組 | filter_type、name、slug、icon_url |
 | `table_templates` / `table_template_variants` | 訂單表格範本 | col_config、row_config、tab_config(JSONB) |
@@ -413,3 +416,33 @@
 - `public.delete_shipment(p_shipment_id) RETURNS jsonb`：admin 守門；刪包裹後重算。
 - **`public.set_doc_delivery_type(p_doc_type text, p_doc_id uuid, p_delivery_type text) RETURNS jsonb`**（migration `20261001000001_delivery_type_sync.sql`）：出貨後切換單據配送類型；`SECURITY DEFINER`、`SET search_path = public, extensions`、僅 `has_role(auth.uid(),'admin')`、`GRANT EXECUTE TO authenticated`、`REVOKE FROM public, anon`。支援 `order`/`sales_note`/`consignment_order`；類型僅 `delivery`/`logistics`/`pickup`，非法值與 doc 不存在皆回 `{ok:false, reason}`。`logistics` → 優先啟用中的預設物流方式，**無包裹時自動建立 1 包**、已有包裹時只轉換第一包；`delivery`/`pickup` → 先檢查 `accounting_entry_references(reference_type='shipment')`（運費月結已引用則拒絕刪除），否則刪除全部包裹並以 `_resolve_delivery(v_type, NULL, true)` 套預設送貨方式（`pickup` 不帶方式）。`shipping_address` 一律 `COALESCE` 保留既有值。
 - ⚠️ **`_recompute_doc_shipping` 已同步 `delivery_type`（2026-10-01）**：有包裹且第一包有方式時，`delivery_type` 與方式快照**一律以第一包（`ORDER BY created_at, id LIMIT 1`）為準**（不再只在單據快照為 NULL 時補），故手動 `upsert_shipment` 新增物流包裹會自動把送貨/自取單據翻成 `logistics`（分享頁 `SharedReceiptExport` 依此顯示追蹤號）。無包裹或方式不存在則保留單據原設定；回傳 JSON 新增 `delivery_type` 鍵。簽名不變，既有呼叫端零改動。
+
+## 11. Telegram 通知系統（2026-10-08，migration `20261008000001_telegram_notification_system.sql`，已套用遠端）
+
+- **目的**：銷貨單（`sales_notes`）建立時即時推播到**單一管理 Telegram 群組**，並同步寫站內 `notifications`；單據回滾（刪除/修正移除）時收回或標記該訊息作廢。框架式設計（`notification_outbox` + `event_type` 分派），未來可擴充訂單/採購事件。**不通知寄賣單**（僅預留接口）。
+- **表 `public.notification_outbox`**：`id`、`event_type`、`ref_type`、`ref_id`、`payload jsonb`、`status`（default `'pending'`）、`attempts`（default 0）、`last_error`、`chat_id`、`message_id bigint`、`created_at default now()`、`processed_at`。索引 `(status, created_at)`。RLS `notification_outbox_admin_all`（admin ALL，`has_role(auth.uid(),'admin'::public.system_role)`）。
+- **`app_secrets`** 冪等插入 `telegram_webhook_secret`＝`encode(extensions.gen_random_bytes(32),'hex')`（**webhook 共享密鑰存 DB、非環境變數**）。`CREATE EXTENSION IF NOT EXISTS pg_net;`（原未裝）。
+- **函式**（皆 `SECURITY DEFINER` + `SET search_path = public`、`REVOKE ALL ... FROM public, anon, authenticated`）：
+  - `notify_admins(p_title, p_message, p_link, p_store_id DEFAULT NULL)`：`profiles JOIN user_roles ur ON ur.user_id = p.id WHERE ur.role='admin'` 寫 `notifications`（`read=false`）。⚠️ `user_roles` 欄名是 **`role`**。
+  - `enqueue_notification(p_event_type, p_ref_type, p_ref_id, p_payload DEFAULT '{}')`：寫 outbox → 讀 secret → `net.http_post('https://aweqytcelujpqezjitsk.supabase.co/functions/v1/telegram-notify', headers:{x-webhook-secret}, body:{outbox_id})`（pg_net async、**交易 commit 後才送出**，故 rollback 不誤送）。
+  - `retry_failed_notifications()`：掃 `status='failed' AND attempts<5` 重設 pending 重送。
+  - Trigger `trgfn_sales_note_notify_insert`（AFTER INSERT ON `sales_notes`）→ `enqueue_notification('sales_note_created',...)` ＋ `notify_admins`；`trgfn_sales_note_notify_delete`（BEFORE DELETE ON `sales_notes`）→ `enqueue_notification('sales_note_recalled',...,{code})`。**單一 AFTER INSERT trigger 即涵蓋全部建立路徑**（`ship_from_pool`／`direct_ship_order`／`create_order_with_sales_note`／`import_sales_notes_batch`／`confirm_consignment_sales` 皆 INSERT `sales_notes` 一列）→ 零 RPC 改動。
+- **`ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications`**（DO block 冪等）；`cron.schedule('retry-failed-notifications','*/10 * * * *', 'SELECT public.retry_failed_notifications()')`。
+- **Edge Function `telegram-notify`**（`supabase/functions/telegram-notify/index.ts`，`verify_jwt=false`）：以 `x-webhook-secret` 比對 DB secret（不符 401）；讀 outbox（`status='sent'` 冪等略過）→ `sales_note_created` 查 note（items `order_items(unit_price)` + `shipping_fee` 併金額＝`Σ(qty × unit_price) + shipping_fee`）組 HTML → `sendMessage` → 回寫 `chat_id`/`message_id`/`status='sent'`；`sales_note_recalled` → 找原 `message_id` → `deleteMessage`，失敗（逾 48h）改 `editMessageText`「⚠️ …已作廢」。失敗記 `status='failed'`、`attempts+1`、`last_error`。連結＝`{APP_ORIGIN}/share/sale/{code}?token={access_token}`。**環境變數**：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`（群組 id 為負數）、`APP_ORIGIN`（含 `https://`）；`SUPABASE_URL`／`SUPABASE_SERVICE_ROLE_KEY` 平台自動注入。
+
+### 11.1 `sales_note_updated` 事件 ＋ 多 bot（2026-10-08，migration `20261008000002_telegram_sales_note_updated.sql`，已套用遠端，工具名 `telegram_sales_note_updated`）
+
+- **表 `public.notification_bots`**：`id`、`name`、`channel`（default `'telegram'`）、`bot_token`、`chat_id`、`event_types text[]`（default `'{}'`＝通用，涵蓋所有事件）、`is_default`、`is_active`、`created_at`、`updated_at`。索引 `idx_notification_bots_channel_default`（partial UNIQUE ON `(channel) WHERE is_default`）。RLS `notification_bots_admin_all`（admin ALL，`has_role(auth.uid(),'admin'::public.system_role)`）。BEFORE UPDATE trigger `trg_notification_bots_set_updated_at` → `public.trgfn_set_updated_at()`。
+  - ⚠️ **`bot_token`／`chat_id` 可為 NULL**：Edge Function `resolveBot()` 在 DB 無值時 fallback 到環境變數 `TELEGRAM_BOT_TOKEN`／`TELEGRAM_CHAT_ID`，故不強制把機密存進 DB。
+  - 種子：若表內無任何列，插入預設「管理群組」（`channel='telegram'`、`is_default=true`、token／chat 皆 NULL）。**現行實際送訊息仍走環境變數**（種子僅為日後多 bot／UI 擴充預留）。
+- **`notification_outbox` 新增 `bot_id uuid REFERENCES notification_bots(id) ON DELETE SET NULL`**：記錄實際發送所使用的 bot。配套索引 `idx_notification_outbox_bot_id`（migration `20261008000003_notification_outbox_bot_id_index.sql`，已套用遠端，工具名 `notification_outbox_bot_id_index`）——補 performance advisor 的 `unindexed_foreign_keys`。既有索引 `idx_notification_outbox_status (status, created_at)` 不變。
+- **函式 `public.trgfn_sales_note_notify_update()`**（`SECURITY DEFINER`、`SET search_path = public`、`REVOKE ALL ... FROM public, anon, authenticated`）：`enqueue_notification('sales_note_updated','sales_note',NEW.id, jsonb_build_object('code', NEW.code))` ＋ `notify_admins(...)`（寫站內 `notifications`）。
+- **Trigger `trg_sales_note_notify_update`：`AFTER UPDATE ON public.sales_notes FOR EACH ROW`**。
+  - ⚠️ **採泛用 UPDATE trigger 的原因**：`correct_sales_note` 是 `SECURITY DEFINER` 的多階段 RPC，只保證 `sales_notes.updated_at` 變動，逐一支援會牽動多支已驗證的 RPC body，故以單一 UPDATE trigger 蓋全。
+  - ⚠️ **已知且接受的副作用**：`sync_sales_note_payment_status` 與 `update_sales_note_shipped_date` 造成的 `sales_notes` 更新同樣觸發本 trigger，可能產生無對應原訊息的 `sales_note_updated` outbox → Edge Function 找不到 `message_id` 時 fallback `sendMessage`（內容相同則 `editMessageText` 回 `not modified` 視為成功 no-op）。若日後噪音過大，改為僅在 `correct_sales_note` 內顯式 `enqueue_notification`。
+- **Edge Function `telegram-notify`**（同檔，version 8，`verify_jwt=false`）：
+  - `resolveBot(supabase, eventType, envToken, envChat)`：查 `notification_bots`（`channel='telegram' AND is_active`、`is_default DESC`），挑「`event_types` 為空（通用）或包含該事件」者；回 `{ id, token, chatId }`，DB 缺值 fallback 環境變數。
+  - `buildSalesNoteText(supabase, noteId, appOrigin, heading)`：重查 `sales_notes`（含 `stores(name)`、`shipping_fee`、`access_token`、`updated_at/created_at`）＋ `sales_note_items.order_items(unit_price)`，組 HTML 訊息與分享連結；`sales_note_created` 與 `sales_note_updated` 共用，僅 heading 不同。
+  - `sales_note_updated`：找該銷貨單**最新一筆 `message_id` 非空**的 outbox 列 → `editMessageText`（標題改為「✏️ 銷貨單已更新」）；Telegram 回 `not modified` 視為成功（同內容 no-op）；找不到原訊息則 fallback `sendMessage`。
+  - `markSent` 現在一併回寫 `bot_id`／`chat_id`／`message_id`。
+  - `sales_note_created` 改走 `resolveBot` + `buildSalesNoteText`；`sales_note_recalled` 行為不變（`deleteMessage`，逾 48h 失敗 → `editMessageText` 標記作廢）。

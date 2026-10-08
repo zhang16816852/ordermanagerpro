@@ -280,6 +280,7 @@ export function SalesNoteDetailDialog({
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["admin-sales-notes"] });
+            queryClient.invalidateQueries({ queryKey: ["store-sales-notes"] });
             setEditingDate(false);
             toast.success("出貨日期已更新");
         },

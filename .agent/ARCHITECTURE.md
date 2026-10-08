@@ -258,5 +258,6 @@ App 掛載 → QueryClientProvider → TooltipProvider → Toaster/Sonner → Br
 |---|---|
 | `check-data-version` | 增量 Diff 引擎：收到 tableName + lastSequenceId，比對 data_change_logs/data_versions，回傳增量 changes/deletedIds 或全量 snapshot |
 | `invitation-service` | 邀請加入門市 |
+| `telegram-notify` | 銷貨單即時通知 dispatcher（2026-10-08，`verify_jwt=false`，version 8）：`sales_notes` trigger 於同交易寫 `notification_outbox` 後以 `net.http_post` 呼叫，帶 `x-webhook-secret`（比對 DB `app_secrets.telegram_webhook_secret`，不符 401）；以 service role 先 `resolveBot()`（查 `notification_bots`：`channel='telegram' AND is_active`、`is_default` 優先、`event_types` 空＝通用，DB 缺 `bot_token`/`chat_id` 則 fallback 環境變數），再 `buildSalesNoteText()`（`sales_note_items` JOIN `order_items.unit_price` ＋`shipping_fee` 組金額）→ `sendMessage` 並回寫 `bot_id`/`chat_id`/`message_id`/`status='sent'`（`status='sent'` 冪等略過）；事件分派 `sales_note_created`（新訊息）、**`sales_note_updated`（找最新一筆 `message_id` 非空 outbox → `editMessageText`，`not modified` 視為成功，找不到原訊息則 fallback `sendMessage`）**、`sales_note_recalled` 找原訊息 `deleteMessage`、失敗（逾 48h）改 `editMessageText` 標記作廢；失敗記 `status='failed'`＋attempts+1＋last_error。連結＝`{APP_ORIGIN}/share/sale/{code}?token={access_token}`；環境變數 `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`/`APP_ORIGIN`（`SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` 平台自動注入） |
 
 > Edge Function 內有 `TABLE_VERSION_ALIASES` 別名映射（specification_definitions → specs 等）。

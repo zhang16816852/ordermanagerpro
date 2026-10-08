@@ -2,3 +2,6 @@ project_id = "aweqytcelujpqezjitsk"
 
 [functions.check-data-version]
 verify_jwt = false
+
+[functions.telegram-notify]
+verify_jwt = false
