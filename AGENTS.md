@@ -3,6 +3,9 @@
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
 ## 近期變更（Telegram 銷貨單「更新」通知 ＋ 多 bot 架構，2026-10-08）
+- **銷貨單修正通知守衛（GUC pp.sales_note_correction）**：在 correct_sales_note() 內先 set_config('app.sales_note_correction','1',true)，僅該 RPC 明確發送 sales_note_updated 與 
+otify_admins；其餘非修正的 sales_notes UPDATE 由 	rgfn_sales_note_notify_update() 透過 current_setting('app.sales_note_correction', true) 判斷攔截（非 '1' 或未設定即不發通知），避免 sync_sales_note_payment_status、update_sales_note_shipped_date 等 UPDATE 誤觸發更新通知。
+
 
 - **目的**：在既有 Telegram 通知系統上新增 **`sales_note_updated` 事件**（銷貨單「修正」後編輯原訊息）與 **`notification_bots` 多 bot 表**（每個事件可綁不同 bot／群組，未設定則 fallback 環境變數）。同時補一個前端 cache 失效缺口。
 - **Migration `20261008000002_telegram_sales_note_updated.sql`（已套用遠端，工具名 `telegram_sales_note_updated`）**：

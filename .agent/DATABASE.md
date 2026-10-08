@@ -430,19 +430,33 @@
 - **`ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications`**（DO block 冪等）；`cron.schedule('retry-failed-notifications','*/10 * * * *', 'SELECT public.retry_failed_notifications()')`。
 - **Edge Function `telegram-notify`**（`supabase/functions/telegram-notify/index.ts`，`verify_jwt=false`）：以 `x-webhook-secret` 比對 DB secret（不符 401）；讀 outbox（`status='sent'` 冪等略過）→ `sales_note_created` 查 note（items `order_items(unit_price)` + `shipping_fee` 併金額＝`Σ(qty × unit_price) + shipping_fee`）組 HTML → `sendMessage` → 回寫 `chat_id`/`message_id`/`status='sent'`；`sales_note_recalled` → 找原 `message_id` → `deleteMessage`，失敗（逾 48h）改 `editMessageText`「⚠️ …已作廢」。失敗記 `status='failed'`、`attempts+1`、`last_error`。連結＝`{APP_ORIGIN}/share/sale/{code}?token={access_token}`。**環境變數**：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`（群組 id 為負數）、`APP_ORIGIN`（含 `https://`）；`SUPABASE_URL`／`SUPABASE_SERVICE_ROLE_KEY` 平台自動注入。
 
-### 11.1 `sales_note_updated` 事件 ＋ 多 bot（2026-10-08，migration `20261008000002_telegram_sales_note_updated.sql`，已套用遠端，工具名 `telegram_sales_note_updated`）
+### 11.1 `sales_note_updated
+> 註：correct_sales_note() 會設定 set_config('app.sales_note_correction','1',true)，僅該 RPC 明確發送 sales_note_updated；一般 sales_notes UPDATE 由 	rgfn_sales_note_notify_update() 根據 GUC 判斷是否發送（非 1 或未設定即攔截），避免非修正 UPDATE 誤觸發。
+` 事件 ＋ 多 bot（2026-10-08，migration `20261008000002_telegram_sales_note_updated
+> 註：correct_sales_note() 會設定 set_config('app.sales_note_correction','1',true)，僅該 RPC 明確發送 sales_note_updated；一般 sales_notes UPDATE 由 	rgfn_sales_note_notify_update() 根據 GUC 判斷是否發送（非 1 或未設定即攔截），避免非修正 UPDATE 誤觸發。
+.sql`，已套用遠端，工具名 `telegram_sales_note_updated
+> 註：correct_sales_note() 會設定 set_config('app.sales_note_correction','1',true)，僅該 RPC 明確發送 sales_note_updated；一般 sales_notes UPDATE 由 	rgfn_sales_note_notify_update() 根據 GUC 判斷是否發送（非 1 或未設定即攔截），避免非修正 UPDATE 誤觸發。
+`）
 
 - **表 `public.notification_bots`**：`id`、`name`、`channel`（default `'telegram'`）、`bot_token`、`chat_id`、`event_types text[]`（default `'{}'`＝通用，涵蓋所有事件）、`is_default`、`is_active`、`created_at`、`updated_at`。索引 `idx_notification_bots_channel_default`（partial UNIQUE ON `(channel) WHERE is_default`）。RLS `notification_bots_admin_all`（admin ALL，`has_role(auth.uid(),'admin'::public.system_role)`）。BEFORE UPDATE trigger `trg_notification_bots_set_updated_at` → `public.trgfn_set_updated_at()`。
   - ⚠️ **`bot_token`／`chat_id` 可為 NULL**：Edge Function `resolveBot()` 在 DB 無值時 fallback 到環境變數 `TELEGRAM_BOT_TOKEN`／`TELEGRAM_CHAT_ID`，故不強制把機密存進 DB。
   - 種子：若表內無任何列，插入預設「管理群組」（`channel='telegram'`、`is_default=true`、token／chat 皆 NULL）。**現行實際送訊息仍走環境變數**（種子僅為日後多 bot／UI 擴充預留）。
 - **`notification_outbox` 新增 `bot_id uuid REFERENCES notification_bots(id) ON DELETE SET NULL`**：記錄實際發送所使用的 bot。配套索引 `idx_notification_outbox_bot_id`（migration `20261008000003_notification_outbox_bot_id_index.sql`，已套用遠端，工具名 `notification_outbox_bot_id_index`）——補 performance advisor 的 `unindexed_foreign_keys`。既有索引 `idx_notification_outbox_status (status, created_at)` 不變。
-- **函式 `public.trgfn_sales_note_notify_update()`**（`SECURITY DEFINER`、`SET search_path = public`、`REVOKE ALL ... FROM public, anon, authenticated`）：`enqueue_notification('sales_note_updated','sales_note',NEW.id, jsonb_build_object('code', NEW.code))` ＋ `notify_admins(...)`（寫站內 `notifications`）。
+- **函式 `public.trgfn_sales_note_notify_update()`**（`SECURITY DEFINER`、`SET search_path = public`、`REVOKE ALL ... FROM public, anon, authenticated`）：`enqueue_notification('sales_note_updated
+> 註：correct_sales_note() 會設定 set_config('app.sales_note_correction','1',true)，僅該 RPC 明確發送 sales_note_updated；一般 sales_notes UPDATE 由 	rgfn_sales_note_notify_update() 根據 GUC 判斷是否發送（非 1 或未設定即攔截），避免非修正 UPDATE 誤觸發。
+','sales_note',NEW.id, jsonb_build_object('code', NEW.code))` ＋ `notify_admins(...)`（寫站內 `notifications`）。
 - **Trigger `trg_sales_note_notify_update`：`AFTER UPDATE ON public.sales_notes FOR EACH ROW`**。
   - ⚠️ **採泛用 UPDATE trigger 的原因**：`correct_sales_note` 是 `SECURITY DEFINER` 的多階段 RPC，只保證 `sales_notes.updated_at` 變動，逐一支援會牽動多支已驗證的 RPC body，故以單一 UPDATE trigger 蓋全。
-  - ⚠️ **已知且接受的副作用**：`sync_sales_note_payment_status` 與 `update_sales_note_shipped_date` 造成的 `sales_notes` 更新同樣觸發本 trigger，可能產生無對應原訊息的 `sales_note_updated` outbox → Edge Function 找不到 `message_id` 時 fallback `sendMessage`（內容相同則 `editMessageText` 回 `not modified` 視為成功 no-op）。若日後噪音過大，改為僅在 `correct_sales_note` 內顯式 `enqueue_notification`。
+  - ⚠️ **已知且接受的副作用**：`sync_sales_note_payment_status` 與 `update_sales_note_shipped_date` 造成的 `sales_notes` 更新同樣觸發本 trigger，可能產生無對應原訊息的 `sales_note_updated
+> 註：correct_sales_note() 會設定 set_config('app.sales_note_correction','1',true)，僅該 RPC 明確發送 sales_note_updated；一般 sales_notes UPDATE 由 	rgfn_sales_note_notify_update() 根據 GUC 判斷是否發送（非 1 或未設定即攔截），避免非修正 UPDATE 誤觸發。
+` outbox → Edge Function 找不到 `message_id` 時 fallback `sendMessage`（內容相同則 `editMessageText` 回 `not modified` 視為成功 no-op）。若日後噪音過大，改為僅在 `correct_sales_note` 內顯式 `enqueue_notification`。
 - **Edge Function `telegram-notify`**（同檔，version 8，`verify_jwt=false`）：
   - `resolveBot(supabase, eventType, envToken, envChat)`：查 `notification_bots`（`channel='telegram' AND is_active`、`is_default DESC`），挑「`event_types` 為空（通用）或包含該事件」者；回 `{ id, token, chatId }`，DB 缺值 fallback 環境變數。
-  - `buildSalesNoteText(supabase, noteId, appOrigin, heading)`：重查 `sales_notes`（含 `stores(name)`、`shipping_fee`、`access_token`、`updated_at/created_at`）＋ `sales_note_items.order_items(unit_price)`，組 HTML 訊息與分享連結；`sales_note_created` 與 `sales_note_updated` 共用，僅 heading 不同。
-  - `sales_note_updated`：找該銷貨單**最新一筆 `message_id` 非空**的 outbox 列 → `editMessageText`（標題改為「✏️ 銷貨單已更新」）；Telegram 回 `not modified` 視為成功（同內容 no-op）；找不到原訊息則 fallback `sendMessage`。
+  - `buildSalesNoteText(supabase, noteId, appOrigin, heading)`：重查 `sales_notes`（含 `stores(name)`、`shipping_fee`、`access_token`、`updated_at/created_at`）＋ `sales_note_items.order_items(unit_price)`，組 HTML 訊息與分享連結；`sales_note_created` 與 `sales_note_updated
+> 註：correct_sales_note() 會設定 set_config('app.sales_note_correction','1',true)，僅該 RPC 明確發送 sales_note_updated；一般 sales_notes UPDATE 由 	rgfn_sales_note_notify_update() 根據 GUC 判斷是否發送（非 1 或未設定即攔截），避免非修正 UPDATE 誤觸發。
+` 共用，僅 heading 不同。
+  - `sales_note_updated
+> 註：correct_sales_note() 會設定 set_config('app.sales_note_correction','1',true)，僅該 RPC 明確發送 sales_note_updated；一般 sales_notes UPDATE 由 	rgfn_sales_note_notify_update() 根據 GUC 判斷是否發送（非 1 或未設定即攔截），避免非修正 UPDATE 誤觸發。
+`：找該銷貨單**最新一筆 `message_id` 非空**的 outbox 列 → `editMessageText`（標題改為「✏️ 銷貨單已更新」）；Telegram 回 `not modified` 視為成功（同內容 no-op）；找不到原訊息則 fallback `sendMessage`。
   - `markSent` 現在一併回寫 `bot_id`／`chat_id`／`message_id`。
   - `sales_note_created` 改走 `resolveBot` + `buildSalesNoteText`；`sales_note_recalled` 行為不變（`deleteMessage`，逾 48h 失敗 → `editMessageText` 標記作廢）。
