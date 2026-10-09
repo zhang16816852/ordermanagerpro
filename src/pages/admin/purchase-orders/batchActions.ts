@@ -179,6 +179,15 @@ export function poPaymentDocLine(
   };
 }
 
+/** 是否可納入合併付款：有未付餘額才可勾選；未提供已付地圖（業務身分／載入中）一律不開放 */
+export function isBatchPayable(
+  order: Pick<PurchaseOrder, 'id' | 'supplier_order_number' | 'total_amount'>,
+  paidAmountMap: Record<string, number> | undefined,
+): boolean {
+  if (!paidAmountMap) return false;
+  return poPaymentDocLine(order, paidAmountMap[order.id]) !== null;
+}
+
 export interface PoBatchPaymentPlan {
   lines: PoPaymentDocLine[];
   /** 合計 amountApplied：<0 淨支出、>0 淨收入（退貨為主）、0 雙向抵銷 */

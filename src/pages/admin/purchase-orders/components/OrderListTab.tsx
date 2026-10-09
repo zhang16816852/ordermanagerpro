@@ -12,7 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Eye, Edit, Trash2, Send, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { PurchaseOrder } from '../types';
 import { poPaymentSummary } from '../paymentSummary';
-import { isBatchOrderable, isBatchReceivable } from '../batchActions';
+import { isBatchOrderable, isBatchPayable, isBatchReceivable } from '../batchActions';
 import { formatCurrency } from '@/lib/formatters';
 import type { PoSortDir, PoSortField } from '../orderSort';
 
@@ -58,7 +58,12 @@ export function OrderListTab({
 }: OrderListTabProps) {
   const selected = selectedIds ?? [];
   const selectableIds = batchMode
-    ? orders.filter((o) => isBatchOrderable(o) || isBatchReceivable(o)).map((o) => o.id)
+    ? orders
+        .filter(
+          (o) =>
+            isBatchOrderable(o) || isBatchReceivable(o) || isBatchPayable(o, paidAmountMap),
+        )
+        .map((o) => o.id)
     : [];
   const selectableSet = new Set(selectableIds);
   const selectedCount = selected.filter((id) => selectableSet.has(id)).length;
