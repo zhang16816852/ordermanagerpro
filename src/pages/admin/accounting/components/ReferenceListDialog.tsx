@@ -24,14 +24,14 @@ interface ReferenceListDialogProps {
 export function ReferenceListDialog({ refs, open, onOpenChange, onOpenRef }: ReferenceListDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>關聯單據</DialogTitle>
           <DialogDescription>共 {refs.length} 筆，點擊查看單據明細</DialogDescription>
         </DialogHeader>
-        <div className="border rounded-md overflow-hidden">
+        <div className="border rounded-md flex-1 min-h-0 overflow-y-auto">
           <Table>
-            <TableHeader className="bg-muted/50">
+            <TableHeader className="bg-muted/50 sticky top-0 z-10">
               <TableRow>
                 <TableHead>類型</TableHead>
                 <TableHead>單據</TableHead>

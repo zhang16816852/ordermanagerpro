@@ -269,10 +269,9 @@ export default function AdminAccounting() {
 
       <ReferenceListDialog
         refs={viewingReferences ?? []}
-        open={!!viewingReferences}
+        open={!!viewingReferences && !viewingReference}
         onOpenChange={(open) => { if (!open) setViewingReferences(null); }}
         onOpenRef={(ref) => {
-          setViewingReferences(null);
           setViewingReference({ referenceType: ref.reference_type, referenceId: ref.reference_id });
         }}
       />
