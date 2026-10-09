@@ -75,3 +75,10 @@ export interface AccountingEntryReference {
   amount_applied: number;
   created_at: string;
 }
+
+export interface ViewableReference {
+  reference_type: string;
+  reference_id: string;
+  item_name?: string | null;
+  amount_applied?: number | null;
+}

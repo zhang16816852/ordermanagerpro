@@ -11,8 +11,28 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CreditCard, Edit, Trash2, Eye, ArrowRight, FileText } from 'lucide-react';
 import { format } from 'date-fns';
-import { AccountingEntry, EntryType, PaymentStatus, ENTRY_TYPE_LABELS } from '../types';
+import { AccountingEntry, EntryType, PaymentStatus, ViewableReference } from '../types';
 import { formatCurrency } from '@/lib/formatters';
+
+function entryViewableRefs(entry: AccountingEntry): ViewableReference[] {
+  if (entry.references && entry.references.length > 0) {
+    return entry.references.map((ref) => ({
+      reference_type: ref.reference_type,
+      reference_id: ref.reference_id,
+      item_name: ref.item_name,
+      amount_applied: ref.amount_applied,
+    }));
+  }
+  if (entry.reference_type && entry.reference_id) {
+    return [{
+      reference_type: entry.reference_type,
+      reference_id: entry.reference_id,
+      item_name: entry.counterparty_name,
+      amount_applied: entry.amount,
+    }];
+  }
+  return [];
+}
 
 interface EntriesTabProps {
   entries: AccountingEntry[];
@@ -21,6 +41,7 @@ interface EntriesTabProps {
   onDelete: (entry: AccountingEntry) => void;
   onPay: (entry: AccountingEntry) => void;
   onViewReference?: (referenceType: string, referenceId: string) => void;
+  onViewReferences?: (refs: ViewableReference[]) => void;
 }
 
 function getEntryTypeBadge(type: EntryType) {
@@ -50,7 +71,7 @@ function getStatusBadge(status: PaymentStatus) {
   }
 }
 
-function EntryDescription({ entry, onViewReference }: { entry: AccountingEntry; onViewReference?: (type: string, id: string) => void }) {
+function EntryDescription({ entry }: { entry: AccountingEntry }) {
   const isTransfer = entry.type === 'transfer' || entry.type === 'currency_exchange' || entry.type === 'topup';
 
   if (isTransfer && entry.transferToAccount) {
@@ -68,33 +89,16 @@ function EntryDescription({ entry, onViewReference }: { entry: AccountingEntry; 
     );
   }
 
-  if (entry.references && entry.references.length > 0) {
+  const refs = entryViewableRefs(entry);
+  if (refs.length > 0) {
     return (
-      <div className="space-y-1">
-        <div className="flex items-center gap-1 text-sm">
-          <FileText className="h-3 w-3 text-muted-foreground" />
-          <span>關聯 {entry.references.length} 筆單據</span>
-        </div>
-        <div className="text-xs text-muted-foreground space-y-0.5">
-          {entry.references.slice(0, 5).map((ref, i) => (
-            <div key={i} className="flex items-center gap-1">
-              <span>{ref.item_name}</span>
-              <span style={{ color: ref.amount_applied >= 0 ? '#16a34a' : 'hsl(var(--destructive))' }}>
-                {ref.amount_applied >= 0 ? '+' : ''}{formatCurrency(ref.amount_applied)}
-              </span>
-              {onViewReference && ref.reference_id && (
-                <button
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={(e) => { e.stopPropagation(); onViewReference(ref.reference_type, ref.reference_id); }}
-                  title="查看單據"
-                >
-                  <Eye className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-          ))}
-          {entry.references.length > 5 && <span>...等 {entry.references.length} 筆</span>}
-        </div>
+      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+        <FileText className="h-3 w-3 shrink-0" />
+        {refs.length === 1 ? (
+          <span className="truncate block max-w-[200px]">{refs[0].item_name || entry.description || '-'}</span>
+        ) : (
+          <span>關聯 {refs.length} 筆單據</span>
+        )}
       </div>
     );
   }
@@ -113,6 +117,7 @@ export function EntriesTab({
   onDelete,
   onPay,
   onViewReference,
+  onViewReferences,
 }: EntriesTabProps) {
   if (isLoading) {
     return (
@@ -144,6 +149,18 @@ export function EntriesTab({
     );
   };
 
+  const canView = !!(onViewReference || onViewReferences);
+  const openEntryRefs = (entry: AccountingEntry) => {
+    const refs = entryViewableRefs(entry);
+    if (refs.length === 0) return;
+    if (refs.length === 1) {
+      onViewReference?.(refs[0].reference_type, refs[0].reference_id);
+    } else {
+      onViewReferences?.(refs);
+    }
+  };
+  const hasViewableRefs = (entry: AccountingEntry) => entryViewableRefs(entry).length > 0;
+
   return (
     <>
       {/* Desktop: Table */}
@@ -169,7 +186,7 @@ export function EntriesTab({
                 <TableCell>{getEntryTypeBadge(entry.type)}</TableCell>
                 <TableCell className="text-sm">{entry.category?.name || '-'}</TableCell>
                 <TableCell className="text-sm text-muted-foreground max-w-[120px] truncate" title={entry.counterparty_name || ''}>{entry.counterparty_name || '-'}</TableCell>
-                <TableCell><EntryDescription entry={entry} onViewReference={onViewReference} /></TableCell>
+                <TableCell><EntryDescription entry={entry} /></TableCell>
                 <TableCell className="text-right">{getAmountDisplay(entry)}</TableCell>
                 <TableCell className="text-right text-sm">
                   {formatCurrency(entry.paid_amount)}
@@ -177,12 +194,12 @@ export function EntriesTab({
                 <TableCell>{getStatusBadge(entry.payment_status)}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
-                    {entry.reference_type && entry.reference_id && onViewReference && (
+                    {canView && hasViewableRefs(entry) && (
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() => onViewReference(entry.reference_type!, entry.reference_id!)}
+                        onClick={() => openEntryRefs(entry)}
                         aria-label="查看單據"
                         title="查看來源單據"
                       >
@@ -244,14 +261,14 @@ export function EntriesTab({
                 <span className="text-muted-foreground ml-2">· {entry.counterparty_name}</span>
               )}
             </div>
-            <EntryDescription entry={entry} onViewReference={onViewReference} />
+            <EntryDescription entry={entry} />
             <div className="flex items-center gap-1 pt-1 border-t">
-              {entry.reference_type && entry.reference_id && onViewReference && (
+              {canView && hasViewableRefs(entry) && (
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  onClick={() => onViewReference(entry.reference_type!, entry.reference_id!)}
+                  onClick={() => openEntryRefs(entry)}
                   aria-label="查看單據"
                 >
                   <Eye className="h-4 w-4" />

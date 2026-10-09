@@ -31,7 +31,8 @@ import { EntryDialog } from './components/EntryDialog';
 import { AccountForm } from './components/AccountForm';
 import { CategoryForm } from './components/CategoryForm';
 import { ReferenceViewer } from './components/ReferenceViewer';
-import { AccountingEntry } from './types';
+import { ReferenceListDialog } from './components/ReferenceListDialog';
+import { AccountingEntry, ViewableReference } from './types';
 
 export default function AdminAccounting() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -48,6 +49,7 @@ export default function AdminAccounting() {
   const [payingEntry, setPayingEntry] = useState<AccountingEntry | null>(null);
 
   const [viewingReference, setViewingReference] = useState<{ referenceType: string; referenceId: string } | null>(null);
+  const [viewingReferences, setViewingReferences] = useState<ViewableReference[] | null>(null);
 
   const months = Array.from({ length: 12 }, (_, i) => {
     const date = subMonths(new Date(), i);
@@ -135,6 +137,7 @@ export default function AdminAccounting() {
             onDelete={(entry) => { if (confirm('確定要刪除這筆記錄嗎？將同時回退已入帳的帳戶餘額。')) deleteEntryMutation.mutate(entry); }}
             onPay={(entry) => { setPayingEntry(entry); setEditingEntry(null); setEntryDialogOpen(true); }}
             onViewReference={(referenceType, referenceId) => setViewingReference({ referenceType, referenceId })}
+            onViewReferences={(refs) => setViewingReferences(refs)}
           />
         </TabsContent>
 
@@ -263,6 +266,16 @@ export default function AdminAccounting() {
           onOpenChange={(open) => { if (!open) setViewingReference(null); }}
         />
       )}
+
+      <ReferenceListDialog
+        refs={viewingReferences ?? []}
+        open={!!viewingReferences}
+        onOpenChange={(open) => { if (!open) setViewingReferences(null); }}
+        onOpenRef={(ref) => {
+          setViewingReferences(null);
+          setViewingReference({ referenceType: ref.reference_type, referenceId: ref.reference_id });
+        }}
+      />
     </div>
   );
 }
