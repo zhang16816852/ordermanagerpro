@@ -27,7 +27,7 @@ export interface GroupedByStore {
   totalQuantity: number;
 }
 
-export type PoolSortField = 'product' | 'quantity' | 'unit_price' | 'subtotal' | 'created_at';
+export type PoolSortField = 'manual' | 'product' | 'quantity' | 'unit_price' | 'subtotal' | 'created_at';
 
 export type PoolSortDir = 'asc' | 'desc';
 

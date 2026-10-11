@@ -119,28 +119,30 @@ export default function AdminShippingPool() {
     },
   });
 
-  // 按店家分組
-  const groupedByStore: GroupedByStore[] = shippingPoolItems?.reduce((acc, item) => {
-    const store = stores?.find(s => s.id === item.store_id);
-    const existingGroup = acc.find(g => g.storeId === item.store_id);
+  // 按店家分組（memo 化：拖曳期間 identity 穩定，避免 SortableContext 每幀重算抖動）
+  const groupedByStore: GroupedByStore[] = useMemo(() => {
+    return shippingPoolItems?.reduce((acc, item) => {
+      const store = stores?.find(s => s.id === item.store_id);
+      const existingGroup = acc.find(g => g.storeId === item.store_id);
 
-    if (existingGroup) {
-      existingGroup.items.push(item);
-      existingGroup.totalQuantity += item.quantity;
-    } else {
-      acc.push({
-        storeId: item.store_id,
-        storeName: store?.name || '未知店家',
-        storeCode: store?.code || null,
-        items: [item],
-        totalQuantity: item.quantity,
-      });
-    }
-    return acc;
-  }, [] as GroupedByStore[]) || [];
+      if (existingGroup) {
+        existingGroup.items.push(item);
+        existingGroup.totalQuantity += item.quantity;
+      } else {
+        acc.push({
+          storeId: item.store_id,
+          storeName: store?.name || '未知店家',
+          storeCode: store?.code || null,
+          items: [item],
+          totalQuantity: item.quantity,
+        });
+      }
+      return acc;
+    }, [] as GroupedByStore[]) || [];
+  }, [shippingPoolItems, stores]);
 
-  // 抬頭欄位排序
-  const [sortField, setSortField] = useState<PoolSortField>('created_at');
+  // 抬頭欄位排序（'manual'＝不套欄位排序，以 sort_order / 手動拖曳順序為準）
+  const [sortField, setSortField] = useState<PoolSortField>('manual');
   const [sortDir, setSortDir] = useState<PoolSortDir>('asc');
 
   const handleSort = (field: PoolSortField) => {
@@ -171,11 +173,33 @@ export default function AdminShippingPool() {
     }
   };
 
+  const sortedGroups = useMemo(() => {
+    return groupedByStore.map(group => {
+      const sorted = sortField === 'manual'
+        ? [...group.items]
+        : [...group.items].sort((a, b) => {
+            const aVal = getSortValue(a, sortField);
+            const bVal = getSortValue(b, sortField);
+            if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+            if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+            return 0;
+          });
+      const order = localOrder[group.storeId];
+      if (order && order.length === sorted.length) {
+        const itemMap = new Map(sorted.map(i => [i.id, i]));
+        const reordered = order.map(id => itemMap.get(id)).filter(Boolean) as ShippingPoolItem[];
+        if (reordered.length === sorted.length) return { ...group, items: reordered };
+      }
+      return { ...group, items: sorted };
+    });
+  }, [groupedByStore, sortField, sortDir, localOrder]);
+
   const handleDragEnd = (storeId: string, event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const group = groupedByStore.find(g => g.storeId === storeId);
+    // 與 SortableContext 相同的顯示順序（sortedGroups）取索引，避免與渲染順序錯配
+    const group = sortedGroups.find(g => g.storeId === storeId);
     if (!group) return;
 
     const oldIndex = group.items.findIndex(i => i.id === active.id);
@@ -184,6 +208,8 @@ export default function AdminShippingPool() {
 
     const reordered = arrayMove(group.items, oldIndex, newIndex);
 
+    // 拖曳代表改為手動排序：清除表頭排序指示
+    setSortField('manual');
     setLocalOrder(prev => ({
       ...prev,
       [storeId]: reordered.map(i => i.id),
@@ -198,25 +224,6 @@ export default function AdminShippingPool() {
       if (error) console.error('reorder_shipping_pool_items failed:', error);
     });
   };
-
-  const sortedGroups = useMemo(() => {
-    return groupedByStore.map(group => {
-      const sorted = [...group.items].sort((a, b) => {
-        const aVal = getSortValue(a, sortField);
-        const bVal = getSortValue(b, sortField);
-        if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
-        return 0;
-      });
-      const order = localOrder[group.storeId];
-      if (order && order.length === sorted.length) {
-        const itemMap = new Map(sorted.map(i => [i.id, i]));
-        const reordered = order.map(id => itemMap.get(id)).filter(Boolean) as ShippingPoolItem[];
-        if (reordered.length === sorted.length) return { ...group, items: reordered };
-      }
-      return { ...group, items: sorted };
-    });
-  }, [groupedByStore, sortField, sortDir, localOrder]);
 
   // 過濾搜索結果
   const filteredGroups = sortedGroups.filter(group => {

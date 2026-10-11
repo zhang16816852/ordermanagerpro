@@ -2,6 +2,12 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（出貨池拖曳排序修正：索引錯配＋穩定度＋重整保留，2026-10-11）
+- **根因**：`ShippingPool.tsx` 的 `handleDragEnd` 從 `groupedByStore`（DB 原始順序）取 `oldIndex`/`newIndex`，但 `SortableContext`（`ShippingPoolGroups.tsx`）渲染的是 `filteredGroups` ← `sortedGroups`（已套表頭排序＋`localOrder`）。兩者順序不一致時 `arrayMove` 移錯位 → 拖曳「變成交換／亂跳」。兩個必錯情境：①第一次拖曳後 `localOrder` 已改、記憶體 `groupedByStore` 仍是舊序（reorder RPC 未 invalidate）；②先用表頭排序再拖曳。
+- **修正（純前端，無 migration／RPC 變更）**：① `handleDragEnd` 移到 `sortedGroups` 之後定義，group 來源改 `sortedGroups.find(...)`（與渲染同源，索引才正確）；② 拖曳時 `setSortField('manual')` 自動清除表頭排序指示；③ `groupedByStore` 包 `useMemo([shippingPoolItems, stores])`（穩定 identity，避免拖曳每幀重建 `SortableContext` items）；④ `shippingPoolTypes.ts` 的 `PoolSortField` 新增中性值 `'manual'`，`sortField` 預設由 `'created_at'` 改 **`'manual'`**（`sortedGroups` 於 manual 時不套比較器，直接以 DB `sort_order` 為準 → **重整後保留上次拖曳順序**）。
+- **行為**：先表頭排序再拖曳位置正確並自動清除排序指示；連續拖曳不再交錯；重整顯示持久化 `sort_order`；按任一欄位表頭仍可切回該欄排序（`handleSort` 不變）。
+- **驗證**：`npm run typecheck` 0 errors、本批 2 檔 `eslint` 0 problems、`npm run lint` 0 errors（69 warnings 皆既有）、`npm run build` 通過（51.87s，僅既有 chunk-size warning）。⚠️ 未做瀏覽器實測（`/admin/shipping-pool` 需登入）。
+
 ## 近期變更（訂單／產品列表篩選往返保留 ＋ 複製產品變體唯一性，2026-10-11）
 - **Issue A｜複製產品變體 條碼/SKU 衝突**：migration `20261010000001_duplicate_product_variants_barcode_sku.sql`（簽名不變，免重生 types.ts）重發 `duplicate_product_with_variants`——變體 barcode 由逐字複製改插 **NULL**（避免撞 `idx_product_variants_barcode` 部分唯一索引）、SKU 後綴由低熵 `-COPY-`+`random()*1000` 改**高熵 8 hex**，並補 `SET search_path = public, extensions` + REVOKE/GRANT。前端 `CopyProductDialog` 加 pre-RPC 驗證與失敗補償刪除（`delete_variant_if_safe`），23505 轉友善訊息。⚠️ migration 尚未套用遠端。
 - **Issue B｜產品列表篩選往返保留**：`ProductsPage`／`ProductFormPage` 導覽（新增/編輯/複製）帶 `location.search`；`ProductFormPage` 頁頭 back 由 `back` 字串改 `onBack: goBack`（原不帶 query）。
