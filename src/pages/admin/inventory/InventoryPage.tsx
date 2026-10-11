@@ -226,13 +226,6 @@ export default function AdminInventory() {
             )
         },
         {
-            header: "規格 / 描述",
-            accessorKey: "specs",
-            cell: ({ row }) => (
-                <span className="text-xs text-muted-foreground italic">{row.original.specs}</span>
-            )
-        },
-        {
             header: "零售價",
             accessorKey: "price",
             cell: ({ row }) => (
@@ -258,7 +251,7 @@ export default function AdminInventory() {
             cell: ({ row }) => (
                 <Badge 
                     variant={row.original.isLowStock ? "destructive" : "outline"}
-                    className="text-[10px] px-1.5 h-5 font-normal"
+                    className="text-[10px] px-1.5 h-5 font-normal leading-none whitespace-nowrap"
                 >
                     {row.original.isLowStock ? '低庫存' : '充足'}
                 </Badge>
@@ -316,7 +309,6 @@ export default function AdminInventory() {
                                 const exportData = inventory.map((item: any) => ({
                                     "商品名稱": item.name,
                                     "SKU": item.code,
-                                    "規格": item.specs,
                                     "單價": item.price,
                                     "庫存數量": item.quantity,
                                     "最後更新": item.updatedAt ? new Date(item.updatedAt).toLocaleString() : '-'
