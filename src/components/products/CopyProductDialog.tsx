@@ -241,7 +241,83 @@ export function CopyProductDialog({ open, onOpenChange, product, onCopied }: Cop
 
   const handleCopy = async () => {
     if (!product) return;
+
+    // ── 前置計算（純運算，不觸及 DB）──
+    const groupsList = getActiveGroups(optionGroups);
+    const currentGroupSnapshot = groupsList.map(g => ({
+      name: g.name.trim(),
+      values: g.values
+        .filter(v => v.label.trim())
+        .map(v => ({
+          label: v.label.trim(),
+          value: v.value.trim() || v.label.trim(),
+          wholesalePrice: v.wholesalePrice,
+          retailPrice: v.retailPrice,
+        })),
+    }));
+    const optionsChanged = JSON.stringify(currentGroupSnapshot) !== JSON.stringify(originalGroupsRef.current);
+
+    const currentRefKey = (refs: DeviceSelectionRef[]) => refs.map(r => `${r.type}:${r.id}`).join('|');
+    const modelsChanged = currentRefKey(selectedDeviceRefs) !== currentRefKey(originalDeviceRefsRef.current);
+
+    // 決定要重新生成的變體清單：
+    // 1) 使用者已在「變體預覽」生成且選項/型號/前綴未再變更 → 使用（含手動編輯）
+    // 2) 否則若選項群組結構有改 → 依目前選項現場重建
+    const previewFresh = generatedVariants.length > 0 && generatedSignature === currentSignature();
+    const variantsForRegen = previewFresh
+      ? generatedVariants
+      : (optionsChanged && groupsList.length > 0 ? buildVariants() : []);
+
+    // 選項／型號／前綴已變更但預覽未重新生成 → 擋下，避免靜默丟棄使用者手動編輯
+    if (generatedVariants.length > 0 && !previewFresh) {
+      toast.error('選項／型號／SKU 前綴已變更，請至「變體預覽」重新生成後再複製');
+      return;
+    }
+
+    // 重新生成變體前的驗證（在建立任何資料之前完成）：
+    // SKU 不得為空、不得重複；條碼不得重複、不得與現有變體衝突。
+    if (variantsForRegen.length > 0) {
+      const skuSeen = new Set<string>();
+      for (const v of variantsForRegen) {
+        const sku = v.sku.trim();
+        if (!sku) {
+          toast.error('有變體缺少 SKU，請到「變體預覽」補齊');
+          return;
+        }
+        if (skuSeen.has(sku.toUpperCase())) {
+          toast.error(`有重複 SKU：${sku}，請到「變體預覽」修正`);
+          return;
+        }
+        skuSeen.add(sku.toUpperCase());
+      }
+
+      const barcodeSeen = new Set<string>();
+      const barcodes: string[] = [];
+      for (const v of variantsForRegen) {
+        const bc = (v.barcode || '').trim();
+        if (!bc) continue;
+        if (barcodeSeen.has(bc)) {
+          toast.error(`有重複條碼：${bc}，請到「變體預覽」修正`);
+          return;
+        }
+        barcodeSeen.add(bc);
+        barcodes.push(bc);
+      }
+      if (barcodes.length > 0) {
+        const { data: clash, error: bcErr } = await supabase
+          .from('product_variants')
+          .select('barcode')
+          .in('barcode', barcodes);
+        if (bcErr) throw bcErr;
+        if (clash && clash.length > 0) {
+          toast.error(`條碼已被其他變體使用：${clash.map(c => c.barcode).join('、')}，請修改後再試`);
+          return;
+        }
+      }
+    }
+
     setSaving(true);
+    let createdProductId: string | null = null;
 
     try {
       const { data: newProductId, error: copyError } = await (supabase.rpc as any)('duplicate_product_with_variants', {
@@ -251,38 +327,12 @@ export function CopyProductDialog({ open, onOpenChange, product, onCopied }: Cop
       });
       if (copyError) throw copyError;
       if (!newProductId) throw new Error('複製失敗：未回傳新產品 ID');
-
-      const groupsList = getActiveGroups(optionGroups);
-      const currentGroupSnapshot = groupsList.map(g => ({
-        name: g.name.trim(),
-        values: g.values
-          .filter(v => v.label.trim())
-          .map(v => ({
-            label: v.label.trim(),
-            value: v.value.trim() || v.label.trim(),
-            wholesalePrice: v.wholesalePrice,
-            retailPrice: v.retailPrice,
-          })),
-      }));
-      const optionsChanged = JSON.stringify(currentGroupSnapshot) !== JSON.stringify(originalGroupsRef.current);
-
-      const currentRefKey = (refs: DeviceSelectionRef[]) => refs.map(r => `${r.type}:${r.id}`).join('|');
-      const modelsChanged = currentRefKey(selectedDeviceRefs) !== currentRefKey(originalDeviceRefsRef.current);
-
-      // 決定要重新生成的變體清單：
-      // 1) 使用者已在「變體預覽」生成且選項/型號/前綴未再變更 → 使用（含手動編輯）
-      // 2) 否則若選項群組結構有改 → 依目前選項現場重建
-      const previewFresh = generatedVariants.length > 0 && generatedSignature === currentSignature();
-      const variantsForRegen = previewFresh
-        ? generatedVariants
-        : (optionsChanged && groupsList.length > 0 ? buildVariants() : []);
+      createdProductId = newProductId;
 
       // 保留 generateVariantCombos 產出的逐變體 _modelGroupId/_modelGroupType，
       // 使 buildModelRelationsPayload 走「每變體各自對應」模式（與 VariantBatchCreator 一致），
       // 避免「全部變體 × 全部選取型號」的錯誤語意。
-      const flatVariantsForRegen = variantsForRegen;
-
-      if (flatVariantsForRegen.length > 0) {
+      if (variantsForRegen.length > 0) {
         // 重新生成變體：先刪除剛複製的變體（全新、無引用），避免 batch_upsert
         // 依新 SKU 重建時殘留 -COPY-XXXX 的孤兒變體。
         const { error: delErr } = await supabase
@@ -291,25 +341,10 @@ export function CopyProductDialog({ open, onOpenChange, product, onCopied }: Cop
           .eq('product_id', newProductId);
         if (delErr) throw delErr;
 
-        // 驗證 SKU：不得為空、不得重複
-        const skuSeen = new Set<string>();
-        for (const v of flatVariantsForRegen) {
-          const sku = v.sku.trim();
-          if (!sku) {
-            toast.error('有變體缺少 SKU，請到「變體預覽」補齊');
-            return;
-          }
-          if (skuSeen.has(sku.toUpperCase())) {
-            toast.error(`有重複 SKU：${sku}，請到「變體預覽」修正`);
-            return;
-          }
-          skuSeen.add(sku.toUpperCase());
-        }
-
-        const dedupedVariants = buildDedupedVariantsPayload(flatVariantsForRegen);
+        const dedupedVariants = buildDedupedVariantsPayload(variantsForRegen);
         const groupsPayload = buildGroupsPayload(groupsList);
-        const variantOptionsPayload = buildVariantOptionsPayload(groupsList, flatVariantsForRegen);
-        const modelRelationsPayload = buildModelRelationsPayload(flatVariantsForRegen, selectedDeviceRefs);
+        const variantOptionsPayload = buildVariantOptionsPayload(groupsList, variantsForRegen);
+        const modelRelationsPayload = buildModelRelationsPayload(variantsForRegen, selectedDeviceRefs);
 
         const { error: rpcError } = await supabase.rpc('batch_upsert_product_options', {
           p_product_id: newProductId,
@@ -361,7 +396,34 @@ export function CopyProductDialog({ open, onOpenChange, product, onCopied }: Cop
       onCopied(newProductId);
       onOpenChange(false);
     } catch (error: any) {
-      toast.error(`複製失敗：${getErrorMessage(error)}`);
+      // 補償刪除：duplicate RPC 已建立產品、但後續步驟失敗 → 清掉剛建的產品，
+      // 避免留下「有產品卻無變體」的孤兒。
+      if (createdProductId) {
+        try {
+          const { data: cleanup, error: cleanupErr } = await (supabase.rpc as any)('delete_product_if_safe', {
+            p_product_id: createdProductId,
+          });
+          if (cleanupErr || cleanup?.ok === false) {
+            await supabase.from('products').delete().eq('id', createdProductId);
+          }
+        } catch (cleanupError) {
+          console.error('複製失敗後清理產品出錯:', cleanupError);
+        }
+      }
+
+      const code = error?.code;
+      const message = String(error?.message || '');
+      if (code === '23505') {
+        if (message.includes('idx_product_variants_barcode')) {
+          toast.error('複製失敗：條碼與現有變體重複，請於「變體預覽」修改條碼後再試');
+        } else if (message.includes('idx_product_variants_sku') || message.includes('sku')) {
+          toast.error('複製失敗：SKU 與現有變體重複，請於「變體預覽」修改 SKU 後再試');
+        } else {
+          toast.error('複製失敗：資料重複，請檢查 SKU／條碼');
+        }
+      } else {
+        toast.error(`複製失敗：${getErrorMessage(error)}`);
+      }
     } finally {
       setSaving(false);
     }
@@ -475,7 +537,7 @@ export function CopyProductDialog({ open, onOpenChange, product, onCopied }: Cop
             {previewStale && (
               <div className="flex items-center gap-2 p-2.5 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm">
                 <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
-                <span>選項／型號／SKU 前綴已變更，請重新生成預覽；未重新生成時，複製將依目前選項自動重建（會覆寫你的修改）。</span>
+                <span>選項／型號／SKU 前綴已變更，請重新生成預覽後再複製。</span>
               </div>
             )}
 
