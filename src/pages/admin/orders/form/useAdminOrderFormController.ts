@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { listReturnTo } from './orderListReturn';
 import { useAuth } from '@/hooks/useAuth';
 import { useStoreProductCache, useProductCache } from '@/hooks/useProductCache';
 import type { ProductWithPricing } from '@/types/product';
@@ -503,7 +504,7 @@ export function useAdminOrderFormController() {
   const navigateBack = useCallback(() => {
     if (orderType === 'purchase') navigate('/admin/purchase-orders');
     else if (orderType === 'consignment_receive' || orderType === 'consignment_send') navigate('/admin/consignment');
-    else navigate('/admin/orders');
+    else navigate(listReturnTo(window.location.search));
   }, [orderType, navigate]);
 
   // 編輯模式的單據來源：採購走 purchase_orders，其餘走 orders

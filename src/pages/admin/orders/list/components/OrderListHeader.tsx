@@ -80,7 +80,7 @@ export function OrderListHeader({
         icon={<ClipboardList className="h-5 w-5" />}
         actions={
           <>
-            <Button onClick={() => navigate('/admin/orders/checkout')} size="sm" variant="outline">
+            <Button onClick={() => navigate(`/admin/orders/checkout${window.location.search}`)} size="sm" variant="outline">
               <PlusCircle className="mr-2 h-4 w-4" /> 建立新單據
             </Button>
             <Button onClick={onExportCSV} variant="outline" size="sm">

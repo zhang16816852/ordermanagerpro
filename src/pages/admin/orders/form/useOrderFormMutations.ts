@@ -15,6 +15,7 @@ import type {
 import { useStoreDraft } from '@/store/useOrderDraftStore';
 import { DeliveryType } from '@/components/shipping/DeliveryMethodPicker';
 import type { ShippingAddressValue } from '@/components/shipping/ShippingAddressFields';
+import { listReturnTo } from './orderListReturn';
 
 export interface DirectShipDelivery {
   deliveryType: DeliveryType | null;
@@ -257,7 +258,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       toast.success('訂單已更新');
       queryClient.invalidateQueries({ queryKey: ['order-detail'] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
-      navigate('/admin/orders');
+      navigate(listReturnTo(window.location.search));
     },
     onError: (error: any) => {
       if (error?.reason) {
@@ -317,7 +318,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       toast.success('訂單已建立');
       draft.clearDraft();
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
-      navigate('/admin/orders');
+      navigate(listReturnTo(window.location.search));
     },
     onError: (error: Error) => toast.error(getErrorMessage(error)),
   });
@@ -384,7 +385,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       await syncPrices({ auto: true });
 
       draft.clearDraft();
-      navigate('/admin/orders');
+      navigate(listReturnTo(window.location.search));
     } catch (err) {
       toast.error(getErrorMessage(err, '建立訂單失敗'));
     } finally {
@@ -570,7 +571,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       queryClient.invalidateQueries({ queryKey: ['order-detail'] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       queryClient.invalidateQueries({ queryKey: ['consignment-orders'] });
-      navigate('/admin/orders');
+      navigate(listReturnTo(window.location.search));
     },
     onError: (error: Error) => toast.error(getErrorMessage(error)),
   });

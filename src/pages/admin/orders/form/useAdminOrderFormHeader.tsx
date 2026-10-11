@@ -1,8 +1,10 @@
 import { useLayoutEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Lock, Unlock } from 'lucide-react';
 import { usePageHeader } from '@/components/layout/PageHeaderContext';
+import { listReturnTo } from './orderListReturn';
 import {
   PO_STATUS_CLASSES,
   PO_STATUS_LABELS,
@@ -96,7 +98,13 @@ export function useAdminOrderFormHeader(params: UseAdminOrderFormHeaderParams) {
           </span>
         </div>
       ),
-      onBack: isEditMode ? () => goTo(isPurchaseEdit ? '/admin/purchase-orders' : '/admin/orders') : goBack,
+      onBack: isEditMode ? () => {
+        if (isPurchaseEdit) {
+          navigate('/admin/purchase-orders');
+        } else {
+          navigate(listReturnTo(window.location.search));
+        }
+      } : goBack,
       actions: (
         <div className="flex items-center gap-2">
           {typeBadgeElem}

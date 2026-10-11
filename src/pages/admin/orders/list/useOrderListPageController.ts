@@ -21,6 +21,9 @@ import type {
 
 export const validTabs: OrderStatusTab[] = ['pending', 'processing', 'shipped'];
 
+export const ORDER_SORT_FIELDS = ['code', 'store_name', 'item_count', 'profit', 'created_at'] as const;
+const isValidSortField = (v: string | null): v is string => !!v && (ORDER_SORT_FIELDS as readonly string[]).includes(v);
+
 export function useOrderListPageController() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { defaultWarehouse } = useWarehouses();
@@ -31,19 +34,26 @@ export function useOrderListPageController() {
   const [viewMode, setViewMode] = useState<OrderViewMode>(
     searchParams.get('view') === 'items' ? 'items' : searchParams.get('view') === 'aggregate' ? 'aggregate' : 'orders'
   );
-  const [search, setSearch] = useState(searchParams.get('id') || searchParams.get('search') || '');
+  const [search, setSearch] = useState(searchParams.get('search') || searchParams.get('id') || '');
   const [storeFilter, setStoreFilter] = useState<string>(searchParams.get('store') || 'all');
-  const [sortField, setSortField] = useState<string>('created_at');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [poFilter, setPoFilter] = useState<'all' | 'has_po' | 'no_po'>('all');
+  const urlSort = searchParams.get('sort');
+  const [sortField, setSortField] = useState<string>(isValidSortField(urlSort) ? urlSort : 'created_at');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(
+    searchParams.get('dir') === 'asc' ? 'asc' : 'desc'
+  );
+  const [dateFrom, setDateFrom] = useState(searchParams.get('from') || '');
+  const [dateTo, setDateTo] = useState(searchParams.get('to') || '');
+  const [poFilter, setPoFilter] = useState<'all' | 'has_po' | 'no_po'>(
+    (searchParams.get('po') === 'has_po' || searchParams.get('po') === 'no_po')
+      ? searchParams.get('po') as 'has_po' | 'no_po'
+      : 'all'
+  );
   const [businessFilter, setBusinessFilter] = useState<BusinessFilter>(
     (searchParams.get('business') === 'with' || searchParams.get('business') === 'without')
       ? searchParams.get('business') as BusinessFilter
       : 'all'
   );
-  const [repFilter, setRepFilter] = useState<string>('all');
+  const [repFilter, setRepFilter] = useState<string>(searchParams.get('rep') || 'all');
   const [aggStatus, setAggStatus] = useState<AggregateFilterMode>(
     searchParams.get('agg') === 'outstanding' ? 'outstanding'
       : searchParams.get('agg') === 'ordered' ? 'ordered'
@@ -51,14 +61,6 @@ export function useOrderListPageController() {
   );
 
   const { repsData, repAssignedStoreIds } = useOrderListQueries(repFilter);
-
-  // 當 URL 參數變動時同步搜尋框
-  useEffect(() => {
-    const id = searchParams.get('id');
-    const q = searchParams.get('search');
-    if (id) setSearch(id);
-    else if (q) setSearch(q);
-  }, [searchParams]);
 
   const selections = useOrderListSelections();
   const {
@@ -210,9 +212,18 @@ export function useOrderListPageController() {
   }, [orders]);
 
   const handleSort = useCallback((field: string) => {
-    setSortDirection(prev => sortField === field ? (prev === 'asc' ? 'desc' : 'asc') : 'desc');
+    const nextDir: 'asc' | 'desc' = sortField === field ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'desc';
+    setSortDirection(nextDir);
     setSortField(field);
-  }, [sortField]);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (field === 'created_at') next.delete('sort');
+      else next.set('sort', field);
+      if (nextDir === 'desc') next.delete('dir');
+      else next.set('dir', nextDir);
+      return next;
+    }, { replace: true });
+  }, [sortField, sortDirection, setSearchParams]);
 
   // 出貨前自動帶入庫存非空的倉庫
   useEffect(() => {
@@ -300,6 +311,59 @@ export function useOrderListPageController() {
     }, { replace: true });
   };
 
+  const handleSearchChange = (v: string) => {
+    setSearch(v);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (v && v.trim()) {
+        next.set("search", v);
+      } else {
+        next.delete("search");
+      }
+      next.delete("id");
+      return next;
+    }, { replace: true });
+  };
+
+  const handleDateFromChange = (v: string) => {
+    setDateFrom(v);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (v) next.set("from", v);
+      else next.delete("from");
+      return next;
+    }, { replace: true });
+  };
+
+  const handleDateToChange = (v: string) => {
+    setDateTo(v);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (v) next.set("to", v);
+      else next.delete("to");
+      return next;
+    }, { replace: true });
+  };
+
+  const handlePoFilterChange = (v: 'all' | 'has_po' | 'no_po') => {
+    setPoFilter(v);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (v && v !== "all") next.set("po", v);
+      else next.delete("po");
+      return next;
+    }, { replace: true });
+  };
+  const handleRepFilterChange = (v: string) => {
+    setRepFilter(v);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (v && v !== "all") next.set("rep", v);
+      else next.delete("rep");
+      return next;
+    }, { replace: true });
+  };
+
   const handleStoreFilterChange = (v: string) => {
     setStoreFilter(v);
     setSearchParams((prev) => {
@@ -343,21 +407,21 @@ export function useOrderListPageController() {
     aggStatus,
     setAggStatus,
     search,
-    setSearch,
+    handleSearchChange,
     storeFilter,
     setStoreFilter,
     sortField,
     sortDirection,
     dateFrom,
-    setDateFrom,
+    handleDateFromChange,
     dateTo,
-    setDateTo,
+    handleDateToChange,
     poFilter,
-    setPoFilter,
+    handlePoFilterChange,
     businessFilter,
     handleBusinessFilterChange,
     repFilter,
-    setRepFilter,
+    handleRepFilterChange,
     repsData,
     stores,
     orders,

@@ -30,16 +30,16 @@ export default function AdminOrderList() {
     viewMode,
     aggStatus,
     search,
-    setSearch,
+    handleSearchChange,
     storeFilter,
     dateFrom,
-    setDateFrom,
+    handleDateFromChange,
     dateTo,
-    setDateTo,
+    handleDateToChange,
     poFilter,
-    setPoFilter,
+    handlePoFilterChange,
     repFilter,
-    setRepFilter,
+    handleRepFilterChange,
     repsData,
     stores,
     orders,
@@ -121,20 +121,20 @@ export default function AdminOrderList() {
         aggStatus={aggStatus}
         onAggStatusChange={c.handleAggStatusChange}
         search={search}
-        onSearchChange={setSearch}
+        onSearchChange={handleSearchChange}
         storeFilter={storeFilter}
         onStoreFilterChange={c.handleStoreFilterChange}
         stores={stores as any[]}
         dateFrom={dateFrom}
-        onDateFromChange={setDateFrom}
+        onDateFromChange={handleDateFromChange}
         dateTo={dateTo}
-        onDateToChange={setDateTo}
+        onDateToChange={handleDateToChange}
         poFilter={poFilter}
-        onPoFilterChange={setPoFilter}
+        onPoFilterChange={handlePoFilterChange}
         businessFilter={c.businessFilter}
         onBusinessFilterChange={c.handleBusinessFilterChange}
         repFilter={repFilter}
-        onRepFilterChange={setRepFilter}
+        onRepFilterChange={handleRepFilterChange}
         reps={repsData}
         onExportCSV={c.handleExportOrdersCSV}
         syncPending={syncOrdersMutation.isPending}
@@ -163,7 +163,7 @@ export default function AdminOrderList() {
                     else setSelectedOrderIds(new Set());
                   }}
                   onView={setViewingOrder}
-                  onEdit={(id) => navigate(`/admin/orders/${id}/edit`)}
+                  onEdit={(id) => navigate(`/admin/orders/${id}/edit${window.location.search}`)}
                   onReverseShipment={handleReverseShipment}
                   sortField={c.sortField}
                   sortDirection={c.sortDirection}
@@ -181,7 +181,7 @@ export default function AdminOrderList() {
                 orders={filteredOrders}
                 isLoading={isLoading}
                 onView={setViewingOrder}
-                onEdit={(id) => navigate(`/admin/orders/${id}/edit`)}
+                onEdit={(id) => navigate(`/admin/orders/${id}/edit${window.location.search}`)}
                 onReverseShipment={handleReverseShipment}
                 statusTab={statusTab}
                 consignmentBySourceOrder={consignmentBySourceOrderId}
