@@ -2,6 +2,12 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（訂單／產品列表篩選往返保留 ＋ 複製產品變體唯一性，2026-10-11）
+- **Issue A｜複製產品變體 條碼/SKU 衝突**：migration `20261010000001_duplicate_product_variants_barcode_sku.sql`（簽名不變，免重生 types.ts）重發 `duplicate_product_with_variants`——變體 barcode 由逐字複製改插 **NULL**（避免撞 `idx_product_variants_barcode` 部分唯一索引）、SKU 後綴由低熵 `-COPY-`+`random()*1000` 改**高熵 8 hex**，並補 `SET search_path = public, extensions` + REVOKE/GRANT。前端 `CopyProductDialog` 加 pre-RPC 驗證與失敗補償刪除（`delete_variant_if_safe`），23505 轉友善訊息。⚠️ migration 尚未套用遠端。
+- **Issue B｜產品列表篩選往返保留**：`ProductsPage`／`ProductFormPage` 導覽（新增/編輯/複製）帶 `location.search`；`ProductFormPage` 頁頭 back 由 `back` 字串改 `onBack: goBack`（原不帶 query）。
+- **Issue C｜訂單列表篩選/排序往返保留**：`useOrderListPageController` 改以 URL 為真值——新增 URL 參數 `sort`/`dir`（白名單，預設 `created_at`/`desc`）、`from`/`to`、`po`、`rep`，各 handler 皆 `setSearchParams(..., {replace:true})`、移除舊 stale 同步 effect。新增 `listReturnTo()`（`orderListReturn.ts`，過濾表單專用參數 type/p/category/brands/specs）供 `useOrderFormMutations`、`useAdminOrderFormController.navigateBack`、`useAdminOrderFormHeader` 返回使用；`OrderListPage` 編輯連結與 `OrderListHeader` 建立連結附 `window.location.search`。**採購/寄賣返回路徑維持不變。**
+- **驗證**：`npm run typecheck` 0 errors、`npm run lint` 0 errors（70 warnings 皆既有、無新增）、build 通過。
+
 ## 近期變更（Telegram 銷貨單「更新」通知 ＋ 多 bot 架構，2026-10-08）
 - **銷貨單修正通知守衛（GUC pp.sales_note_correction）**：在 correct_sales_note() 內先 set_config('app.sales_note_correction','1',true)，僅該 RPC 明確發送 sales_note_updated 與 
 otify_admins；其餘非修正的 sales_notes UPDATE 由 	rgfn_sales_note_notify_update() 透過 current_setting('app.sales_note_correction', true) 判斷攔截（非 '1' 或未設定即不發通知），避免 sync_sales_note_payment_status、update_sales_note_shipped_date 等 UPDATE 誤觸發更新通知。
