@@ -1,7 +1,9 @@
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, AlertTriangle, Send, Truck, ShoppingBag, PackageCheck, X, Package, Save } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, FolderOpen, Send, Truck, ShoppingBag, PackageCheck, X, Package, Save } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { OrderInfoCard } from '@/components/order/OrderInfoCard';
 import { OrderItemsPanel } from '@/components/order/OrderItemsPanel';
@@ -11,6 +13,8 @@ import { DeliveryTypeCard } from '@/components/shipping/DeliveryTypeCard';
 import { useAdminOrderFormController } from './orders/form/useAdminOrderFormController';
 import { useAdminOrderFormHeader, statusLabels } from './orders/form/useAdminOrderFormHeader';
 import { DirectShipDialog } from './orders/form/DirectShipDialog';
+import { DraftPickerDialog } from './orders/form/DraftPickerDialog';
+import { selectDraftRows } from './orders/form/draftPicker';
 import { PO_STATUS_LABELS, type PurchaseOrderStatus } from './purchase-orders/types';
 
 export default function AdminOrderForm() {
@@ -30,6 +34,9 @@ export default function AdminOrderForm() {
     navigate,
     navigateBack: c.navigateBack,
   });
+
+  const [draftPickerOpen, setDraftPickerOpen] = useState(false);
+  const draftCount = useMemo(() => selectDraftRows(c.allDrafts).length, [c.allDrafts]);
 
   // Loading / empty states
   if (c.isEditMode && c.editDocLoading) {
@@ -169,24 +176,42 @@ export default function AdminOrderForm() {
 
   return (
     <div className="space-y-4">
-      {/* Type selector (create mode only) */}
-      {!c.isEditMode && !c.isRep && (
-        <Tabs value={c.orderType} onValueChange={c.handleOrderTypeChange}>
-          <TabsList>
-            <TabsTrigger value="sales" className="gap-1.5">
-              <ShoppingBag className="h-4 w-4" />銷售訂單
-            </TabsTrigger>
-            <TabsTrigger value="purchase" className="gap-1.5">
-              <Truck className="h-4 w-4" />採購單
-            </TabsTrigger>
-            <TabsTrigger value="consignment_receive" className="gap-1.5">
-              <PackageCheck className="h-4 w-4" />寄賣收貨
-            </TabsTrigger>
-            <TabsTrigger value="consignment_send" className="gap-1.5">
-              <Send className="h-4 w-4" />寄賣出貨
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+      {/* Type selector (create mode only) + draft picker */}
+      {!c.isEditMode && (
+        <div className="flex items-center gap-2">
+          {!c.isRep && (
+            <Tabs value={c.orderType} onValueChange={c.handleOrderTypeChange}>
+              <TabsList>
+                <TabsTrigger value="sales" className="gap-1.5">
+                  <ShoppingBag className="h-4 w-4" />銷售訂單
+                </TabsTrigger>
+                <TabsTrigger value="purchase" className="gap-1.5">
+                  <Truck className="h-4 w-4" />採購單
+                </TabsTrigger>
+                <TabsTrigger value="consignment_receive" className="gap-1.5">
+                  <PackageCheck className="h-4 w-4" />寄賣收貨
+                </TabsTrigger>
+                <TabsTrigger value="consignment_send" className="gap-1.5">
+                  <Send className="h-4 w-4" />寄賣出貨
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto gap-1.5"
+            onClick={() => setDraftPickerOpen(true)}
+          >
+            <FolderOpen className="h-4 w-4" />
+            草稿
+            {draftCount > 0 && (
+              <Badge variant="secondary" className="ml-0.5 px-1.5">
+                {draftCount}
+              </Badge>
+            )}
+          </Button>
+        </div>
       )}
 
       {/* Warning for non-pending orders */}
@@ -355,6 +380,17 @@ export default function AdminOrderForm() {
           </Button>
         )}
       </div>
+
+      {/* Draft picker dialog */}
+      <DraftPickerDialog
+        open={draftPickerOpen}
+        onOpenChange={setDraftPickerOpen}
+        drafts={c.allDrafts}
+        stores={c.storesList}
+        currentKey={c.draftKey}
+        onOpenDraft={c.openDraft}
+        onDeleteDraft={c.deleteDraft}
+      />
 
       {/* Direct Ship Dialog */}
       <DirectShipDialog

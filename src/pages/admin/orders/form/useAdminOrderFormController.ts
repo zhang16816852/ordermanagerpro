@@ -107,6 +107,7 @@ export function useAdminOrderFormController() {
   const catalogLoading = orderType === 'purchase' ? allProductsLoading : productsLoading;
 
   const draft = useStoreDraft(draftKey);
+  const allDrafts = useOrderDraftStore((s) => s.drafts);
 
   // Local state
   const [notes, setNotes] = useState('');
@@ -505,6 +506,55 @@ export function useAdminOrderFormController() {
     else navigate(listReturnTo(window.location.search));
   }, [orderType, navigate]);
 
+  // 從草稿清單載入指定草稿：先清空目前表單狀態，再切換 draftKey／URL，
+  // 由 draft sync effect 將目標草稿 merge 進（已清空的）狀態即為該草稿內容。
+  const openDraft = useCallback((key: string) => {
+    if (isEditMode || key === draftKey) return;
+    let nextType: typeof orderType = 'sales';
+    let nextStoreId = '';
+    if (key.startsWith('_admin_new_')) {
+      nextType = key.slice('_admin_new_'.length) as typeof orderType;
+    } else {
+      nextStoreId = key;
+    }
+    setItems([]);
+    setNotes('');
+    setPendingDeletedIds([]);
+    setPriceSyncMap({});
+    setSupplierId('');
+    setTargetStoreId('');
+    setExpectedDate('');
+    setSupplierOrderNumber('');
+    setConsignmentMode(false);
+    setDeliveryType(null);
+    setItemWarehouses({});
+    setItemSources({});
+    setMetaHydratedKey('');
+    setOrderType(nextType);
+    setSelectedStoreId(nextStoreId);
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        p.set('type', nextType);
+        if (nextStoreId) p.set('storeId', nextStoreId);
+        else p.delete('storeId');
+        return p;
+      },
+      { replace: true }
+    );
+  }, [isEditMode, draftKey, setSearchParams]);
+
+  // 刪除草稿；若刪除的是目前草稿，同步清空目前表單
+  const deleteDraft = useCallback((key: string) => {
+    useOrderDraftStore.getState().clearDraft(key);
+    if (key === draftKey) {
+      setItems([]);
+      setNotes('');
+      setPendingDeletedIds([]);
+      setPriceSyncMap({});
+    }
+  }, [draftKey]);
+
   // 編輯模式的單據來源：採購走 purchase_orders，其餘走 orders
   const editDoc = isPurchaseEdit ? purchaseOrder : order;
   const editDocLoading = isPurchaseEdit ? purchaseLoading : orderLoading;
@@ -573,6 +623,9 @@ export function useAdminOrderFormController() {
     storeProducts: catalogProducts,
     productsLoading: catalogLoading,
     draft,
+    allDrafts,
+    openDraft,
+    deleteDraft,
     notes,
     setNotes,
     items,
