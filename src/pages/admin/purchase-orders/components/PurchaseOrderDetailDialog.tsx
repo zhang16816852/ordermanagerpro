@@ -551,43 +551,43 @@ export function PurchaseOrderDetailDialog({
       </div>
 
       <div className="border rounded-md">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {canReorder && <TableHead className="w-8"></TableHead>}
-              <TableHead>SKU</TableHead>
-              {canReorder ? (
-                <TableHead>
-                  <button
-                    type="button"
-                    onClick={handleNameHeaderClick}
-                    className="inline-flex items-center gap-1 font-medium text-muted-foreground hover:text-foreground cursor-pointer"
-                  >
-                    產品名稱
-                    {nameSort === 'asc' ? (
-                      <ArrowUp className="h-3.5 w-3.5" />
-                    ) : nameSort === 'desc' ? (
-                      <ArrowDown className="h-3.5 w-3.5" />
-                    ) : (
-                      <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
-                    )}
-                  </button>
-                </TableHead>
-              ) : (
-                <TableHead>產品名稱</TableHead>
-              )}
-              <TableHead>廠商代碼</TableHead>
-              <TableHead>廠商名稱</TableHead>
-              <TableHead>來源訂單</TableHead>
-              <TableHead className="text-right">數量</TableHead>
-              <TableHead className="text-right">已收</TableHead>
-              <TableHead className="text-right">單價</TableHead>
-              <TableHead className="text-right">總額</TableHead>
-              {canDelete && <TableHead className="w-12 text-right">操作</TableHead>}
-            </TableRow>
-          </TableHeader>
-          {canReorder ? (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        {canReorder ? (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {canReorder && <TableHead className="w-8"></TableHead>}
+                  <TableHead>SKU</TableHead>
+                  {canReorder ? (
+                    <TableHead>
+                      <button
+                        type="button"
+                        onClick={handleNameHeaderClick}
+                        className="inline-flex items-center gap-1 font-medium text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        產品名稱
+                        {nameSort === 'asc' ? (
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        ) : nameSort === 'desc' ? (
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        ) : (
+                          <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
+                        )}
+                      </button>
+                    </TableHead>
+                  ) : (
+                    <TableHead>產品名稱</TableHead>
+                  )}
+                  <TableHead>廠商代碼</TableHead>
+                  <TableHead>廠商名稱</TableHead>
+                  <TableHead>來源訂單</TableHead>
+                  <TableHead className="text-right">數量</TableHead>
+                  <TableHead className="text-right">已收</TableHead>
+                  <TableHead className="text-right">單價</TableHead>
+                  <TableHead className="text-right">總額</TableHead>
+                  {canDelete && <TableHead className="w-12 text-right">操作</TableHead>}
+                </TableRow>
+              </TableHeader>
               <SortableContext items={visibleItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
                 <TableBody>
                   {visibleItems.map((item) => (
@@ -604,8 +604,24 @@ export function PurchaseOrderDetailDialog({
                   )}
                 </TableBody>
               </SortableContext>
-            </DndContext>
-          ) : (
+            </Table>
+          </DndContext>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>SKU</TableHead>
+                <TableHead>產品名稱</TableHead>
+                <TableHead>廠商代碼</TableHead>
+                <TableHead>廠商名稱</TableHead>
+                <TableHead>來源訂單</TableHead>
+                <TableHead className="text-right">數量</TableHead>
+                <TableHead className="text-right">已收</TableHead>
+                <TableHead className="text-right">單價</TableHead>
+                <TableHead className="text-right">總額</TableHead>
+                {canDelete && <TableHead className="w-12 text-right">操作</TableHead>}
+              </TableRow>
+            </TableHeader>
             <TableBody>
               {visibleItems.map((item) => (
                 <TableRow key={item.id}>
@@ -620,8 +636,8 @@ export function PurchaseOrderDetailDialog({
                 </TableRow>
               )}
             </TableBody>
-          )}
-        </Table>
+          </Table>
+        )}
       </div>
 
       <div className="flex justify-between items-end bg-muted/30 p-4 rounded-lg">

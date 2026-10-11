@@ -169,23 +169,36 @@ export function OrderInfoCard({
       {!collapsed && (
         <CardContent className="flex-1 min-h-0 overflow-auto p-4 space-y-4" onClick={(e) => e.stopPropagation()}>
           {isEditMode ? (
-            <div className="grid grid-cols-2 gap-4 text-sm bg-muted/40 p-3 rounded-lg">
-              <div>
-                <span className="text-muted-foreground">店鋪：</span>
-                <span className="font-medium">{displayStoreName}</span>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-sm bg-muted/40 p-3 rounded-lg">
+                <div>
+                  <span className="text-muted-foreground">店鋪：</span>
+                  <span className="font-medium">{displayStoreName}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">品牌：</span>
+                  <span className="font-medium">{displayBrand || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">建立時間：</span>
+                  <span>{order?.created_at ? format(new Date(order.created_at), 'yyyy/MM/dd HH:mm', { locale: zhTW }) : '-'}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">來源：</span>
+                  <span>{order?.source_type === 'frontend' ? '前台' : order?.source_type === 'consignment' ? '寄賣' : '後台'}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-muted-foreground">品牌：</span>
-                <span className="font-medium">{displayBrand || '-'}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">建立時間：</span>
-                <span>{order?.created_at ? format(new Date(order.created_at), 'yyyy/MM/dd HH:mm', { locale: zhTW }) : '-'}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">來源：</span>
-                <span>{order?.source_type === 'frontend' ? '前台' : order?.source_type === 'consignment' ? '寄賣' : '後台'}</span>
-              </div>
+              {orderType === 'purchase' && (
+                <div className="space-y-2">
+                  <Label className="text-sm">廠商單號（選填）</Label>
+                  <Input
+                    value={supplierOrderNumber || ''}
+                    onChange={(e) => onSupplierOrderNumberChange(e.target.value)}
+                    placeholder="輸入廠商單號"
+                    disabled={!!purchaseStatusLocked}
+                  />
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
