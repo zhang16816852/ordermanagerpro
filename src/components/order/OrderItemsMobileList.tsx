@@ -145,6 +145,9 @@ export function OrderItemsMobileList({
                                             {(item.receivedQuantity || 0) > 0 && (
                                                 <p className="text-[10px] text-green-600">已收 {item.receivedQuantity}</p>
                                             )}
+                                            {(item.shippedQuantity || 0) > 0 && (
+                                                <p className="text-[10px] text-blue-600">已出貨 {item.shippedQuantity}</p>
+                                            )}
                                         </>
                                     ) : (
                                         <div className="font-medium p-1.5 text-sm">{displayQty(item)}</div>

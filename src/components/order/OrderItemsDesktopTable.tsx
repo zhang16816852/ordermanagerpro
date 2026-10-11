@@ -165,6 +165,9 @@ export function OrderItemsDesktopTable({
                                                             min={Math.max(1, item.receivedQuantity || 0)}
                                                         />
                                                         {receivedHint(item)}
+                                                        {(item.shippedQuantity || 0) > 0 && (
+                                                            <p className="text-[10px] text-blue-600">已出貨 {item.shippedQuantity}</p>
+                                                        )}
                                                     </>
                                                 ) : (
                                                     <span>{displayQty(item)}</span>
@@ -272,6 +275,9 @@ export function OrderItemsDesktopTable({
                                                             min={Math.max(1, item.receivedQuantity || 0)}
                                                         />
                                                         {receivedHint(item)}
+                                                        {(item.shippedQuantity || 0) > 0 && (
+                                                            <p className="text-[10px] text-blue-600">已出貨 {item.shippedQuantity}</p>
+                                                        )}
                                                     </>
                                                 ) : (
                                                     <span>{displayQty(item)}</span>

@@ -133,6 +133,7 @@ export function useOrderFormStateSync(params: OrderFormStateSyncParams) {
       productId: item.product_id,
       variantId: item.variant_id || undefined,
       quantity: item.quantity,
+      shippedQuantity: item.shipped_quantity ?? 0,
       unitPrice: item.unit_price,
       selectedModelName: item.selected_model_name || undefined,
       sku: item.products?.code || '',
