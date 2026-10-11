@@ -122,7 +122,6 @@ export interface OrderFormMeta {
   targetStoreId?: string;
   expectedDate?: string;
   supplierOrderNumber?: string;
-  shippedAt?: string;
   warehouseId?: string;
   consignmentMode?: boolean;
   deliveryType?: 'delivery' | 'logistics' | 'pickup';

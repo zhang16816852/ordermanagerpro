@@ -135,7 +135,6 @@ export function useAdminOrderFormController() {
       if (meta.targetStoreId) setTargetStoreId(meta.targetStoreId);
       if (meta.expectedDate) setExpectedDate(meta.expectedDate);
       if (meta.supplierOrderNumber) setSupplierOrderNumber(meta.supplierOrderNumber);
-      if (meta.shippedAt) setShippedAt(meta.shippedAt);
       if (meta.warehouseId) setWarehouseId(meta.warehouseId);
       if (typeof meta.consignmentMode === 'boolean') setConsignmentMode(meta.consignmentMode);
       if (meta.deliveryType) setDeliveryType(meta.deliveryType);
@@ -153,7 +152,6 @@ export function useAdminOrderFormController() {
       targetStoreId,
       expectedDate,
       supplierOrderNumber,
-      shippedAt,
       warehouseId,
       consignmentMode,
       deliveryType: deliveryType ?? undefined,
@@ -163,7 +161,7 @@ export function useAdminOrderFormController() {
     useOrderDraftStore.getState().updateNotes(draftKey, notes);
   }, [
     isEditMode, metaHydratedKey, draftKey, supplierId, targetStoreId, expectedDate,
-    supplierOrderNumber, shippedAt, warehouseId, consignmentMode, deliveryType,
+    supplierOrderNumber, warehouseId, consignmentMode, deliveryType,
     itemWarehouses, itemSources, notes,
   ]);
 
