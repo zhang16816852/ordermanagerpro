@@ -1,8 +1,9 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OrderItemsTable } from '@/components/order/OrderItemsTable';
-import { OrderItemRow, LineTypeOption } from '@/components/order/orderItemsTypes';
+import { OrderItemRow, LineTypeOption, OrderItemsTableProps } from '@/components/order/orderItemsTypes';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ProductWithPricing } from '@/types/product';
 
 export type PanelState = 'information' | 'delivery' | 'items' | 'products' | null;
 
@@ -22,6 +23,7 @@ interface OrderItemsPanelProps {
   onTogglePanel: () => void;
   className?: string;
   collapsed?: boolean;
+  products?: ProductWithPricing[];
 }
 
 export function OrderItemsPanel({
@@ -40,6 +42,7 @@ export function OrderItemsPanel({
   onTogglePanel,
   className,
   collapsed = false,
+  products,
 }: OrderItemsPanelProps) {
   const isExpanded = activePanel === 'items';
 
@@ -67,6 +70,7 @@ export function OrderItemsPanel({
         <CardContent className="flex-1 min-h-0 overflow-auto p-4" onClick={(e) => e.stopPropagation()}>
           <OrderItemsTable
             items={items}
+            products={products as unknown as OrderItemsTableProps['products']}
             onUpdateQuantity={onUpdateQuantity}
             onUpdatePrice={onUpdatePrice}
             onRemove={onRemove}

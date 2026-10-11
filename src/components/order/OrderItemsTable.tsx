@@ -143,6 +143,36 @@ export function OrderItemsTable({
         return (products as any as ProductWithPricing[]) || [];
     }, [viewMode, products]);
 
+    const getGridCartQuantity = useCallback(
+        (productId: string, variantId: string) => {
+            if (viewMode !== 'grid' || !variantId) return 0;
+            const idxs: number[] = [];
+            items.forEach((item, i) => {
+                if (item.variantId === variantId) idxs.push(i);
+            });
+            if (idxs.length === 0) return 0;
+            return idxs.reduce((sum, i) => sum + (Number(items[i].quantity) || 0), 0);
+        },
+        [viewMode, items]
+    );
+
+    const reconcileVariantQuantity = useCallback(
+        (variantId: string, quantity: number) => {
+            if (!variantId || !Number.isFinite(quantity) || quantity <= 0 || !onUpdateQuantity) return;
+            const idxs: number[] = [];
+            items.forEach((item, i) => {
+                if (item.variantId === variantId) idxs.push(i);
+            });
+            if (idxs.length === 0) return;
+            const currentSum = idxs.reduce((sum, i) => sum + (Number(items[i].quantity) || 0), 0);
+            const delta = quantity - currentSum;
+            if (delta === 0) return;
+            const lastIdx = idxs[idxs.length - 1];
+            onUpdateQuantity(lastIdx, Math.max(1, (Number(items[lastIdx].quantity) || 0) + delta));
+        },
+        [items, onUpdateQuantity]
+    );
+
     return (
         <div className="space-y-4">
             <OrderItemsToolbar
@@ -165,7 +195,9 @@ export function OrderItemsTable({
                     <OrderGridRenderer
                         template={currentTemplate}
                         products={gridProducts}
-                        onAddToCart={() => {}}
+                        getCartQuantity={getGridCartQuantity}
+                        onQuantityChange={reconcileVariantQuantity}
+                        onAddToCart={undefined}
                         initialQuantities={{}}
                     />
                 </div>

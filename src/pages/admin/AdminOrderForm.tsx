@@ -160,6 +160,7 @@ export default function AdminOrderForm() {
       isEditMode={c.isEditMode}
       orderType={c.orderType}
       items={c.items}
+      products={c.storeProducts}
       onUpdateQuantity={c.handleQuantityChange}
       onUpdatePrice={c.handlePriceChange}
       onRemove={c.handleRemoveItem}

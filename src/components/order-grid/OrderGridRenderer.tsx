@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { OrderGridCell } from './OrderGridCell';
@@ -20,6 +20,7 @@ interface OrderGridRendererProps {
   onDirectItemAdd?: (variant: VariantWithPricing, product: ProductWithPricing, delta: number) => void;
   initialQuantities?: GridQuantities;
   getCartQuantity?: (productId: string, variantId: string) => number;
+  onQuantityChange?: (variantId: string, quantity: number) => void;
 }
 
 export function OrderGridRenderer({
@@ -29,6 +30,7 @@ export function OrderGridRenderer({
   onDirectItemAdd,
   initialQuantities,
   getCartQuantity,
+  onQuantityChange,
 }: OrderGridRendererProps) {
   const [mode, setMode] = useState<GridMode>('button');
   const [quantities, setQuantities] = useState<GridQuantities>(initialQuantities || {});
@@ -36,6 +38,11 @@ export function OrderGridRenderer({
   useEffect(() => {
     setQuantities(initialQuantities || {});
   }, [initialQuantities]);
+
+  const onQuantityChangeRef = useRef(onQuantityChange);
+  useEffect(() => {
+    onQuantityChangeRef.current = onQuantityChange;
+  }, [onQuantityChange]);
 
   const templateVariantIds = useMemo(
     () => new Set(template.template_variants?.map((tv) => tv.variant_id) || []),
@@ -75,6 +82,7 @@ export function OrderGridRenderer({
         ...prev,
         [variantId]: quantity,
       }));
+      onQuantityChangeRef.current?.(variantId, quantity);
     },
     []
   );
