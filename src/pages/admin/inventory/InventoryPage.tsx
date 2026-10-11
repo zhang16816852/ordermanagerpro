@@ -205,6 +205,9 @@ export default function AdminInventory() {
         setSearch,
         lowStockOnly,
         setLowStockOnly,
+        pageIndex,
+        pageSize,
+        setPageIndex,
         updateInventory,
         recalculateInventory,
     } = useInventory();
@@ -379,6 +382,9 @@ export default function AdminInventory() {
                         data={inventory}
                         isLoading={isLoading}
                         skeletonCount={6}
+                        pageIndex={pageIndex}
+                        pageSize={pageSize}
+                        onPageIndexChange={setPageIndex}
                     />
 
                     {movementsTarget && (

@@ -7,6 +7,8 @@ import { useState } from 'react';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { toast } from 'sonner';
 
+const PAGE_SIZE = 10;
+
 export function useInventory() {
     const [searchParams, setSearchParams] = useSearchParams();
     const [search, setSearch] = useState(searchParams.get('search') || '');
@@ -79,6 +81,20 @@ export function useInventory() {
         return matchesSearch;
     });
 
+    const totalPages = Math.max(1, Math.ceil(filteredData.length / PAGE_SIZE));
+    const pageParam = parseInt(searchParams.get('page') || '1', 10);
+    const rawPageIndex = Number.isFinite(pageParam) && pageParam > 0 ? pageParam - 1 : 0;
+    const pageIndex = Math.min(rawPageIndex, totalPages - 1);
+
+    const setPageIndex = (index: number) => {
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            if (index > 0) next.set('page', String(index + 1));
+            else next.delete('page');
+            return next;
+        }, { replace: true });
+    };
+
     const updateInventory = useSupabaseAction(
         async ({ id, quantity, note }: { id: string, quantity: number, note?: string }) => {
             const { error } = await (supabase.rpc('adjust_inventory' as any) as any)({
@@ -121,6 +137,7 @@ export function useInventory() {
             const next = new URLSearchParams(prev);
             if (value) next.set('search', value);
             else next.delete('search');
+            next.delete('page');
             return next;
         }, { replace: true });
     };
@@ -131,6 +148,7 @@ export function useInventory() {
             const next = new URLSearchParams(prev);
             if (value) next.set('lowStock', 'true');
             else next.delete('lowStock');
+            next.delete('page');
             return next;
         }, { replace: true });
     };
@@ -142,6 +160,10 @@ export function useInventory() {
         setSearch: updateSearch,
         lowStockOnly,
         setLowStockOnly: updateLowStockOnly,
+        pageIndex,
+        pageSize: PAGE_SIZE,
+        totalPages,
+        setPageIndex,
         updateInventory,
         recalculateInventory,
     };

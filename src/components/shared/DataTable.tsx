@@ -14,9 +14,33 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
+import {
+    Pagination,
+    PaginationContent,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+    PaginationEllipsis,
+} from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+
+function getPageNumbers(page: number, totalPages: number): (number | 'ellipsis')[] {
+    const pages: (number | 'ellipsis')[] = [];
+    if (totalPages <= 7) {
+        for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+        pages.push(1);
+        if (page > 3) pages.push('ellipsis');
+        const start = Math.max(2, page - 1);
+        const end = Math.min(totalPages - 1, page + 1);
+        for (let i = start; i <= end; i++) pages.push(i);
+        if (page < totalPages - 2) pages.push('ellipsis');
+        pages.push(totalPages);
+    }
+    return pages;
+}
 
 interface DataTableProps<TData, TValue> {
     columns: ColumnDef<TData, TValue>[];
@@ -29,6 +53,9 @@ interface DataTableProps<TData, TValue> {
         pageCount: number;
         onPageChange: (pageIndex: number) => void;
     };
+    pageIndex?: number;
+    pageSize?: number;
+    onPageIndexChange?: (pageIndex: number) => void;
     className?: string;
     onRowClick?: (row: TData) => void;
 }
@@ -39,34 +66,69 @@ export function DataTable<TData, TValue>({
     isLoading,
     skeletonCount = 5,
     pagination = true,
+    pageIndex,
+    pageSize,
+    onPageIndexChange,
     className,
     onRowClick,
 }: DataTableProps<TData, TValue>) {
     const isManualPagination = typeof pagination === 'object';
-    
+    const isControlled = !isManualPagination && !!pagination && pageIndex !== undefined && !!onPageIndexChange;
+    const resolvedPageSize = pageSize ?? 10;
+
     const table = useReactTable({
         data,
         columns,
         getCoreRowModel: getCoreRowModel(),
         getPaginationRowModel: !isManualPagination && pagination ? getPaginationRowModel() : undefined,
         manualPagination: isManualPagination,
-        pageCount: isManualPagination ? pagination.pageCount : undefined,
-        state: isManualPagination ? {
-            pagination: {
-                pageIndex: pagination.pageIndex,
-                pageSize: pagination.pageSize,
-            }
-        } : undefined,
-        onPaginationChange: isManualPagination ? (updater) => {
-            if (typeof updater === 'function') {
-                const newState = updater({
+        ...(isManualPagination ? {
+            pageCount: pagination.pageCount,
+            state: {
+                pagination: {
                     pageIndex: pagination.pageIndex,
                     pageSize: pagination.pageSize,
-                });
-                pagination.onPageChange(newState.pageIndex);
-            }
-        } : undefined,
+                }
+            },
+            onPaginationChange: (updater: any) => {
+                if (typeof updater === 'function') {
+                    const newState = updater({
+                        pageIndex: pagination.pageIndex,
+                        pageSize: pagination.pageSize,
+                    });
+                    pagination.onPageChange(newState.pageIndex);
+                }
+            },
+        } : isControlled ? {
+            state: {
+                pagination: {
+                    pageIndex,
+                    pageSize: resolvedPageSize,
+                }
+            },
+            autoResetPageIndex: false,
+            onPaginationChange: (updater: any) => {
+                const prev = { pageIndex, pageSize: resolvedPageSize };
+                const next = typeof updater === 'function' ? updater(prev) : updater;
+                onPageIndexChange?.(next.pageIndex);
+            },
+        } : {}),
     });
+
+    const currentPageIndex = isManualPagination
+        ? pagination.pageIndex
+        : isControlled
+            ? (pageIndex ?? 0)
+            : table.getState().pagination.pageIndex;
+    const totalPages = isManualPagination ? pagination.pageCount : table.getPageCount();
+    const showPager = !!pagination && totalPages > 1;
+
+    const goToPage = (idx: number) => {
+        if (idx < 0 || idx > totalPages - 1) return;
+        if (isManualPagination) pagination.onPageChange(idx);
+        else if (isControlled) onPageIndexChange?.(idx);
+        else table.setPageIndex(idx);
+    };
 
     return (
         <div className={cn("space-y-4", className)}>
@@ -130,33 +192,48 @@ export function DataTable<TData, TValue>({
                 </Table>
             </div>
 
-            {pagination && (isManualPagination || data.length > (table.getState().pagination?.pageSize || 10)) && (
-                <div className="flex items-center justify-between py-2">
+            {showPager && (
+                <div className="flex flex-col items-center justify-between gap-2 py-2 sm:flex-row">
                     <div className="text-xs text-muted-foreground">
-                        {isManualPagination && (
+                        {isManualPagination ? (
                             <span>第 {pagination.pageIndex + 1} 頁，共 {pagination.pageCount} 頁</span>
+                        ) : (
+                            <span>共 {data.length} 筆，第 {currentPageIndex + 1}/{totalPages} 頁</span>
                         )}
                     </div>
-                    <div className="flex items-center space-x-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => isManualPagination ? pagination.onPageChange(pagination.pageIndex - 1) : table.previousPage()}
-                            disabled={isManualPagination ? pagination.pageIndex === 0 : !table.getCanPreviousPage()}
-                            className="h-8 text-xs bg-card"
-                        >
-                            上一頁
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => isManualPagination ? pagination.onPageChange(pagination.pageIndex + 1) : table.nextPage()}
-                            disabled={isManualPagination ? pagination.pageIndex >= pagination.pageCount - 1 : !table.getCanNextPage()}
-                            className="h-8 text-xs bg-card"
-                        >
-                            下一頁
-                        </Button>
-                    </div>
+                    <Pagination className="mx-0 w-auto justify-end">
+                        <PaginationContent>
+                            <PaginationItem>
+                                <PaginationPrevious
+                                    onClick={() => goToPage(currentPageIndex - 1)}
+                                    className={currentPageIndex <= 0 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                />
+                            </PaginationItem>
+                            {getPageNumbers(currentPageIndex + 1, totalPages).map((p, i) =>
+                                p === 'ellipsis' ? (
+                                    <PaginationItem key={`ellipsis-${i}`}>
+                                        <PaginationEllipsis />
+                                    </PaginationItem>
+                                ) : (
+                                    <PaginationItem key={p}>
+                                        <PaginationLink
+                                            isActive={p === currentPageIndex + 1}
+                                            onClick={() => goToPage(p - 1)}
+                                            className="cursor-pointer"
+                                        >
+                                            {p}
+                                        </PaginationLink>
+                                    </PaginationItem>
+                                )
+                            )}
+                            <PaginationItem>
+                                <PaginationNext
+                                    onClick={() => goToPage(currentPageIndex + 1)}
+                                    className={currentPageIndex >= totalPages - 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                                />
+                            </PaginationItem>
+                        </PaginationContent>
+                    </Pagination>
                 </div>
             )}
         </div>
