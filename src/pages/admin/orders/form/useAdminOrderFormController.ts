@@ -67,7 +67,6 @@ export function useAdminOrderFormController() {
     isRep,
     user,
     supplierId,
-    storeIdFromParam,
     isPurchaseEdit,
   });
 
@@ -536,6 +535,7 @@ export function useAdminOrderFormController() {
       (prev) => {
         const p = new URLSearchParams(prev);
         p.set('type', nextType);
+        p.delete('lockStore');
         if (nextStoreId) p.set('storeId', nextStoreId);
         else p.delete('storeId');
         return p;

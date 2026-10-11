@@ -10,7 +10,6 @@ export interface OrderFormQueryParams {
   isRep: boolean;
   user: { id: string } | null;
   supplierId: string;
-  storeIdFromParam: string;
   isPurchaseEdit: boolean;
 }
 
@@ -22,7 +21,6 @@ export function useOrderFormQueries({
   isRep,
   user,
   supplierId,
-  storeIdFromParam,
   isPurchaseEdit,
 }: OrderFormQueryParams) {
   // Edit mode: fetch existing order
@@ -179,7 +177,8 @@ export function useOrderFormQueries({
       if (error) throw error;
       return (data || []) as { id: string; name: string; code: string | null; brand: string | null }[];
     },
-    enabled: (orderType === 'consignment_send' || (orderType === 'sales' && !isEditMode && !storeIdFromParam)) && !isEditMode,
+    // 建立模式的銷售單一律載入門市清單，讓草稿階段仍可切換店家（鎖定改由顯式 lockStore 旗標控制）
+    enabled: !isEditMode && (orderType === 'sales' || orderType === 'consignment_send'),
   });
 
   // Supplier product mappings (for purchase/consignment pricing)

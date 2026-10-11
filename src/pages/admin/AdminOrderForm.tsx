@@ -69,7 +69,7 @@ export default function AdminOrderForm() {
       displayBrand={c.displayBrand}
       storesList={c.storesList}
       suppliersList={c.suppliersList}
-      storeLocked={!!c.searchParams.get('storeId') && !c.isEditMode}
+      storeLocked={c.searchParams.get('lockStore') === '1' && !c.isEditMode}
       selectedStoreId={c.selectedStoreId}
       onStoreChange={c.setSelectedStoreId}
       supplierId={c.supplierId}
