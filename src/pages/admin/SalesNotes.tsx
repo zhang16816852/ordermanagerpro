@@ -15,12 +15,13 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Search, FileText, CalendarIcon, X, CheckSquare, Download, List, LayoutGrid, FileUp, ReceiptText } from "lucide-react";
+import { Search, FileText, CalendarIcon, X, CheckSquare, Download, List, LayoutGrid, FileUp, ReceiptText, Banknote } from "lucide-react";
 import { SalesNoteListTable } from "@/components/sales/SalesNoteListTable";
 import { StorePicker } from "@/components/ui/StorePicker";
 import { SalesNoteProductView, SalesNoteAggregateItem } from "@/components/sales/SalesNoteProductView";
 import { SalesNoteDetailDialog, SalesNoteDetail } from "@/components/sales/SalesNoteDetailDialog";
 import { CustomerStatementDialog } from "@/components/sales/CustomerStatementDialog";
+import { SalesNoteBatchPaymentDialog, BatchEligibleNote } from "@/components/sales/SalesNoteBatchPaymentDialog";
 import { toast } from "sonner";
 import { getErrorDetails, getErrorMessage } from '@/lib/errorMessages';
 import { format, addDays } from "date-fns";
@@ -55,6 +56,7 @@ export default function AdminSalesNotes() {
   const [businessFilter, setBusinessFilter] = useState<string>(searchParams.get("business") || "all");
   const [selectedNote, setSelectedNote] = useState<typeof salesNotes[number] | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
+  const [batchPaymentOpen, setBatchPaymentOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [statementOpen, setStatementOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
@@ -251,6 +253,33 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
   }, [salesNotes, search]);
 
   const visibleNotes = useMemo(() => filteredNotes ?? [], [filteredNotes]);
+
+  const batchEligibleNotes = useMemo<BatchEligibleNote[]>(
+    () =>
+      (filteredNotes || [])
+        .filter((note) => selectedNoteIds.includes(note.id) && note.payment_status !== "paid")
+        .map((note) => ({
+          id: note.id,
+          code: note.code || note.id.slice(0, 8),
+          storeId: note.store_id,
+          storeName: note.store?.name,
+          created_at: note.created_at,
+          totalAmount:
+            (note.sales_note_items || []).reduce(
+              (sum, item) => sum + (item.quantity * (item.order_item?.unit_price || 0)),
+              0
+            ) + (note.shipping_fee || 0),
+        })),
+    [filteredNotes, selectedNoteIds]
+  );
+
+  const handleOpenBatchPayment = () => {
+    if (batchEligibleNotes.length === 0) {
+      toast.info("選取的銷貨單均已收款或金額為 0");
+      return;
+    }
+    setBatchPaymentOpen(true);
+  };
 
   const unreceivedCount = visibleNotes.filter(n => n.payment_status !== "paid").length;
   const receivedCount = visibleNotes.filter(n => n.payment_status === "paid").length;
@@ -826,6 +855,9 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
               >
                 取消選取
               </Button>
+              <Button size="sm" className="h-8" onClick={handleOpenBatchPayment}>
+                <Banknote className="h-4 w-4 mr-1.5" />批次登記收款
+              </Button>
               <Button size="sm" className="h-8" onClick={exportSelectedNotes}>
                 <Download className="h-4 w-4 mr-1.5" />匯出 Excel
               </Button>
@@ -878,6 +910,13 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
         enablePayment={true}
         enableCorrect={!isRep}
         parcelEditable={!isRep}
+      />
+
+      <SalesNoteBatchPaymentDialog
+        open={batchPaymentOpen}
+        onOpenChange={setBatchPaymentOpen}
+        notes={batchEligibleNotes}
+        onCompleted={() => setSelectedNoteIds([])}
       />
 
       <DocImportDialog
