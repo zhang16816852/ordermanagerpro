@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,7 @@ import type { DimensionConfig } from '@/types/order-grid';
 
 export default function AdminProducts() {
     const navigate = useNavigate();
+    const location = useLocation();
     const {
         products, isLoading, version, forceRefresh,
         brandMap,
@@ -124,7 +125,7 @@ export default function AdminProducts() {
                             <ShoppingCart className="mr-2 h-4 w-4" />
                             選取產品
                         </Button>
-                        <Button size="sm" onClick={() => navigate('/admin/products/new')} className="h-9 shadow-md">
+                        <Button size="sm" onClick={() => navigate({ pathname: '/admin/products/new', search: location.search })} className="h-9 shadow-md">
                             <Plus className="mr-2 h-4 w-4" />
                             新增產品
                         </Button>
@@ -226,7 +227,7 @@ export default function AdminProducts() {
                                 getVariants={getProductVariants}
                                 getModels={getProductModels}
                                 getModelGroups={getProductModelGroups}
-                                onEdit={(p) => navigate(`/admin/products/${p.id}/edit`)}
+                                onEdit={(p) => navigate({ pathname: `/admin/products/${p.id}/edit`, search: location.search })}
                                 onCopy={(p: any) => setCopyProduct(p as ProductWithPricing)}
                                 onDelete={(p) => setDeleteProduct(p as any)}
                                 onUpdateVariant={(id, updates) => updateVariantPriceMutation.mutate({ id, ...updates })}
@@ -281,7 +282,7 @@ export default function AdminProducts() {
                 product={copyProduct as any}
                 onCopied={(id) => {
                     forceRefresh();
-                    navigate(`/admin/products/${id}/edit`);
+                    navigate({ pathname: `/admin/products/${id}/edit`, search: location.search });
                 }}
             />
         </div>

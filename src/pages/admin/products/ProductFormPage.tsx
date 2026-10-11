@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Eye, Loader2 } from 'lucide-react';
 import { ProductFormBody } from '@/components/products/form/ProductFormDialog';
@@ -13,6 +13,7 @@ import type { ProductWithPricing } from '@/types/product';
 export default function AdminProductFormPage() {
     const { productId } = useParams<{ productId?: string }>();
     const navigate = useNavigate();
+    const location = useLocation();
     const { products, isLoading, forceRefresh } = useProductCache();
     const mutations = useProductMutations(forceRefresh);
     const formRef = useRef<any>(null);
@@ -33,7 +34,9 @@ export default function AdminProductFormPage() {
 
     const isMutationLoading = mutations.createMutation.isPending || mutations.updateMutation.isPending;
 
-    const goBack = () => navigate('/admin/products');
+    const goBack = useCallback(() => {
+        navigate({ pathname: '/admin/products', search: location.search });
+    }, [navigate, location.search]);
 
     const registerForm = useCallback((form: any) => {
         formRef.current = form;
@@ -43,12 +46,12 @@ export default function AdminProductFormPage() {
         if (isEdit && initialData?.id) {
             mutations.updateMutation.mutate(
                 { id: initialData.id, values },
-                { onSuccess: () => navigate('/admin/products') }
+                { onSuccess: () => navigate({ pathname: '/admin/products', search: location.search }) }
             );
         } else {
             mutations.createMutation
                 .mutateAsync(values)
-                .then(() => navigate('/admin/products'))
+                .then(() => navigate({ pathname: '/admin/products', search: location.search }))
                 .catch(() => { /* 錯誤已由 mutation 的 toast 處理 */ });
         }
     };
@@ -138,7 +141,7 @@ export default function AdminProductFormPage() {
         const title = isEdit ? `編輯產品: ${initialData?.name || ''}` : '新增產品';
         setPageHeader({
             title,
-            back: '/admin/products',
+            onBack: goBack,
             actions: (
                 <Button variant="outline" size="sm" onClick={handlePreview} disabled={isEdit && !initialData} className="gap-1.5">
                     <Eye className="h-4 w-4" />
@@ -148,7 +151,7 @@ export default function AdminProductFormPage() {
         });
 
         return () => setPageHeader(null);
-    }, [setPageHeader, isEdit, initialData, isNotFound, handlePreview]);
+    }, [setPageHeader, isEdit, initialData, isNotFound, handlePreview, goBack]);
 
     if (isNotFound) {
         return (
