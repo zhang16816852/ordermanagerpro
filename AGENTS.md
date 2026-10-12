@@ -2,6 +2,19 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（7 項後台小修批次，2026-10-12）
+
+- **變更範圍**：7 檔、139 insertions(+)／27 deletions(−)，全部純前端、零 migration、零 RPC、零 types.ts 重生。
+- **① 轉採購單對話框（`src/pages/admin/orders/list/components/AggregateToPODialog.tsx`）**：模組層 `EMPTY_ARRAY` 外部常數取代 query 內嵌新陣列（避免每次 render 新 identity 造成 re-render 迴圈）；7 個 `useQuery` 的 `data` 皆給 `?? EMPTY_ARRAY` 防 undefined；autofill `useEffect` 加 `if (!open) return;`（dialog 關閉時不預填）。
+- **② 訂單列表篩選列版面（`OrderFilters.tsx`）**：容器改 `flex flex-col sm:flex-row flex-wrap items-center gap-3`、搜尋包 `relative flex-1 min-w-[220px]`，窄螢幕不溢出。
+- **③ 出貨池回滾 RPC 無需異動**：`remove_items_from_shipping_pool` 與前端 `shippingPoolMutations` wrapper 核對正確，保持原樣。
+- **④ 訂單詳情對話框寬度（`src/components/order/OrderDetailDialog.tsx`）**：移除 `src/pages/admin/accounting/components/dialog.tsx` base `max-w-lg` 之上無效的 `max-w-1xl`（非 Tailwind class，原本就無作用；現寬度由 dialog.tsx:39 統一控制）。
+- **⑤ 訂單狀態切換守衛（`src/pages/admin/orders/form/`）**：`useOrderFormMutations.toggleStatusMutation` 僅允許 `pending`/`processing`（否則 throw「僅未確認或處理中的訂單可切換狀態」）；`useAdminOrderFormHeader` 切換按鈕僅 `isEditMode && !isPurchaseEdit && (pending||processing)` 才顯示（避免已出貨/已取消訂單被誤切）。
+- **⑥ 會計「單據匯入」排除已收款銷貨單（`src/pages/admin/accounting/components/useEntryDocQueries.ts`）**：salesNotes 候選查詢加 `.neq('payment_status', 'paid')`，避免把已收款的單再列入收款/結帳候選。
+- **⑦ 銷貨單列表（admin）分頁 `url-sync`（`src/pages/admin/SalesNotes.tsx`，+100 行）**：`page`/`size` 走 searchParams（`size` clamp `[1,100]`，預設 20；`setPage` 用 `replace:true`，page≤1 時刪參數）；彙總卡片與 CSV 匯出仍以全量篩選結果計算、不受分頁影響；串接 `Pagination` 頁碼列（沿用共用元件）。⚠️ **存檔時注意 `cn()` 已在 L30 import**（`@/lib/utils`），勿手動加重複 import。
+- **供應商對照欄位「切換」需求（`MappedRulesList.tsx`）無需改碼**：使用者澄清「切換只是 text 轉 input，避免誤 key，完成後一次提交，即使沒改也提交一次」——現有 pencil 編輯流程已符合：預設顯示唯讀 text（`rule.vendor_product_id`／`vendor_product_name`），`startEdit`（L68）切 input（L311–333），`saveEdit`（L77）一律呼叫 `onSave` 一次（不做 dirty-check 阻擋）。**本檔不在本次 git 變更清單內**。
+- **驗證**：`npx tsc --noEmit -p tsconfig.app.json`／`-p tsconfig.node.json` 各 **0 errors**；7 檔 targeted `eslint` **0 errors**（2 warnings 為既有 `exhaustive-deps`：`useAdminOrderFormHeader.tsx:132`、`useOrderFormMutations.ts:394`）。⚠️ typecheck 在本機需較長執行時間（app 專案 ~10–15 分鐘），勿因逾時誤判失敗。未做瀏覽器實測（需登入）。
+
 ## 近期變更（庫存頁分頁修復 ＋ DataTable 受控分頁 ＋ pagination 中文化，2026-10-12）
 - **根因**：`src/components/shared/DataTable.tsx` 自動分頁模式明確傳入 `onPaginationChange: undefined`，覆蓋 table-core 預設的 `makeStateUpdater('pagination', table)` → `table.nextPage()/previousPage()` 變 no-op，導致「下一頁」無反應、也拿不到總頁數。
 - **`DataTable.tsx`（共用）**：`useReactTable` options 改**條件展開**——自動且未受控時**完全不帶** `onPaginationChange`（回歸 table-core 預設，修好所有自動分頁表格）；新增可選 props `pageIndex?`、`pageSize?`（預設 10）、`onPageIndexChange?`。受控判定 `isControlled`＝非 manual＋`pagination` 為真＋`pageIndex !== undefined`＋`onPageIndexChange` 存在 → 帶 `state.pagination`、`autoResetPageIndex:false`、`onPaginationChange` 轉呼叫 `onPageIndexChange`。footer 由舊 `<Button>` 上一頁/下一頁改為共用 `Pagination` 頁碼列（module-scope `getPageNumbers`，抄 `DeviceModelListView` 邏輯；含 ellipsis），左側顯示「共 N 筆，第 X/Y 頁」（manual 模式改「第 X 頁，共 Y 頁」），顯示條件 `pagination && totalPages > 1`；移除未再使用的 `import { Button }`。**其他 DataTable 呼叫端（手動分頁者傳 `pagination` 物件）零改動**。

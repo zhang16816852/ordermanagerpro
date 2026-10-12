@@ -15,6 +15,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 
+const EMPTY_ARRAY: any[] = [];
+
 interface EditableItem {
   key: string;
   productId: string;
@@ -83,7 +85,7 @@ export function AggregateToPODialog({
     }
   }, [open, selectedItems]);
 
-  const { data: suppliers = [] } = useQuery({
+  const { data: suppliers = EMPTY_ARRAY } = useQuery({
     queryKey: ['suppliers'],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
@@ -97,7 +99,7 @@ export function AggregateToPODialog({
     enabled: open,
   });
 
-  const { data: draftPOs = [] } = useQuery({
+  const { data: draftPOs = EMPTY_ARRAY } = useQuery({
     queryKey: ['purchase-orders-draft', supplierId],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
@@ -113,7 +115,7 @@ export function AggregateToPODialog({
     enabled: open && targetMode === 'existing' && !!supplierId,
   });
 
-  const { data: supplierMappings = [] } = useQuery({
+  const { data: supplierMappings = EMPTY_ARRAY } = useQuery({
     queryKey: ['supplier-mappings-for-po', supplierId],
     queryFn: async () => {
       if (!supplierId) return [];
@@ -128,7 +130,7 @@ export function AggregateToPODialog({
   });
 
   // All products for the "add item" selector
-  const { data: allProducts = [] } = useQuery({
+  const { data: allProducts = EMPTY_ARRAY } = useQuery({
     queryKey: ['products-for-add-po-item'],
     queryFn: async () => {
       const { data, error } = await (supabase
@@ -142,7 +144,7 @@ export function AggregateToPODialog({
   });
 
   // Variants for selected product in "add item"
-  const { data: addVariants = [] } = useQuery({
+  const { data: addVariants = EMPTY_ARRAY } = useQuery({
     queryKey: ['variants-for-add-po-item', addProductId],
     queryFn: async () => {
       const { data, error } = await (supabase
@@ -165,7 +167,7 @@ export function AggregateToPODialog({
   );
 
   // 為已選品項撈取批發價，確保單價能正確帶入（不再停留在 0）
-  const { data: selectedProductPrices = [] } = useQuery({
+  const { data: selectedProductPrices = EMPTY_ARRAY } = useQuery({
     queryKey: ['products-for-po-price', selectedProductIds],
     queryFn: async () => {
       if (selectedProductIds.length === 0) return [];
@@ -179,7 +181,7 @@ export function AggregateToPODialog({
     enabled: open && selectedProductIds.length > 0,
   });
 
-  const { data: selectedVariantPrices = [] } = useQuery({
+  const { data: selectedVariantPrices = EMPTY_ARRAY } = useQuery({
     queryKey: ['variants-for-po-price', selectedVariantIds],
     queryFn: async () => {
       if (selectedVariantIds.length === 0) return [];
@@ -205,22 +207,30 @@ export function AggregateToPODialog({
   // 供應商對照或任一批發價來源就緒時，自動補齊尚未手動編輯的單價
   // （解析優先序：供應商對照價 → 變體批發價 → 產品批發價）
   useEffect(() => {
+    if (!open) return;
     if (supplierId.length === 0 && supplierMappings.length === 0 && productWholesaleMap.size === 0 && variantWholesaleMap.size === 0) return;
-    setEditableItems(prev => prev.map(item => {
-      if (touchedCostRef.current.has(item.key)) return item;
-      let cost = 0;
-      if (supplierId) {
-        const mapping = supplierMappings.find(
-          (m: any) => m.internal_product_id === item.productId && m.internal_variant_id === item.variantId
-        );
-        if (mapping?.vendor_unit_cost) cost = mapping.vendor_unit_cost;
-      }
-      if (cost <= 0 && item.variantId) cost = variantWholesaleMap.get(item.variantId) || 0;
-      if (cost <= 0) cost = productWholesaleMap.get(item.productId) || 0;
-      if (cost > 0) return { ...item, unitCost: cost };
-      return item;
-    }));
-  }, [supplierId, supplierMappings, productWholesaleMap, variantWholesaleMap]);
+    setEditableItems(prev => {
+      let changed = false;
+      const next = prev.map(item => {
+        if (touchedCostRef.current.has(item.key)) return item;
+        let cost = 0;
+        if (supplierId) {
+          const mapping = supplierMappings.find(
+            (m: any) => m.internal_product_id === item.productId && m.internal_variant_id === item.variantId
+          );
+          if (mapping?.vendor_unit_cost) cost = mapping.vendor_unit_cost;
+        }
+        if (cost <= 0 && item.variantId) cost = variantWholesaleMap.get(item.variantId) || 0;
+        if (cost <= 0) cost = productWholesaleMap.get(item.productId) || 0;
+        if (cost > 0 && cost !== item.unitCost) {
+          changed = true;
+          return { ...item, unitCost: cost };
+        }
+        return item;
+      });
+      return changed ? next : prev;
+    });
+  }, [open, supplierId, supplierMappings, productWholesaleMap, variantWholesaleMap]);
 
   const handleUpdateQuantity = (key: string, qty: number) => {
     setEditableItems(prev => prev.map(item =>

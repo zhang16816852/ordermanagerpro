@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext } from "@/components/ui/pagination";
 import { Search, FileText, CalendarIcon, X, CheckSquare, Download, List, LayoutGrid, FileUp, ReceiptText, Banknote } from "lucide-react";
 import { SalesNoteListTable } from "@/components/sales/SalesNoteListTable";
 import { StorePicker } from "@/components/ui/StorePicker";
@@ -30,6 +31,22 @@ import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/formatters";
 import { usePageHeader } from "@/components/layout/PageHeaderContext";
 import type { DateRange } from "react-day-picker";
+
+function getPageNumbers(page: number, totalPages: number): (number | "ellipsis")[] {
+	const pages: (number | "ellipsis")[] = [];
+	if (totalPages <= 7) {
+		for (let i = 1; i <= totalPages; i++) pages.push(i);
+	} else {
+		pages.push(1);
+		if (page > 3) pages.push("ellipsis");
+		const start = Math.max(2, page - 1);
+		const end = Math.min(totalPages - 1, page + 1);
+		for (let i = start; i <= end; i++) pages.push(i);
+		if (page < totalPages - 2) pages.push("ellipsis");
+		pages.push(totalPages);
+	}
+	return pages;
+}
 
 export default function AdminSalesNotes() {
   const queryClient = useQueryClient();
@@ -254,6 +271,23 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
 
   const visibleNotes = useMemo(() => filteredNotes ?? [], [filteredNotes]);
 
+  const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("size")) || 20));
+  const totalPages = Math.max(1, Math.ceil(visibleNotes.length / pageSize));
+  const currentPage = Math.min(Math.max(1, Number(searchParams.get("page")) || 1), totalPages);
+  const pagedNotes = useMemo(
+    () => visibleNotes.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [visibleNotes, currentPage, pageSize],
+  );
+  const setPage = (page: number) => {
+    const clamped = Math.min(Math.max(1, page), totalPages);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (clamped <= 1) next.delete("page");
+      else next.set("page", String(clamped));
+      return next;
+    }, { replace: true });
+  };
+
   const batchEligibleNotes = useMemo<BatchEligibleNote[]>(
     () =>
       (filteredNotes || [])
@@ -413,7 +447,7 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
   });
 
   // Map data for the table component
-  const tableData = filteredNotes?.map(note => ({
+  const tableData = (filteredNotes ? pagedNotes : undefined)?.map(note => ({
     id: note.id,
     code: note.code,
     storeName: note.store?.name,
@@ -662,6 +696,7 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
                     const next = new URLSearchParams(prev);
                     if (e.target.value) next.set("search", e.target.value);
                     else next.delete("search");
+                    next.delete("page");
                     return next;
                   }, { replace: true });
                 }}
@@ -681,6 +716,7 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
                     const nextParams = new URLSearchParams(prev);
                     if (next.length > 0) nextParams.set("store", next.join(","));
                     else nextParams.delete("store");
+                    nextParams.delete("page");
                     return nextParams;
                   }, { replace: true });
                 }}
@@ -696,6 +732,7 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
                 const next = new URLSearchParams(prev);
                 if (v && v !== "all") next.set("rep", v);
                 else next.delete("rep");
+                next.delete("page");
                 return next;
               }, { replace: true });
             }}>
@@ -719,6 +756,7 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
                 const next = new URLSearchParams(prev);
                 if (v && v !== "all") next.set("business", v);
                 else next.delete("business");
+                next.delete("page");
                 return next;
               }, { replace: true });
             }}>
@@ -771,6 +809,7 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
                       else next.delete("from");
                       if (resolved?.to) next.set("to", format(resolved.to, "yyyy-MM-dd"));
                       else next.delete("to");
+                      next.delete("page");
                       return next;
                     }, { replace: true });
                   }}
@@ -790,6 +829,7 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
                     const next = new URLSearchParams(prev);
                     next.delete("from");
                     next.delete("to");
+                    next.delete("page");
                     return next;
                   }, { replace: true });
                 }}
@@ -818,6 +858,7 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
                       const next = new URLSearchParams(prev);
                       if (tab.value !== "all") next.set("status", tab.value);
                       else next.delete("status");
+                      next.delete("page");
                       return next;
                     }, { replace: true });
                   }}
@@ -866,6 +907,7 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
 
           <div className="flex-1 min-h-0 flex flex-col">
             {viewMode === "notes" ? (
+            <>
             <SalesNoteListTable
               data={tableData}
               isLoading={isLoading}
@@ -889,6 +931,62 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
               selectedIds={selectedNoteIds}
               onSelectionChange={setSelectedNoteIds}
             />
+            {totalPages > 1 && (
+              <div className="flex flex-col items-center justify-between gap-2 py-2 sm:flex-row">
+                <div className="text-sm text-muted-foreground">
+                  共 {visibleNotes.length} 筆，第 {currentPage}/{totalPages} 頁
+                </div>
+                <Pagination className="mx-0 w-auto justify-end">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        className={cn(
+                          "h-8 w-8 border-none p-0",
+                          currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"
+                        )}
+                        aria-label="上一頁"
+                        onClick={() => setPage(currentPage - 1)}
+                      />
+                    </PaginationItem>
+                    {getPageNumbers(currentPage, totalPages).map((p, i) =>
+                      p === "ellipsis" ? (
+                        <PaginationItem key={`ellipsis-${i}`}>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      ) : (
+                        <PaginationItem key={p}>
+                          <PaginationLink
+                            href="#"
+                            className={cn(
+                              "h-8 w-8 border-none p-0",
+                              p === currentPage ? "" : "cursor-pointer"
+                            )}
+                            isActive={p === currentPage}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setPage(p);
+                            }}
+                          >
+                            {p}
+                          </PaginationLink>
+                        </PaginationItem>
+                      )
+                    )}
+                    <PaginationItem>
+                      <PaginationNext
+                        className={cn(
+                          "h-8 w-8 border-none p-0",
+                          currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"
+                        )}
+                        aria-label="下一頁"
+                        onClick={() => setPage(currentPage + 1)}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
+            </>
           ) : (
             <SalesNoteProductView
               items={aggregatedProducts}

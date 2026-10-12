@@ -110,7 +110,7 @@ export function useAdminOrderFormHeader(params: UseAdminOrderFormHeaderParams) {
           {typeBadgeElem}
           {statusObj && <Badge className={statusObj.className}>{statusObj.label}</Badge>}
           {orderConsignmentMode && <Badge variant="secondary">寄賣</Badge>}
-          {isEditMode && !isPurchaseEdit && orderStatusVal && orderStatusVal !== 'shipped' && (
+          {isEditMode && !isPurchaseEdit && (orderStatusVal === 'pending' || orderStatusVal === 'processing') && (
             <Button
               variant="outline"
               size="sm"

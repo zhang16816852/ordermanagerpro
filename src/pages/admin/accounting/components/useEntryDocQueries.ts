@@ -31,6 +31,7 @@ export function useEntryDocQueries({ isList, isRepair, docTab }: UseEntryDocQuer
           sales_note_items(quantity, order_item:order_items(unit_price))
         `)
         .in('status', ['shipped', 'received'])
+        .neq('payment_status', 'paid')
         .order('created_at', { ascending: false })
         .limit(200);
       if (error) throw error;

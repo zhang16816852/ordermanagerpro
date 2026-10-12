@@ -397,6 +397,9 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
   const toggleStatusMutation = useMutation({
     mutationFn: async () => {
       if (!orderId || !order) throw new Error('訂單不存在');
+      if (order.status !== 'pending' && order.status !== 'processing') {
+        throw new Error('僅未確認或處理中的訂單可切換狀態');
+      }
       const newStatus = order.status === 'pending' ? 'processing' : 'pending';
       await (supabase.from('orders') as any).update({ status: newStatus }).eq('id', orderId);
     },

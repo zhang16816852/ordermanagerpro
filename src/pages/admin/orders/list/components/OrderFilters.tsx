@@ -131,8 +131,8 @@ export function OrderFilters({
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row items-center gap-3">
-        <div className="relative flex-1">
+      <div className="flex flex-col sm:flex-row flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[220px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={viewMode === 'orders' ? "搜尋訂單編號或店鋪..." : "搜尋產品名稱或 SKU..."}

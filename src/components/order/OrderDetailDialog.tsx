@@ -163,7 +163,7 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, on
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-1xl max-h-[85vh] md:max-h-[70vh] flex flex-col">
+            <DialogContent className="max-h-[85vh] md:max-h-[70vh] flex flex-col">
                 <DialogHeader>
                     <div className="flex items-center justify-between pr-6">
                         <div>
