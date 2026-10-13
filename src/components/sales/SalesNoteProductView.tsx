@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronRight, ChevronUp, Package, ReceiptText } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Package, ReceiptText } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 
 export interface SalesNoteBreakdown {
@@ -34,9 +34,9 @@ interface SalesNoteProductViewProps {
 
 export function SalesNoteProductView({ items, isLoading, onViewNote }: SalesNoteProductViewProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [sort, setSort] = useState<{ key: SortKey | 'none'; dir: 'asc' | 'desc' }>({
-    key: 'none',
-    dir: 'desc',
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({
+    key: 'name',
+    dir: 'asc',
   });
 
   const getKey = (item: SalesNoteAggregateItem) => `${item.productId}_${item.variantId || 'null'}`;
@@ -53,13 +53,11 @@ export function SalesNoteProductView({ items, isLoading, onViewNote }: SalesNote
   const cycleSort = (key: SortKey) => {
     setSort(prev => {
       if (prev.key !== key) return { key, dir: 'asc' };
-      if (prev.dir === 'asc') return { key, dir: 'desc' };
-      return { key: 'none', dir: 'asc' };
+      return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
     });
   };
 
   const sortedItems = useMemo(() => {
-    if (sort.key === 'none') return items;
     const arr = [...items];
     arr.sort((a, b) => {
       let cmp = 0;
@@ -83,8 +81,8 @@ export function SalesNoteProductView({ items, isLoading, onViewNote }: SalesNote
   }, [items, sort]);
 
   const sortIndicator = (key: SortKey) => {
-    if (sort.key !== key) return null;
-    return sort.dir === 'asc' ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />;
+    if (sort.key !== key) return <ArrowUpDown className="h-3.5 w-3.5 opacity-30" />;
+    return sort.dir === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />;
   };
 
   const sortPills: { key: SortKey; label: string }[] = [
@@ -144,22 +142,22 @@ export function SalesNoteProductView({ items, isLoading, onViewNote }: SalesNote
           <TableHeader className="bg-muted/50">
             <TableRow>
               <TableHead>
-                <Button variant="ghost" size="sm" className="h-7 px-1.5 -ml-1.5 text-xs font-medium" onClick={() => cycleSort('name')}>
+                <Button variant="ghost" size="sm" className="h-7 px-1.5 -ml-1.5 text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => cycleSort('name')}>
                   商品名稱 {sortIndicator('name')}
                 </Button>
               </TableHead>
               <TableHead className="w-20 text-center">
-                <Button variant="ghost" size="sm" className="h-7 px-1.5 text-xs font-medium" onClick={() => cycleSort('quantity')}>
+                <Button variant="ghost" size="sm" className="h-7 px-1.5 text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => cycleSort('quantity')}>
                   數量 {sortIndicator('quantity')}
                 </Button>
               </TableHead>
               <TableHead className="w-24 text-right">
-                <Button variant="ghost" size="sm" className="h-7 px-1.5 -mr-1.5 text-xs font-medium" onClick={() => cycleSort('unitPrice')}>
+                <Button variant="ghost" size="sm" className="h-7 px-1.5 -mr-1.5 text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => cycleSort('unitPrice')}>
                   單價 {sortIndicator('unitPrice')}
                 </Button>
               </TableHead>
               <TableHead className="w-28 text-right">
-                <Button variant="ghost" size="sm" className="h-7 px-1.5 -mr-1.5 text-xs font-medium" onClick={() => cycleSort('amount')}>
+                <Button variant="ghost" size="sm" className="h-7 px-1.5 -mr-1.5 text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => cycleSort('amount')}>
                   銷售金額 {sortIndicator('amount')}
                 </Button>
               </TableHead>
