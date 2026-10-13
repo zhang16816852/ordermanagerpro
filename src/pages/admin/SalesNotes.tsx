@@ -1,55 +1,22 @@
 import { useState, useMemo, useLayoutEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
-import { useRepCommission } from "@/hooks/useRepCommission";
-import { useRepStoreAssignments } from "@/hooks/useRepStoreAssignments";
-import { useDocumentProfit, type DocProfitInputItem } from "@/hooks/useDocumentProfit";
-import { useBusinessProfitCalculator, businessProfitSummary } from "@/hooks/useBusinessProfit";
-import { sumProfit, type ProfitLine, type ProfitSummary } from "@/utils/grossProfit";
-import { DocImportDialog } from "@/components/orders/DocImportDialog";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext } from "@/components/ui/pagination";
-import { Search, FileText, CalendarIcon, X, CheckSquare, Download, List, LayoutGrid, FileUp, ReceiptText, Banknote } from "lucide-react";
-import { SalesNoteListTable } from "@/components/sales/SalesNoteListTable";
-import { StorePicker } from "@/components/ui/StorePicker";
-import { SalesNoteProductView, SalesNoteAggregateItem } from "@/components/sales/SalesNoteProductView";
-import { SalesNoteDetailDialog, SalesNoteDetail } from "@/components/sales/SalesNoteDetailDialog";
-import { CustomerStatementDialog } from "@/components/sales/CustomerStatementDialog";
-import { SalesNoteBatchPaymentDialog, BatchEligibleNote } from "@/components/sales/SalesNoteBatchPaymentDialog";
+import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { getErrorDetails, getErrorMessage } from '@/lib/errorMessages';
-import { format, addDays } from "date-fns";
-import { zhTW } from "date-fns/locale";
-import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/formatters";
+import { format } from "date-fns";
 import { usePageHeader } from "@/components/layout/PageHeaderContext";
 import type { DateRange } from "react-day-picker";
-
-function getPageNumbers(page: number, totalPages: number): (number | "ellipsis")[] {
-	const pages: (number | "ellipsis")[] = [];
-	if (totalPages <= 7) {
-		for (let i = 1; i <= totalPages; i++) pages.push(i);
-	} else {
-		pages.push(1);
-		if (page > 3) pages.push("ellipsis");
-		const start = Math.max(2, page - 1);
-		const end = Math.min(totalPages - 1, page + 1);
-		for (let i = start; i <= end; i++) pages.push(i);
-		if (page < totalPages - 2) pages.push("ellipsis");
-		pages.push(totalPages);
-	}
-	return pages;
-}
+import type { SalesNoteRow } from "./salesNotes/salesNotesTypes";
+import type { BatchEligibleNote } from "@/components/sales/SalesNoteBatchPaymentDialog";
+import { useSalesNotesData } from "./salesNotes/useSalesNotesData";
+import { useSalesNotesMutations } from "./salesNotes/useSalesNotesMutations";
+import { exportSalesNotesExcel } from "./salesNotes/salesNotesUtils";
+import { SalesNotesHeader } from "./salesNotes/SalesNotesHeader";
+import { SalesNotesSummary } from "./salesNotes/SalesNotesSummary";
+import { SalesNotesFilterBar } from "./salesNotes/SalesNotesFilterBar";
+import { SalesNotesListView } from "./salesNotes/SalesNotesListView";
+import { SalesNotesDialogs } from "./salesNotes/SalesNotesDialogs";
 
 export default function AdminSalesNotes() {
-  const queryClient = useQueryClient();
   const { setPageHeader } = usePageHeader();
 
   // 「銷售單管理」標題交由共用 Header 呈現（桌面/手機皆適用），省下頁面內大標題空間
@@ -57,6 +24,7 @@ export default function AdminSalesNotes() {
     setPageHeader({ title: "銷售單管理" });
     return () => setPageHeader(null);
   }, [setPageHeader]);
+
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [viewMode, setViewMode] = useState<"notes" | "product">(() => {
@@ -71,7 +39,7 @@ export default function AdminSalesNotes() {
   const [statusFilter, setStatusFilter] = useState<string>(searchParams.get("status") || "all");
   const [repFilter, setRepFilter] = useState<string>(searchParams.get("rep") || "all");
   const [businessFilter, setBusinessFilter] = useState<string>(searchParams.get("business") || "all");
-  const [selectedNote, setSelectedNote] = useState<typeof salesNotes[number] | null>(null);
+  const [selectedNote, setSelectedNote] = useState<SalesNoteRow | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
   const [batchPaymentOpen, setBatchPaymentOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -91,201 +59,145 @@ export default function AdminSalesNotes() {
     }
     return undefined;
   });
-  const { data: stores } = useQuery({
-    queryKey: ["admin-stores"],
-    queryFn: async () => {
-      const { data, error } = await (supabase.from("stores") as any).select("id, name, code");
-      if (error) throw error;
-      return data;
-    },
+
+  const {
+    stores,
+    repsData,
+    isLoading,
+    salesNotes,
+    filteredNotes,
+    visibleNotes,
+    aggregatedProducts,
+    totalPages,
+    currentPage,
+    setPage,
+    unreceivedCount,
+    receivedCount,
+    totalAmount,
+    productTotalQty,
+    productTotalAmount,
+    tableData,
+    dialogData,
+    repSummary,
+    isRep,
+  } = useSalesNotesData({
+    search,
+    storeFilter,
+    statusFilter,
+    repFilter,
+    businessFilter,
+    dateRange,
+    selectedNote,
   });
 
-  const { data: repsData = [] } = useQuery({
-    queryKey: ["admin-reps-for-sales-filter"],
-    queryFn: async () => {
-      const { data: roles } = await (supabase
-        .from('user_roles') as any)
-        .select('user_id')
-        .eq('role', 'rep');
-      if (!roles || roles.length === 0) return [];
-      const userIds = roles.map((r: any) => r.user_id);
-      const { data: profiles } = await (supabase
-        .from('profiles') as any)
-        .select('id, full_name, email')
-        .in('id', userIds);
-      return (profiles || []).map((p: any) => ({
-        user_id: p.id,
-        full_name: p.full_name,
-        email: p.email,
-      }));
-    },
-  });
+  const { deleteMutation } = useSalesNotesMutations();
 
-  const { data: repAssignedStoreIds = [] } = useQuery({
-    queryKey: ['admin-rep-stores-for-sales-filter', repFilter],
-    queryFn: async () => {
-      if (repFilter === 'all') return [];
-      const { data } = await (supabase
-        .from('rep_store_assignments') as any)
-        .select('store_id')
-        .eq('rep_id', repFilter);
-      return (data || []).map((a: any) => a.store_id as string);
-    },
-    enabled: repFilter !== 'all',
-  });
+  const productCount = aggregatedProducts.length;
+  const totalCount = visibleNotes.length;
 
-  const { data: salesNotes, isLoading } = useQuery({
-    queryKey: ["admin-sales-notes", storeFilter.join(','), statusFilter, repFilter, repAssignedStoreIds.join(','), dateRange?.from, dateRange?.to],
-    queryFn: async () => {
-      let query = (supabase
-        .from("sales_notes") as any)
-        .select(`
-          *,
-          store:stores(name, code),
-          sales_note_items(
-            id,
-            quantity,
-            returned_quantity,
-            sort_order,
-            order_item:order_items(
-              id,
-              order_id,
-              quantity,
-              unit_price,
-              unit_cost,
-              sort_order,
-              product_id,
-              variant_id,
-              line_type,
-              line_note,
-              order:orders(code),
-              product:products(name, code),
-              product_variant:product_variants(name, sku)
-            )
-          )
-        `)
-        .order("created_at", { ascending: false })
-        .order("sort_order", { foreignTable: "sales_note_items", ascending: true });
-
-      if (repAssignedStoreIds.length > 0) {
-        query = query.in("store_id", repAssignedStoreIds);
-      } else if (storeFilter.length > 0) {
-        query = query.in("store_id", storeFilter);
-      }
-      if (statusFilter !== "all") {
-        if (statusFilter === "unreceived") {
-          query = query.eq("payment_status", "unpaid");
-        } else if (statusFilter === "received") {
-          query = query.eq("payment_status", "paid");
-        }
-      }
-      if (dateRange?.from) {
-        const fromStr = format(dateRange.from, "yyyy-MM-dd");
-        const toStr = dateRange.to
-          ? format(addDays(dateRange.to, 1), "yyyy-MM-dd")
-          : format(addDays(dateRange.from, 1), "yyyy-MM-dd");
-        query = query
-          .not("shipped_at", "is", null)
-          .gte("shipped_at", fromStr)
-          .lt("shipped_at", toStr);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
-    },
-  });
-
-const { isRepStore, repNameOf } = useRepStoreAssignments();
-
-  const filteredNotes = salesNotes?.filter((note) => {
-    const searchLower = search.toLowerCase();
-    if (businessFilter !== "all") {
-      const hasBusiness = isRepStore(note.store_id);
-      if (businessFilter === "with" && !hasBusiness) return false;
-      if (businessFilter === "without" && hasBusiness) return false;
-    }
-    return (
-      note.id.toLowerCase().includes(searchLower) ||
-      (note.code && note.code.toLowerCase().includes(searchLower)) ||
-      (note.store?.name?.toLowerCase().includes(searchLower)) ||
-      (note.store?.code?.toLowerCase().includes(searchLower))
-    );
-  });
-
-  const aggregatedProducts = useMemo<SalesNoteAggregateItem[]>(() => {
-    const map = new Map<string, SalesNoteAggregateItem>();
-    for (const note of salesNotes || []) {
-      for (const item of note.sales_note_items || []) {
-        const oi = item.order_item;
-        if (!oi) continue;
-        const name = oi.product_variant?.name || oi.product?.name || "未知產品";
-        const sku = oi.product?.code || "-";
-        const qty = item.quantity || 0;
-        const unit = oi.unit_price || 0;
-        const key = `${oi.product_id}_${oi.variant_id || "null"}`;
-        let entry = map.get(key);
-        if (!entry) {
-          entry = {
-            productId: oi.product_id,
-            variantId: oi.variant_id ?? null,
-            productName: name,
-            sku,
-            totalQuantity: 0,
-            totalAmount: 0,
-            avgUnitPrice: 0,
-            noteBreakdown: [],
-          };
-          map.set(key, entry);
-        }
-        let breakdown = entry.noteBreakdown.find((b) => b.salesNoteId === note.id);
-        if (!breakdown) {
-          breakdown = {
-            salesNoteId: note.id,
-            salesNoteCode: note.code || note.id.slice(0, 8),
-            storeName: note.store?.name || "-",
-            quantity: 0,
-            amount: 0,
-          };
-          entry.noteBreakdown.push(breakdown);
-        }
-        breakdown.quantity += qty;
-        breakdown.amount += qty * unit;
-        entry.totalQuantity += qty;
-        entry.totalAmount += qty * unit;
-      }
-    }
-    let products = Array.from(map.values());
-    for (const p of products) {
-      p.avgUnitPrice = p.totalQuantity > 0 ? p.totalAmount / p.totalQuantity : 0;
-    }
-    const keyword = search.trim().toLowerCase();
-    if (keyword) {
-      products = products.filter(
-        (p) => p.productName.toLowerCase().includes(keyword) || p.sku.toLowerCase().includes(keyword)
-      );
-    }
-    products.sort((a, b) => b.totalAmount - a.totalAmount);
-    return products;
-  }, [salesNotes, search]);
-
-  const visibleNotes = useMemo(() => filteredNotes ?? [], [filteredNotes]);
-
-  const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("size")) || 20));
-  const totalPages = Math.max(1, Math.ceil(visibleNotes.length / pageSize));
-  const currentPage = Math.min(Math.max(1, Number(searchParams.get("page")) || 1), totalPages);
-  const pagedNotes = useMemo(
-    () => visibleNotes.slice((currentPage - 1) * pageSize, currentPage * pageSize),
-    [visibleNotes, currentPage, pageSize],
-  );
-  const setPage = (page: number) => {
-    const clamped = Math.min(Math.max(1, page), totalPages);
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
-      if (clamped <= 1) next.delete("page");
-      else next.set("page", String(clamped));
+      if (value) next.set("search", value);
+      else next.delete("search");
+      next.delete("page");
       return next;
     }, { replace: true });
+  };
+
+  const handleStoreFilterChange = (value: string[]) => {
+    setStoreFilter(value);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value.length > 0) next.set("store", value.join(","));
+      else next.delete("store");
+      next.delete("page");
+      return next;
+    }, { replace: true });
+  };
+
+  const handleRepFilterChange = (value: string) => {
+    setRepFilter(value);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value && value !== "all") next.set("rep", value);
+      else next.delete("rep");
+      next.delete("page");
+      return next;
+    }, { replace: true });
+  };
+
+  const handleBusinessFilterChange = (value: string) => {
+    setBusinessFilter(value);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value && value !== "all") next.set("business", value);
+      else next.delete("business");
+      next.delete("page");
+      return next;
+    }, { replace: true });
+  };
+
+  const handleStatusFilterChange = (value: string) => {
+    setStatusFilter(value);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value !== "all") next.set("status", value);
+      else next.delete("status");
+      next.delete("page");
+      return next;
+    }, { replace: true });
+  };
+
+  const handleDateRangeChange = (range: DateRange | undefined) => {
+    setDateRange(range);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (range?.from) next.set("from", format(range.from, "yyyy-MM-dd"));
+      else next.delete("from");
+      if (range?.to) next.set("to", format(range.to, "yyyy-MM-dd"));
+      else next.delete("to");
+      next.delete("page");
+      return next;
+    }, { replace: true });
+  };
+
+  const handleClearDateRange = () => {
+    setDateRange(undefined);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("from");
+      next.delete("to");
+      next.delete("page");
+      return next;
+    }, { replace: true });
+  };
+
+  const handleViewModeChange = (mode: "notes" | "product") => {
+    setViewMode(mode);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (mode === "product") next.set("view", "product");
+      else next.delete("view");
+      return next;
+    }, { replace: true });
+  };
+
+  const handleViewNote = (id: string) => {
+    const fullNote = salesNotes?.find((n) => n.id === id);
+    if (fullNote) setSelectedNote(fullNote);
+  };
+
+  const handleDelete = (id: string) => {
+    const target = salesNotes?.find((n) => n.id === id);
+    if (target?.status === "received") {
+      toast.error("已收貨的銷貨單不可刪除", { description: `單號 ${target.code || id.slice(0, 8)} 已簽收，屬收款憑證不可作廢刪除。` });
+      return;
+    }
+    if (window.confirm("確定要刪除此銷貨單嗎？\n\n注意：刪除後，商品將會回滾至出貨池（變回未出貨狀態）。寄賣收款單（已收貨）不可刪除。")) {
+      deleteMutation.mutate(id);
+    }
   };
 
   const batchEligibleNotes = useMemo<BatchEligibleNote[]>(
@@ -296,7 +208,7 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
           id: note.id,
           code: note.code || note.id.slice(0, 8),
           storeId: note.store_id,
-          storeName: note.store?.name,
+          storeName: note.store?.name ?? undefined,
           created_at: note.created_at,
           totalAmount:
             (note.sales_note_items || []).reduce(
@@ -315,717 +227,85 @@ const { isRepStore, repNameOf } = useRepStoreAssignments();
     setBatchPaymentOpen(true);
   };
 
-  const unreceivedCount = visibleNotes.filter(n => n.payment_status !== "paid").length;
-  const receivedCount = visibleNotes.filter(n => n.payment_status === "paid").length;
-  const totalAmount = visibleNotes.reduce((sum, note) =>
-    sum + (note.sales_note_items || []).reduce((s, item) =>
-      s + (item.quantity * (item.order_item?.unit_price || 0)), 0
-    ), 0
-  );
-
-  const productTotalQty = aggregatedProducts.reduce((s, p) => s + p.totalQuantity, 0);
-  const productTotalAmount = aggregatedProducts.reduce((s, p) => s + p.totalAmount, 0);
-
-  // 利潤／毛利：把全部可見單據的品項攤平後一次計算，再依 noteId 分組
-  // （單一 useDocumentProfit 呼叫 → 只有一份成本查詢）
-  const profitInput = useMemo<DocProfitInputItem[]>(() => {
-    const rows: DocProfitInputItem[] = [];
-    for (const note of visibleNotes) {
-      for (const item of note.sales_note_items || []) {
-        const oi = item.order_item;
-        if (!oi) continue;
-        rows.push({
-          key: `${note.id}:${item.id}`,
-          productId: oi.product_id,
-          variantId: oi.variant_id ?? null,
-          // 退貨列以負數傳入，營業額與成本同為負自然對沖
-          quantity: oi.line_type === 'return' ? -(item.quantity || 0) : item.quantity || 0,
-          unitPrice: oi.unit_price || 0,
-          snapshotCost: oi.unit_cost ?? null,
-          lineType: oi.line_type ?? null,
-        });
-      }
-    }
-    return rows;
-  }, [visibleNotes]);
-
-  const docProfit = useDocumentProfit(profitInput);
-
-  const profitByNoteId = useMemo(() => {
-    const grouped = new Map<string, ProfitLine[]>();
-    for (const row of profitInput) {
-      const noteId = row.key.slice(0, row.key.lastIndexOf(':'));
-      const line = docProfit.byKey.get(row.key);
-      if (!line) continue;
-      const list = grouped.get(noteId);
-      if (list) list.push(line);
-      else grouped.set(noteId, [line]);
-    }
-    const out = new Map<string, ProfitSummary>();
-    for (const [noteId, lines] of grouped) out.set(noteId, sumProfit(lines));
-    return out;
-  }, [profitInput, docProfit.byKey]);
-
-  // 有業務門市的單據改顯示「業務利潤／估佣」（與毛利互斥）
-  // 業務口徑：快照 → rep_product_costs → 變體批發價（與 useRepCommission 一致）
-  const { assignments } = useRepStoreAssignments();
-  const { calcForStore, costOf } = useBusinessProfitCalculator(assignments.map((a) => a.rep_id));
-  const businessProfitByNoteId = useMemo(() => {
-    const map = new Map<string, { profit: number; commission: number; repName: string; summary: ProfitSummary }>();
-    for (const note of visibleNotes) {
-      if (!isRepStore(note.store_id)) continue;
-      const items = (note.sales_note_items || []).map((item: any) => ({
-        productId: item.order_item?.product_id,
-        variantId: item.order_item?.variant_id ?? null,
-        quantity: item.order_item?.line_type === 'return' ? -(item.quantity || 0) : item.quantity || 0,
-        unitPrice: item.order_item?.unit_price || 0,
-        snapshotCost: item.order_item?.unit_cost ?? null,
-        lineType: item.order_item?.line_type,
-      }));
-      const res = calcForStore(note.store_id, items);
-      if (!res) continue;
-      const gross = profitByNoteId.get(note.id);
-      map.set(note.id, {
-        profit: res.profit,
-        commission: res.commission,
-        repName: res.repName ?? '未命名業務',
-        summary: businessProfitSummary(gross?.revenue ?? 0, res),
-      });
-    }
-    return map;
-  }, [visibleNotes, isRepStore, calcForStore, profitByNoteId]);
-
-  // 業務佣金彙總（僅業務身分顯示）
-  const { isRep, computeOrder: computeRepOrder } = useRepCommission();
-  const repSummary = useMemo(() => {
-    if (!isRep) return null;
-    const lines: { productId: string; variantId?: string | null; unitPrice: number; quantity: number }[] = [];
-    for (const note of filteredNotes || []) {
-      for (const item of note.sales_note_items || []) {
-        lines.push({
-          productId: item.order_item?.product_id,
-          variantId: item.order_item?.variant_id ?? null,
-          unitPrice: item.order_item?.unit_price || 0,
-          quantity: item.quantity || 0,
-        });
-      }
-    }
-    return computeRepOrder(lines);
-  }, [isRep, filteredNotes, computeRepOrder]);
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { data, error } = await supabase.rpc("delete_sales_note", {
-        p_sales_note_id: id,
-      });
-      if (error) throw error;
-      const res = (data ?? null) as unknown as { ok?: boolean; reason?: string; adopted_by?: Array<{ label?: string }> } | null;
-      if (res && res.ok !== false) return;
-      const reason = res?.reason || "刪除失敗";
-      const err = new Error(reason) as Error & { hint?: string };
-      const labels = (res?.adopted_by || []).map((b: any) => b?.label).filter(Boolean).join("、");
-      err.hint = labels ? `被引用：${labels}（請先處理後再刪除）` : "請先處理會計/佣金/寄賣紀錄後再刪除";
-      throw err;
-    },
-    onSuccess: () => {
-      toast.success("銷貨單已刪除並回滾至出貨池");
-      queryClient.invalidateQueries({ queryKey: ["admin-sales-notes"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["shipping-pool-items"] });
-    },
-    onError: (error: unknown) => {
-      const details = getErrorDetails(error);
-      console.error("[delete_sales_note]", details, error);
-      const msg = getErrorMessage(error);
-      const suffix = details.code ? `（${details.code}）` : "";
-      const description = [details.details, details.hint].filter(Boolean).join(" | ") || undefined;
-      toast.error(`刪除失敗：${msg}${suffix}`, {
-        description,
-        duration: 6000,
-      });
-    },
-  });
-
-  // Map data for the table component
-  const tableData = (filteredNotes ? pagedNotes : undefined)?.map(note => ({
-    id: note.id,
-    code: note.code,
-    storeName: note.store?.name,
-    storeCode: note.store?.code,
-    status: note.status,
-    payment_status: note.payment_status,
-    access_token: note.access_token,
-    itemCount: note.sales_note_items?.length || 0,
-    totalQty: (note.sales_note_items || []).reduce((s, i: any) => s + (i.quantity || 0), 0),
-    amount: (note.sales_note_items || []).reduce((s, i: any) => s + (i.quantity || 0) * (i.order_item?.unit_price || 0), 0),
-    hasReturned: (note.sales_note_items || []).some((i: any) => (i.returned_quantity || 0) > 0),
-    created_at: note.created_at,
-    shipped_at: note.shipped_at,
-    received_at: note.received_at,
-    // 有業務門市 → 只顯示業務利潤／估佣；無業務門市 → 只顯示毛利／毛利率（互斥）
-    profit: (() => {
-      const biz = businessProfitByNoteId.get(note.id);
-      if (biz) return biz.summary;
-      return profitByNoteId.get(note.id) || null;
-    })(),
-    profitMode: (isRepStore(note.store_id) ? "business" : "gross") as "business" | "gross",
-    commission: businessProfitByNoteId.get(note.id)?.commission ?? null,
-    repName: repNameOf(note.store_id),
-  }));
-
-  // Map data for the dialog component — use live query data so edits refresh immediately
-  const dialogData: SalesNoteDetail | null = selectedNote ? (() => {
-    const live = salesNotes?.find((n) => n.id === selectedNote.id) ?? selectedNote;
-    return {
-      id: live.id,
-      code: live.code,
-      store_id: live.store_id,
-      storeName: live.store?.name,
-      storeCode: live.store?.code,
-      status: live.status,
-      payment_status: live.payment_status,
-      created_at: live.created_at,
-      shipped_at: live.shipped_at,
-      received_at: live.received_at,
-      notes: live.notes,
-      access_token: live.access_token,
-      delivery_type: live.delivery_type,
-      shipping_fee: live.shipping_fee,
-      shipping_cost: live.shipping_cost,
-      delivery_method_id: live.delivery_method_id,
-      delivery_method_title: live.delivery_method_title,
-      delivery_method_code: live.delivery_method_code,
-      shipping_address: live.shipping_address,
-      // 利潤／毛利：有業務門市顯示業務利潤與估佣，無業務門市顯示毛利（互斥）
-      profit: (() => {
-        const biz = businessProfitByNoteId.get(live.id);
-        if (biz) return biz.summary;
-        return profitByNoteId.get(live.id) || null;
-      })(),
-      profitMode: (isRepStore(live.store_id) ? "business" : "gross") as "business" | "gross",
-      commission: businessProfitByNoteId.get(live.id)?.commission ?? null,
-      repName: repNameOf(live.store_id),
-      items: [...(live.sales_note_items || [])]
-        .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-        .map((item: any) => {
-          const line = docProfit.byKey.get(`${live.id}:${item.id}`);
-          // 有業務門市時逐列成本改用「業務口徑」，避免總額是業務利潤但明細成本是毛利口徑
-          const bizLine = isRepStore(live.store_id)
-            ? costOf(live.store_id, {
-                productId: item.order_item?.product_id,
-                variantId: item.order_item?.variant_id ?? null,
-                quantity: item.quantity || 0,
-                unitPrice: item.order_item?.unit_price || 0,
-                snapshotCost: item.order_item?.unit_cost ?? null,
-                lineType: item.order_item?.line_type,
-              })
-            : null;
-          return {
-            id: item.id,
-            orderItemId: item.order_item?.id,
-            orderCode: item.order_item?.order?.code,
-            quantity: item.quantity,
-            returnedQuantity: item.returned_quantity ?? 0,
-            productName: item.order_item?.product?.name || "未知產品",
-            productSku: item.order_item?.product?.code || "-",
-            variantName: item.order_item?.product_variant?.name,
-            unitPrice: item.order_item?.unit_price,
-            unitCost: bizLine ? bizLine.unitCost : line?.cost ?? null,
-            costKnown: bizLine ? bizLine.costKnown : line?.costKnown ?? false,
-            lineType: item.order_item?.line_type,
-            lineNote: item.order_item?.line_note,
-            sortOrder: item.sort_order ?? 0,
-          };
-        })
-    };
-  })() : null;
-
-  const exportSelectedNotes = async () => {
-    const notesToExport = (salesNotes || []).filter((n) => selectedNoteIds.includes(n.id));
-    if (notesToExport.length === 0) {
-      toast.error("請先勾選要匯出的銷貨單");
-      return;
-    }
-    const xlsx = await import("xlsx");
-    const rows: (string | number)[][] = [];
-    let grandTotal = 0;
-    let grandQty = 0;
-
-    for (const note of notesToExport) {
-      const items = [...(note.sales_note_items || [])].sort(
-        (a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
-      );
-      rows.push([`銷貨單 ${note.code || note.id.slice(0, 8)}`, "", "", "", ""]);
-      rows.push([
-        "店家",
-        note.store?.name || "-",
-        "日期",
-        note.shipped_at
-          ? format(new Date(note.shipped_at), "yyyy/MM/dd")
-          : format(new Date(note.created_at), "yyyy/MM/dd"),
-        "",
-      ]);
-      rows.push(["變體編號", "商品名稱", "數量", "單價", "銷售金額"]);
-
-      let subtotal = 0;
-      let qty = 0;
-      for (const item of items) {
-        const name =
-          item.order_item?.product_variant?.name ||
-          item.order_item?.product?.name ||
-          "未知產品";
-        // 優先取變體 SKU（變體編號）；無變體的品項回退產品編號
-        const code = item.order_item?.product_variant?.sku || item.order_item?.product?.code || "-";
-        const unit = Number(item.order_item?.unit_price || 0);
-        const amt = Number(item.quantity || 0) * unit;
-        rows.push([code, name, Number(item.quantity || 0), unit, amt]);
-        subtotal += amt;
-        qty += Number(item.quantity || 0);
-      }
-      rows.push(["小計", "", qty, "", subtotal]);
-      rows.push([]);
-      grandTotal += subtotal;
-      grandQty += qty;
-    }
-
-    rows.push(["總計", `${notesToExport.length} 張 · 共 ${grandQty} 件`, "", "", grandTotal]);
-
-    const ws = xlsx.utils.aoa_to_sheet(rows);
-    ws["!cols"] = [{ wch: 18 }, { wch: 44 }, { wch: 10 }, { wch: 12 }, { wch: 14 }];
-    const wb = xlsx.utils.book_new();
-    xlsx.utils.book_append_sheet(wb, ws, "銷貨單");
-    xlsx.writeFile(wb, `銷貨單匯出_${format(new Date(), "yyyyMMdd")}.xlsx`);
-    toast.success(`已匯出 ${notesToExport.length} 張銷貨單`);
+  const handleExport = () => {
+    exportSalesNotesExcel(salesNotes, selectedNoteIds);
   };
 
   return (
     <div className="flex flex-col h-[calc(100dvh-6.5rem)] overflow-hidden space-y-4">
       <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        <CardHeader className="shrink-0 px-4 py-3 flex flex-row items-center justify-between gap-2 space-y-0">
-          <CardTitle className="flex items-center gap-2 text-base">
-            {viewMode === "product" ? <LayoutGrid className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-            {viewMode === "product" ? "商品銷售彙總" : "銷售單列表"}
-          </CardTitle>
-          <div className="flex items-center gap-2 shrink-0">
-            {!isRep && (
-              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => setImportOpen(true)}>
-                <FileUp className="h-3.5 w-3.5 mr-1" /> 匯入
-              </Button>
-            )}
-            {!isRep && (
-              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => setStatementOpen(true)}>
-                <ReceiptText className="h-3.5 w-3.5 mr-1" /> 對帳單
-              </Button>
-            )}
-            <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-lg">
-              <Button
-                variant={viewMode === "notes" ? "default" : "ghost"}
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => {
-                  setViewMode("notes");
-                  setSearchParams((prev) => {
-                    const next = new URLSearchParams(prev);
-                    next.delete("view");
-                    return next;
-                  }, { replace: true });
-                }}
-              >
-                <List className="h-3.5 w-3.5 mr-1" /> 銷售單
-              </Button>
-              <Button
-                variant={viewMode === "product" ? "default" : "ghost"}
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => {
-                  setViewMode("product");
-                  setSearchParams((prev) => {
-                    const next = new URLSearchParams(prev);
-                    next.set("view", "product");
-                    return next;
-                  }, { replace: true });
-                }}
-              >
-                <LayoutGrid className="h-3.5 w-3.5 mr-1" /> 商品加總
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
+        <SalesNotesHeader
+          viewMode={viewMode}
+          isRep={isRep}
+          onViewModeChange={handleViewModeChange}
+          onImport={() => setImportOpen(true)}
+          onStatement={() => setStatementOpen(true)}
+        />
         <CardContent className="flex-1 min-h-0 overflow-hidden flex flex-col px-4 pb-4">
-          {/* Summary */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 shrink-0 text-xs sm:text-sm leading-4">
-            {viewMode === "product" ? (
-              <>
-                <span>商品: <strong>{aggregatedProducts.length}</strong></span>
-                <span className="text-muted-foreground">|</span>
-                <span>總件數: <strong>{productTotalQty}</strong></span>
-                <span className="text-muted-foreground">|</span>
-                <span>金額總計: <strong>{formatCurrency(productTotalAmount)}</strong></span>
-              </>
-            ) : (
-              <>
-                <span>全部: <strong>{visibleNotes.length}</strong> 張</span>
-                <span className="text-muted-foreground">|</span>
-                <span className="text-amber-600">未收款: <strong>{unreceivedCount}</strong></span>
-                <span className="text-muted-foreground">|</span>
-                <span className="text-green-600">已收款: <strong>{receivedCount}</strong></span>
-                <span className="text-muted-foreground">|</span>
-                <span>金額總計: <strong>{formatCurrency(totalAmount)}</strong></span>
-                {repSummary && (
-                  <>
-                    <span className="text-muted-foreground">|</span>
-                    <span className="text-emerald-600">業務利潤: <strong>{formatCurrency(repSummary.totalProfit)}</strong></span>
-                    <span className="text-muted-foreground">|</span>
-                    <span className="text-amber-600">估佣: <strong>{formatCurrency(repSummary.totalCommission)}</strong></span>
-                  </>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-2 mb-2 shrink-0">
-            <div className="relative flex-1 min-w-[160px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={viewMode === "product" ? "搜尋商品名稱或 SKU..." : "搜尋銷售單..."}
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setSearchParams((prev) => {
-                    const next = new URLSearchParams(prev);
-                    if (e.target.value) next.set("search", e.target.value);
-                    else next.delete("search");
-                    next.delete("page");
-                    return next;
-                  }, { replace: true });
-                }}
-                className="pl-10"
-              />
-            </div>
-
-            <div className="flex-1 min-w-[130px]">
-              <StorePicker
-                stores={stores || []}
-                value={storeFilter}
-                multiple
-                onChange={(v) => {
-                  const next = (v as string[]);
-                  setStoreFilter(next);
-                  setSearchParams((prev) => {
-                    const nextParams = new URLSearchParams(prev);
-                    if (next.length > 0) nextParams.set("store", next.join(","));
-                    else nextParams.delete("store");
-                    nextParams.delete("page");
-                    return nextParams;
-                  }, { replace: true });
-                }}
-                placeholder="選擇店鋪（預設全部）"
-                searchPlaceholder="搜尋店鋪..."
-                disabled={!stores || stores.length === 0}
-              />
-            </div>
-
-            <Select value={repFilter} onValueChange={(v) => {
-              setRepFilter(v);
-              setSearchParams((prev) => {
-                const next = new URLSearchParams(prev);
-                if (v && v !== "all") next.set("rep", v);
-                else next.delete("rep");
-                next.delete("page");
-                return next;
-              }, { replace: true });
-            }}>
-              <SelectTrigger className="flex-1 min-w-[110px]">
-                <SelectValue placeholder="全部業務" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部業務</SelectItem>
-                {repsData.map((r) => (
-                  <SelectItem key={r.user_id} value={r.user_id}>
-                    {r.full_name || r.email}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* 有業務 / 無業務 篩選（決定該單顯示「業務利潤」或「毛利」） */}
-            <Select value={businessFilter} onValueChange={(v) => {
-              setBusinessFilter(v);
-              setSearchParams((prev) => {
-                const next = new URLSearchParams(prev);
-                if (v && v !== "all") next.set("business", v);
-                else next.delete("business");
-                next.delete("page");
-                return next;
-              }, { replace: true });
-            }}>
-              <SelectTrigger className="flex-1 min-w-[120px]">
-                <SelectValue placeholder="全部單據" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部單據</SelectItem>
-                <SelectItem value="with">有業務</SelectItem>
-                <SelectItem value="without">無業務</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Date range filter */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "flex-1 min-w-[150px] justify-start text-left font-normal",
-                    !dateRange && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateRange?.from ? (
-                    dateRange.to ? (
-                      <>
-                        {format(dateRange.from, "yyyy/MM/dd")} ~ {format(dateRange.to, "yyyy/MM/dd")}
-                      </>
-                    ) : (
-                      format(dateRange.from, "yyyy/MM/dd")
-                    )
-                  ) : (
-                    <span>選擇日期範圍</span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="range"
-                  selected={dateRange}
-                  onSelect={(range) => {
-                    const resolved = range?.from && !range.to
-                      ? { from: range.from, to: range.from }
-                      : range;
-                    setDateRange(resolved);
-                    setSearchParams((prev) => {
-                      const next = new URLSearchParams(prev);
-                      if (resolved?.from) next.set("from", format(resolved.from, "yyyy-MM-dd"));
-                      else next.delete("from");
-                      if (resolved?.to) next.set("to", format(resolved.to, "yyyy-MM-dd"));
-                      else next.delete("to");
-                      next.delete("page");
-                      return next;
-                    }, { replace: true });
-                  }}
-                  numberOfMonths={2}
-                  locale={zhTW}
-                />
-              </PopoverContent>
-            </Popover>
-            {dateRange && (
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="清除日期篩選"
-                onClick={() => {
-                  setDateRange(undefined);
-                  setSearchParams((prev) => {
-                    const next = new URLSearchParams(prev);
-                    next.delete("from");
-                    next.delete("to");
-                    next.delete("page");
-                    return next;
-                  }, { replace: true });
-                }}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-
-          {/* Status tabs */}
-          <div className="flex flex-wrap gap-2 mb-2 shrink-0">
-            <div className="flex gap-1">
-              {[
-                { value: "all", label: "全部" },
-                { value: "unreceived", label: "未收款" },
-                { value: "received", label: "已收款" },
-              ].map((tab) => (
-                <Button
-                  key={tab.value}
-                  variant={statusFilter === tab.value ? "default" : "outline"}
-                  size="sm"
-                  className="h-7 px-3"
-                  onClick={() => {
-                    setStatusFilter(tab.value);
-                    setSearchParams((prev) => {
-                      const next = new URLSearchParams(prev);
-                      if (tab.value !== "all") next.set("status", tab.value);
-                      else next.delete("status");
-                      next.delete("page");
-                      return next;
-                    }, { replace: true });
-                  }}
-                >
-                  {tab.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          {viewMode === "product" && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 text-xs sm:text-sm shrink-0">
-              <div className="flex items-center gap-3">
-                <span>商品數: <strong>{aggregatedProducts.length}</strong></span>
-                <span className="text-muted-foreground">|</span>
-                <span>總件數: <strong>{aggregatedProducts.reduce((s, p) => s + p.totalQuantity, 0)}</strong></span>
-                <span className="text-muted-foreground">|</span>
-                <span>總金額: <strong>{formatCurrency(aggregatedProducts.reduce((s, p) => s + p.totalAmount, 0))}</strong></span>
-              </div>
-            </div>
-          )}
-
-          {viewMode === "notes" && selectedNoteIds.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 mb-2 px-3 py-1.5 rounded-md border bg-muted/30 shrink-0">
-              <CheckSquare className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium">
-                已選取 <strong>{selectedNoteIds.length}</strong> 張銷貨單
-              </span>
-              <div className="flex-1" />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8"
-                onClick={() => setSelectedNoteIds([])}
-              >
-                取消選取
-              </Button>
-              <Button size="sm" className="h-8" onClick={handleOpenBatchPayment}>
-                <Banknote className="h-4 w-4 mr-1.5" />批次登記收款
-              </Button>
-              <Button size="sm" className="h-8" onClick={exportSelectedNotes}>
-                <Download className="h-4 w-4 mr-1.5" />匯出 Excel
-              </Button>
-            </div>
-          )}
-
-          <div className="flex-1 min-h-0 flex flex-col">
-            {viewMode === "notes" ? (
-            <>
-            <SalesNoteListTable
-              data={tableData}
-              isLoading={isLoading}
-              onView={(note) => {
-                const fullNote = salesNotes?.find(n => n.id === note.id);
-                setSelectedNote(fullNote);
-              }}
-              onDelete={(id) => {
-                const target = salesNotes?.find(n => n.id === id);
-                if (target?.status === "received") {
-                  toast.error("已收貨的銷貨單不可刪除", { description: `單號 ${target.code || id.slice(0, 8)} 已簽收，屬收款憑證不可作廢刪除。` });
-                  return;
-                }
-                if (window.confirm("確定要刪除此銷貨單嗎？\n\n注意：刪除後，商品將會回滾至出貨池（變回未出貨狀態）。寄賣收款單（已收貨）不可刪除。")) {
-                  deleteMutation.mutate(id);
-                }
-              }}
-              showStoreColumn={true}
-              showProfit={!isRep}
-              selectable={true}
-              selectedIds={selectedNoteIds}
-              onSelectionChange={setSelectedNoteIds}
-            />
-            {totalPages > 1 && (
-              <div className="flex flex-col items-center justify-between gap-2 py-2 sm:flex-row">
-                <div className="text-sm text-muted-foreground">
-                  共 {visibleNotes.length} 筆，第 {currentPage}/{totalPages} 頁
-                </div>
-                <Pagination className="mx-0 w-auto justify-end">
-                  <PaginationContent>
-                    <PaginationItem>
-                      <PaginationPrevious
-                        className={cn(
-                          "h-8 w-8 border-none p-0",
-                          currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"
-                        )}
-                        aria-label="上一頁"
-                        onClick={() => setPage(currentPage - 1)}
-                      />
-                    </PaginationItem>
-                    {getPageNumbers(currentPage, totalPages).map((p, i) =>
-                      p === "ellipsis" ? (
-                        <PaginationItem key={`ellipsis-${i}`}>
-                          <PaginationEllipsis />
-                        </PaginationItem>
-                      ) : (
-                        <PaginationItem key={p}>
-                          <PaginationLink
-                            href="#"
-                            className={cn(
-                              "h-8 w-8 border-none p-0",
-                              p === currentPage ? "" : "cursor-pointer"
-                            )}
-                            isActive={p === currentPage}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              setPage(p);
-                            }}
-                          >
-                            {p}
-                          </PaginationLink>
-                        </PaginationItem>
-                      )
-                    )}
-                    <PaginationItem>
-                      <PaginationNext
-                        className={cn(
-                          "h-8 w-8 border-none p-0",
-                          currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"
-                        )}
-                        aria-label="下一頁"
-                        onClick={() => setPage(currentPage + 1)}
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
-              </div>
-            )}
-            </>
-          ) : (
-            <SalesNoteProductView
-              items={aggregatedProducts}
-              isLoading={isLoading}
-              onViewNote={(noteId) => {
-                const fullNote = salesNotes?.find(n => n.id === noteId);
-                if (fullNote) setSelectedNote(fullNote);
-              }}
-            />
-          )}
-          </div>
+          <SalesNotesSummary
+            viewMode={viewMode}
+            productCount={productCount}
+            productTotalQty={productTotalQty}
+            productTotalAmount={productTotalAmount}
+            totalCount={totalCount}
+            unreceivedCount={unreceivedCount}
+            receivedCount={receivedCount}
+            totalAmount={totalAmount}
+            repSummary={repSummary}
+          />
+          <SalesNotesFilterBar
+            viewMode={viewMode}
+            search={search}
+            onSearchChange={handleSearchChange}
+            stores={stores}
+            storeFilter={storeFilter}
+            onStoreFilterChange={handleStoreFilterChange}
+            repsData={repsData}
+            repFilter={repFilter}
+            onRepFilterChange={handleRepFilterChange}
+            businessFilter={businessFilter}
+            onBusinessFilterChange={handleBusinessFilterChange}
+            dateRange={dateRange}
+            onDateRangeChange={handleDateRangeChange}
+            onClearDateRange={handleClearDateRange}
+            statusFilter={statusFilter}
+            onStatusFilterChange={handleStatusFilterChange}
+            aggregatedProducts={aggregatedProducts}
+          />
+          <SalesNotesListView
+            viewMode={viewMode}
+            isLoading={isLoading}
+            tableData={tableData}
+            isRep={isRep}
+            selectedNoteIds={selectedNoteIds}
+            onSelectionChange={setSelectedNoteIds}
+            onViewNote={handleViewNote}
+            onDelete={handleDelete}
+            aggregatedProducts={aggregatedProducts}
+            totalPages={totalPages}
+            currentPage={currentPage}
+            visibleCount={totalCount}
+            onPageChange={setPage}
+            onBatchPayment={handleOpenBatchPayment}
+            onExport={handleExport}
+            onClearSelection={() => setSelectedNoteIds([])}
+          />
         </CardContent>
       </Card>
 
-      <SalesNoteDetailDialog
-        open={!!selectedNote}
-        onOpenChange={(open) => !open && setSelectedNote(null)}
-        note={dialogData}
-        enablePayment={true}
-        enableCorrect={!isRep}
-        parcelEditable={!isRep}
-      />
-
-      <SalesNoteBatchPaymentDialog
-        open={batchPaymentOpen}
-        onOpenChange={setBatchPaymentOpen}
-        notes={batchEligibleNotes}
-        onCompleted={() => setSelectedNoteIds([])}
-      />
-
-      <DocImportDialog
-        kind="sales"
-        open={importOpen}
-        onOpenChange={setImportOpen}
-      />
-
-      <CustomerStatementDialog
-        open={statementOpen}
-        onOpenChange={setStatementOpen}
+      <SalesNotesDialogs
+        selectedNote={selectedNote}
+        dialogData={dialogData}
+        onCloseDetail={() => setSelectedNote(null)}
+        isRep={isRep}
+        batchPaymentOpen={batchPaymentOpen}
+        onBatchPaymentOpenChange={setBatchPaymentOpen}
+        batchEligibleNotes={batchEligibleNotes}
+        onBatchCompleted={() => setSelectedNoteIds([])}
+        importOpen={importOpen}
+        onImportOpenChange={setImportOpen}
+        statementOpen={statementOpen}
+        onStatementOpenChange={setStatementOpen}
       />
     </div>
   );
