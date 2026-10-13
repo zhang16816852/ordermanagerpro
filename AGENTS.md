@@ -2,6 +2,21 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（SalesNotes 頁面拆分為頂層薄殼＋子模組，2026-10-14）
+
+- **目的**：`src/pages/admin/SalesNotes.tsx`（1032 行）拆分為**頂層薄殼**＋`src/pages/admin/salesNotes/`（10 檔）子模組，沿用 `shippingPool/` 樣板（薄殼置 admin 上層、camelCase 檔名）。**路由 `src/routes/admin.tsx` 不需更動**（`import AdminSalesNotes from "@/pages/admin/SalesNotes"` 維持）。**零後端、零 migration、零 RPC、零 types.ts 重生、零 UI 行為變更**（純結構重構）。
+- **單一 commit `92b51a2`：11 檔、1439 insertions(+)／929 deletions(−)**。
+- **薄殼 `SalesNotes.tsx`**（保留 default export）：持有**全部 state/handlers**（`search`/`viewMode`/`storeFilter`/`statusFilter`/`repFilter`/`businessFilter`/`dateRange`/`selectedNote`/`selectedNoteIds`/`batchPaymentOpen`/`importOpen`/`statementOpen`）＋ URL searchParams 同步（`view/search/store/status/rep/business/from/to/page/size` 皆 `setSearchParams(..., {replace:true})`，篩選變更皆 `delete("page")`）；`useLayoutEffect` 設頁標題「銷售單管理」；自算 `productCount = aggregatedProducts.length`、`totalCount = visibleNotes.length`；組合 5 個子元件＋`useSalesNotesData`＋`useSalesNotesMutations`。
+- **子模組（`src/pages/admin/salesNotes/`）**：
+  - `salesNotesTypes.ts`：`StoreOption`/`RepOption`/`SalesNoteItemOrderItem`/`SalesNoteItemRow`/`SalesNoteRow`（`store.name: string|null`）/`SalesNoteTableRow`/`RepSalesSummary`。
+  - `useSalesNotesQueries.ts`：3 支 query（`["admin-stores"]`/`["admin-reps-for-sales-filter"]`/`['admin-rep-stores-for-sales-filter', repFilter]`），回傳 `{ stores, repsData, isLoading, salesNotes }`。
+  - `salesNotesUtils.ts`：`getPageNumbers`、`exportSalesNotesExcel`（動態 `import("xlsx")`）。
+  - `useSalesNotesData.ts`（最大，14245 bytes）：URL `size`(clamp [1,100] 預設 20)／`page`(1 起始) 分頁、`setPage`、`filteredNotes`/`visibleNotes`/`aggregatedProducts`/`pagedNotes`/`tableData`/`dialogData`/`repSummary` 等衍生資料；**`productCount` 刻意不在此**（由薄殼算）。
+  - `useSalesNotesMutations.ts`：`deleteMutation`（RPC `delete_sales_note`）。
+  - `SalesNotesHeader.tsx`/`SalesNotesSummary.tsx`/`SalesNotesFilterBar.tsx`/`SalesNotesListView.tsx`/`SalesNotesDialogs.tsx`：presentational，僅收 props＋callback。
+- ⚠️ **型別注意**：`BatchEligibleNote.storeName` 為 `string|undefined`（非 null），而 `SalesNoteRow.store?.name` 為 `string|null|undefined` → 薄殼須 `storeName: note.store?.name ?? undefined`。`SalesNoteTableRow` 結構須相容未 export 的 `SalesNoteSummary`。
+- **驗證**：`npm run typecheck` 0 errors（app＋node）、本批 11 檔 targeted `eslint` 0 problems、`npm run lint` 0 errors（69 warnings 皆既有）、`npm run build` 通過（56.94s，僅既有 chunk-size warning）。⚠️ 未做瀏覽器實測（`/admin/sales-notes` 需登入）。
+
 ## 近期變更（7 項後台小修批次，2026-10-12）
 
 - **變更範圍**：7 檔、139 insertions(+)／27 deletions(−)，全部純前端、零 migration、零 RPC、零 types.ts 重生。
