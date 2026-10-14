@@ -512,6 +512,16 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
 
       {webPreview && !printMode && (
         <div className="flex flex-wrap items-center justify-end gap-2 pb-3 print:hidden">
+          {pagination && (
+            <select
+              className="text-xs border rounded px-1 py-1"
+              value={paperSize}
+              onChange={(e) => setPaperSize(e.target.value as "a4" | "middle-cut")}
+            >
+              <option value="a4">A4</option>
+              <option value="middle-cut">中一刀</option>
+            </select>
+          )}
           <div className="flex items-center rounded-lg border overflow-hidden">
             <button
               type="button"
@@ -564,14 +574,6 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
               </button>
             </div>
           )}
-          <select
-            className="text-xs border rounded px-1 py-1"
-            value={paperSize}
-            onChange={(e) => setPaperSize(e.target.value as "a4" | "middle-cut")}
-          >
-            <option value="a4">A4</option>
-            <option value="middle-cut">中一刀</option>
-          </select>
         </div>
       )}
 
