@@ -137,6 +137,7 @@ function ReceiptPage({
   deliveryType,
   trackingNumbers,
   widthClass,
+  showPageNo = true,
   children,
 }: {
   items: ReceiptItem[];
@@ -158,6 +159,7 @@ function ReceiptPage({
   deliveryType?: string | null;
   trackingNumbers?: string[];
   widthClass: "a4" | "middle-cut";
+  showPageNo?: boolean;
   children?: ReactNode;
 }) {
   const showQrBlock = showQR && !!qrValue;
@@ -170,7 +172,9 @@ function ReceiptPage({
   return (
     <div className="doc-page">
       <div className="doc-head-wrap">
-        <div className="doc-page-no">第 {pageIndex + 1} 頁 / 共 {totalPages} 頁</div>
+        {showPageNo && (
+          <div className="doc-page-no">第 {pageIndex + 1} 頁 / 共 {totalPages} 頁</div>
+        )}
         <div className="doc-title">{title}：{code || "—"}</div>
         <div className="doc-store">{docTitleLabel}：{storeName}</div>
         <div className="doc-meta-row">
@@ -288,6 +292,9 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
 
   const statusText = status;
 
+  // 連續模式（僅網頁預覽）：不切割頁面、只渲染單一表頭；列印/PDF 維持逐頁實體分頁
+  const continuous = !!webPreview && !pagination;
+
   // 分頁：前面頁用 maxCapacity、末頁用 lastCapacity，序號整單連續
   const cap = CHUNK_CAPACITY[widthClass];
   const pageSizes = buildPageSizes(items.length, cap.max, cap.last);
@@ -402,49 +409,82 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
       ].filter(Boolean).join(" ")}
       {...(!webPreview && !printMode ? {} : {})}
     >
-      {(() => {
-        const pages: JSX.Element[] = [];
-        let running = 0;
-        pageChunks.forEach((chunk, pageIndex) => {
-          const isLast = pageIndex === pageChunks.length - 1;
-          pages.push(
-            <ReceiptPage
-              key={pageIndex}
-              items={chunk}
-              startIndex={running}
-              capacity={pageSizes[pageIndex]}
-              pageIndex={pageIndex}
-              totalPages={totalPages}
-              showPrice={showPrice}
-              showQR={showQR}
-              qrValue={qrValue}
-              title={title}
-              docTitleLabel={docTitleLabel}
-              storeName={storeName}
-              code={code}
-              createdAt={createdAt}
-              status={statusText}
-              notes={notes}
-              deliveryMethodTitle={deliveryMethodTitle}
-              deliveryType={deliveryType}
-              trackingNumbers={trackingNumbers}
-              widthClass={widthClass}
-            >
-              {isLast && (
-                <LastPageSummary
-                  items={items}
-                  showPrice={showPrice}
-                  notes={notes}
-                  canShowPrice={baseShowPrice}
-                  shippingFee={shippingFee}
-                />
-              )}
-            </ReceiptPage>
-          );
-          running += chunk.length;
-        });
-        return pages;
-      })()}
+      {continuous ? (
+        <ReceiptPage
+          items={items}
+          startIndex={0}
+          capacity={items.length}
+          pageIndex={0}
+          totalPages={1}
+          showPageNo={false}
+          showPrice={showPrice}
+          showQR={showQR}
+          qrValue={qrValue}
+          title={title}
+          docTitleLabel={docTitleLabel}
+          storeName={storeName}
+          code={code}
+          createdAt={createdAt}
+          status={statusText}
+          notes={notes}
+          deliveryMethodTitle={deliveryMethodTitle}
+          deliveryType={deliveryType}
+          trackingNumbers={trackingNumbers}
+          widthClass={widthClass}
+        >
+          <LastPageSummary
+            items={items}
+            showPrice={showPrice}
+            notes={notes}
+            canShowPrice={baseShowPrice}
+            shippingFee={shippingFee}
+          />
+        </ReceiptPage>
+      ) : (
+        (() => {
+          const pages: JSX.Element[] = [];
+          let running = 0;
+          pageChunks.forEach((chunk, pageIndex) => {
+            const isLast = pageIndex === pageChunks.length - 1;
+            pages.push(
+              <ReceiptPage
+                key={pageIndex}
+                items={chunk}
+                startIndex={running}
+                capacity={pageSizes[pageIndex]}
+                pageIndex={pageIndex}
+                totalPages={totalPages}
+                showPrice={showPrice}
+                showQR={showQR}
+                qrValue={qrValue}
+                title={title}
+                docTitleLabel={docTitleLabel}
+                storeName={storeName}
+                code={code}
+                createdAt={createdAt}
+                status={statusText}
+                notes={notes}
+                deliveryMethodTitle={deliveryMethodTitle}
+                deliveryType={deliveryType}
+                trackingNumbers={trackingNumbers}
+                widthClass={widthClass}
+              >
+                {isLast && (
+                  <LastPageSummary
+                    items={items}
+                    showPrice={showPrice}
+                    notes={notes}
+                    canShowPrice={baseShowPrice}
+                    shippingFee={shippingFee}
+                  />
+                )}
+              </ReceiptPage>
+            );
+            running += chunk.length;
+          });
+          return pages;
+        })()
+      )}
     </div>
   );
 
