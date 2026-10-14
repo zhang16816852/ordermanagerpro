@@ -13,6 +13,7 @@ interface AggregateCardsViewProps {
   selectedItems: Map<string, { productId: string; variantId: string | null; quantity: number; maxQuantity: number; productName: string; variantName?: string | null; sku: string; sourceOrderIds: string[]; sourceQuantities?: Record<string, number> }>;
   onToggleSelection: (item: AggregatedItem, checked: boolean) => void;
   onUpdateQuantity: (key: string, quantity: number) => void;
+  onToggleAll?: (checked: boolean) => void;
 }
 
 export function AggregateCardsView({
@@ -21,10 +22,13 @@ export function AggregateCardsView({
   selectedItems,
   onToggleSelection,
   onUpdateQuantity,
+  onToggleAll,
 }: AggregateCardsViewProps) {
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 
   const getItemKey = (item: AggregatedItem) => `${item.productId}_${item.variantId || 'null'}`;
+  const selectable = !!onToggleAll;
+  const selectableItems = items.filter((it) => it.outstandingQty > 0);
 
   const toggleExpand = (key: string) => {
     setExpandedCards(prev => {
@@ -54,7 +58,16 @@ export function AggregateCardsView({
   }
 
   return (
-    <div className="space-y-3 pb-20 flex-1 overflow-y-auto">
+    <div className="space-y-3 flex-1 overflow-y-auto">
+      {selectable && selectableItems.length > 0 && (
+        <label className="flex items-center gap-2 px-1 py-1 text-sm text-muted-foreground">
+          <Checkbox
+            checked={selectableItems.every((it) => selectedItems.has(getItemKey(it)))}
+            onCheckedChange={(checked) => onToggleAll?.(checked === true)}
+          />
+          全選（本頁 {selectableItems.length} 項）
+        </label>
+      )}
       {items.map((item) => {
         const key = getItemKey(item);
         const isSelected = selectedItems.has(key);

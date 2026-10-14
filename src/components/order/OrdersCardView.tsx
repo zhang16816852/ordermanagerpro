@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Eye, Pencil, Package, Calendar, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
@@ -24,6 +25,10 @@ interface OrdersCardViewProps {
     commissionByOrder?: Map<string, { totalProfit: number; totalCommission: number }>;
   /** 擁有者視圖：有業務門市顯示業務利潤／估佣，無業務門市顯示毛利／毛利率（互斥） */
   profitByOrderId?: Map<string, OrderProfitView>;
+  /** 手機批次選取（選填；未提供時不顯示勾選框，供門市端沿用） */
+  selectedOrderIds?: Set<string>;
+  onToggleSelection?: (id: string, checked: boolean) => void;
+  onToggleAll?: (checked: boolean) => void;
 }
 
 export function OrdersCardView({
@@ -38,7 +43,11 @@ export function OrdersCardView({
     getOrderTotal,
     commissionByOrder,
   profitByOrderId,
+  selectedOrderIds,
+  onToggleSelection,
+  onToggleAll,
 }: OrdersCardViewProps) {
+    const selectable = (statusTab === 'pending' || statusTab === 'processing') && !!onToggleSelection;
     return (
         <div className="md:hidden flex-1 overflow-y-auto space-y-3 pr-1">
             {isLoading ? (
@@ -50,14 +59,33 @@ export function OrdersCardView({
                     沒有找到訂單
                 </div>
             ) : (
-                orders?.map((order) => {
+                <>
+                    {selectable && orders && orders.length > 0 && (
+                        <label className="flex items-center gap-2 px-1 py-1 text-sm text-muted-foreground">
+                            <Checkbox
+                                checked={orders.every((o) => selectedOrderIds?.has(o.id))}
+                                onCheckedChange={(checked) => onToggleAll?.(checked === true)}
+                            />
+                            全選（本頁 {orders.length} 筆）
+                        </label>
+                    )}
+                    {orders?.map((order) => {
                     const itemStatus = getOrderShipmentStatus(order.order_items);
                     const canEdit = order.status === 'pending';
+                    const isSelected = !!selectedOrderIds?.has(order.id);
                     return (
-                        <Card key={order.id} className="rounded-xl shadow-sm">
+                        <Card key={order.id} className={`rounded-xl shadow-sm ${isSelected ? 'ring-2 ring-primary' : ''}`}>
                             <CardContent className="p-4 space-y-3">
                                 {/* 頂部：編號與操作 */}
-                                <div className="flex justify-between items-start">
+                                <div className="flex items-start gap-3">
+                                {selectable && (
+                                    <Checkbox
+                                        checked={isSelected}
+                                        onCheckedChange={(checked) => onToggleSelection?.(order.id, checked === true)}
+                                        className="mt-1"
+                                    />
+                                )}
+                                <div className="flex-1 flex justify-between items-start">
                                 <div className="space-y-1">
                                     {/* 店家名稱 */}
                                     <div className="font-semibold text-sm leading-snug">
@@ -94,6 +122,7 @@ export function OrdersCardView({
                                             </Button>
                                         )}
                                     </div>
+                                </div>
                                 </div>
 
                                 {/* 中間：資訊 */}
@@ -150,7 +179,8 @@ export function OrdersCardView({
                             </CardContent>
                         </Card>
                     );
-                })
+                })}
+                </>
             )}
         </div>
     );

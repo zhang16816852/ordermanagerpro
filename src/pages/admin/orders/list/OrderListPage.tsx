@@ -17,6 +17,7 @@ import { OrderListHeader } from './components/OrderListHeader';
 import { ConvertToConsignmentDialog, DirectShipDialog, ReverseShipmentDialog } from './OrderListDialogs';
 import { getOrderShipmentStatus, getOrderTotal } from './orderListUtils';
 import { useOrderListPageController } from './useOrderListPageController';
+import { cn } from '@/lib/utils';
 
 export default function AdminOrderList() {
   const navigate = useNavigate();
@@ -146,7 +147,7 @@ export default function AdminOrderList() {
         {viewMode === 'orders' && (
           <>
             {/* Desktop: Table */}
-            <div className="hidden md:block flex-1 min-h-0">
+            <div className={cn("hidden md:block flex-1 min-h-0", selectedOrderIds.size > 0 && "md:pb-24")}>
               <div className="h-full flex flex-col">
                 <OrderTableView
                   orders={sortedOrders}
@@ -176,7 +177,7 @@ export default function AdminOrderList() {
               </div>
             </div>
             {/* Mobile: Cards */}
-            <div className="md:hidden flex-1 min-h-0 flex flex-col">
+            <div className={cn("md:hidden flex-1 min-h-0 flex flex-col", selectedOrderIds.size > 0 && "pb-32")}>
               <OrdersCardView
                 orders={filteredOrders}
                 isLoading={isLoading}
@@ -189,6 +190,16 @@ export default function AdminOrderList() {
                 getOrderTotal={getOrderTotal}
                 commissionByOrder={commissionByOrder}
                 profitByOrderId={isRep ? undefined : profitByOrderId}
+                selectedOrderIds={selectedOrderIds}
+                onToggleSelection={(id, checked) => {
+                  const next = new Set(selectedOrderIds);
+                  if (checked) next.add(id); else next.delete(id);
+                  setSelectedOrderIds(next);
+                }}
+                onToggleAll={(checked) => {
+                  if (checked) setSelectedOrderIds(new Set(filteredOrders.map(o => o.id)));
+                  else setSelectedOrderIds(new Set());
+                }}
               />
             </div>
           </>
@@ -197,7 +208,7 @@ export default function AdminOrderList() {
         {viewMode === 'items' && (
           <>
             {/* Desktop: Table */}
-            <div className="hidden md:block flex-1 min-h-0">
+            <div className={cn("hidden md:block flex-1 min-h-0", selectedItems.size > 0 && "md:pb-24")}>
               <div className="h-full flex flex-col">
                 <ItemTableView
                   items={allPendingItems}
@@ -214,11 +225,14 @@ export default function AdminOrderList() {
               </div>
             </div>
             {/* Mobile: Cards */}
-            <div className="md:hidden flex-1 min-h-0 flex flex-col">
+            <div className={cn("md:hidden flex-1 min-h-0 flex flex-col", selectedItems.size > 0 && "pb-32")}>
               <ItemsCardView
                 items={allPendingItems}
                 isLoading={isLoading}
                 statusLabels={c.itemStatusLabels}
+                selectedItems={selectedItems}
+                onToggleSelection={handleItemToggleSelection}
+                onToggleAll={(checked) => handleItemToggleAll(checked, allPendingItems)}
               />
             </div>
           </>
@@ -227,7 +241,7 @@ export default function AdminOrderList() {
         {viewMode === 'aggregate' && (
           <>
             {/* Desktop: Table */}
-            <div className="hidden md:block flex-1 min-h-0">
+            <div className={cn("hidden md:block flex-1 min-h-0", selectedAggregateItems.size > 0 && "md:pb-24")}>
               <div className="h-full flex flex-col">
                 <AggregateTableView
                   items={aggregatedItems}
@@ -240,12 +254,13 @@ export default function AdminOrderList() {
               </div>
             </div>
             {/* Mobile: Cards */}
-            <div className="md:hidden flex-1 min-h-0 flex flex-col">
+            <div className={cn("md:hidden flex-1 min-h-0 flex flex-col", selectedAggregateItems.size > 0 && "pb-32")}>
               <AggregateCardsView
                 items={aggregatedItems}
                 isLoading={isLoading}
                 selectedItems={selectedAggregateItems}
                 onToggleSelection={handleToggleAggregateSelection}
+                onToggleAll={(checked) => handleToggleAllAggregate(checked, aggregatedItems)}
                 onUpdateQuantity={handleUpdateAggregateQuantity}
               />
             </div>

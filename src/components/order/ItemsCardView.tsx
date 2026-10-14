@@ -1,5 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
@@ -8,10 +9,13 @@ interface ItemsCardViewProps {
     items: FlatOrderItem[];
     isLoading: boolean;
     statusLabels: Record<string, { label: string; className: string }>;
+    selectedItems?: Map<string, any>;
+    onToggleSelection?: (item: FlatOrderItem, checked: boolean) => void;
+    onToggleAll?: (checked: boolean) => void;
 }
 
-export function ItemsCardView({ items, isLoading, statusLabels }: ItemsCardViewProps) {
-    console.log(items)
+export function ItemsCardView({ items, isLoading, statusLabels, selectedItems, onToggleSelection, onToggleAll }: ItemsCardViewProps) {
+    const selectable = !!onToggleSelection;
     return (
         <div className="md:hidden flex-1 overflow-y-auto space-y-3 pr-1">
             {isLoading ? (
@@ -23,15 +27,33 @@ export function ItemsCardView({ items, isLoading, statusLabels }: ItemsCardViewP
                     沒有找到商品
                 </div>
             ) : (
-                items.map((item) => {
+                <>
+                    {selectable && (
+                        <label className="flex items-center gap-2 px-1 py-1 text-sm text-muted-foreground">
+                            <Checkbox
+                                checked={items.every((it) => selectedItems?.has(it.id))}
+                                onCheckedChange={(checked) => onToggleAll?.(checked === true)}
+                            />
+                            全選（本頁 {items.length} 項）
+                        </label>
+                    )}
+                    {items.map((item) => {
                     const pending = item.quantity - item.shipped_quantity;
                     const itemStatusInfo = statusLabels[item.status];
+                    const isSelected = !!selectedItems?.has(item.id);
                     return (
-                        <Card key={item.id} className="rounded-xl shadow-sm">
+                        <Card key={item.id} className={`rounded-xl shadow-sm ${isSelected ? 'ring-2 ring-primary' : ''}`}>
                             <CardContent className="p-4 space-y-4">
 
                                 {/* 上排：商品 + 右上資訊 */}
                                 <div className="flex justify-between items-start gap-2">
+                                    {selectable && (
+                                        <Checkbox
+                                            checked={isSelected}
+                                            onCheckedChange={(checked) => onToggleSelection?.(item, checked === true)}
+                                            className="mt-1"
+                                        />
+                                    )}
 
                                     {/* 商品資訊 */}
                                     <div className="flex-1">
@@ -80,7 +102,8 @@ export function ItemsCardView({ items, isLoading, statusLabels }: ItemsCardViewP
 
                         </Card>
                     );
-                })
+                })}
+                </>
             )}
         </div>
     );

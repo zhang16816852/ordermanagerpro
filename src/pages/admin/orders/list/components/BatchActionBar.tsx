@@ -204,7 +204,7 @@ export function BatchActionBar({
                   <Truck className="h-4 w-4 mr-2" />
                   加入出貨池
                 </Button>
-<Button
+                <Button
                   variant="secondary"
                   size="sm"
                   onClick={onConvertToPO}
@@ -226,31 +226,6 @@ export function BatchActionBar({
                     解除採購
                   </Button>
                 )}
-              </>
-            )}
-
-            {viewMode === 'items' && !isRep && (
-              <>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={onShipItems}
-                  disabled={isLoading}
-                  className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
-                >
-                  <Truck className="h-4 w-4 mr-2" />
-                  加入出貨池
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={onConvertToPO}
-                  disabled={isLoading}
-                  className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
-                >
-                  <ClipboardList className="h-4 w-4 mr-2" />
-                  轉採購單
-                </Button>
                 <Button
                   variant="destructive"
                   size="sm"
@@ -364,30 +339,8 @@ export function BatchActionBar({
                     <Send className="h-4 w-4 mr-1.5" />
                     轉銷貨單
                   </Button>
-<Button
-                variant="secondary"
-                size="sm"
-                onClick={onConvertToPO}
-                disabled={isLoading}
-                className="snap-start shrink-0"
-              >
-                <ClipboardList className="h-4 w-4 mr-1.5" />
-                轉採購單
-              </Button>
-              {statusTab === 'processing' && linkedToPO && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={onUnlinkOrders}
-                  disabled={isLoading}
-                  className="snap-start shrink-0"
-                >
-                  <Unlink className="h-4 w-4 mr-1.5" />
-                  解除採購
-                </Button>
+                </>
               )}
-            </>
-          )}
               {hasConsignmentSelection && (
                 <Button
                   variant="secondary"
