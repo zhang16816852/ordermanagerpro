@@ -40,44 +40,43 @@ export function useOrderListMutations(params: UseOrderListMutationsParams): UseO
       orderIds, notes, delivery,
     }: { orderIds: string[]; notes: string; delivery?: DirectShipDelivery }) => {
       if (!user) throw new Error('未登入');
-      const results: any[] = [];
       const shellSyncToStore = delivery?.deliveryType === 'logistics' && delivery?.syncToStore && !!delivery?.shippingAddress;
       const syncAddress = delivery?.shippingAddress || null;
       const syncStoreIds = new Set<string>();
+      // 合併所有選取訂單的品項倉庫設定（key = order_item_id，可跨訂單共用）
+      const warehouseMap: Record<string, string> = {};
       for (const orderId of orderIds) {
         const order = orders.find(o => o.id === orderId);
-        const warehouseMap: Record<string, string> = {};
         if (order?.order_items) {
           for (const item of order.order_items) {
             const wh = getItemWarehouse(item.id);
             if (wh) warehouseMap[item.id] = wh;
           }
         }
-        const addr = delivery?.deliveryType === 'logistics' && delivery.shippingAddress
-          ? delivery.shippingAddress
-          : undefined;
-        const { data, error } = await supabase.rpc('direct_ship_order', {
-          p_order_id: orderId,
-          p_created_by: user.id,
-          p_notes: notes || undefined,
-          p_shipped_at: directShipAt ? new Date(directShipAt).toISOString() : undefined,
-          p_warehouse_id: undefined,
-          p_warehouse_map: warehouseMap as any,
-          p_delivery_type: delivery?.deliveryType || undefined,
-          p_delivery_method_id: delivery?.deliveryType === 'logistics' ? delivery.deliveryMethodId || undefined : undefined,
-          p_shipping_address: addr,
-          p_tracking_company: delivery?.deliveryType === 'logistics' ? delivery.trackingCompany || undefined : undefined,
-          p_tracking_number: delivery?.deliveryType === 'logistics' ? delivery.trackingNumber || undefined : undefined,
-          p_tracking_url: delivery?.deliveryType === 'logistics' ? delivery.trackingUrl || undefined : undefined,
-        });
-        if (error) throw error;
-        results.push(data as any);
-        // 勾選「同步至店鋪」：出貨後將配送地址回寫店家（僅地址欄位，不含配送類型/方式）
-        if (shellSyncToStore && addr) {
-          const storeId = order?.store_id;
-          if (storeId) syncStoreIds.add(storeId);
+        if (shellSyncToStore && delivery?.shippingAddress && order?.store_id) {
+          syncStoreIds.add(order.store_id);
         }
       }
+      const addr = delivery?.deliveryType === 'logistics' && delivery.shippingAddress
+        ? delivery.shippingAddress
+        : undefined;
+      // 同店家的多張訂單合併為單一銷貨單（後端依 store_id 分組）
+      const { data, error } = await (supabase.rpc as any)('direct_ship_orders', {
+        p_order_ids: orderIds,
+        p_created_by: user.id,
+        p_notes: notes || undefined,
+        p_shipped_at: directShipAt ? new Date(directShipAt).toISOString() : undefined,
+        p_warehouse_id: undefined,
+        p_warehouse_map: warehouseMap,
+        p_delivery_type: delivery?.deliveryType || undefined,
+        p_delivery_method_id: delivery?.deliveryType === 'logistics' ? delivery.deliveryMethodId || undefined : undefined,
+        p_shipping_address: addr,
+        p_tracking_company: delivery?.deliveryType === 'logistics' ? delivery.trackingCompany || undefined : undefined,
+        p_tracking_number: delivery?.deliveryType === 'logistics' ? delivery.trackingNumber || undefined : undefined,
+        p_tracking_url: delivery?.deliveryType === 'logistics' ? delivery.trackingUrl || undefined : undefined,
+      });
+      if (error) throw error;
+      // 勾選「同步至店鋪」：出貨後將配送地址回寫店家（僅地址欄位，不含配送類型/方式）
       if (syncStoreIds.size > 0 && syncAddress) {
         for (const storeId of syncStoreIds) {
           const { error: sErr } = await (supabase as any)
@@ -95,19 +94,19 @@ export function useOrderListMutations(params: UseOrderListMutationsParams): UseO
         }
         queryClient.invalidateQueries({ queryKey: ['stores'] });
       }
-      return results;
+      return ((data as any)?.sales_notes || []) as any[];
     },
     onSuccess: (results, variables) => {
       const count = variables.orderIds.length;
       const isConsignmentShip = Array.from(variables.orderIds).every(
         (id) => orders.find((o) => o.id === id)?.consignment_mode
       );
+      const firstNote = Array.isArray(results) ? results[0] : undefined;
       toast.success(isConsignmentShip ? `已寄賣出貨 ${count} 個訂單` : `已將 ${count} 個訂單轉為銷貨單`, {
-        action: count === 1 && !isConsignmentShip ? {
+        action: !isConsignmentShip && firstNote && results.length === 1 ? {
           label: '複製連結',
           onClick: () => {
-            const r = results[0] as any;
-            const link = `${window.location.origin}/share/sale/${r.sales_note_code || r.sales_note_id}?token=${r.access_token}`;
+            const link = `${window.location.origin}/share/sale/${firstNote.sales_note_code || firstNote.sales_note_id}?token=${firstNote.access_token}`;
             navigator.clipboard.writeText(link);
             toast.success('連結已複製');
           },

@@ -10,7 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Send } from 'lucide-react';
+import { Send, Store } from 'lucide-react';
 import { WarehouseSelector } from "@/components/WarehouseSelector";
 import { DeliveryType, useDeliveryMethods, deliveryTypeOfMethod } from '@/components/shipping/DeliveryMethodPicker';
 import {
@@ -193,6 +193,23 @@ export function DirectShipDialog({
       ? onItemSourceChange === undefined
       : true;
 
+  // 依店家分組：同一店家的多張訂單合併為一張銷貨單（後端 direct_ship_orders 亦以 store_id 分組）
+  const storeGroups = (() => {
+    const groups: { key: string; storeName?: string; orders: DirectShipOrderContext[] }[] = [];
+    const index = new Map<string, number>();
+    for (const order of orders) {
+      const key = order.storeId || order.id;
+      const found = index.get(key);
+      if (found === undefined) {
+        index.set(key, groups.length);
+        groups.push({ key, storeName: order.storeName, orders: [order] });
+      } else {
+        groups[found].orders.push(order);
+      }
+    }
+    return groups;
+  })();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
@@ -208,62 +225,83 @@ export function DirectShipDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          {orders.map((order) => (
-            <div key={order.id} className="rounded-lg border">
-              <div className="px-3 py-2 bg-muted/30 font-medium text-sm">
-                {order.code || order.id} {order.storeName ? `- ${order.storeName}` : ''}
-                {order.consignmentMode ? '（寄賣）' : ''}
-              </div>
-              {showItemRows(order) ? (
-                <div className="divide-y">
-                  {order.items.map((item) => (
-                    <div key={item.id} className="flex items-center gap-2 px-3 py-2 text-sm">
-                      <div className="flex-1 min-w-0">
-                        <div className="truncate">
-                          {item.name}
-                          {item.lineType === 'exchange' && (
-                            <span className="ml-2 text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded px-1 py-0.5">換貨</span>
-                          )}
-                          {item.lineType === 'return' && (
-                            <span className="ml-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-1 py-0.5">退貨</span>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {item.lineType === 'return'
-                            ? <span className="text-red-600">-{item.quantity}件（退貨入庫）</span>
-                            : `${item.quantity}件`}
-                        </div>
+          {storeGroups.map((group) => {
+            const allGroupConsignment = group.orders.every((o) => o.consignmentMode);
+            return (
+              <div key={group.key} className="rounded-lg border">
+                <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 font-medium text-sm">
+                  <Store className="h-4 w-4 text-muted-foreground" />
+                  <span>{group.storeName || '未知店家'}</span>
+                  {group.orders.length > 1 && (
+                    <span className="text-xs font-normal text-muted-foreground">
+                      （合併 {group.orders.length} 張訂單為一張銷貨單）
+                    </span>
+                  )}
+                  {allGroupConsignment && (
+                    <span className="text-xs font-normal text-amber-700 bg-amber-50 border border-amber-200 rounded px-1 py-0.5">寄賣</span>
+                  )}
+                </div>
+                {group.orders.map((order) => (
+                  <div key={order.id} className={group.orders.length > 1 ? 'border-t' : ''}>
+                    {group.orders.length > 1 && (
+                      <div className="px-3 py-1.5 bg-muted/10 text-xs text-muted-foreground">
+                        {order.code || order.id}
+                        {order.consignmentMode ? '（寄賣）' : ''}
                       </div>
-                      <WarehouseSelector
-                        value={getItemWarehouse(item.id)}
-                        onChange={(w) => onItemWarehouseChange(item.id, w)}
-                        productId={item.productId}
-                        variantId={item.variantId}
-                      />
-                      {onItemSourceChange && (
-                        <Select
-                          value={itemSources?.[item.id] || 'self'}
-                          onValueChange={(v) => onItemSourceChange(item.id, v)}
-                        >
-                          <SelectTrigger className="h-8 w-40 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="self">自有庫存</SelectItem>
-                            <SelectItem value="supplier_consignment">供應商寄賣</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="px-3 py-3 text-sm text-muted-foreground">
-                  此訂單為寄賣模式，轉出時以店家寄賣方式記錄，不扣自有庫存。
-                </div>
-              )}
-            </div>
-          ))}
+                    )}
+                    {showItemRows(order) ? (
+                      <div className="divide-y">
+                        {order.items.map((item) => (
+                          <div key={item.id} className="flex items-center gap-2 px-3 py-2 text-sm">
+                            <div className="flex-1 min-w-0">
+                              <div className="truncate">
+                                {item.name}
+                                {item.lineType === 'exchange' && (
+                                  <span className="ml-2 text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded px-1 py-0.5">換貨</span>
+                                )}
+                                {item.lineType === 'return' && (
+                                  <span className="ml-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-1 py-0.5">退貨</span>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {item.lineType === 'return'
+                                  ? <span className="text-red-600">-{item.quantity}件（退貨入庫）</span>
+                                  : `${item.quantity}件`}
+                              </div>
+                            </div>
+                            <WarehouseSelector
+                              value={getItemWarehouse(item.id)}
+                              onChange={(w) => onItemWarehouseChange(item.id, w)}
+                              productId={item.productId}
+                              variantId={item.variantId}
+                            />
+                            {onItemSourceChange && (
+                              <Select
+                                value={itemSources?.[item.id] || 'self'}
+                                onValueChange={(v) => onItemSourceChange(item.id, v)}
+                              >
+                                <SelectTrigger className="h-8 w-40 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="self">自有庫存</SelectItem>
+                                  <SelectItem value="supplier_consignment">供應商寄賣</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-3 py-3 text-sm text-muted-foreground">
+                        此訂單為寄賣模式，轉出時以店家寄賣方式記錄，不扣自有庫存。
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
 
           <div className="space-y-2">
             <Label>配送類型</Label>
