@@ -2,6 +2,24 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（訂單列表浮動列修復＋同店多單合併出貨，2026-10-14）
+
+- **兩階段 commit**：Stage 1 `b203b5c`（純前端，5 檔 99+/65−）；Stage 2 `1b986a6`（migration ＋ 前端，3 檔 410+/85−）。
+- **Stage 1｜訂單列表浮動動作列修復（純前端）**：
+  - **遮擋內容**：`OrderListPage.tsx` 的內容容器依「是否有選取」條件式加 `pb-32 md:pb-24`（僅選取時讓出浮動列高度，未選取不佔位）；`cn()` 已 import（`@/lib/utils`）。
+  - **去除重複按鈕**：`BatchActionBar.tsx` 桌面 `items` 視圖原本重複的動作區塊合併為單一區塊（桌面 pill 與行動 footer 各一份，不再重複）。
+  - **行動端可選取**：補上 `OrdersCardView.tsx`／`ItemsCardView.tsx`／`AggregateCardsView.tsx` 的選取能力（每卡片 checkbox＋頁首「全選」列，全選僅作用於目前篩選結果）。⚠️ 兩支 card 元件為**共用**（`store/StoreOrderList.tsx` 亦使用），新增 props **一律 optional**，門市端不受影響。
+- **Stage 2｜同店多單批次出貨合併為單一銷貨單（migration `20261014000001_direct_ship_orders.sql`，已套用遠端）**：
+  - **新 RPC `public.direct_ship_orders(p_order_ids uuid[], p_created_by uuid, p_notes text, p_shipped_at timestamptz, p_warehouse_id uuid, p_warehouse_map jsonb, p_source_map jsonb, p_delivery_method_id uuid, p_shipping_fee numeric, p_shipping_address jsonb, p_delivery_type text, p_shipping_cost numeric, p_tracking_company text, p_tracking_number text, p_tracking_url text) RETURNS jsonb`**（15 參數、`SECURITY DEFINER`、`SET search_path TO 'public','extensions'`）。**刻意用新名（非 overload `direct_ship_order`）**——保留既有單張 `direct_ship_order`（admin 表單用）不動，且避免 PostgREST PGRST203。
+  - **演算法**：訂單編號 `unnest(...) WITH ORDINALITY + DISTINCT ON` **去重保留首次出現順序** → `FOREACH` 逐單**驗證存在且狀態可出貨** → `SELECT DISTINCT o.store_id ... ORDER BY o.store_id` **依店家分組**：
+    - **一般訂單**：同店 insert **單一張 `sales_notes`**（備註 `string_agg(DISTINCT o.notes,' | ')`）、迴圈品項 insert `sales_note_items`＋扣庫存（退貨列→負數量＋`_receive_return_to_stock` 回補自有倉；`inventory_source_type='self'`→`_ship_stock_movements`，否則 `allocate_inventory`；退貨列走寄賣路徑則 RAISE）→ 回填 `order_items` → `DELETE FROM shipping_pool` → 配送快照→`upsert_shipment`＋UPDATE `sales_notes` → 逐店 `UPDATE orders SET status='shipped'`。
+    - **寄賣訂單**：同店整併為**單一次 `create_consignment_shipment_layer` 呼叫**（items 來自該店全部寄賣訂單）。⚠️ **已知取捨**：整併跨多個 `source_order_id`，layer 最終 delivery/shipment UPDATE 只落到**最後一筆** `v_co_id`，先前寄賣單的逐單配送快照會遺失（沿用已核准設計）。
+  - 回傳 `{ order_ids, sales_notes: [{ sales_note_id, sales_note_code, store_id, access_token }] }`。
+  - **前端**：`useOrderListMutations.ts` `directShipMutation` 由「逐單呼叫 `direct_ship_order`」改為**單次呼叫 `(supabase.rpc as any)('direct_ship_orders', {...})`**；`warehouseMap` 移出迴圈、**跨單合併**（key = `order_item_id`）；`onSuccess` 用 `results[0]`、複製連結僅 `!isConsignmentShip && firstNote && results.length === 1` 時提供；invalidate `['stores']/['admin-orders']/['admin-sales-notes']`。`DirectShipDialog.tsx`（共用）預覽改以 `storeGroups` **依店家分組**呈現（每店一框，>1 張顯示「合併 N 張訂單為一張銷貨單」）。
+  - **⚠️ 型別慣例**：新 RPC 未進 `types.ts`，一律 `(supabase.rpc as any)`（AGENTS.md 禁止手改 typegen）。
+- **遠端狀態**：`direct_ship_orders` 函式本體已以 out-of-band `CREATE OR REPLACE` 套用（ledger 記為 `debug_direct_ship_orders_create_only`，**append-only 故不刪**）；**實測遠端 `prosrc` md5 與檔案的函式本體（去掉 8 行純中文註解後）完全一致**——即程式碼 byte-identical、僅少 8 行註解，行為無差異。**REVOKE/GRANT 已另行套用並鎖定**：`anon=false`、`authenticated=true`、`public=false`。（首版 grant 失敗根因＝前綴 REVOKE/GRANT 的第一參數誤寫 scalar `uuid`，應為 `uuid[]`，檔案 lines 287/288 已修正。）
+- **驗證**：`npm run typecheck` 0 errors；`npm run lint` 0 errors（69 warnings 皆既有）；本批 2 前端檔 targeted `eslint` 0 problems。⚠️ **未做瀏覽器實測**（`/admin/orders` 需登入）。
+
 ## 近期變更（SalesNotes 頁面拆分為頂層薄殼＋子模組，2026-10-14）
 
 - **目的**：`src/pages/admin/SalesNotes.tsx`（1032 行）拆分為**頂層薄殼**＋`src/pages/admin/salesNotes/`（10 檔）子模組，沿用 `shippingPool/` 樣板（薄殼置 admin 上層、camelCase 檔名）。**路由 `src/routes/admin.tsx` 不需更動**（`import AdminSalesNotes from "@/pages/admin/SalesNotes"` 維持）。**零後端、零 migration、零 RPC、零 types.ts 重生、零 UI 行為變更**（純結構重構）。
