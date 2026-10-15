@@ -74,6 +74,8 @@ export function useOrderListMutations(params: UseOrderListMutationsParams): UseO
         p_tracking_company: delivery?.deliveryType === 'logistics' ? delivery.trackingCompany || undefined : undefined,
         p_tracking_number: delivery?.deliveryType === 'logistics' ? delivery.trackingNumber || undefined : undefined,
         p_tracking_url: delivery?.deliveryType === 'logistics' ? delivery.trackingUrl || undefined : undefined,
+        p_shipping_fee: delivery?.deliveryType === 'logistics' ? delivery.shippingFee ?? undefined : undefined,
+        p_shipping_cost: delivery?.deliveryType === 'logistics' ? delivery.shippingCost ?? undefined : undefined,
       });
       if (error) throw error;
       // 勾選「同步至店鋪」：出貨後將配送地址回寫店家（僅地址欄位，不含配送類型/方式）

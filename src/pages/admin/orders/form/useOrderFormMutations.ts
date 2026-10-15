@@ -25,6 +25,8 @@ export interface DirectShipDelivery {
   trackingUrl: string | null;
   shippingAddress?: ShippingAddressValue | null;
   syncToStore?: boolean;
+  shippingFee?: number | null;
+  shippingCost?: number | null;
 }
 
 export interface OrderFormMutationParams {
@@ -523,10 +525,10 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         p_warehouse_map: Object.keys(warehouseMap).length > 0 ? warehouseMap : undefined,
         p_source_map: Object.keys(sourceMap).length > 0 ? sourceMap : undefined,
         p_delivery_method_id: loader?.deliveryMethodId || undefined,
-        p_shipping_fee: undefined,
+        p_shipping_fee: loader?.deliveryType === 'logistics' ? loader.shippingFee ?? undefined : undefined,
         p_shipping_address: addr,
         p_delivery_type: loader?.deliveryType || undefined,
-        p_shipping_cost: undefined,
+        p_shipping_cost: loader?.deliveryType === 'logistics' ? loader.shippingCost ?? undefined : undefined,
         p_tracking_company: loader?.trackingCompany || undefined,
         p_tracking_number: loader?.trackingNumber || undefined,
         p_tracking_url: loader?.trackingUrl || undefined,

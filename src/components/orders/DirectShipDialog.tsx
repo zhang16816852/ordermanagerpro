@@ -28,6 +28,10 @@ export interface DirectShipDelivery {
   trackingUrl: string | null;
   shippingAddress?: ShippingAddressValue | null;
   syncToStore?: boolean;
+  /** 運費覆寫（顧客實收）；未帶時後端沿用物流方式預設 */
+  shippingFee?: number | null;
+  /** 物流成本覆寫；未帶時後端沿用物流方式預設 */
+  shippingCost?: number | null;
 }
 
 export interface DirectShipItemLine {
@@ -125,12 +129,18 @@ export function DirectShipDialog({
         ? methodsRef.current.find((m) => m.id === latest.defaultDeliveryMethodId)
         : undefined;
     const inherited = (latest.deliveryType as DeliveryType) || deliveryTypeOfMethod(defaultMethod) || 'delivery';
+    const selectedMethodId = latest.deliveryMethodId || defaultMethod?.id || null;
+    const selectedMethod = selectedMethodId
+      ? methodsRef.current.find((m) => m.id === selectedMethodId)
+      : undefined;
     setDelivery({
       deliveryType: inherited,
-      deliveryMethodId: latest.deliveryMethodId || defaultMethod?.id || null,
+      deliveryMethodId: selectedMethodId,
       trackingCompany: latest.deliveryMethodTitle || '',
       trackingNumber: '',
       trackingUrl: '',
+      shippingFee: selectedMethod?.price ?? null,
+      shippingCost: selectedMethod?.cost ?? null,
     });
     // 收件地址繼承：訂單快照 → 店家最新地址 → 空
     const addr = latest.shippingAddress || latest.storeAddress;
@@ -185,6 +195,8 @@ export function DirectShipDialog({
       trackingUrl: isLogistics(delivery.deliveryType) ? (delivery.trackingUrl || null) : null,
       shippingAddress: isLogistics(delivery.deliveryType) && !isEmptyShippingAddress(shippingAddress) ? { ...shippingAddress } : null,
       syncToStore: isLogistics(delivery.deliveryType) && syncToStore,
+      shippingFee: isLogistics(delivery.deliveryType) ? (delivery.shippingFee ?? null) : null,
+      shippingCost: isLogistics(delivery.deliveryType) ? (delivery.shippingCost ?? null) : null,
     }, orderIds);
   };
 
@@ -308,6 +320,7 @@ export function DirectShipDialog({
             <ShippingDeliveryFields
               value={delivery}
               onChange={setDelivery}
+              showFee
             />
           </div>
 

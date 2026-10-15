@@ -2,6 +2,14 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（轉銷貨單對話框可直接編輯運費／物流成本，2026-10-15）
+
+- **目的**：`DirectShipDialog`（「轉銷貨單／直接出貨」，訂單列表批次＋admin 訂單表單共用）原本無法修改物流費用，使用者必須先送出、再進銷售單才能改運費。本次讓對話框在 `logistics` 時可直接輸入「運費（顧客實收）」與「物流成本」。**純前端、零 migration、零 RPC 變更**（兩支出貨 RPC 早已支援 `p_shipping_fee`/`p_shipping_cost`）。
+- **共用元件 `src/components/shipping/ShippingDeliveryFields.tsx`**：`ShippingDeliveryValue` 新增可選 `shippingFee?: number | null`／`shippingCost?: number | null`；`ShippingDeliveryFieldsProps` 新增 **`showFee?: boolean`（預設 false）**；新增 `parseNum` helper（空字串→`null`、否則 `Number(...)`，NaN→`null`）；`setMethod(mid)` 於 `showFee` 時以所選方法 `price`/`cost` 預填（`m?.price ?? null`）；`showFee` 時渲染 fee/cost 雙輸入區塊（`grid grid-cols-2 gap-3`、`type="number" step="0.01" min="0"`）。⚠️ `ShipDialog`（`src/pages/admin/consignment/components/ShipDialog.tsx`）不傳 `showFee`，行為不變。
+- **共用 `src/components/orders/DirectShipDialog.tsx`**：`DirectShipDelivery` 加 fee/cost（第 32/34 行）；open effect 預填 `selectedMethod?.price`／`?.cost`（第 142–143 行）；`handleConfirm` 僅 `logistics` 時帶出 fee/cost（第 198–199 行）；傳 `showFee` 給欄位（第 323 行）。
+- **兩條 mutation 匯流**：`src/pages/admin/orders/list/useOrderListMutations.ts`（RPC `direct_ship_orders`）第 77/78 行、`src/pages/admin/orders/form/useOrderFormMutations.ts`（RPC `direct_ship_order`，第 519 行起）第 528/531 行，皆於 `deliveryType === 'logistics'` 時傳 `p_shipping_fee`/`p_shipping_cost`（`?? null`）。⚠️ `useOrderFormMutations.ts` 第 355 行 `create_order_with_sales_note` 路徑的 `p_shipping_fee: undefined`（第 364 行）**不在本次範圍**。⚠️ 清單流程依店家分組，而 fee/cost 為單一純量、後端對每組套用同值，多店家時運費覆寫為**整批同值**（已接受）。
+- **驗證**：`npm run typecheck` 0 errors（app＋node）、`npm run lint` 0 errors（69 warnings 皆既有）、`npm run build` 通過（3979 modules，僅既有 chunk-size warning）。⚠️ 未做瀏覽器實測（`/admin/orders` 需登入）。
+
 ## 近期變更（訂單列表浮動列修復＋同店多單合併出貨，2026-10-14）
 
 - **兩階段 commit**：Stage 1 `b203b5c`（純前端，5 檔 99+/65−）；Stage 2 `1b986a6`（migration ＋ 前端，3 檔 410+/85−）。
