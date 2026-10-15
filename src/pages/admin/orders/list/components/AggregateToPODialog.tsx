@@ -14,6 +14,7 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
+import { toCreatePayloadItems, mergeItemsForExistingPO } from '@/utils/poSourceBinding';
 
 const EMPTY_ARRAY: any[] = [];
 
@@ -287,65 +288,45 @@ export function AggregateToPODialog({
       if (targetMode === 'existing' && !existingPOId) throw new Error('請選擇目標採購單');
       if (editableItems.length === 0) throw new Error('請至少新增一項產品');
 
-      let poId = existingPOId;
-      let totalAmount = 0;
-
       if (targetMode === 'new') {
-        const { data: newPO, error: poError } = await (supabase as any)
-          .from('purchase_orders')
-          .insert({
-            supplier_id: supplierId,
-            status: 'draft',
-            order_date: new Date().toISOString().split('T')[0],
-            total_amount: 0,
-            supplier_order_number: null,
-            created_by: user?.id,
-          })
-          .select()
-          .single();
-        if (poError) throw poError;
-        poId = newPO.id;
-      }
-
-      for (const item of editableItems) {
-        const itemTotal = item.unitCost * item.quantity;
-        totalAmount += itemTotal;
-
-        const { error: itemError } = await (supabase as any)
+        const payloadItems = toCreatePayloadItems(editableItems);
+        const { data, error } = await supabase.rpc('create_purchase_order_with_items', {
+          p_supplier_id: supplierId,
+          p_order_date: new Date().toISOString().split('T')[0],
+          p_items: payloadItems as any,
+          p_status: 'draft',
+          p_purpose: 'general',
+          p_created_by: user?.id,
+        } as any);
+        if (error) throw error;
+        const res = data as any;
+        if (res && res.ok === false) throw new Error(res.reason || '建立採購單失敗');
+        return res?.purchase_order_id;
+      } else {
+        // existing mode: fetch existing items, merge, and update via RPC
+        const { data: existingItems, error: fetchErr } = await (supabase as any)
           .from('purchase_order_items')
-          .insert({
-            purchase_order_id: poId,
-            product_id: item.productId,
-            variant_id: item.variantId,
-            quantity: item.quantity,
-            received_quantity: 0,
-            unit_cost: item.unitCost,
-            source_order_ids: item.sourceOrderIds.length > 0 ? item.sourceOrderIds : null,
-            source_quantities: item.sourceOrderIds.length > 0 && Object.keys(item.sourceQuantities).length > 0 ? item.sourceQuantities : null,
-          });
-        if (itemError) throw itemError;
+          .select('id, product_id, variant_id, quantity, unit_cost, source_order_ids, source_quantities')
+          .eq('purchase_order_id', existingPOId);
+        if (fetchErr) throw fetchErr;
+
+        const mergedItems = mergeItemsForExistingPO(existingItems || [], editableItems);
+
+        const { data, error } = await supabase.rpc('update_purchase_order_with_items', {
+          p_purchase_order_id: existingPOId,
+          p_items: mergedItems as any,
+          p_deleted_item_ids: [],
+        } as any);
+        if (error) throw error;
+        const res = data as any;
+        if (res && res.ok === false) throw new Error(res.reason || '更新採購單失敗');
+        return existingPOId;
       }
-
-      if (targetMode === 'existing') {
-        const { data: existingPO } = await (supabase as any)
-          .from('purchase_orders')
-          .select('total_amount')
-          .eq('id', poId)
-          .single();
-        totalAmount += existingPO?.total_amount || 0;
-      }
-
-      await (supabase as any)
-        .from('purchase_orders')
-        .update({ total_amount: totalAmount })
-        .eq('id', poId);
-
-      return poId;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
       queryClient.invalidateQueries({ queryKey: ['purchase-order-links'] });
-      toast.success(`已建立採購單，含 ${editableItems.length} 項產品`);
+      toast.success(`已處理採購單，含 ${editableItems.length} 項產品`);
       onOpenChange(false);
       onCreated();
     },

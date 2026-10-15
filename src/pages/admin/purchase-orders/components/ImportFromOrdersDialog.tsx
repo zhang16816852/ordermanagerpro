@@ -120,7 +120,9 @@ export function ImportFromOrdersDialog({
         product_id: item.product_id,
         variant_id: item.variant_id,
         quantity: item.quantity,
-        unit_cost: item.estimated_cost
+        unit_cost: item.estimated_cost,
+        source_order_ids: [item.order_id],
+        source_quantities: { [item.order_id]: item.quantity },
       }));
     onSubmit(itemsToImport);
   };

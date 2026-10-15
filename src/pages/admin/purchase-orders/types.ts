@@ -170,6 +170,8 @@ export interface PoCreateItemPayload {
   variant_id: string | null;
   quantity: number;
   unit_cost: number;
+  source_order_ids?: string[] | null;
+  source_quantities?: Record<string, number> | null;
 }
 
 /** update_purchase_order_with_items 的 p_items 元素（id 為 null ＝ 新品項） */

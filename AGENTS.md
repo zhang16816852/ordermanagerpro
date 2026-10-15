@@ -2,6 +2,22 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（採購單來源綁定補齊與合併寫入重構，2026-10-16）
+
+- **目的**：補齊「匯入銷售需求」「轉採購單(new)」「轉採購單(existing)」三條採購建立／追加路徑的 `source_order_ids`／`source_quantities` 來源綁定（先前透過 `AggregateToPODialog` raw insert 已有，但 `ImportFromOrdersDialog` 匯入銷售需求與現有 PO 追加漏失，且原 `AggregateToPODialog` 使用非 RPC 的 raw insert）。本次透過 migration 強化兩支採購 RPC（`_po_create_with_items`、`update_purchase_order_with_items`）支援 source 寫入，並重構 `AggregateToPODialog` 與 `ImportFromOrdersDialog` 統一走兩支 RPC 寫入。
+- **後端 Migration（`20261016000001_po_import_source_binding.sql`，已套用遠端）**：
+  - 重發 `_po_create_with_items`：INSERT 品項時自 `p_items` line jsonb 寫入 `source_order_ids`（uuid[]）與 `source_quantities`（jsonb）。
+  - 重發 `update_purchase_order_with_items`：新品项 insert 寫 source；既有品 UPDATE 採**條件式覆寫**（僅當 `v_line ? 'source_order_ids'`／`'source_quantities'` 存在時才更新，缺席＝保留原既有綁定，避免手動修改被清空；傳 JSON null 則設為 NULL）。
+- **共用輔助模組 `src/utils/poSourceBinding.ts`（新）**：
+  - `resolveItemUnitCost`：供應商對照價（`vendor_unit_cost`）優先，無則回退預設單價。
+  - `mergeItemsForExistingPO`：選取品項與現有採購單品項依 `product_id + variant_id` 合併（數量相加、source_order_ids 聯集、source_quantities 依訂單求和、單價保留既有）。
+  - `toCreatePayloadItems`：轉為建立採購單 payload。
+- **前端重構**：
+  - `AggregateToPODialog.tsx`：移除舊有逐筆 raw insert 與總額重算，改為呼叫 `create_purchase_order_with_items`（新 PO）或先載入既有品項合併後呼叫 `update_purchase_order_with_items`（現有 PO）。
+  - `ImportFromOrdersDialog.tsx`：`handleConfirm` 映射時補上 `source_order_ids: [item.order_id]` 與 `source_quantities: { [item.order_id]: item.quantity }`。
+  - `types.ts`：`PoCreateItemPayload` 補上可選 `source_order_ids` 與 `source_quantities`。
+- **驗證**：遠端 harness 6/6 全 PASSED（建立含 source、建立無 source、更新保留、更新清空、更新覆寫、新增品項含 source）；`npm run typecheck` 0 errors、`npm run lint` 0 errors（69 warnings 皆既有）、`npm run build` 通過。
+
 ## 近期變更（轉銷貨單對話框可直接編輯運費／物流成本，2026-10-15）
 
 - **目的**：`DirectShipDialog`（「轉銷貨單／直接出貨」，訂單列表批次＋admin 訂單表單共用）原本無法修改物流費用，使用者必須先送出、再進銷售單才能改運費。本次讓對話框在 `logistics` 時可直接輸入「運費（顧客實收）」與「物流成本」。**純前端、零 migration、零 RPC 變更**（兩支出貨 RPC 早已支援 `p_shipping_fee`/`p_shipping_cost`）。
