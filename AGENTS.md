@@ -2,6 +2,43 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（送修列（exchange＋is_repair）全路徑跳過庫存，2026-10-17）
+
+- **目的**：送修單據（`line_type='exchange'`＋`is_repair=true`，2026-10-16 定案）出貨時**不得產生任何 inventory_movements**（+數量、單價 0、不動庫存）。原本只有「退貨列」會跳過庫存，送修列會走一般銷售路徑誤扣庫存。
+- **方案（Plan H：動態 SQL 錨點補丁）**：不整支重發 RPC（`create_consignment_shipment_layer` 等函式體積龐大、重發易引入回歸），改為 **migration `20261017000000_fix_repair_skip_inventory_all_paths.sql`（已套用遠端，ledger `20261017181949`）**——DO block 以 `pg_get_functiondef` 取得現有 prosrc，依**唯一錨點字串** `replace()` 插入守門，再 `CREATE OR REPLACE` 寫回。冪等：每個補丁帶 marker（`[repair-skip-inventory:...]`），`position(marker)=0` 才套用；錨點不唯一或找不到即 `RAISE EXCEPTION 'anchor not found'`（fail-loud，絕不盲改）。
+- **四支函式與守門（全部只加 early-return，零 caller 改動）**：
+  - `public._ship_stock_movements(...)`：函式體 `BEGIN` 後插入——該 `p_order_item_id` 為送修列（`exchange`＋`is_repair`）時 `RETURN`（marker `[repair-skip-inventory:ship]`）。
+  - `public.allocate_inventory(...)`：同上，送修列 `RETURN '[]'::jsonb`（marker `[repair-skip-inventory:alloc]`）。
+  - `public.upsert_sales_note_deletion_movement(...)`：同上，送修列 `RETURN`（marker `[repair-skip-inventory:deletion]`）——刪單／修正移除回沖亦跳過。
+  - `public.create_consignment_shipment_layer(...)`：在 `SELECT v_oi`（`order_item 不存在` 檢查）之後、`IF v_oi.line_type = 'return'` 之前，送修列 **`RAISE EXCEPTION '送修列不支援寄賣路徑：%'`**（marker `[repair-skip-inventory:consignment]`；用迴圈變數 `v_order_item_id`，非 helper 的 `p_order_item_id`）。⚠️ guard **不可放 return-IF 內部**（送修列 `line_type='exchange'` 永遠進不去＝不可達）。
+  - ⚠️ **三支 helper 的 guard 一律插在 `BEGIN` 之後**（replacement＝`'BEGIN' || chr(10) || guard || 原第一句`），插中間會撞 `42601 syntax error at or near "1"`（v1 教訓）。
+- **出貨路徑釐清（事實修正）**：`direct_ship_order`／`create_order_with_sales_note`／`ship_from_pool` 等只過濾 `oi.line_type <> 'return'`，故送修列會照常出貨（+數量、單價 0）；扣庫存分支（`inventory_source_type='self'` → `_ship_stock_movements`，否則 `allocate_inventory`）現由上述 guard 攔截 → **不動庫存、不寫 movements**。`delete_sales_note`／`correct_sales_note` 的回沖分支呼叫 `upsert_sales_note_deletion_movement`，同被 guard 攔截。
+- **煙霧測試（遠端，自我清理 harness，6/6 PASS、殘留 0）**：T1 `_ship_stock_movements` 送修列 → 0 movements；T2 `allocate_inventory` 送修列 → `'[]'`、0 movements；T3 `upsert_sales_note_deletion_movement` 送修列 → 0 movements；T4 `create_consignment_shipment_layer` 送修列 → RAISE 且**未建立寄賣單**；T5 控制組（sale 列呼叫 `_ship_stock_movements`）→ 正常產生 1 筆 movement（證明守門只擋送修列）；T9 回滾後 products/variants/orders/movements/inventory 全 0。
+- **harness 教訓**：`product_batches` **只有 `variant_id`、沒有 `product_id`**（按 product_id 清理會 42703）；`consignment_orders` 備註欄是 **`note`**（非 `notes`）；多語句字串為單一 implicit transaction——中途錯誤整串回滾無殘留，修正後重跑即可。
+- ⚠️ 前端零改動（送修列徽章／彙總淨扣／價格鎖定已於 2026-10-16 完成）；`types.ts` 無需重產（簽名全不變）。
+
+## 近期變更（送修單據儲存形式改為 exchange+is_repair ＋ 送修倉 ＋ 退貨回沖分流，2026-10-16）
+
+- **目的**：三種打單性質語意定案——**換貨 `exchange`＝+數量、單價 0、扣自有倉**；**送修 `repair`＝+數量、單價 0、不動庫存**；**退貨 `return`＝−數量**（數量彙總淨扣、金額彙總淨扣、退貨分流回沖）。送修改以 `line_type='exchange'` ＋ `is_repair=true` 儲存（原為 `return`＋`is_repair`），並新增**送修倉**與歷史資料補正。
+- **後端 Migrations（5 支，全部已套用遠端）**：
+  - `20261016000001_po_import_source_binding.sql`（前批，採購 source 綁定）。
+  - `20261016000002_repair_warehouse.sql`：新增倉庫 `code='repair'`／`name='送修倉'`。
+  - `20261016000003_process_return_inventory.sql`：重寫 `process_order_return_lines` 的回沖分流——`p_action='stock'` 良品回自有倉（`code='own'`）＋退款分錄；`'exchange'` 瑕疵品進**瑕疵倉**（`code='defective'`）、換貨補寄品自**自有倉**出貨；`'repaired'` 瑕疵品進**送修倉**（`code='repair'`），日後以 `adjust_inventory` 移回。
+  - `20261016000004_historical_data_fix.sql`（ledger 名 `historical_data_fix`）：**放寬 `chk_order_item_is_repair_scope`** 至 `CHECK ((NOT is_repair) OR (line_type IN ('return','exchange')))`；歷史 `return`＋`is_repair` 列**批量轉為 `exchange`＋`is_repair`** 並補齊對應 inventory_movements；套用後遠端實查 `exchange_repair=0`、`legacy_return_repair=0`、`return_null_status=0`（歷史資料已全數轉換）。
+  - `20261016000005_fix_update_order_repair_guard.sql`（ledger 版本 `20261016000105`，⚠️ ledger version ≠ 檔名前綴，查套用狀態請比對遠端約束/prosrc 而非 ledger）：重發 `update_order_with_items`，守門改為——`line_type NOT IN ('return','exchange')` 時不可帶 `return_status`/`is_repair`；**`exchange`＋`is_repair`（送修）必須 `return_status IS NULL`**；`exchange` 非送修不可帶 `return_status`。錯誤訊息：`僅退貨列可設定 return_status；送修列（exchange + is_repair）不可設定 return_status`。
+- **不變式（遠端實查確認）**：`chk_order_item_return_status_scope`＝`return_status` 僅 `line_type='return'` 可非 NULL（pending/stock/exchange/repaired）；`chk_order_item_line_type` 仍允許 `sale/exchange/return`。`prosrc` 同時含舊「打單性質」訊息與新訊息＝**預期**（前者屬已收款守門分支，非回歸）。
+- **出貨路徑釐清（重要事實修正）**：`direct_ship_order` 等出貨 RPC 只過濾 `oi.line_type <> 'return'`，故 **`exchange`／送修列會照常出貨**（先前「送修列不出貨」的判斷有誤）。
+- **前端（全數完成，`npm run typecheck` 0 errors／`lint` 0 errors）**：
+  - `orderItemsTypes.ts` `isRepairLine`、`LineTypeBadge.tsx`：送修＝`exchange`＋`is_repair` 徽章（顯示「送修」而非「換貨」）。
+  - `useAdminOrderFormController.ts` `handleUpdateLineType`：切換打單性質時送修組合寫 `exchange`＋`is_repair`、`return_status: null`。
+  - `useOrderFormMutations.ts` `lineTypeFields()`（L69–78）：已核對與新守門相容——非退貨列固定 `return_status: null`、`is_repair` 依選取。
+  - 彙總淨扣：`orderListUtils.ts`／`useOrderListDerived.ts`／`OrderDetailDialog.getTotalAmount`（L126–129）——退貨列數量與金額皆淨扣；送修列 +1 數量、金額 0。
+  - 價格輸入隱藏：`OrderItemsDesktopTable`／`OrderItemsMobileList` 等於送修／換貨（單價 0）時鎖定價格欄。
+  - 排除邏輯：`ImportFromOrdersDialog`／`useOrderListDerived`（PO 轉換、出貨池）排除 `return` 與「`exchange`＋`is_repair`」，納入 `sale` 與一般 `exchange`；`OrderListDialogs`／`DirectShipDialog`／`SalesNoteDetailDialog`／`SharedOrder` 同步。
+  - ⚠️ `useOrderListMutations.ts` 的 directShip／倉庫帶入路徑仍待複核（見下方「Active」）。
+- **驗證（遠端 `BEGIN…ROLLBACK` harness，5/5 PASS）**：以 pending 訂單 `3d7887a1` 實測——T1 送修 `exchange+is_repair+return_status NULL` → `{ok:true}`、DB 落地正確；T2 送修帶 `return_status='pending'` → `ok:false` 守門訊息；T3 `sale+is_repair` → `ok:false`；T4 一般 `exchange` 帶 `return_status='stock'` → `ok:false`；T5 還原 `sale/false/NULL` → `{ok:true}`。回滾後訂單與品項完全還原（備註 null、2@400／1@575）。harness 教訓：SQL 字串內 `'[]'::uuid[]` 會觸發 `22P02 malformed array literal`，改傳 `NULL::uuid[]`；單一字串含 `BEGIN…ROLLBACK`、結果逐筆 `INSERT INTO TEMP TABLE` 再以最後一個 `SELECT` 匯出（多語句僅回傳最後 SELECT）。
+- **待辦**：① `useOrderListMutations.ts`（directShip／倉庫帶入）複核；② 可選：真實表單 UI 實測送修儲存。
+
 ## 近期變更（採購單來源綁定補齊與合併寫入重構，2026-10-16）
 
 - **目的**：補齊「匯入銷售需求」「轉採購單(new)」「轉採購單(existing)」三條採購建立／追加路徑的 `source_order_ids`／`source_quantities` 來源綁定（先前透過 `AggregateToPODialog` raw insert 已有，但 `ImportFromOrdersDialog` 匯入銷售需求與現有 PO 追加漏失，且原 `AggregateToPODialog` 使用非 RPC 的 raw insert）。本次透過 migration 強化兩支採購 RPC（`_po_create_with_items`、`update_purchase_order_with_items`）支援 source 寫入，並重構 `AggregateToPODialog` 與 `ImportFromOrdersDialog` 統一走兩支 RPC 寫入。
