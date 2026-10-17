@@ -9,8 +9,8 @@ export const LINE_TYPE_OPTION_LABELS: Record<LineTypeOption, string> = {
 };
 
 export function lineTypeOf(row: Pick<OrderItemRow, 'lineType' | 'isRepair'>): LineTypeOption {
-    if (row.lineType === 'return') return row.isRepair ? 'repair' : 'return';
-    if (row.lineType === 'exchange') return 'exchange';
+    if (row.lineType === 'exchange') return row.isRepair ? 'repair' : 'exchange';
+    if (row.lineType === 'return') return 'return';
     return 'sale';
 }
 

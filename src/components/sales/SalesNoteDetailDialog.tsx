@@ -40,6 +40,7 @@ export interface SalesNoteItem {
     returnedQuantity?: number;
     lineType?: "sale" | "exchange" | "return" | null;
     lineNote?: string | null;
+    isRepair?: boolean;
 }
 
 export interface SalesNoteDetail {
@@ -442,7 +443,10 @@ export function SalesNoteDetailDialog({
                                             <TableCell>
                                                 <div className="font-medium product-name-cell">
                                                     {item.variantName ? item.variantName : item.productName}
-                                                    {item.lineType === "exchange" && (
+                                                    {item.lineType === "exchange" && (item as any).isRepair && (
+                                                        <Badge variant="outline" className="ml-2 bg-violet-50 text-violet-700 border-violet-200">送修</Badge>
+                                                    )}
+                                                    {item.lineType === "exchange" && !(item as any).isRepair && (
                                                         <Badge variant="outline" className="ml-2 bg-sky-50 text-sky-700 border-sky-200">換貨</Badge>
                                                     )}
                                                     {item.lineType === "return" && (

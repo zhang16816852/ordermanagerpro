@@ -31,6 +31,9 @@ export const DEFAULT_LINE_TYPE: 'sale' | 'exchange' | 'return' = 'sale';
 export const isReturnLine = (item: Pick<OrderItemRow, 'lineType'>): boolean =>
   (item.lineType ?? DEFAULT_LINE_TYPE) === 'return';
 
+export const isRepairLine = (item: Pick<OrderItemRow, 'lineType' | 'isRepair'>): boolean =>
+  (item.lineType ?? DEFAULT_LINE_TYPE) === 'exchange' && !!item.isRepair;
+
 export const displayQty = (item: Pick<OrderItemRow, 'lineType' | 'quantity'>): number =>
   isReturnLine(item) ? -(Number(item.quantity) || 0) : Number(item.quantity) || 0;
 

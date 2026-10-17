@@ -41,6 +41,7 @@ export interface DirectShipItemLine {
   name: string;
   quantity: number;
   lineType?: 'sale' | 'exchange' | 'return';
+  isRepair?: boolean;
 }
 
 export interface DirectShipOrderContext {
@@ -268,7 +269,10 @@ export function DirectShipDialog({
                             <div className="flex-1 min-w-0">
                               <div className="truncate">
                                 {item.name}
-                                {item.lineType === 'exchange' && (
+                                {item.lineType === 'exchange' && item.isRepair && (
+                                  <span className="ml-2 text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded px-1 py-0.5">送修</span>
+                                )}
+                                {item.lineType === 'exchange' && !item.isRepair && (
                                   <span className="ml-2 text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded px-1 py-0.5">換貨</span>
                                 )}
                                 {item.lineType === 'return' && (

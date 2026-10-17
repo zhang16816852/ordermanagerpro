@@ -68,11 +68,12 @@ export interface OrderFormMutationParams {
  */
 const lineTypeFields = (item: OrderItemRow) => {
   const isReturn = isReturnLine(item);
+  const isRepair = (item.lineType || 'sale') === 'exchange' && !!item.isRepair;
   return {
     line_type: item.lineType || 'sale',
     line_note: item.lineNote || null,
     return_status: isReturn ? item.returnStatus || 'pending' : null,
-    is_repair: isReturn ? !!item.isRepair : false,
+    is_repair: isRepair,
   };
 };
 

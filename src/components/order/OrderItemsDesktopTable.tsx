@@ -174,7 +174,7 @@ export function OrderItemsDesktopTable({
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                {showPriceInput && (item.lineType ?? 'sale') === 'sale' ? (
+                                                {showPriceInput && ((item.lineType ?? 'sale') === 'sale' || (item.lineType ?? 'sale') === 'exchange') ? (
                                                     <Input
                                                         type="number"
                                                         value={item.unitPrice}
@@ -193,7 +193,7 @@ export function OrderItemsDesktopTable({
                                             </TableCell>
                                             {showPriceSync && (
                                                 <TableCell className="text-center">
-                                                    {(item.lineType ?? 'sale') === 'sale' ? (
+                                                    {((item.lineType ?? 'sale') === 'sale' || (item.lineType ?? 'sale') === 'exchange') ? (
                                                         <Checkbox
                                                             checked={priceSyncMap?.[item.id] ?? false}
                                                             onCheckedChange={(checked) => onTogglePriceSync?.(item.id, !!checked)}
@@ -284,7 +284,7 @@ export function OrderItemsDesktopTable({
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                {showPriceInput && (item.lineType ?? 'sale') === 'sale' ? (
+                                                {showPriceInput && ((item.lineType ?? 'sale') === 'sale' || (item.lineType ?? 'sale') === 'exchange') ? (
                                                     <Input
                                                         type="number"
                                                         value={item.unitPrice}
@@ -303,7 +303,7 @@ export function OrderItemsDesktopTable({
                                             </TableCell>
                                             {showPriceSync && (
                                                 <TableCell className="text-center">
-                                                    {(item.lineType ?? 'sale') === 'sale' ? (
+                                                    {((item.lineType ?? 'sale') === 'sale' || (item.lineType ?? 'sale') === 'exchange') ? (
                                                         <Checkbox
                                                             checked={priceSyncMap?.[item.id] ?? false}
                                                             onCheckedChange={(checked) => onTogglePriceSync?.(item.id, !!checked)}

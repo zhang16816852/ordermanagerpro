@@ -48,6 +48,8 @@ export function ImportFromOrdersDialog({
             shipped_quantity,
             product_id,
             variant_id,
+            line_type,
+            is_repair,
             products (id, name, code),
             product_variants (id, name, sku, wholesale_price)
           )
@@ -62,6 +64,8 @@ export function ImportFromOrdersDialog({
       orders?.forEach((order: any) => {
         order.order_items?.forEach((item: any) => {
           if (item.quantity > item.shipped_quantity) {
+            if (item.line_type === 'return') return;
+            if (item.line_type === 'exchange' && item.is_repair) return;
             items.push({
               _id: item.id, // Unique Key
               order_id: order.id,

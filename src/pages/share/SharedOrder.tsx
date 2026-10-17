@@ -34,14 +34,13 @@ interface SharedOrderData {
   }[];
 }
 
-/** 單據層類型對應的預設備註（品項備註 line_note 為空時使用） */
 const LINE_TYPE_NOTE: Record<string, string> = { return: '退貨', exchange: '換貨' };
 
 const toReceiptItems = (items: SharedOrderData['items']) =>
   items.map((item) => {
-    const noteParts = [LINE_TYPE_NOTE[item.line_type ?? 'sale'], item.line_note].filter(
-      (s): s is string => !!s,
-    );
+    const isRepair = item.line_type === 'exchange' && (item as any).is_repair;
+    const note = isRepair ? '送修' : LINE_TYPE_NOTE[item.line_type ?? 'sale'];
+    const noteParts = [note, item.line_note].filter((s): s is string => !!s);
     return {
       name: `${item.line_type === 'return' ? '[退貨] ' : ''}${item.product_name}`,
       variant: item.variant_name,

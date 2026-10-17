@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { Order, OrderItem } from '@/types/order';
 import { AggregatedItem } from './components/AggregateTableView';
-import { getDisplayProductName, getOrderShipmentStatus, getOrderTotal, isReturnLine } from './orderListUtils';
+import { getDisplayProductName, getOrderShipmentStatus, getOrderTotal, isReturnLine, isRepairLine } from './orderListUtils';
 import type { AggregateFilterMode, AggregateSelectionItem, OrderViewMode } from './orderListTypes';
 import { useDocumentProfit, type DocProfitInputItem } from '@/hooks/useDocumentProfit';
 import { useRepStoreAssignments } from '@/hooks/useRepStoreAssignments';
@@ -321,7 +321,7 @@ const profitByOrderId = useMemo(() => {
 
     const allItems = orders?.flatMap(order =>
       order.order_items
-        .filter(item => !isReturnLine(item) && getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued' && item.status !== 'out_of_stock')
+        .filter(item => !isReturnLine(item) && !isRepairLine(item) && getPendingQuantity(item) > 0 && item.status !== 'cancelled' && item.status !== 'discontinued' && item.status !== 'out_of_stock')
         .filter(item => itemMatchesSearch(item))
         .map(item => ({
           ...item,
@@ -406,6 +406,7 @@ const profitByOrderId = useMemo(() => {
       for (const item of order.order_items) {
         if (item.status === 'cancelled' || item.status === 'discontinued' || item.status === 'out_of_stock') continue;
         if (isReturnLine(item)) continue;
+        if (isRepairLine(item)) continue;
         const pending = item.quantity - item.shipped_quantity;
         if (pending <= 0) continue;
         const purchasedKey = `${order.id}|${item.product_id}|${item.variant_id || 'null'}`;
@@ -448,6 +449,7 @@ const profitByOrderId = useMemo(() => {
       const item = order?.order_items.find(i => i.id === sel.itemId);
       if (!item) continue;
       if (isReturnLine(item)) continue;
+      if (isRepairLine(item)) continue;
       const purchasedKey = `${sel.orderId}|${item.product_id}|${item.variant_id || 'null'}`;
       const alreadyPurchased = purchasedByOrderKey.get(purchasedKey) || 0;
       const remaining = Math.max(0, sel.quantity - alreadyPurchased);

@@ -131,6 +131,7 @@ export function DirectShipDialog({
           name: item.product_variant?.name || item.product?.name || item.id,
           quantity: item.quantity - item.shipped_quantity,
           lineType: (item.line_type as DirectShipItemLine['lineType']) ?? 'sale',
+          isRepair: (item as any).is_repair || false,
         })),
     }));
 

@@ -329,23 +329,21 @@ export function useAdminOrderFormController() {
     }
   }, [draft, priceSyncMap, guardPurchaseCancelled]);
 
-  // 打單性質切換：一般/換貨→清退貨狀態；退貨→待處理；送修→退貨＋待處理＋isRepair
-  // 換貨→單價歸 0 且不寫入價格表；非一般（退貨/送修/換貨）一律退出價格同步
   const handleUpdateLineType = useCallback((index: number, lineType: LineTypeOption) => {
     const item = itemsRef.current[index];
     setItems((prev) => {
       const next = [...prev];
       next[index] = {
         ...next[index],
-        lineType: lineType === 'sale' || lineType === 'exchange' ? lineType : 'return',
-        returnStatus: lineType === 'exchange' || lineType === 'sale' ? null : 'pending',
+        lineType: (lineType === 'repair' || lineType === 'exchange') ? 'exchange' : (lineType === 'sale' ? 'sale' : 'return'),
+        returnStatus: (lineType === 'exchange' || lineType === 'sale' || lineType === 'repair') ? null : 'pending',
         isRepair: lineType === 'repair',
-        unitPrice: lineType === 'exchange' ? 0 : next[index].unitPrice,
+        unitPrice: (lineType === 'exchange' || lineType === 'repair') ? 0 : next[index].unitPrice,
       };
       return next;
     });
     if (item) {
-      if (lineType === 'exchange') draft.updateItemPrice(item.id, 0);
+      if (lineType === 'exchange' || lineType === 'repair') draft.updateItemPrice(item.id, 0);
       if (lineType !== 'sale') {
         const nextMap = { ...priceSyncMap, [item.id]: false };
         setPriceSyncMap(nextMap);

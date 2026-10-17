@@ -27,5 +27,8 @@ export const getOrderTotal = (items: OrderItem[], shippingFee?: number | null) =
 
 export const isReturnLine = (item: OrderItem) => item.line_type === 'return';
 
+export const isRepairLine = (item: OrderItem) =>
+  item.line_type === 'exchange' && (item as any).is_repair === true;
+
 export const getAggregateItemKey = (productId: string, variantId: string | null) =>
   `${productId}_${variantId || 'null'}`;
