@@ -44,14 +44,17 @@ export default function AdminProductFormPage() {
 
     const handleSubmit = (values: any) => {
         if (isEdit && initialData?.id) {
-            mutations.updateMutation.mutate(
-                { id: initialData.id, values },
-                { onSuccess: () => navigate({ pathname: '/admin/products', search: location.search }) }
-            );
+            // 儲存後停留在目前頁面，不關閉視窗
+            mutations.updateMutation.mutate({ id: initialData.id, values });
         } else {
             mutations.createMutation
                 .mutateAsync(values)
-                .then(() => navigate({ pathname: '/admin/products', search: location.search }))
+                .then((newProduct: any) => {
+                    // 新增成功後切換到編輯模式（保留視窗，啟用變體/規格等分頁）
+                    if (newProduct?.id) {
+                        navigate({ pathname: `/admin/products/${newProduct.id}/edit`, search: location.search }, { replace: true });
+                    }
+                })
                 .catch(() => { /* 錯誤已由 mutation 的 toast 處理 */ });
         }
     };
