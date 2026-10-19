@@ -17,6 +17,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Layers, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 import { TRACKING_MODE_LABELS } from '@/utils/lotTracking';
 import { StandaloneDeviceModelSelectField } from '../StandaloneDeviceModelSelectField';
 import { VariantOptionsEditor } from '@/components/products/variant/VariantOptionsEditor';
@@ -71,6 +72,33 @@ export function VariantBatchCreator({ open, onOpenChange, product, onSuccess }: 
               onChange={(e) => ctl.setBarcodeList(e.target.value)}
               className="min-h-[80px]"
             />
+          </div>
+
+          {/* Name / SKU Prefix (抬頭) */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="namePrefix">名稱抬頭（前置）</Label>
+              <Input
+                id="namePrefix"
+                value={ctl.namePrefix}
+                onChange={(e) => ctl.setNamePrefix(e.target.value)}
+                placeholder="例：CITYBOSS-（留空不加）"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="skuPrefix">SKU 抬頭（前置）</Label>
+              <Input
+                id="skuPrefix"
+                value={ctl.skuPrefix}
+                onChange={(e) => ctl.setSkuPrefix(e.target.value)}
+                placeholder="例：CB-（留空用產品代碼）"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button type="button" variant="ghost" size="sm" onClick={() => ctl.savePrefixDefaults().catch(e => toast.error(e?.message || '儲存失敗'))}>
+              儲存為產品預設抬頭
+            </Button>
           </div>
 
           {/* Default Prices */}

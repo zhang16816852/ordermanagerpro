@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +14,21 @@ import {
 } from '@/components/ui/dialog';
 import { getContrastColor } from '@/utils/colorUtils';
 import { cn } from '@/lib/utils';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Sparkles, Plus, X, GripVertical, CheckCircle2 } from 'lucide-react';
 import { ColorSelectField } from '@/components/products/form/ColorSelectField';
 import { useColorStore } from '@/store/useColorStore';
@@ -38,6 +54,27 @@ interface VariantOptionsEditorProps {
   onSelectValue?: (groupId: string, valueId: string) => void;
 }
 
+function SortableGroupCard({
+  id,
+  children,
+}: {
+  id: string;
+  children: (dragHandleProps: Record<string, any>) => ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children({ ...attributes, ...listeners })}
+    </div>
+  );
+}
+
 export function VariantOptionsEditor({
   groups,
   onChange,
@@ -51,6 +88,19 @@ export function VariantOptionsEditor({
   const [bulkPasteTargetGroupId, setBulkPasteTargetGroupId] = useState<string | null>(null);
   const [bulkPasteText, setBulkPasteText] = useState('');
   const { colors: libraryColors, fetchColors } = useColorStore();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+
+  const handleGroupDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = groups.findIndex(g => g.id === active.id);
+    const newIndex = groups.findIndex(g => g.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    onChange(arrayMove(groups, oldIndex, newIndex));
+  };
 
   useEffect(() => {
     fetchColors();
@@ -226,15 +276,21 @@ export function VariantOptionsEditor({
         </div>
       )}
 
-      {groups.map(group => {
-        const isColorGroup = isColorGroupName(group.name);
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleGroupDragEnd}>
+        <SortableContext items={groups.map(g => g.id)} strategy={verticalListSortingStrategy}>
+          {groups.map(group => {
+            const isColorGroup = isColorGroupName(group.name);
         const selectedColorIds = getGroupSelectedColorIds(group.values);
         const extraValues = group.values.filter(v => !findLibraryColor(libraryColors, v));
 
         return (
-          <div key={group.id} className="border rounded-lg p-4 space-y-3 bg-card">
-            <div className="flex items-center gap-2">
-              <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
+          <SortableGroupCard key={group.id} id={group.id}>
+            {(dragHandleProps) => (
+              <div className="border rounded-lg p-4 space-y-3 bg-card">
+                <div className="flex items-center gap-2">
+                  <div {...dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 hover:bg-muted rounded shrink-0 touch-none">
+                    <GripVertical className="h-4 w-4 text-muted-foreground" />
+                  </div>
               <Input
                 value={group.name}
                 onChange={e => updateGroupName(group.id, e.target.value)}
@@ -334,8 +390,12 @@ export function VariantOptionsEditor({
               />
             )}
           </div>
-        );
-      })}
+            )}
+          </SortableGroupCard>
+          );
+        })}
+        </SortableContext>
+      </DndContext>
 
       <Dialog
         open={bulkPasteTargetGroupId !== null}

@@ -90,6 +90,36 @@ export function IdentificationFields({ form }: IdentificationFieldsProps) {
                 )}
             />
 
+            {/* 變體名稱 / SKU 抬頭（批次建立變體時預設帶入） */}
+            <FormField
+                control={form.control}
+                name="default_variant_name_prefix"
+                render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>預設變體名稱抬頭</FormLabel>
+                        <FormControl>
+                            <Input placeholder="例：CITYBOSS-（留空不加）" {...field} value={field.value || ''} />
+                        </FormControl>
+                        <FormDescription>批次建立變體時，自動加在變體名稱最前。</FormDescription>
+                        <FormMessage />
+                    </FormItem>
+                )}
+            />
+            <FormField
+                control={form.control}
+                name="default_variant_sku_prefix"
+                render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>預設變體 SKU 抬頭</FormLabel>
+                        <FormControl>
+                            <Input placeholder="例：CB-（留空用產品代碼）" {...field} value={field.value || ''} />
+                        </FormControl>
+                        <FormDescription>批次建立變體時，自動加在 SKU 最前。</FormDescription>
+                        <FormMessage />
+                    </FormItem>
+                )}
+            />
+
             {/* 前端顯示開關 */}
             <FormField
                 control={form.control}

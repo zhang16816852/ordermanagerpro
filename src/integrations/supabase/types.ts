@@ -2809,6 +2809,8 @@ export type Database = {
           unified_retail_price: number | null
           unified_wholesale_price: number | null
           updated_at: string
+          default_variant_name_prefix: string | null
+          default_variant_sku_prefix: string | null
         }
         Insert: {
           code?: string | null
@@ -2823,6 +2825,8 @@ export type Database = {
           unified_retail_price?: number | null
           unified_wholesale_price?: number | null
           updated_at?: string
+          default_variant_name_prefix?: string | null
+          default_variant_sku_prefix?: string | null
         }
         Update: {
           code?: string | null
@@ -2837,6 +2841,8 @@ export type Database = {
           unified_retail_price?: number | null
           unified_wholesale_price?: number | null
           updated_at?: string
+          default_variant_name_prefix?: string | null
+          default_variant_sku_prefix?: string | null
         }
         Relationships: [
           {

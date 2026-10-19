@@ -38,6 +38,8 @@ const productSchema = z.object({
   item_type: z.enum(['product', 'shipping', 'packaging', 'repair_part']).default('product'),
   is_hidden: z.boolean().default(false),
   supplier_id: z.string().uuid().nullable().default(null),
+  default_variant_name_prefix: z.string().nullable().optional().default(null),
+  default_variant_sku_prefix: z.string().nullable().optional().default(null),
 }).superRefine((val, ctx) => {
   if (val.item_type === 'shipping' && !val.supplier_id) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['supplier_id'], message: '運費型商品需選所屬物流公司（採購商）' });
@@ -84,6 +86,8 @@ export function ProductFormBody({ active, initialData, onSubmit, isLoading, onCl
       item_type: 'product',
       is_hidden: false,
       supplier_id: null,
+      default_variant_name_prefix: null,
+      default_variant_sku_prefix: null,
     },
   });
 
@@ -189,6 +193,8 @@ export function ProductFormBody({ active, initialData, onSubmit, isLoading, onCl
             item_type: (((initialData as any).item_type || 'product') as 'product' | 'shipping' | 'packaging' | 'repair_part'),
             is_hidden: !!(initialData as any).is_hidden,
             supplier_id: (initialData as any).supplier_id || null,
+            default_variant_name_prefix: (initialData as any).default_variant_name_prefix || '',
+            default_variant_sku_prefix: (initialData as any).default_variant_sku_prefix || '',
           });
           console.log(form)
 

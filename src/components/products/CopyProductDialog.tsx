@@ -47,6 +47,7 @@ interface CopyProductDialogProps {
 export function CopyProductDialog({ open, onOpenChange, product, onCopied }: CopyProductDialogProps) {
   const [activeTab, setActiveTab] = useState('basic');
   const [newName, setNewName] = useState('');
+  const [namePrefix, setNamePrefix] = useState('');
   const [skuPrefix, setSkuPrefix] = useState('');
   const [selectedDeviceRefs, setSelectedDeviceRefs] = useState<DeviceSelectionRef[]>([]);
   const [optionGroups, setOptionGroups] = useState<OptionGroupInput[]>([]);
@@ -142,7 +143,8 @@ export function CopyProductDialog({ open, onOpenChange, product, onCopied }: Cop
   useEffect(() => {
     if (open && product) {
       setNewName(`${product.name} (複製)`);
-      setSkuPrefix(`${product.code || 'PROD'}-COPY`);
+      setNamePrefix(product.default_variant_name_prefix || '');
+      setSkuPrefix(product.default_variant_sku_prefix || `${product.code || 'PROD'}-COPY`);
       setSelectedDeviceRefs([]);
       setActiveTab('basic');
       setSaving(false);
@@ -179,6 +181,7 @@ export function CopyProductDialog({ open, onOpenChange, product, onCopied }: Cop
     }));
     return JSON.stringify({
       prefix: (skuPrefix || `${product?.code || 'PROD'}-COPY`).trim(),
+      namePrefix: namePrefix.trim(),
       groups,
       refs: selectedDeviceRefs.map(r => `${r.type}:${r.id}`).join('|'),
     });
@@ -198,6 +201,8 @@ export function CopyProductDialog({ open, onOpenChange, product, onCopied }: Cop
       priceMap,
       defaults,
       unified: null,
+      namePrefix: namePrefix.trim() || undefined,
+      skuPrefix: skuPrefix.trim() || undefined,
     });
     return buildVariantPayload({
       combos,
@@ -486,6 +491,15 @@ export function CopyProductDialog({ open, onOpenChange, product, onCopied }: Cop
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="輸入新產品名稱"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="copy-name-prefix">名稱抬頭（前置）</Label>
+              <Input
+                id="copy-name-prefix"
+                value={namePrefix}
+                onChange={(e) => setNamePrefix(e.target.value)}
+                placeholder="例：CITYBOSS-（留空不加）"
               />
             </div>
             <div className="space-y-2">

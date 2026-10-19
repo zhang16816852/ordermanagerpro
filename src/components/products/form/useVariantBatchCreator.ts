@@ -37,6 +37,8 @@ export function useVariantBatchCreator({ open, onOpenChange, product, onSuccess 
   const [selectedDeviceRefs, setSelectedDeviceRefs] = useState<DeviceSelectionRef[]>([]);
   const [defaultWholesalePrice, setDefaultWholesalePrice] = useState('');
   const [defaultRetailPrice, setDefaultRetailPrice] = useState('');
+  const [namePrefix, setNamePrefix] = useState(product?.default_variant_name_prefix ?? '');
+  const [skuPrefix, setSkuPrefix] = useState(product?.default_variant_sku_prefix ?? '');
   const [trackingMode, setTrackingMode] = useState<string>('none');
   const [generatedVariants, setGeneratedVariants] = useState<SharedVariant[]>([]);
   const [diffSummary, setDiffSummary] = useState<DiffSummary | null>(null);
@@ -51,9 +53,24 @@ export function useVariantBatchCreator({ open, onOpenChange, product, onSuccess 
   const { models: deviceModels, groups: deviceGroups, fetchData: fetchDeviceData } = useDeviceModelStore();
   const { colors: libraryColors, fetchColors } = useColorStore();
 
+  const savePrefixDefaults = async () => {
+    if (!product?.id) return;
+    const { error } = await supabase
+      .from('products')
+      .update({
+        default_variant_name_prefix: namePrefix.trim() || null,
+        default_variant_sku_prefix: skuPrefix.trim() || null,
+      })
+      .eq('id', product.id);
+    if (error) throw error;
+    toast.success('已儲存為產品預設抬頭');
+  };
+
   useEffect(() => {
     const init = async () => {
       if (open) {
+        setNamePrefix(product?.default_variant_name_prefix ?? '');
+        setSkuPrefix(product?.default_variant_sku_prefix ?? '');
         await Promise.all([
           fetchDeviceData(),
           fetchColors(),
@@ -63,7 +80,7 @@ export function useVariantBatchCreator({ open, onOpenChange, product, onSuccess 
       }
     };
     init();
-  }, [open, fetchDeviceData, fetchColors]);
+  }, [open, fetchDeviceData, fetchColors, product]);
 
   const loadExistingData = async () => {
     try {
@@ -152,6 +169,8 @@ export function useVariantBatchCreator({ open, onOpenChange, product, onSuccess 
         priceMap: new Map(),
         defaults,
         unified: isUnified ? { ...defaults } : null,
+        namePrefix: namePrefix.trim() || undefined,
+        skuPrefix: skuPrefix.trim() || undefined,
       });
       const variants = buildVariantPayload({
         combos,
@@ -174,6 +193,8 @@ export function useVariantBatchCreator({ open, onOpenChange, product, onSuccess 
       priceMap,
       defaults,
       unified: isUnified ? { ...defaults } : null,
+      namePrefix: namePrefix.trim() || undefined,
+      skuPrefix: skuPrefix.trim() || undefined,
     });
     const barcodeLines = barcodeList
       .split('\n')
@@ -297,6 +318,8 @@ export function useVariantBatchCreator({ open, onOpenChange, product, onSuccess 
     setSelectedDeviceRefs([]);
     setDefaultWholesalePrice('');
     setDefaultRetailPrice('');
+    setNamePrefix(product?.default_variant_name_prefix ?? '');
+    setSkuPrefix(product?.default_variant_sku_prefix ?? '');
     setTrackingMode('none');
     setBarcodeList('');
     setGeneratedVariants([]);
@@ -340,6 +363,11 @@ export function useVariantBatchCreator({ open, onOpenChange, product, onSuccess 
     setDefaultWholesalePrice,
     defaultRetailPrice,
     setDefaultRetailPrice,
+    namePrefix,
+    setNamePrefix,
+    skuPrefix,
+    setSkuPrefix,
+    savePrefixDefaults,
     trackingMode,
     setTrackingMode,
     generatedVariants,

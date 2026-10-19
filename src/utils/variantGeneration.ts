@@ -159,9 +159,12 @@ export function generateVariantCombos(input: {
   priceMap: Map<string, { wholesale: number; retail: number }>;
   defaults: { wholesale: number; retail: number }; // 逐值兜底；unified 模式用 unified 價
   unified?: { wholesale: number; retail: number } | null;
+  namePrefix?: string;
+  skuPrefix?: string;
 }): GenerateVariantCombo[] {
   const { prefix } = input;
-  const codePrefix = prefix.trim();
+  const codePrefix = (input.skuPrefix ?? prefix).trim();
+  const namePrefix = (input.namePrefix ?? '').trim();
   const activeGroups = getActiveGroups(input.optionGroups);
   const modelDim = input.modelItems.length > 0 ? input.modelItems : [null];
 
@@ -169,7 +172,7 @@ export function generateVariantCombos(input: {
     if (input.modelItems.length === 0) return [];
     return input.modelItems.map((item, idx) => ({
       sku: `${codePrefix}-${item.name}`.toUpperCase().replace(SPACE_RE, '-'),
-      name: item.name,
+      name: namePrefix ? `${namePrefix}${item.name}` : item.name,
       sort_order: idx,
       optionValueIds: [],
       _modelGroupId: item.id,
@@ -200,9 +203,10 @@ export function generateVariantCombos(input: {
       const sku = skuParts.join('-').toUpperCase().replace(SPACE_RE, '-');
 
       const nameLabels = valueObjs.map(v => v.label.trim()).filter(Boolean);
-      const name = modelItem
+      const baseName = modelItem
         ? `${modelItem.name}${nameLabels.length > 0 ? '_' + nameLabels.join('-') : ''}`
         : nameLabels.join('-');
+      const name = namePrefix ? `${namePrefix}${baseName}` : baseName;
 
       combos.push({
         sku,
