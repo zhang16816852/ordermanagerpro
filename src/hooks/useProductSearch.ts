@@ -62,6 +62,9 @@ export function useProductSearch({
             ...((p as any).effective_model_aliases || []),
             ...allVariantModelNames,
             ...allVariantModelAliases,
+            ...(p.variants || []).map((v: any) => v.name),
+            ...(p.variants || []).map((v: any) => v.sku),
+            ...(p.variants || []).map((v: any) => v.barcode),
           ]
             .filter(Boolean)
             .map((v: string) => v.toLowerCase());
