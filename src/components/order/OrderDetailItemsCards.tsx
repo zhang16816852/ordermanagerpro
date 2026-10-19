@@ -1,8 +1,12 @@
+import { useState, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { OrderStatusBadge } from './OrderStatusBadge';
 import { LineTypeBadge } from './LineTypeBadge';
 import { OrderItem } from '@/types/order';
 import { formatCurrency } from '@/lib/formatters';
+import type { NameSort } from './orderItemsTypes';
 
 interface OrderItemsCardsProps {
     items: OrderItem[];
@@ -11,9 +15,60 @@ interface OrderItemsCardsProps {
 }
 
 export function OrderDetailItemsCards({ items, costByItem }: OrderItemsCardsProps) {
-    const sortedItems = [...items].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const [nameSort, setNameSort] = useState<NameSort>('default');
+    const [statusSort, setStatusSort] = useState<NameSort>('default');
+
+    const getItemName = (item: OrderItem) => item.product_variant?.name || item.product?.name || '';
+
+    const sortedItems = useMemo(() => {
+        const base = [...items].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+        if (statusSort !== 'default') {
+            const cmp = (a: OrderItem, b: OrderItem) =>
+                (a.status ?? '').localeCompare(b.status ?? '', 'zh-Hant-TW', { sensitivity: 'base' });
+            return [...base].sort(statusSort === 'asc' ? cmp : (a, b) => cmp(b, a));
+        }
+        if (nameSort !== 'default') {
+            const cmp = (a: OrderItem, b: OrderItem) =>
+                getItemName(a).localeCompare(getItemName(b), 'zh-Hant-TW', { sensitivity: 'base' });
+            return [...base].sort(nameSort === 'asc' ? cmp : (a, b) => cmp(b, a));
+        }
+        return base;
+    }, [items, nameSort, statusSort]);
+
+    const cycleNameSort = () => {
+        setStatusSort('default');
+        setNameSort((prev) => (prev === 'default' ? 'asc' : prev === 'asc' ? 'desc' : 'default'));
+    };
+
+    const cycleStatusSort = () => {
+        setNameSort('default');
+        setStatusSort((prev) => (prev === 'default' ? 'asc' : prev === 'asc' ? 'desc' : 'default'));
+    };
+
     return (
         <div className="md:hidden w-full flex-1 min-h-0 flex flex-col gap-2 overflow-y-auto ">
+            <div className="flex justify-end gap-1">
+                <Button variant="ghost" size="sm" onClick={cycleNameSort} className="h-7 px-2 text-xs">
+                    {nameSort === 'asc' ? (
+                        <ArrowUp className="h-3.5 w-3.5 mr-1" />
+                    ) : nameSort === 'desc' ? (
+                        <ArrowDown className="h-3.5 w-3.5 mr-1" />
+                    ) : (
+                        <ArrowUpDown className="h-3.5 w-3.5 mr-1 opacity-40" />
+                    )}
+                    名稱
+                </Button>
+                <Button variant="ghost" size="sm" onClick={cycleStatusSort} className="h-7 px-2 text-xs">
+                    {statusSort === 'asc' ? (
+                        <ArrowUp className="h-3.5 w-3.5 mr-1" />
+                    ) : statusSort === 'desc' ? (
+                        <ArrowDown className="h-3.5 w-3.5 mr-1" />
+                    ) : (
+                        <ArrowUpDown className="h-3.5 w-3.5 mr-1 opacity-40" />
+                    )}
+                    狀態
+                </Button>
+            </div>
             {sortedItems.map((item) => (
                 <Card key={item.id} className="rounded-2xl w-full">
                     <CardContent className="p-2 space-y-3 text-sm">
