@@ -39,7 +39,7 @@ export interface BatchMappingItem {
 const targetKeyOf = (productId: string, variantId: string | null | undefined) =>
   `${productId}_${variantId || 'null'}`;
 
-function describeMappingError(error: any, vendorProductId?: string): string {
+export function describeMappingError(error: any, vendorProductId?: string): string {
   if (error?.code === '23505') {
     if (String(error.message || '').includes('idx_supplier_mappings_primary')) {
       return '此廠商代號已有主對照，請先將原主對照改為次要對照';

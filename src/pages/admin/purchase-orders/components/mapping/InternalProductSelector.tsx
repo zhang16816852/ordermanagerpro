@@ -14,20 +14,34 @@ interface InternalProductSelectorProps {
 export function InternalProductSelector({ onSelect, onClose }: InternalProductSelectorProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
+  // 空白分割：所有 token 都必須出現在產品名/代碼/變體名/SKU 中
+  const tokens = searchTerm.trim().toLowerCase().split(/\s+/).filter(Boolean);
+
   const { data: products = [], isLoading } = useQuery({
     queryKey: ['internal-products-search', searchTerm],
     queryFn: async () => {
+      // 先抓一批產品（含變體），再在前端依 token 過濾變體，支援變體搜尋
       const { data, error } = await (supabase
         .from('products') as any)
         .select(`
           id, name, code,
           variants:product_variants(id, name, sku)
-        `)
-        .ilike('name', `%${searchTerm}%`)
-        .limit(20);
+        `);
 
       if (error) throw error;
-      return data || [];
+      if (tokens.length === 0) return data || [];
+      return (data || []).map((p: any) => {
+        const variants = (p.variants || []).filter((v: any) => {
+          const hay = `${p.name || ''} ${p.code || ''} ${v.name || ''} ${v.sku || ''}`.toLowerCase();
+          return tokens.every((t) => hay.includes(t));
+        });
+        // 若產品本身或任一變體命中，保留命中變體；產品無變體時以產品本身判斷
+        const prodHay = `${p.name || ''} ${p.code || ''}`.toLowerCase();
+        const prodMatch = tokens.every((t) => prodHay.includes(t));
+        if (variants.length > 0) return { ...p, variants };
+        if (prodMatch) return p;
+        return null;
+      }).filter(Boolean);
     },
     enabled: searchTerm.length > 0,
   });

@@ -64,6 +64,22 @@ export default function AdminPurchaseOrders() {
     dateTo: searchParams.get('to') || undefined,
   });
 
+  // 收款（付款）狀態篩選：金額來自 accounting_entries 彙總（paidAmountMap），無法 DB 端過濾，
+  // 故以獨立 state + URL 參數處理，套用在 orders 端（client-side）。
+  const [paidFilter, setPaidFilter] = useState<'all' | 'paid' | 'unpaid'>(
+    (searchParams.get('paid') as 'paid' | 'unpaid') || 'all',
+  );
+
+  const setPaidFilterUrl = (v: 'all' | 'paid' | 'unpaid') => {
+    setPaidFilter(v);
+    setSearchParams((prev) => {
+      const sp = new URLSearchParams(prev);
+      if (v === 'all') sp.delete('paid');
+      else sp.set('paid', v);
+      return sp;
+    }, { replace: true });
+  };
+
   // 排列狀態直接以網址為單一真值（不另存 useState），避免與網址不同步
   const { sortField, sortDir } = useMemo(() => parsePoSort(searchParams), [searchParams]);
 
@@ -125,6 +141,7 @@ export default function AdminPurchaseOrders() {
     orderItems,
     itemsLoading,
     sourceOrderMap,
+    sourceOrderStoreMap,
     supplierMappingMap,
     accounts,
     categories,
@@ -136,6 +153,7 @@ export default function AdminPurchaseOrders() {
     updateSupplierMutation,
     updateItemMutation,
     deleteItemMutation,
+    saveVendorMappingMutation,
     reorderItemsMutation,
     importItemsMutation,
     receiveItemsMutation,
@@ -145,6 +163,16 @@ export default function AdminPurchaseOrders() {
     batchReceiveItemsMutation,
   } = usePurchaseOrders(viewingOrder?.id, filters);
 
+  // 收款狀態篩選（client-side，依 paidAmountMap 判定）。
+  const visibleOrders = useMemo(() => {
+    if (paidFilter === 'all') return orders;
+    return orders.filter((o) => {
+      const s = poPaymentSummary(o.total_amount, paidAmountMap[o.id]);
+      const isPaid = s.unpaid <= 0;
+      return paidFilter === 'paid' ? isPaid : !isPaid;
+    });
+  }, [orders, paidFilter, paidAmountMap]);
+
   // 金額摘要直接由「已套用篩選後的 orders」推導，因此篩選條件一變動即同步更新。
   // 採購退貨單為負數金額，此處帶正負號回加，讓 總金額 = 已付 + 未付 恆成立。
   const paymentSummary = useMemo(() => {
@@ -152,7 +180,7 @@ export default function AdminPurchaseOrders() {
     let paid = 0;
     let unpaid = 0;
     let unpaidCount = 0;
-    for (const order of orders) {
+    for (const order of visibleOrders) {
       const s = poPaymentSummary(order.total_amount, paidAmountMap[order.id]);
       const sign = s.isCredit ? -1 : 1;
       total += sign * s.payable;
@@ -161,13 +189,13 @@ export default function AdminPurchaseOrders() {
       if (s.unpaid > 0) unpaidCount += 1;
     }
     return { total, paid, unpaid, unpaidCount };
-  }, [orders, paidAmountMap]);
+  }, [visibleOrders, paidAmountMap]);
 
   // 列表排列（純顯示層）。刻意不併入 filters —— filters 同時是 usePurchaseOrders 的
   // queryKey 與 PostgREST 條件，放排序進去會讓切換排列時重新打 DB。
   const sortedOrders = useMemo(
-    () => sortPurchaseOrders(orders, sortField, sortDir),
-    [orders, sortField, sortDir],
+    () => sortPurchaseOrders(visibleOrders, sortField, sortDir),
+    [visibleOrders, sortField, sortDir],
   );
 
   // --- 批次操作衍生狀態 -----------------------------------------------------
@@ -176,8 +204,8 @@ export default function AdminPurchaseOrders() {
   // 會讓操作列顯示「可批次下單 3 張」而實際送出時被 mutation 擋掉。
   const selectedOrders = useMemo(() => {
     const set = new Set(selectedIds);
-    return orders.filter((o) => set.has(o.id));
-  }, [orders, selectedIds]);
+    return visibleOrders.filter((o) => set.has(o.id));
+  }, [visibleOrders, selectedIds]);
 
   const orderableOrders = useMemo(() => selectedOrders.filter(isBatchOrderable), [selectedOrders]);
   const receivableOrders = useMemo(() => selectedOrders.filter(isBatchReceivable), [selectedOrders]);
@@ -316,25 +344,29 @@ export default function AdminPurchaseOrders() {
             suppliers={suppliers}
             filters={filters}
             onFiltersChange={updateFilterUrl}
-            onClearFilters={() =>
+            onClearFilters={() => {
               updateFilterUrl({
                 supplierId: undefined,
                 purpose: undefined,
                 status: undefined,
                 dateFrom: undefined,
                 dateTo: undefined,
-              })
-            }
+              });
+              setPaidFilterUrl('all');
+            }}
             sortField={sortField}
             sortDir={sortDir}
             onSortFieldChange={handleSortFieldChange}
             onToggleSortDir={handleToggleSortDir}
+            showPaidFilter={canSeePayments}
+            paidFilter={paidFilter}
+            onPaidFilterChange={setPaidFilterUrl}
           />
 
           {/* 金額摘要：依目前篩選條件計算 */}
-          {!ordersLoading && orders.length > 0 && (
+          {!ordersLoading && visibleOrders.length > 0 && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-xs sm:text-sm leading-4">
-              <span>採購單: <strong>{orders.length}</strong> 張</span>
+              <span>採購單: <strong>{visibleOrders.length}</strong> 張</span>
               <span className="text-muted-foreground">|</span>
               <span>總金額: <strong>{formatCurrency(paymentSummary.total)}</strong></span>
               {canSeePayments && (
@@ -447,7 +479,7 @@ export default function AdminPurchaseOrders() {
 
       {/* Order Detail View Dialog */}
       <Dialog open={!!viewingOrder} onOpenChange={(open) => { if (!open) setViewingOrder(null); }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               採購單詳情
@@ -466,7 +498,10 @@ export default function AdminPurchaseOrders() {
               categories={categories}
               paidAmount={canSeePayments ? paidAmountMap[viewingOrder.id] : undefined}
               sourceOrderMap={sourceOrderMap}
+              sourceOrderStoreMap={sourceOrderStoreMap}
               supplierMappingMap={supplierMappingMap}
+              canEditVendorMapping={canSeePayments}
+              onSaveVendorMapping={(p) => saveVendorMappingMutation.mutateAsync(p)}
               isLoading={itemsLoading || importItemsMutation.isPending || receiveItemsMutation.isPending || recordPaymentMutation.isPending}
               onImportItems={(data) => importItemsMutation.mutateAsync(data)}
               onReceiveItems={(items) => receiveItemsMutation.mutate(items)}

@@ -5,6 +5,7 @@ import type { Database } from '@/integrations/supabase/types';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
+import { describeMappingError } from './useSupplierMappings';
 import {
   PurchaseOrder, Supplier, PurchaseOrderItem, ProductWithPrice, PurchaseOrderStatus,
   type PoItemWritePayload, type PoUpdateItemsArgs, type PoWriteResult,
@@ -225,40 +226,49 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
       if (!viewingOrder?.supplier_id) return {};
       const { data, error } = await (supabase as any)
         .from('supplier_product_mappings')
-        .select('internal_product_id, internal_variant_id, vendor_product_id, vendor_product_name, is_primary')
+        .select('id, supplier_id, internal_product_id, internal_variant_id, vendor_product_id, vendor_product_name, is_primary')
         .eq('supplier_id', viewingOrder.supplier_id)
         .order('is_primary', { ascending: false });
       if (error) throw error;
       // 同一料號可對多個內部目標，反向查詢（目標 → 料號）時以主對照優先
-      return (data || []).reduce((acc: Record<string, { vendor_product_id: string; vendor_product_name: string; is_primary: boolean }>, m: any) => {
+      return (data || []).reduce((acc: Record<string, { id: string; supplier_id: string; vendor_product_id: string; vendor_product_name: string; is_primary: boolean }>, m: any) => {
         const key = `${m.internal_product_id}_${m.internal_variant_id || 'null'}`;
         const existing = acc[key];
         if (existing && existing.is_primary) return acc;
-        acc[key] = { vendor_product_id: m.vendor_product_id, vendor_product_name: m.vendor_product_name, is_primary: !!m.is_primary };
+        acc[key] = { id: m.id, supplier_id: m.supplier_id, vendor_product_id: m.vendor_product_id, vendor_product_name: m.vendor_product_name, is_primary: !!m.is_primary };
         return acc;
       }, {});
     },
     enabled: !!viewingOrder?.supplier_id,
   });
 
-  // Fetch source order codes for display
+  // Fetch source order codes + store names for display
   const allSourceOrderIds = [...new Set(orderItems.flatMap(item => item.source_order_ids || []))];
-  const { data: sourceOrderMap = {} } = useQuery({
+  const { data: sourceOrderData = { codes: {}, stores: {} } } = useQuery<any>({
     queryKey: ['source-order-codes', allSourceOrderIds],
     queryFn: async () => {
-      if (allSourceOrderIds.length === 0) return {};
+      if (allSourceOrderIds.length === 0) return { codes: {}, stores: {} };
       const { data, error } = await (supabase as any)
         .from('orders')
-        .select('id, code')
+        .select('id, code, store:stores(name)')
         .in('id', allSourceOrderIds);
       if (error) throw error;
-      return (data || []).reduce((acc: Record<string, string>, o: any) => {
-        acc[o.id] = o.code || o.id.slice(0, 8);
-        return acc;
-      }, {});
+      const codes: Record<string, string> = {};
+      const stores: Record<string, string> = {};
+      (data || []).forEach((o: any) => {
+        codes[o.id] = o.code || o.id.slice(0, 8);
+        stores[o.id] = o.store?.name || '';
+      });
+      return { codes, stores };
     },
     enabled: allSourceOrderIds.length > 0,
   });
+  const sourceOrderMap: Record<string, string> = allSourceOrderIds.length === 0
+    ? {}
+    : (sourceOrderData?.codes || {});
+  const sourceOrderStoreMap: Record<string, string> = allSourceOrderIds.length === 0
+    ? {}
+    : (sourceOrderData?.stores || {});
 
   // Mutations
   // 表頭更新一律走交易化 RPC（20260930000005）：內含狀態合法性、收貨鎖定、
@@ -388,6 +398,53 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
       toast.success('品項已刪除');
     },
     onError: (e) => toast.error(getErrorMessage(e, '刪除失敗')),
+  });
+
+  const saveVendorMappingMutation = useMutation({
+    mutationFn: async (payload: {
+      mappingId?: string;
+      supplierId: string;
+      vendorProductId: string;
+      vendorProductName: string | null;
+      productId: string;
+      variantId: string | null;
+    }) => {
+      const vpid = payload.vendorProductId.trim();
+      if (!vpid) throw new Error('廠商代碼不可為空白');
+      if (payload.mappingId) {
+        const { error } = await (supabase as any)
+          .from('supplier_product_mappings')
+          .update({ vendor_product_id: vpid, vendor_product_name: payload.vendorProductName })
+          .eq('id', payload.mappingId);
+        if (error) throw error;
+      } else {
+        // 自動主對照：該料號若無任何既有對照，新列設為主對照
+        const { data: existing, error: exErr } = await (supabase as any)
+          .from('supplier_product_mappings')
+          .select('id')
+          .eq('supplier_id', payload.supplierId)
+          .eq('vendor_product_id', vpid)
+          .limit(1);
+        if (exErr) throw exErr;
+        const isPrimary = !existing || existing.length === 0;
+        const { error } = await (supabase as any)
+          .from('supplier_product_mappings')
+          .insert({
+            supplier_id: payload.supplierId,
+            vendor_product_id: vpid,
+            vendor_product_name: payload.vendorProductName,
+            internal_product_id: payload.productId,
+            internal_variant_id: payload.variantId,
+            is_primary: isPrimary,
+          });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['supplier-mappings-export', viewingOrder?.supplier_id] });
+      toast.success('廠商對照已儲存');
+    },
+    onError: (e: any) => toast.error(describeMappingError(e, e?.vendorProductId)),
   });
 
   const reorderItemsMutation = useMutation({
@@ -783,6 +840,7 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
     orderItems,
     itemsLoading,
     sourceOrderMap,
+    sourceOrderStoreMap,
     supplierMappingMap,
     accounts,
     categories,
@@ -795,6 +853,7 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
     updateSupplierMutation,
     updateItemMutation,
     deleteItemMutation,
+    saveVendorMappingMutation,
     reorderItemsMutation,
     importItemsMutation,
     receiveItemsMutation,

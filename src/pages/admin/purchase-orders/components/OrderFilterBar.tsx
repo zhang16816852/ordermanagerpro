@@ -39,6 +39,10 @@ interface OrderFilterBarProps {
   sortDir: PoSortDir;
   onSortFieldChange: (field: PoSortField) => void;
   onToggleSortDir: () => void;
+  /** 收款（付款）狀態篩選（client-side，僅 admin 顯示） */
+  showPaidFilter?: boolean;
+  paidFilter?: 'all' | 'paid' | 'unpaid';
+  onPaidFilterChange?: (v: 'all' | 'paid' | 'unpaid') => void;
 }
 
 export function OrderFilterBar({
@@ -50,6 +54,9 @@ export function OrderFilterBar({
   sortDir,
   onSortFieldChange,
   onToggleSortDir,
+  showPaidFilter,
+  paidFilter,
+  onPaidFilterChange,
 }: OrderFilterBarProps) {
   // 日期選擇器的視覺狀態由本元件持有；真正的篩選值仍以 filters（網址）為準
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>(() => {
@@ -121,6 +128,22 @@ export function OrderFilterBar({
           <SelectItem value="cancelled">已取消</SelectItem>
         </SelectContent>
       </Select>
+
+      {showPaidFilter && (
+        <Select
+          value={paidFilter || 'all'}
+          onValueChange={(v) => onPaidFilterChange?.(v as 'all' | 'paid' | 'unpaid')}
+        >
+          <SelectTrigger className="w-32">
+            <SelectValue placeholder="全部付款" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部付款</SelectItem>
+            <SelectItem value="paid">已付款</SelectItem>
+            <SelectItem value="unpaid">未付款</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
 
       {/* Date range filter */}
       <Popover>

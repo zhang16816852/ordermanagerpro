@@ -11,6 +11,7 @@ import { SupplierProductMapping } from '../../hooks/useSupplierMappings';
 import { MappingExportDialog } from './MappingExportDialog';
 import { MappingImportDialog } from './MappingImportDialog';
 import { InternalProductSelector } from './InternalProductSelector';
+import { MappedRuleEditDialog } from './MappedRuleEditDialog';
 import { formatCurrency } from '@/lib/formatters';
 
 interface MappedRulesListProps {
@@ -27,12 +28,9 @@ interface MappedRulesListProps {
 }
 
 export function MappedRulesList({ mappings, onDelete, onSave, onSetPrimary, isSaving, isSettingPrimary, isLoading, supplierId, supplierName }: MappedRulesListProps) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState<{ vendor_product_id: string; vendor_product_name: string; vendor_unit_cost: string }>({
-    vendor_product_id: '',
-    vendor_product_name: '',
-    vendor_unit_cost: '',
-  });
+  const [editingRule, setEditingRule] = useState<SupplierProductMapping | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editProductOpen, setEditProductOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -65,27 +63,9 @@ export function MappedRulesList({ mappings, onDelete, onSave, onSetPrimary, isSa
     return counts;
   }, [mappings]);
 
-  const startEdit = (rule: SupplierProductMapping) => {
-    setEditingId(rule.id);
-    setEditValues({
-      vendor_product_id: rule.vendor_product_id,
-      vendor_product_name: rule.vendor_product_name || '',
-      vendor_unit_cost: rule.vendor_unit_cost?.toString() || '',
-    });
-  };
-
-  const saveEdit = (rule: SupplierProductMapping) => {
-    onSave({
-      id: rule.id,
-      supplier_id: rule.supplier_id,
-      vendor_product_id: editValues.vendor_product_id,
-      vendor_product_name: editValues.vendor_product_name || null,
-      internal_product_id: rule.internal_product_id,
-      internal_variant_id: rule.internal_variant_id,
-      vendor_unit_cost: editValues.vendor_unit_cost ? Number(editValues.vendor_unit_cost) : null,
-      is_primary: rule.is_primary,
-    });
-    setEditingId(null);
+  const openEdit = (rule: SupplierProductMapping) => {
+    setEditingRule(rule);
+    setEditOpen(true);
   };
 
   const resetAddForm = () => {
@@ -123,17 +103,23 @@ export function MappedRulesList({ mappings, onDelete, onSave, onSetPrimary, isSa
   };
 
   const filteredMappings = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return mappings;
+    const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return mappings;
     return mappings.filter((rule) => {
       const internalProd = rule.internal_product?.name || '';
+      const internalProdCode = rule.internal_product?.code || '';
       const internalVar = rule.internal_variant?.name || '';
-      return (
-        (rule.vendor_product_id || '').toLowerCase().includes(q) ||
-        (rule.vendor_product_name || '').toLowerCase().includes(q) ||
-        internalProd.toLowerCase().includes(q) ||
-        internalVar.toLowerCase().includes(q)
-      );
+      const internalVarSku = rule.internal_variant?.sku || '';
+      const haystack = [
+        rule.vendor_product_id || '',
+        rule.vendor_product_name || '',
+        internalProd,
+        internalProdCode,
+        internalVar,
+        internalVarSku,
+      ].join(' ').toLowerCase();
+      // 所有 token 都必須出現在 haystack 中（空白分割後 AND 比對）
+      return tokens.every((t) => haystack.includes(t));
     });
   }, [search, mappings]);
 
@@ -303,34 +289,13 @@ export function MappedRulesList({ mappings, onDelete, onSave, onSetPrimary, isSa
                   const internalProd = rule.internal_product?.name || '未知產品';
                   const internalVar = rule.internal_variant?.name || '';
                   const internalLabel = internalVar || internalProd;
-                  const isEditing = editingId === rule.id;
+
                   const codeTargetCount = targetCountByCode.get(rule.vendor_product_id.trim()) || 1;
 
                   return (
                 <TableRow key={rule.id}>
-                  <TableCell className="font-medium">
-                    {isEditing ? (
-                      <Input
-                        value={editValues.vendor_product_id}
-                        onChange={(e) => setEditValues(prev => ({ ...prev, vendor_product_id: e.target.value }))}
-                        className="h-8"
-                      />
-                    ) : (
-                      rule.vendor_product_id
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {isEditing ? (
-                      <Input
-                        value={editValues.vendor_product_name}
-                        onChange={(e) => setEditValues(prev => ({ ...prev, vendor_product_name: e.target.value }))}
-                        className="h-8"
-                        placeholder="廠商品名"
-                      />
-                    ) : (
-                      rule.vendor_product_name || '-'
-                    )}
-                  </TableCell>
+                  <TableCell className="font-medium">{rule.vendor_product_id}</TableCell>
+                  <TableCell>{rule.vendor_product_name || '-'}</TableCell>
                   <TableCell>{internalLabel}</TableCell>
                   <TableCell className="text-center">
                     {rule.is_primary ? (
@@ -355,67 +320,33 @@ export function MappedRulesList({ mappings, onDelete, onSave, onSetPrimary, isSa
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    {isEditing ? (
-                      <Input
-                        type="number"
-                        value={editValues.vendor_unit_cost}
-                        onChange={(e) => setEditValues(prev => ({ ...prev, vendor_unit_cost: e.target.value }))}
-                        className="h-8 w-24 text-right"
-                        placeholder="0"
-                      />
-                    ) : (
-                      rule.vendor_unit_cost != null ? formatCurrency(rule.vendor_unit_cost) : '-'
-                    )}
+                    {rule.vendor_unit_cost != null ? formatCurrency(rule.vendor_unit_cost) : '-'}
                   </TableCell>
                   <TableCell className="text-right">
-                    {isEditing ? (
-                      <div className="flex gap-1 justify-end">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => saveEdit(rule)}
-                          disabled={isSaving}
-                          aria-label="儲存編輯"
-                        >
-                          <Check className="h-4 w-4 text-green-600" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => setEditingId(null)}
-                          aria-label="取消編輯"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex gap-1 justify-end">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => startEdit(rule)}
-                          aria-label="編輯對照規則"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive hover:text-destructive/90 h-8 w-8"
-                          onClick={() => {
-                            if (confirm('確定要刪除此對照規則嗎？')) {
-                              onDelete(rule.id);
-                            }
-                          }}
-                          aria-label="刪除對照規則"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
+                    <div className="flex gap-1 justify-end">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => openEdit(rule)}
+                        aria-label="編輯對照規則"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive/90 h-8 w-8"
+                        onClick={() => {
+                          if (confirm('確定要刪除此對照規則嗎？')) {
+                            onDelete(rule.id);
+                          }
+                        }}
+                        aria-label="刪除對照規則"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               );
@@ -439,6 +370,16 @@ export function MappedRulesList({ mappings, onDelete, onSave, onSetPrimary, isSa
         supplierName={supplierName}
         onImportComplete={() => {
           // 批次寫入已失效 ['supplier-mappings'] 查詢，直接重整畫面會流失 SPA 狀態
+        }}
+      />
+
+      <MappedRuleEditDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        rule={editingRule}
+        isSaving={isSaving}
+        onSave={(data) => {
+          onSave(data as any);
         }}
       />
 
