@@ -172,7 +172,7 @@ export function generateVariantCombos(input: {
     if (input.modelItems.length === 0) return [];
     return input.modelItems.map((item, idx) => ({
       sku: `${codePrefix}-${item.name}`.toUpperCase().replace(SPACE_RE, '-'),
-      name: namePrefix ? `${namePrefix}${item.name}` : item.name,
+      name: namePrefix ? `${namePrefix}_${item.name}` : item.name,
       sort_order: idx,
       optionValueIds: [],
       _modelGroupId: item.id,
@@ -206,7 +206,7 @@ export function generateVariantCombos(input: {
       const baseName = modelItem
         ? `${modelItem.name}${nameLabels.length > 0 ? '_' + nameLabels.join('-') : ''}`
         : nameLabels.join('-');
-      const name = namePrefix ? `${namePrefix}${baseName}` : baseName;
+      const name = namePrefix ? `${namePrefix}_${baseName}` : baseName;
 
       combos.push({
         sku,
