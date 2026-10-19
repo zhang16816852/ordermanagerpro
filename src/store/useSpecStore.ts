@@ -8,8 +8,11 @@ const SPEC_CACHE_CFG = CACHE.specs;
 const CAT_CACHE_CFG = CACHE.categories;
 
 // 版本感知自動刷新：節流間隔（與 heartbeat 相同，控制 data_versions 查詢頻率）
-const VERSION_CHECK_THROTTLE_MS = 30_000;
+const VERSION_CHECK_THROTTLE_MS = 5_000;
+// 空資料自我修復的最小間隔：避免「版本號看似最新但本地資料為空」時每次心跳都重抓
+const EMPTY_HEAL_MIN_INTERVAL_MS = 60_000;
 let lastVersionCheckAt = 0;
+let lastEmptyHealAt = 0;
 let refreshingSpecs = false;
 let heartbeatStarted = false;
 let refreshChannel: BroadcastChannel | null = null;
@@ -106,8 +109,9 @@ interface SpecStore {
   isLoading: boolean;
   invalidateCache: () => void;
   setDefinitions: (newDefs: any[]) => void;
-  fetchSpecs: (force?: boolean, incomingData?: any, version?: string) => Promise<void>;
-  fetchCategories: (force?: boolean, incomingData?: any, version?: string) => Promise<void>;
+  fetchSpecs: (force?: boolean, incomingData?: any, version?: string, silent?: boolean) => Promise<void>;
+  fetchCategories: (force?: boolean, incomingData?: any, version?: string, silent?: boolean) => Promise<void>;
+  forceRefreshSpecs: () => Promise<void>;
   /** 版本感知自動刷新：比對 data_versions，落後才全量重抓（節流 + 跨 tab 廣播） */
   refreshIfStale: (notify?: boolean) => Promise<void>;
 }
@@ -185,9 +189,9 @@ export const useSpecStore = create<SpecStore>((set, get) => {
       set({ specDefinitions: newDefs, specMap });
     },
 
-    fetchSpecs: async (force = false, incomingData?: any, version?: string) => {
-      if (get().isLoading) return;
-      set({ isLoading: true });
+    fetchSpecs: async (force = false, incomingData?: any, version?: string, silent = false) => {
+      if (get().isLoading && !silent) return;
+      if (!silent) set({ isLoading: true });
       try {
         let definitions = get().specDefinitions;
         let triggers = get().specTriggers;
@@ -264,7 +268,20 @@ export const useSpecStore = create<SpecStore>((set, get) => {
           categoryLinks = catLinkData || [];
           definitions = mergeTriggersToDefs(defData || [], triggers);
 
-          if (isLocalEmpty && !version) {
+          if (force && !version) {
+            // 強制重抓時，從 DB 讀取最新版本號，避免保持舊版本號導致下次比對失效
+            const { data: versionData } = await (supabase
+              .from('data_versions') as any)
+              .select('version')
+              .eq('table_name', 'specs')
+              .single();
+            if (versionData?.version) {
+              newSequenceId = versionData.version;
+            } else {
+              const today = formatTaipeiTime().split(' ')[0].replace(/\//g, '').substring(2);
+              newSequenceId = packVersion(today, 1);
+            }
+          } else if (isLocalEmpty && !version) {
             newSequenceId = get().specVersion !== '0' ? get().specVersion : packVersion(formatTaipeiTime().split(' ')[0].replace(/\//g, '').substring(2), 1);
           } else if (!version) {
             const today = formatTaipeiTime().split(' ')[0].replace(/\//g, '').substring(2);
@@ -272,11 +289,17 @@ export const useSpecStore = create<SpecStore>((set, get) => {
           }
         }
 
-        writeSpecCache({
-          version: newSequenceId, definitions, triggers, categoryLinks,
-          categories: get().categories, categoryHierarchy: get().categoryHierarchy,
-          categoryVersion: get().categoryVersion,
-        });
+        // 快取寫入失敗（IndexedDB 配額/隱私模式等）不可阻擋 store 版本更新，
+        // 否則 version 永遠停在舊值 → refreshIfStale 每次心跳都判定落後 → 無限 force 重抓
+        try {
+          writeSpecCache({
+            version: newSequenceId, definitions, triggers, categoryLinks,
+            categories: get().categories, categoryHierarchy: get().categoryHierarchy,
+            categoryVersion: get().categoryVersion,
+          });
+        } catch (cacheError) {
+          console.warn('[SpecStore] ⚠️ 規格快取寫入失敗（不影響記憶體狀態）:', cacheError);
+        }
 
         set({
           specDefinitions: definitions,
@@ -284,7 +307,7 @@ export const useSpecStore = create<SpecStore>((set, get) => {
           specTriggers: triggers,
           categoryLinks,
           specVersion: newSequenceId,
-          isLoading: false
+          isLoading: silent ? get().isLoading : false
         });
 
         if (incomingData) {
@@ -296,13 +319,28 @@ export const useSpecStore = create<SpecStore>((set, get) => {
         }
       } catch (error) {
         console.error('[SpecStore] 🔴 規格同步失敗:', error);
-        set({ isLoading: false });
+        if (!silent) set({ isLoading: false });
       }
     },
 
-    fetchCategories: async (force = false, incomingData?: any, version?: string) => {
-      if (get().isLoading) return;
-      set({ isLoading: true });
+    // 強制重抓 specs（不依賴版本號比對，bypass 節流）
+    forceRefreshSpecs: async () => {
+      try {
+        const { data: versionData } = await (supabase
+          .from('data_versions') as any)
+          .select('version')
+          .eq('table_name', 'specs')
+          .single();
+        const latestVersion = versionData?.version || get().specVersion;
+        await get().fetchSpecs(true, undefined, latestVersion, true);
+      } catch (error) {
+        console.error('[SpecStore] 強制重整失敗:', error);
+      }
+    },
+
+    fetchCategories: async (force = false, incomingData?: any, version?: string, silent = false) => {
+      if (get().isLoading && !silent) return;
+      if (!silent) set({ isLoading: true });
       try {
         let categories = get().categories;
         let categoryHierarchy = get().categoryHierarchy;
@@ -356,26 +394,42 @@ export const useSpecStore = create<SpecStore>((set, get) => {
           categories = catData || [];
           categoryHierarchy = hierarchyData || [];
 
-          if (isLocalEmpty && !version) {
-            newSequenceId = get().categoryVersion !== '0' ? get().categoryVersion : packVersion(formatTaipeiTime().split(' ')[0].replace(/\//g, '').substring(2), 1);
-          } else if (!version) {
-            const today = formatTaipeiTime().split(' ')[0].replace(/\//g, '').substring(2);
-            newSequenceId = packVersion(today, 1);
+          if (!version) {
+            // [修正] 未指定版本時從 DB 讀取最新 categories 版本號。
+            // 舊邏輯用 packVersion(today, 1)（如 261020-0001）會低於伺服器真實版本，
+            // 造成 refreshIfStale 每次心跳都判定落後 → 無限 force 重抓（console 刷屏根因）
+            const { data: versionData } = await (supabase
+              .from('data_versions') as any)
+              .select('version')
+              .eq('table_name', 'categories')
+              .single();
+            if (versionData?.version) {
+              newSequenceId = versionData.version;
+            } else if (get().categoryVersion === '0') {
+              newSequenceId = packVersion(formatTaipeiTime().split(' ')[0].replace(/\//g, '').substring(2), 1);
+            } else {
+              newSequenceId = get().categoryVersion;
+            }
           }
         }
 
-        writeSpecCache({
-          version: get().specVersion, definitions: get().specDefinitions,
-          triggers: get().specTriggers, categoryLinks: get().categoryLinks,
-          categories, categoryHierarchy,
-          categoryVersion: newSequenceId,
-        });
+        // 快取寫入失敗不可阻擋 store 版本更新（否則版本停在舊值 → 無限 force 重抓）
+        try {
+          writeSpecCache({
+            version: get().specVersion, definitions: get().specDefinitions,
+            triggers: get().specTriggers, categoryLinks: get().categoryLinks,
+            categories, categoryHierarchy,
+            categoryVersion: newSequenceId,
+          });
+        } catch (cacheError) {
+          console.warn('[SpecStore] ⚠️ 分類快取寫入失敗（不影響記憶體狀態）:', cacheError);
+        }
 
         set({
           categories,
           categoryHierarchy,
           categoryVersion: newSequenceId,
-          isLoading: false
+          isLoading: silent ? get().isLoading : false
         });
 
         if (incomingData) {
@@ -387,7 +441,7 @@ export const useSpecStore = create<SpecStore>((set, get) => {
         }
       } catch (error) {
         console.error('[SpecStore] 🔴 分類同步失敗:', error);
-        set({ isLoading: false });
+        if (!silent) set({ isLoading: false });
       }
     },
 
@@ -400,13 +454,40 @@ export const useSpecStore = create<SpecStore>((set, get) => {
         const versions = await CacheService.fetchServerVersions();
         let didRefresh = false;
 
-        if (CacheService.isStale(get().specVersion, versions['specs'] || '0')) {
-          await get().fetchSpecs(true);
+        const serverSpecsVersion = versions['specs'] || '';
+        const serverCategoriesVersion = versions['categories'] || '';
+
+        if (serverSpecsVersion && serverSpecsVersion !== '0' && CacheService.isStale(get().specVersion, serverSpecsVersion)) {
+          await get().fetchSpecs(true, undefined, serverSpecsVersion, true);
           didRefresh = true;
         }
-        if (CacheService.isStale(get().categoryVersion, versions['categories'] || '0')) {
-          await get().fetchCategories(true);
+        if (serverCategoriesVersion && serverCategoriesVersion !== '0' && CacheService.isStale(get().categoryVersion, serverCategoriesVersion)) {
+          await get().fetchCategories(true, undefined, serverCategoriesVersion, true);
           didRefresh = true;
+        }
+
+        // 空資料自我修復：版本號看似最新但本地資料為空（例如先前 hierarchy 抓取失敗、寫入 [] 且版本已推進），
+        // 此時僅比對版本號永遠不會重抓 → 祖先關聯/規格關聯永久遺失。以節流避免每次心跳都重抓。
+        if (!didRefresh && Date.now() - lastEmptyHealAt > EMPTY_HEAL_MIN_INTERVAL_MS) {
+          const s = get();
+          const needSpecsHeal = s.specDefinitions.length === 0 || s.categoryLinks.length === 0;
+          const needCategoriesHeal = s.categories.length === 0 || s.categoryHierarchy.length === 0;
+          if (needSpecsHeal || needCategoriesHeal) {
+            lastEmptyHealAt = Date.now();
+            SyncManager.logTelemetry('📡 本地資料為空，執行自我修復', '#c0392b', {
+              '規格定義': s.specDefinitions.length,
+              '規格-分類連結': s.categoryLinks.length,
+              '分類': s.categories.length,
+              '分類階層': s.categoryHierarchy.length,
+            });
+            if (needSpecsHeal) {
+              await get().fetchSpecs(true, undefined, serverSpecsVersion || get().specVersion, true);
+            }
+            if (needCategoriesHeal) {
+              await get().fetchCategories(true, undefined, serverCategoriesVersion || get().categoryVersion, true);
+            }
+            didRefresh = true;
+          }
         }
 
         if (didRefresh && notify) getRefreshChannel()?.postMessage('specs-refreshed');
@@ -419,6 +500,26 @@ export const useSpecStore = create<SpecStore>((set, get) => {
     },
   };
 });
+
+// Supabase Realtime 訂閱 data_versions：當 specs 版本變動時，立即重抓快取（不依賴節流或 mount）
+try {
+  supabase.channel('spec-version-changes')
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'data_versions',
+      filter: `table_name=eq.'specs'`
+    }, (payload: any) => {
+      const newVersion = payload?.new?.version;
+      if (newVersion && newVersion !== useSpecStore.getState().specVersion) {
+        console.log('[SpecStore] Realtime 版本變更，觸發靜默重抓:', newVersion);
+        useSpecStore.getState().fetchSpecs(true, undefined, newVersion, true);
+      }
+    })
+    .subscribe();
+} catch (err) {
+  console.warn('[SpecStore] Realtime 訂閱失敗，沿用版本比對:', err);
+}
 
 // 跨 tab 同步：收到其他分頁已刷新的通知時，也檢查自身版本（不重播，避免廣播回圈）
 getRefreshChannel()?.addEventListener('message', () => {

@@ -4,7 +4,8 @@ import { generateStableUUID } from './specSerializer';
 export function getVisibleSpecsTree(
     specFields: CategorySpec[],
     tableSettings: Record<string, any>,
-    specTriggers: any[] = []
+    specTriggers: any[] = [],
+    specDefinitions: any[] = []
 ) {
     const visible = new Map<string, {
         sourceValue?: any;
@@ -17,7 +18,11 @@ export function getVisibleSpecsTree(
     }>();
     if (!specFields || specFields.length === 0) return visible;
 
-    const specMap = new Map(specFields.map(s => [s.id, s]));
+    // [修正] specMap 合併 specFields 與 specDefinitions，確保即使 specFields 未包含某 downstream spec
+    // （例如 store 快取尚未同步），仍能查到 spec 定義並處理其 triggers，避免子項規格不觸發
+    const specMap = new Map<string, any>();
+    (specDefinitions || []).forEach((s: any) => specMap.set(s.id, s));
+    (specFields || []).forEach((s: any) => specMap.set(s.id, s)); // specFields takes priority (has sourceCategoryIds etc.)
     const settings = tableSettings || {};
 
     const targetSpecIdsInTriggers = new Set(specTriggers.map(t => t.target_spec_id));
@@ -44,7 +49,25 @@ export function getVisibleSpecsTree(
             const val = settings[pathKey] !== undefined ? settings[pathKey] : '';
             const isHeading = spec.type === 'heading';
 
-            const activeTriggers = specTriggers.filter(t => t.source_spec_id === specId);
+            // [修正] 優先使用 specTriggers，fallback 到 spec.logicConfig/logic_config 的 triggers（相容 store 快取尚未同步的情況）
+            const storeTriggersForSpec = specTriggers.filter(t => t.source_spec_id === specId);
+            const legacyTriggersForSpec = (spec.logicConfig?.triggers || spec.logic_config?.triggers || []).flatMap((t: any) =>
+                (t.targets || []).map((tar: any) => ({
+                    source_spec_id: specId,
+                    target_spec_id: tar.id,
+                    relation_type: t.type === 'quantity' ? 'quantity' : 'visibility',
+                    condition_dsl: t.type === 'quantity' ? {} : {
+                        operator: t.operator || 'eq',
+                        on_value: t.on_value,
+                        is_quantity_detail: !!tar.is_quantity_detail
+                    }
+                }))
+            );
+            const seenTargets = new Set(storeTriggersForSpec.map((t: any) => t.target_spec_id));
+            const activeTriggers = [
+                ...storeTriggersForSpec,
+                ...legacyTriggersForSpec.filter((t: any) => !seenTargets.has(t.target_spec_id))
+            ];
 
             activeTriggers.forEach(t => {
                 const isMatch = isHeading ? true : checkSpecTriggerMatch(
@@ -73,7 +96,22 @@ export function getVisibleSpecsTree(
             // 若當前規格本身是 quantity target（處於被複製層），則把上層 branch 帶入，
             // 避免「數量內再嵌數量」時跨所有一層實例產生相同 pathKey 而彼此碰撞
             const isNestedQuantity = quantityTargetIds.has(specId);
-            const quantityTriggers = specTriggers.filter(t => t.relation_type === 'quantity' && t.source_spec_id === specId);
+            const storeQtyTriggers = specTriggers.filter(t => t.relation_type === 'quantity' && t.source_spec_id === specId);
+            const legacyQtyTriggers = (spec.logicConfig?.triggers || spec.logic_config?.triggers || [])
+                .filter((t: any) => t.type === 'quantity')
+                .flatMap((t: any) =>
+                    (t.targets || []).map((tar: any) => ({
+                        source_spec_id: specId,
+                        target_spec_id: tar.id,
+                        relation_type: 'quantity',
+                        condition_dsl: {}
+                    }))
+                );
+            const seenQtyTargets = new Set(storeQtyTriggers.map((t: any) => t.target_spec_id));
+            const quantityTriggers = [
+                ...storeQtyTriggers,
+                ...legacyQtyTriggers.filter((t: any) => !seenQtyTargets.has(t.target_spec_id))
+            ];
             quantityTriggers.forEach(qt => {
                 const qTarget = specMap.get(qt.target_spec_id);
                 if (!qTarget) return;

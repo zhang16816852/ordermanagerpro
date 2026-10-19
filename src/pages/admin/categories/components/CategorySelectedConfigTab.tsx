@@ -177,6 +177,7 @@ interface CategorySelectedConfigTabProps {
     };
     requiredMap?: Record<string, boolean>;
     onToggleRequired?: (id: string) => void;
+    inheritedSpecs?: any[];
 }
 
 export const CategorySelectedConfigTab = ({
@@ -184,7 +185,8 @@ export const CategorySelectedConfigTab = ({
     specDefinitions,
     engine,
     requiredMap = {},
-    onToggleRequired
+    onToggleRequired,
+    inheritedSpecs = []
 }: CategorySelectedConfigTabProps) => {
     // 建立已選規格的樹狀結構
     const selectedTree = React.useMemo(() => {
@@ -314,6 +316,35 @@ export const CategorySelectedConfigTab = ({
                     </SortableContext>
                 </div>
             </DndContext>
+
+            {/* 繼承自母分類的共用規格（唯讀） */}
+            {inheritedSpecs.length > 0 && (
+                <div className="shrink-0 border-t pt-4 mt-4">
+                    <div className="flex items-center gap-2 mb-3">
+                        <h3 className="text-sm font-semibold text-slate-700">繼承自母分類的共用規格</h3>
+                        <Badge variant="outline" className="text-[10px] h-4 px-1 border-amber-200 text-amber-600 bg-amber-50">唯讀</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-3">
+                        以下規格來自母分類，子分類自動繼承，無法在此直接管理。若需修改，請至母分類的「已選配置」頁面。
+                    </p>
+                    <div className="flex flex-col gap-2">
+                        {inheritedSpecs.map((spec: any) => (
+                            <div
+                                key={spec.id}
+                                className="flex items-center gap-3 p-3 border rounded-md bg-amber-50/50 border-amber-100"
+                            >
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <h4 className="font-medium text-slate-700 truncate text-sm">{spec.name}</h4>
+                                        <Badge variant="outline" className="text-[10px] h-4 px-1 border-amber-200 text-amber-600 bg-amber-50">繼承</Badge>
+                                    </div>
+                                    <p className="text-xs text-slate-400 mt-0.5">{spec.type}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

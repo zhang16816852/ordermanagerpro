@@ -30,8 +30,9 @@ interface VariantSpecsMatrixProps {
 export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSpecsMatrixProps>(
     ({ productId, categoryIds, onDirtyChange }, ref) => {
     const queryClient = useQueryClient();
-    const { specMap, specTriggers, refreshIfStale, categories } = useSpecStore();
+    const { specMap, specTriggers, specDefinitions, refreshIfStale, categories } = useSpecStore();
     const { data: specFields = [], isLoading: specsLoading } = useCategorySpecs(categoryIds, {
+        includeAncestors: true,
         includeDescendants: true,
         includeTriggerDownstream: true,
     });
@@ -42,9 +43,9 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
     const [batchValues, setBatchValues] = useState<Record<string, any>>({});
     const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // 確保規格定義已載入（比對版本、落後才重抓）
+    // 確保規格定義已載入（版本比對，節流 5 秒；silent 不閃爍）
     useEffect(() => {
-        refreshIfStale();
+        useSpecStore.getState().refreshIfStale(true);
     }, []);
 
     // 單一模式 debounce toast：連續編輯時只在閒置後彈一次，避免洗版
@@ -128,13 +129,13 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
         if (specFields.length === 0 || Object.keys(localData).length === 0) return aggregated;
 
         Object.keys(localData).forEach(vId => {
-            const variantVisible = getVisibleSpecsTree(specFields, localData[vId], specTriggers);
+            const variantVisible = getVisibleSpecsTree(specFields, localData[vId], specTriggers, specDefinitions);
             variantVisible.forEach((info, path) => {
                 if (!aggregated.has(path)) aggregated.set(path, info);
             });
         });
         return aggregated;
-    }, [specFields, localData, specTriggers]);
+    }, [specFields, localData, specTriggers, specDefinitions]);
 
     // 數量複製組別配色對照
     const colorMap = useMemo(() => buildQuantityColorMap(aggregatedVisible), [aggregatedVisible]);
@@ -153,7 +154,7 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
             const parts = pathKey.split(':');
             const parentId = parts[0];
             const specId = parts[1];
-            const spec = specFields.find(f => f.id === specId) || specMap.get(specId);
+            const spec = specFields.find(f => f.id === specId) || specMap.get(specId) || (specDefinitions || []).find((s: any) => s.id === specId);
             const triggerInfo = aggregatedVisible.get(pathKey);
 
             return {
@@ -165,7 +166,7 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
                 triggerInfo
             };
         });
-    }, [specFields, aggregatedVisible, specMap, localData]);
+    }, [specFields, aggregatedVisible, specMap, specDefinitions, localData]);
 
     // 依來源分類將規格分組，讓多分類選取時能清楚標示每個規格的歸屬
     const groupedRows = useMemo(() => {
@@ -216,6 +217,11 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
         onSuccess: () => {
             toast.success('變體規格矩陣已同步至雲端 (v6 Engine)');
             setSavedSnapshot(localData);
+            // 立即更新本地快取並廣播給其他分頁
+            const { setDefinitions, fetchSpecs } = useSpecStore.getState();
+            fetchSpecs(true, undefined, undefined, true).then(() => {
+                try { new BroadcastChannel('spec-store-refresh').postMessage('specs-refreshed'); } catch { /* ignore */ }
+            });
             queryClient.invalidateQueries({ queryKey: ['product-variants-specs-v6', productId] });
         },
         onError: (err: any) => toast.error('儲存失敗：' + getErrorMessage(err))
@@ -431,7 +437,7 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
                             if (editMode === 'single' && !isHeading) {
                                 variants.forEach(v => {
                                     const vSettings = localData[v.id] || {};
-                                    const vVisiblePaths = getVisibleSpecsTree(specFields, vSettings, specTriggers);
+                                    const vVisiblePaths = getVisibleSpecsTree(specFields, vSettings, specTriggers, specDefinitions);
                                     const vInfo = vVisiblePaths.get(row.pathKey);
                                     if (!vInfo) return;
                                     visibleCount++;
@@ -479,7 +485,7 @@ export const VariantSpecsMatrix = forwardRef<VariantSpecsMatrixHandle, VariantSp
                                         <>
                                             {variants.map(v => {
                                                 const vSettings = localData[v.id] || {};
-                                                const vVisiblePaths = getVisibleSpecsTree(specFields, vSettings, specTriggers);
+                                                const vVisiblePaths = getVisibleSpecsTree(specFields, vSettings, specTriggers, specDefinitions);
                                                 const isVis = vVisiblePaths.has(row.pathKey);
                                                 const value = vSettings[row.pathKey] || '';
 

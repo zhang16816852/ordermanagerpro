@@ -64,7 +64,7 @@ interface ProductFormBodyProps {
 
 export function ProductFormBody({ active, initialData, onSubmit, isLoading, onClose, registerForm }: ProductFormBodyProps) {
   const [activeTab, setActiveTab] = useState('basic');
-  const { specMap, refreshIfStale, specTriggers } = useSpecStore();
+  const { specMap, refreshIfStale, specTriggers, specDefinitions } = useSpecStore();
   const [matrixDirty, setMatrixDirty] = useState(false);
   const [unsavedWarning, setUnsavedWarning] = useState(false);
   const matrixRef = useRef<VariantSpecsMatrixHandle>(null);
@@ -91,7 +91,7 @@ export function ProductFormBody({ active, initialData, onSubmit, isLoading, onCl
     },
   });
 
-  const { data: productSpecFields = [] } = useCategorySpecs(form.watch('category_ids') || []);
+  const { data: productSpecFields = [] } = useCategorySpecs(form.watch('category_ids') || [], { includeAncestors: true });
 
   const isDirty = form.formState.isDirty || matrixDirty || unifiedDirty;
 
@@ -112,7 +112,7 @@ export function ProductFormBody({ active, initialData, onSubmit, isLoading, onCl
     form.handleSubmit(async (values) => {
       // 驗證產品層級必填規格（僅檢查目前可見者）
       const specValues = (values.spec_values as Record<string, any>) || {};
-      const visibleInfo = getVisibleSpecsTree(productSpecFields, specValues, specTriggers);
+      const visibleInfo = getVisibleSpecsTree(productSpecFields, specValues, specTriggers, specDefinitions);
       const missingNames = productSpecFields
         .filter(s => {
           if (!s.required) return false;

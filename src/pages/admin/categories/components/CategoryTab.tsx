@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -195,19 +195,17 @@ export function CategoryTab() {
     const navigate = useNavigate();
     const initExpanded = searchParams.get('expanded')?.split(',').filter(Boolean) || [];
     const [expandedIds, setExpandedIdsState] = useState<Set<string>>(new Set(initExpanded));
-    const setExpandedIds: React.Dispatch<React.SetStateAction<Set<string>>> = (val) => {
-        setExpandedIdsState((prev) => {
-            const next = typeof val === 'function' ? (val as (prev: Set<string>) => Set<string>)(prev) : val;
-            const str = Array.from(next).join(',');
-            setSearchParams((p) => {
-                const s = new URLSearchParams(p);
-                if (str) s.set('expanded', str);
-                else s.delete('expanded');
-                return s;
-            }, { replace: true });
-            return next;
-        });
-    };
+    // 同步 expandedIds 到 URL（放在 useEffect 中，避免在 render phase 呼叫 setSearchParams 造成 warning）
+    useEffect(() => {
+        const str = Array.from(expandedIds).join(',');
+        setSearchParams((p) => {
+            const s = new URLSearchParams(p);
+            if (str) s.set('expanded', str);
+            else s.delete('expanded');
+            return s;
+        }, { replace: true });
+    }, [expandedIds, setSearchParams]);
+    const setExpandedIds = setExpandedIdsState;
 
     // 開啟編輯器（全螢幕路由，取代原 Dialog）
     const openDialog = (cat: Category | null = null, defaultParentId: string | null = null) => {

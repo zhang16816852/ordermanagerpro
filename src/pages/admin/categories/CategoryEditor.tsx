@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,9 +21,47 @@ export default function CategoryEditor() {
     const [searchParams] = useSearchParams();
     const defaultParent = searchParams.get('parent');
 
-    const { categories, categorySpecLinks, categoryHierarchy, categoryMutation } = useCategoryData();
+    const { categories, categorySpecLinks, categoryHierarchy, isLoadingLinks, isLoadingHierarchy, categoryMutation } = useCategoryData();
     const { specDefinitions } = useSpecData();
     const { engine, activeConfiguration } = useSpecEngine(specDefinitions);
+
+    // 找出所有祖先分類 ID
+    const ancestorIds = useMemo(() => {
+        const ids = new Set<string>();
+        if (!categoryId || !categoryHierarchy) return ids;
+        let cur: string | undefined = categoryId;
+        while (cur) {
+            const parent = categoryHierarchy.find((h: any) => h.child_id === cur)?.parent_id;
+            if (parent && !ids.has(parent)) {
+                ids.add(parent);
+                cur = parent;
+            } else {
+                cur = undefined;
+            }
+        }
+        return ids;
+    }, [categoryId, categoryHierarchy]);
+
+    // 祖先（母分類）所連結的 spec IDs（react-query 即時資料，供預覽與唯讀區塊共用）
+    const ancestorSpecIds = useMemo(() => {
+        if (ancestorIds.size === 0 || !categorySpecLinks) return [] as string[];
+        return categorySpecLinks
+            .filter((l: any) => ancestorIds.has(l.category_id))
+            .map((l: any) => l.spec_id);
+    }, [ancestorIds, categorySpecLinks]);
+
+    // 計算繼承自母分類（祖先）的 specs（唯讀，不可直接管理）
+    const inheritedSpecs = useMemo(() => {
+        if (ancestorSpecIds.length === 0 || !categorySpecLinks) return [];
+        // 排除已直接連結到此分類的 specs
+        const directSpecIds = new Set(
+            categorySpecLinks
+                .filter((l: any) => l.category_id === categoryId)
+                .map((l: any) => l.spec_id)
+        );
+        const inheritedIds = ancestorSpecIds.filter(id => !directSpecIds.has(id));
+        return (specDefinitions || []).filter((s: any) => inheritedIds.includes(s.id));
+    }, [categoryId, ancestorSpecIds, categorySpecLinks, specDefinitions]);
 
     const [activeTab, setActiveTab] = useState<'library' | 'config' | 'preview'>('library');
     const [name, setName] = useState('');
@@ -36,6 +74,9 @@ export default function CategoryEditor() {
     useEffect(() => {
         if (didInit.current) return;
         if (!categories || categories.length === 0) return;
+        // 必須等規格關聯/階層載入完成再初始化：過早初始化會以空快照讀取既有配置，
+        // 使用者一儲存就等於把所有關聯清空（配合儲存端的差量更新雙重防護）
+        if (isLoadingLinks || isLoadingHierarchy) return;
         didInit.current = true;
 
         if (categoryId) {
@@ -70,10 +111,14 @@ export default function CategoryEditor() {
             setRequiredMap({});
             engine.restore({ selected: {} });
         }
-    }, [categories, categoryId, categoryHierarchy, categorySpecLinks, engine, defaultParent]);
+    }, [categories, categoryId, categoryHierarchy, categorySpecLinks, isLoadingHierarchy, isLoadingLinks, engine, defaultParent]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!didInit.current) {
+            toast.error('資料尚未載入完成，請稍候再試');
+            return;
+        }
         try {
             await categoryMutation.mutateAsync({
                 name,
@@ -211,6 +256,7 @@ export default function CategoryEditor() {
                                 engine={engine}
                                 requiredMap={requiredMap}
                                 onToggleRequired={onToggleRequired}
+                                inheritedSpecs={inheritedSpecs}
                             />
                         </TabsContent>
 
@@ -220,6 +266,7 @@ export default function CategoryEditor() {
                                 activeConfiguration={activeConfiguration}
                                 specDefinitions={specDefinitions}
                                 requiredMap={requiredMap}
+                                inheritedSpecIds={ancestorSpecIds}
                             />
                         </TabsContent>
                     </Tabs>

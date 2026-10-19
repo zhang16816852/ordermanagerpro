@@ -29,7 +29,7 @@ export function useCategoryData() {
         },
     });
 
-    const { data: categorySpecLinks = [] } = useQuery({
+    const { data: categorySpecLinks = [], isLoading: isLoadingLinks } = useQuery({
         queryKey: ['category_spec_links'],
         queryFn: async () => {
             const { data, error } = await (supabase.from('category_spec_links' as any) as any).select('*');
@@ -38,7 +38,7 @@ export function useCategoryData() {
         },
     });
 
-    const { data: categoryHierarchy = [] } = useQuery({
+    const { data: categoryHierarchy = [], isLoading: isLoadingHierarchy } = useQuery({
         queryKey: ['category_hierarchy'],
         queryFn: async () => {
             const { data, error } = await (supabase.from('category_hierarchy' as any) as any).select('*');
@@ -53,7 +53,7 @@ export function useCategoryData() {
         mutationFn: async (data: {
             name: string;
             parentIds: string[];
-            specs: { id: string, sortOrder: number }[];
+            specs: { id: string, sortOrder: number, isManual?: boolean, required?: boolean }[];
             editingCategoryId?: string;
         }) => {
             const { specs, parentIds, editingCategoryId, ...catData } = data;
@@ -70,27 +70,82 @@ export function useCategoryData() {
                 catId = newCat.id;
             }
 
-            // 更新階層關係
-            await (supabase.from('category_hierarchy' as any) as any).delete().eq('child_id', catId);
-            if (parentIds.length > 0) {
-                const hierarchy = parentIds.map((pid: string) => ({
-                    parent_id: pid,
-                    child_id: catId
-                }));
-                await (supabase.from('category_hierarchy' as any) as any).insert(hierarchy);
+            // 更新階層關係（差量：僅在有變動時刪/插，並檢查錯誤）
+            const { data: existingParents, error: hierReadErr } = await (supabase
+                .from('category_hierarchy' as any) as any)
+                .select('parent_id')
+                .eq('child_id', catId);
+            if (hierReadErr) throw hierReadErr;
+            const existingParentIds = (existingParents || []).map((r: any) => r.parent_id as string);
+            const parentsToRemove = existingParentIds.filter((p: string) => !parentIds.includes(p));
+            const parentsToAdd = parentIds.filter((p: string) => !existingParentIds.includes(p));
+            if (parentsToRemove.length > 0) {
+                const { error } = await (supabase.from('category_hierarchy' as any) as any)
+                    .delete()
+                    .eq('child_id', catId)
+                    .in('parent_id', parentsToRemove);
+                if (error) throw error;
+            }
+            if (parentsToAdd.length > 0) {
+                const { error } = await (supabase.from('category_hierarchy' as any) as any)
+                    .insert(parentsToAdd.map((pid: string) => ({ parent_id: pid, child_id: catId })));
+                if (error) throw error;
             }
 
-            // 更新規格關聯
-            await (supabase.from('category_spec_links' as any) as any).delete().eq('category_id', catId);
-            if (specs && specs.length > 0) {
-                const links = specs.map((s: { id: string, sortOrder: number, isManual?: boolean, required?: boolean }) => ({
+            // 更新規格關聯（差量 upsert：只刪移除的、只插新增的、只更新有變動的，
+            // 取代原本「整批 DELETE 再 INSERT」——中斷或失敗時不會把既有關聯全部清空）
+            const { data: existingLinks, error: linkReadErr } = await (supabase
+                .from('category_spec_links' as any) as any)
+                .select('spec_id, sort_order, is_manual, required')
+                .eq('category_id', catId);
+            if (linkReadErr) throw linkReadErr;
+
+            const incomingSpecs = (specs || []).filter((s: any) => s && s.id);
+            const incomingIds = new Set(incomingSpecs.map((s: any) => s.id));
+            const existingById = new Map<string, any>(
+                ((existingLinks || []) as any[]).map((l: any) => [l.spec_id, l])
+            );
+
+            const idsToRemove = Array.from(existingById.keys()).filter((sid) => !incomingIds.has(sid));
+            if (idsToRemove.length > 0) {
+                const { error } = await (supabase.from('category_spec_links' as any) as any)
+                    .delete()
+                    .eq('category_id', catId)
+                    .in('spec_id', idsToRemove);
+                if (error) throw error;
+            }
+
+            const toInsert: any[] = [];
+            const toUpdate: any[] = [];
+            for (const s of incomingSpecs) {
+                const row = {
                     category_id: catId,
                     spec_id: s.id,
                     sort_order: s.sortOrder,
                     is_manual: s.isManual ?? true,
-                    required: s.required ?? false
-                }));
-                await (supabase.from('category_spec_links' as any) as any).insert(links);
+                    required: s.required ?? false,
+                };
+                const existing = existingById.get(s.id);
+                if (!existing) {
+                    toInsert.push(row);
+                } else if (
+                    existing.sort_order !== row.sort_order ||
+                    existing.is_manual !== row.is_manual ||
+                    existing.required !== row.required
+                ) {
+                    toUpdate.push(row);
+                }
+            }
+            if (toInsert.length > 0) {
+                const { error } = await (supabase.from('category_spec_links' as any) as any).insert(toInsert);
+                if (error) throw error;
+            }
+            for (const row of toUpdate) {
+                const { error } = await (supabase.from('category_spec_links' as any) as any)
+                    .update({ sort_order: row.sort_order, is_manual: row.is_manual, required: row.required })
+                    .eq('category_id', catId)
+                    .eq('spec_id', row.spec_id);
+                if (error) throw error;
             }
 
             // 清理分類下已移除規格的殘留值
@@ -463,6 +518,8 @@ export function useCategoryData() {
         isLoadingCats,
         categorySpecLinks,
         categoryHierarchy,
+        isLoadingLinks,
+        isLoadingHierarchy,
         categoryMutation,
         reorderMutation,
         handleCategoryExport,

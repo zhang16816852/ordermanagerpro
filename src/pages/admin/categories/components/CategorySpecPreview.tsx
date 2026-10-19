@@ -9,14 +9,20 @@ interface CategorySpecPreviewProps {
     activeConfiguration: any[];
     specDefinitions: any[];
     requiredMap?: Record<string, boolean>;
+    /** 祖先（母分類）連結的 spec IDs — 由呼叫端以即時 react-query 資料計算，避免 store 快取過期造成繼承規格漏顯示 */
+    inheritedSpecIds?: string[];
 }
 
-export function CategorySpecPreview({ categoryId, activeConfiguration, specDefinitions, requiredMap = {} }: CategorySpecPreviewProps) {
+export function CategorySpecPreview({ categoryId, activeConfiguration, specDefinitions, requiredMap = {}, inheritedSpecIds }: CategorySpecPreviewProps) {
     const { specTriggers } = useSpecStore();
     const form = useForm({ defaultValues: { category_ids: categoryId ? [categoryId] : [], spec_values: {} } });
 
     const specFields = useMemo(() => {
         const ids = new Set((activeConfiguration || []).map((s: any) => s.id));
+
+        // 納入母分類（祖先）所連結的 specs，讓子分類預覽也能顯示繼承的共用規格
+        (inheritedSpecIds || []).forEach(id => ids.add(id));
+
         if (ids.size === 0) return [];
 
         const down = new Map<string, string[]>();
@@ -54,7 +60,7 @@ export function CategorySpecPreview({ categoryId, activeConfiguration, specDefin
         return (specDefinitions || [])
             .filter((s: any) => all.has(s.id))
             .map((s: any) => ({ ...s, sourceCategoryIds: categoryId ? [categoryId] : [], required: !!requiredMap[s.id] } as CategorySpec));
-    }, [activeConfiguration, specDefinitions, categoryId, requiredMap, specTriggers]);
+    }, [activeConfiguration, specDefinitions, categoryId, requiredMap, specTriggers, inheritedSpecIds]);
 
     if (specFields.length === 0) {
         return (

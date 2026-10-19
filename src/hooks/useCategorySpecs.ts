@@ -57,7 +57,7 @@ export interface UseCategorySpecsOptions {
  * [v6.2] 新增 includeDescendants / includeTriggerDownstream，讓連動鏈在選到父/子分類時也能完整出現
  */
 export function useCategorySpecs(categoryIds: string[], options?: UseCategorySpecsOptions) {
-    const { specDefinitions, categoryLinks, categoryHierarchy, isLoading } = useSpecStore();
+    const { specDefinitions, categoryLinks, categoryHierarchy, isLoading, specTriggers } = useSpecStore();
     const {
         includeAncestors = false,
         includeDescendants = false,
@@ -99,16 +99,35 @@ export function useCategorySpecs(categoryIds: string[], options?: UseCategorySpe
         const linkedSpecIds = new Set(linked.map(l => l.spec_id));
 
         // 3. 遞迴帶入觸發下游規格（即便是純觸發、未掛載於任何分類）
+        // [修正] 優先使用 store 的 specTriggers（直接從 DB 載入），並 fallback 到 logic_config.triggers，
+        // 與 CategorySpecPreview 的 downstream 遞迴行為保持一致，避免 store 快取尚未同步時 downstream 遺漏
         const downstreamMap = new Map<string, string[]>();
-        (specDefinitions || []).forEach((s: any) => {
-            const triggers = s.logic_config?.triggers || [];
-            triggers.forEach((t: any) => {
-                (t.targets || []).forEach((tar: any) => {
-                    if (!downstreamMap.has(s.id)) downstreamMap.set(s.id, []);
-                    downstreamMap.get(s.id)!.push(tar.id);
+        (specTriggers || []).forEach((t: any) => {
+            if (!downstreamMap.has(t.source_spec_id)) downstreamMap.set(t.source_spec_id, []);
+            downstreamMap.get(t.source_spec_id)!.push(t.target_spec_id);
+        });
+        // fallback：specTriggers 為空或缺少某來源時，退回 logic_config.triggers（相容舊資料）
+        if (downstreamMap.size === 0) {
+            (specDefinitions || []).forEach((s: any) => {
+                (s.logic_config?.triggers || []).forEach((t: any) => {
+                    (t.targets || []).forEach((tar: any) => {
+                        if (!downstreamMap.has(s.id)) downstreamMap.set(s.id, []);
+                        downstreamMap.get(s.id)!.push(tar.id);
+                    });
                 });
             });
-        });
+        } else {
+            // 補充：若某來源在 specTriggers 中無 downstream，但 logic_config 有，則補入
+            (specDefinitions || []).forEach((s: any) => {
+                if (downstreamMap.has(s.id)) return;
+                (s.logic_config?.triggers || []).forEach((t: any) => {
+                    (t.targets || []).forEach((tar: any) => {
+                        if (!downstreamMap.has(s.id)) downstreamMap.set(s.id, []);
+                        downstreamMap.get(s.id)!.push(tar.id);
+                    });
+                });
+            });
+        }
 
         const effectiveSpecIds = new Set(linkedSpecIds);
         if (includeTriggerDownstream) {
@@ -136,7 +155,7 @@ export function useCategorySpecs(categoryIds: string[], options?: UseCategorySpe
             })
             .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0));
 
-    }, [categoryIds, specDefinitions, categoryLinks, categoryHierarchy, includeAncestors, includeDescendants, includeTriggerDownstream]);
+    }, [categoryIds, specDefinitions, categoryLinks, categoryHierarchy, specTriggers, includeAncestors, includeDescendants, includeTriggerDownstream]);
 
     return {
         data: filteredSpecs,

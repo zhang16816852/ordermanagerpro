@@ -29,6 +29,7 @@ export function SpecFieldHeader({
     showDepChain = true,
     className,
 }: SpecFieldHeaderProps) {
+    if (!spec) return null;
     const info = visibleInfo.get(pathKey);
     const colorIndex = resolveGroupColor(pathKey, colorMap, visibleInfo);
     const pal = colorIndex !== null ? QTY_GROUP_PALETTE[colorIndex] : null;

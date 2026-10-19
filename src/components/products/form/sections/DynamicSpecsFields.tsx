@@ -14,8 +14,9 @@ interface DynamicSpecsFieldsProps {
 
 export function DynamicSpecsFields({ form, specFieldsOverride }: DynamicSpecsFieldsProps) {
     const selectedCategoryIds = form.watch('category_ids') || [];
-    const { specMap, specTriggers, refreshIfStale, categories } = useSpecStore();
+    const { specMap, specTriggers, specDefinitions, refreshIfStale, categories } = useSpecStore();
     const { data: hookedSpecs = [], isLoading: isLoadingSpecs } = useCategorySpecs(selectedCategoryIds, {
+        includeAncestors: true,
         includeDescendants: true,
         includeTriggerDownstream: true,
     });
@@ -24,11 +25,11 @@ export function DynamicSpecsFields({ form, specFieldsOverride }: DynamicSpecsFie
 
     // 確保規格定義已載入（比對版本、落後才重抓）
     useEffect(() => {
-        refreshIfStale();
+        useSpecStore.getState().refreshIfStale(true);
     }, []);
 
     // 使用中央計算器 (v5.1 支持 DSL)
-    const visibleInfo = getVisibleSpecsTree(specFields, specValues, specTriggers);
+    const visibleInfo = getVisibleSpecsTree(specFields, specValues, specTriggers, specDefinitions);
 
     const sortedVisible = getTreeSortedVisiblePaths(specFields, visibleInfo);
 
@@ -82,7 +83,7 @@ export function DynamicSpecsFields({ form, specFieldsOverride }: DynamicSpecsFie
                         {group.rows.map(({ pathKey, level }) => {
                             const parts = pathKey.split(':');
                             const specId = parts[1];
-                            const spec = specFields.find(f => f.id === specId) || specMap.get(specId);
+                            const spec = specFields.find(f => f.id === specId) || specMap.get(specId) || (specDefinitions || []).find((s: any) => s.id === specId);
 
                             if (!spec) return null;
 
