@@ -141,9 +141,12 @@ export function OrderItemsMobileList({
                                     <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Package className="h-3 w-3" /> 數量</label>
                                     {isEditable ? (
                                         <>
-                                            <Input type="number" value={displayQty(item)} onChange={(e) => onUpdateQuantity(index, Math.abs(parseInt(e.target.value) || 1))} onKeyDown={(e) => handleColumnNav(e, 'qty')} onFocus={selectOnFocus} data-col="qty" className="h-9" min={Math.max(1, item.receivedQuantity || 0)} />
+                                            <Input type="number" value={displayQty(item)} onChange={(e) => onUpdateQuantity(index, Math.abs(parseInt(e.target.value) || 1))} onKeyDown={(e) => handleColumnNav(e, 'qty')} onFocus={selectOnFocus} data-col="qty" className="h-9" min={Math.max(1, item.receivedQuantity || 0, item.poRecordedQuantity || 0)} />
                                             {(item.receivedQuantity || 0) > 0 && (
                                                 <p className="text-[10px] text-green-600">已收 {item.receivedQuantity}</p>
+                                            )}
+                                            {(item.poRecordedQuantity || 0) > 0 && (
+                                                <p className="text-[10px] text-orange-600">已轉採購 {item.poRecordedQuantity}{(item.poRecordedCodes || []).length > 0 ? `（${(item.poRecordedCodes || []).join('、')}）` : ''}</p>
                                             )}
                                             {(item.shippedQuantity || 0) > 0 && (
                                                 <p className="text-[10px] text-blue-600">已出貨 {item.shippedQuantity}</p>

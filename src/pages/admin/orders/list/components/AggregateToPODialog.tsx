@@ -37,6 +37,8 @@ interface AggregateToPODialogProps {
   onOpenChange: (open: boolean) => void;
   selectedItems: { productId: string; variantId: string | null; quantity: number; maxQuantity?: number; productName: string; variantName?: string | null; sku: string; sourceOrderIds: string[]; sourceQuantities?: Record<string, number> }[];
   onCreated: () => void;
+  purchasedByOrderKey?: Map<string, number>;
+  poOverByOrderKey?: Set<string>;
 }
 
 export function AggregateToPODialog({
@@ -44,6 +46,8 @@ export function AggregateToPODialog({
   onOpenChange,
   selectedItems,
   onCreated,
+  purchasedByOrderKey,
+  poOverByOrderKey,
 }: AggregateToPODialogProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -282,6 +286,15 @@ export function AggregateToPODialog({
     return editableItems.reduce((sum, item) => sum + item.unitCost * item.quantity, 0);
   }, [editableItems]);
 
+  const bindInfoOf = (item: EditableItem) => {
+    const keys = item.sourceOrderIds.map(oid => `${oid}|${item.productId}|${item.variantId || 'null'}`);
+    const recorded = keys.reduce((sum, k) => sum + (purchasedByOrderKey?.get(k) || 0), 0);
+    const over = keys.some(k => poOverByOrderKey?.has(k));
+    return { recorded, over };
+  };
+
+  const hasOverItem = editableItems.some(item => bindInfoOf(item).over);
+
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!supplierId) throw new Error('請選擇供應商');
@@ -423,6 +436,24 @@ export function AggregateToPODialog({
                       <div className="flex-1">
                         <span className="font-medium block break-words">{item.variantName || item.productName}</span>
                         <span className="text-xs text-muted-foreground font-mono block">{item.sku}</span>
+                        {(() => {
+                          const bind = bindInfoOf(item);
+                          if (bind.over) {
+                            return (
+                              <span className="inline-block mt-1 text-[10px] px-1 py-0 rounded border bg-red-100 text-red-700 border-red-200">
+                                採購超量（已採購 {bind.recorded} 件）
+                              </span>
+                            );
+                          }
+                          if (bind.recorded > 0) {
+                            return (
+                              <span className="inline-block mt-1 text-[10px] px-1 py-0 rounded border bg-green-100 text-green-700 border-green-200">
+                                已採購 {bind.recorded} 件
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
                         {item.sourceOrderIds.length > 0 && (
                           <span className="text-[10px] text-muted-foreground/70 block">
                             來源：{item.sourceOrderIds.length} 張訂單
@@ -520,6 +551,12 @@ export function AggregateToPODialog({
               </Button>
             )}
 
+            {hasOverItem && (
+              <div className="text-xs text-red-600">
+                清單中有採購超量的品項（既有採購單數量已超過訂單需求），請先解除該品項的採購連結後再轉單。
+              </div>
+            )}
+
             {totalEstimatedCost > 0 && (
               <div className="text-right text-sm text-muted-foreground">
                 預估總金額：<span className="font-bold text-foreground">{formatCurrency(totalEstimatedCost)}</span>
@@ -534,7 +571,7 @@ export function AggregateToPODialog({
           </Button>
           <Button
             onClick={() => createMutation.mutate()}
-            disabled={!supplierId || createMutation.isPending || (targetMode === 'existing' && !existingPOId) || editableItems.length === 0}
+            disabled={!supplierId || createMutation.isPending || (targetMode === 'existing' && !existingPOId) || editableItems.length === 0 || hasOverItem}
           >
             {createMutation.isPending ? '建立中...' : '確認建立'}
           </Button>

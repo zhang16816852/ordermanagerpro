@@ -7,6 +7,7 @@ import { useDocumentProfit, type DocProfitInputItem } from '@/hooks/useDocumentP
 import { useRepStoreAssignments } from '@/hooks/useRepStoreAssignments';
 import { useBusinessProfitCalculator, type BusinessProfitLineInput } from '@/hooks/useBusinessProfit';
 import { sumProfit, type ProfitLine, type ProfitSummary } from '@/utils/grossProfit';
+import { getPoBindStatus, type PoBindStatus } from '@/utils/poBindStatus';
 
 export type BusinessFilter = 'all' | 'with' | 'without';
 
@@ -37,6 +38,7 @@ export interface UseOrderListDerivedParams {
   sortDirection: 'asc' | 'desc';
   getPendingQuantity: (item: OrderItem) => number;
   purchasedByOrderKey: Map<string, number>;
+  poOverByOrderKey: Set<string>;
   poProductStats: Map<string, PoProductStats>;
   aggStatus: AggregateFilterMode;
   selectedOrderIds: Set<string>;
@@ -65,6 +67,8 @@ export interface UseOrderListDerivedResult {
   orderPoolGroupedItems: Record<string, { storeName: string; items: any[] }>;
   poItemsFromOrders: AggregateSelectionItem[];
   poItemsSource: AggregateSelectionItem[];
+  /** 每個訂單品項（key = order_item.id）的採購綁定狀態 */
+  poBindByOrderItem: Map<string, { recorded: number; status: PoBindStatus; poIds: string[] }>;
   getOrderShipmentStatus: (items: OrderItem[]) => 'waiting' | 'partial' | 'shipped';
   getItemStatusLabel: (status: string) => { label: string; className: string };
 }
@@ -83,6 +87,7 @@ export function useOrderListDerived(params: UseOrderListDerivedParams): UseOrder
     sortDirection,
     getPendingQuantity,
     purchasedByOrderKey,
+    poOverByOrderKey,
     poProductStats,
     aggStatus,
     selectedOrderIds,
@@ -505,6 +510,26 @@ const profitByOrderId = useMemo(() => {
     return grouped;
   }, [orders, selectedOrderIds, getPendingQuantity]);
 
+  // 每個訂單品項的採購綁定狀態（recorded=source_quantities 累計、over=來源 PO 品項超量）
+  const poBindByOrderItem = useMemo(() => {
+    const map = new Map<string, { recorded: number; status: PoBindStatus; poIds: string[] }>();
+    for (const order of orders) {
+      const poIds = poLinkMap.get(order.id)?.poIds || [];
+      for (const item of order.order_items) {
+        const key = `${order.id}|${item.product_id}|${item.variant_id || 'null'}`;
+        const recorded = purchasedByOrderKey.get(key) || 0;
+        const over = poOverByOrderKey.has(key);
+        if (recorded <= 0 && !over) continue;
+        map.set(item.id, {
+          recorded,
+          status: getPoBindStatus(item.quantity - item.shipped_quantity, recorded, over),
+          poIds,
+        });
+      }
+    }
+    return map;
+  }, [orders, poLinkMap, purchasedByOrderKey, poOverByOrderKey]);
+
   return {
     itemMatchesSearch,
     matchesSearch,
@@ -519,6 +544,7 @@ const profitByOrderId = useMemo(() => {
     orderPoolGroupedItems,
     poItemsFromOrders,
     poItemsSource,
+    poBindByOrderItem,
     getOrderShipmentStatus,
     getItemStatusLabel: (status: string) => itemStatusLabels[status],
   };

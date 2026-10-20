@@ -24,6 +24,10 @@ export interface OrderItemRow {
     /** 採購單品項已收貨數量：不可刪除／不可降低數量／不可換商品（僅採購編輯模式使用） */
     receivedQuantity?: number;
     shippedQuantity?: number;
+    /** 已被採購單採購數量（source_quantities 對此訂單的累計）：不可降低數量至此以下（僅銷售訂單編輯模式使用） */
+    poRecordedQuantity?: number;
+    /** 採購單採購此品項的單號（提示用） */
+    poRecordedCodes?: string[];
 }
 
 export const DEFAULT_LINE_TYPE: 'sale' | 'exchange' | 'return' = 'sale';

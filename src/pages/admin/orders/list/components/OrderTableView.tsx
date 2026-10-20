@@ -17,6 +17,7 @@ import { zhTW } from 'date-fns/locale';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import { Order, OrderItem } from '@/types/order';
 import { ProfitCell } from '@/components/shared/ProfitCell';
+import { orderPoBindBadge, type OrderPoBindMap } from '@/utils/poBindStatus';
 import type { OrderProfitView } from '../useOrderListDerived';
 
 interface OrderTableViewProps {
@@ -33,6 +34,7 @@ interface OrderTableViewProps {
   sortDirection: 'asc' | 'desc';
   onSort: (field: string) => void;
   poLinkMap: Map<string, { poCount: number; poIds: string[] }>;
+  poBindByOrderItem?: OrderPoBindMap;
   consignmentBySourceOrder: Map<string, any>;
   commissionByOrder?: Map<string, { totalProfit: number; totalCommission: number }>;
   /** 擁有者視圖：有業務門市顯示業務利潤／估佣，無業務門市顯示毛利／毛利率（互斥） */
@@ -53,6 +55,7 @@ export function OrderTableView({
   sortDirection,
   onSort,
   poLinkMap,
+  poBindByOrderItem,
   consignmentBySourceOrder,
   commissionByOrder,
   profitByOrderId,
@@ -182,6 +185,14 @@ export function OrderTableView({
                           已轉採購
                         </Badge>
                       )}
+                      {(() => {
+                        const b = orderPoBindBadge(order.order_items, poBindByOrderItem);
+                        return b ? (
+                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 font-normal ${b.className}`}>
+                            {b.text}
+                          </Badge>
+                        ) : null;
+                      })()}
                     </div>
                   </TableCell>
                   <TableCell>

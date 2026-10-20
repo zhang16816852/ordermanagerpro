@@ -85,6 +85,8 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
   const purchasedByOrderKey = new Map<string, number>();
   // key: `${productId}_${variantId ?? 'null'}` → 已下單/在途/已收
   const poProductStats = new Map<string, { orderedQty: number; receivedQty: number; inTransitQty: number }>();
+  // key: `${orderId}|${productId}|${variantId ?? 'null'}` → 該採購單品項 source_quantities 合計已超過 PO 品項數量
+  const poOverByOrderKey = new Set<string>();
   for (const poi of poLinkItems) {
     const poOrder = Array.isArray(poi.purchase_orders) ? poi.purchase_orders?.[0] : poi.purchase_orders;
     // ⚠️ 退貨單（purpose='purchase_return'）的 status 也是 received，會通過上面的 active 判定，
@@ -105,9 +107,12 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
       }
       // 累計該品項 (orderId × product × variant) 的已採購量
       if (poi.source_quantities) {
+        const recordedTotal = Object.values(poi.source_quantities).reduce((sum, qty) => sum + (qty || 0), 0);
+        const isOver = recordedTotal > (poi.quantity || 0);
         for (const [orderId, qty] of Object.entries(poi.source_quantities)) {
           const key = `${orderId}|${poi.product_id || 'null'}|${poi.variant_id || 'null'}`;
           purchasedByOrderKey.set(key, (purchasedByOrderKey.get(key) || 0) + (qty || 0));
+          if (isOver) poOverByOrderKey.add(key);
         }
       }
     }
@@ -353,6 +358,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
     shippingPoolMap,
     poLinkMap,
     purchasedByOrderKey,
+    poOverByOrderKey,
     poProductStats,
     consignmentBySourceOrderId,
     getPendingQuantity,

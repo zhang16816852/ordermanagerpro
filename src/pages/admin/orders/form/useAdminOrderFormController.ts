@@ -6,6 +6,8 @@ import { useStoreProductCache, useProductCache } from '@/hooks/useProductCache';
 import type { ProductWithPricing } from '@/types/product';
 import { useStoreDraft, useOrderDraftStore } from '@/store/useOrderDraftStore';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
+import { getErrorMessage } from '@/lib/errorMessages';
 import { format } from 'date-fns';
 import { OrderItemRow, LineTypeOption } from '@/components/order/orderItemsTypes';
 import { useWarehouses } from "@/pages/admin/inventory/hooks/useWarehouses";
@@ -16,6 +18,7 @@ import type { PurchaseOrderPurpose, PurchaseOrderStatus } from '@/pages/admin/pu
 import { useOrderFormQueries } from './useOrderFormQueries';
 import { useCatalogFilters } from './useCatalogFilters';
 import { useOrderFormMutations } from './useOrderFormMutations';
+import type { PoSyncChange, DirectShipDelivery } from './useOrderFormMutations';
 import { useOrderFormStateSync } from './useOrderFormStateSync';
 
 export function useAdminOrderFormController() {
@@ -25,6 +28,7 @@ export function useAdminOrderFormController() {
   const [selectedStoreId, setSelectedStoreId] = useState(storeIdFromParam);
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const { user, isRep } = useAuth();
 
   const isEditMode = !!orderId;
@@ -48,6 +52,7 @@ export function useAdminOrderFormController() {
   const {
     order,
     orderLoading,
+    orderPoBindings,
     purchaseOrder,
     purchaseLoading,
     storeInfo,
@@ -121,6 +126,11 @@ export function useAdminOrderFormController() {
   const [itemWarehouses, setItemWarehouses] = useState<Record<string, string>>({});
   const [itemSources, setItemSources] = useState<Record<string, string>>({});
   const [consignmentMode, setConsignmentMode] = useState(false);
+  const [poSyncDialogOpen, setPoSyncDialogOpen] = useState(false);
+  const [poSyncChanges, setPoSyncChanges] = useState<PoSyncChange[]>([]);
+  const [poSyncSaving, setPoSyncSaving] = useState(false);
+  const poSyncIntentRef = useRef<null | 'save' | 'directShip'>(null);
+  const poSyncDeliveryRef = useRef<DirectShipDelivery | null>(null);
   // 訂單層只存配送類型（delivery/logistics/pickup），方法/包裹細節於出貨 RPC 內產生
   const [deliveryType, setDeliveryType] = useState<DeliveryType | null>(null);
 
@@ -253,6 +263,7 @@ export function useAdminOrderFormController() {
     order,
     isPurchaseEdit,
     purchaseOrder,
+    orderPoBindings,
     blockNewItems: isPurchaseEdit && purchaseOrder?.status === 'cancelled',
     draft,
     supplierMappings,
@@ -300,6 +311,13 @@ export function useAdminOrderFormController() {
     // 採購：不可低於已收貨數量
     if (purchaseEditRef.current && (row?.receivedQuantity ?? 0) > 0 && value < (row?.receivedQuantity ?? 0)) {
       handlePoLockGuard(row, '降低數量至已收貨數量以下');
+      return;
+    }
+    // 銷售：不可低於已轉採購數量（避免與採購單來源數量不一致）
+    const poRecorded = row?.poRecordedQuantity ?? 0;
+    if (!purchaseEditRef.current && poRecorded > 0 && value < poRecorded) {
+      const codes = row?.poRecordedCodes?.length ? `（${row.poRecordedCodes.join('、')}）` : '';
+      toast.error(`此品項已被採購單${codes}採購 ${poRecorded} 件，請先解除採購再降低數量`);
       return;
     }
     setItems((prev) => {
@@ -442,6 +460,8 @@ export function useAdminOrderFormController() {
     createPurchaseOrderMutation,
     createConsignmentReceiveMutation,
     createConsignmentSendMutation,
+    previewPoQuantities,
+    applyPoQuantities,
     isSubmitting,
   } = useOrderFormMutations({
     orderId,
@@ -502,6 +522,84 @@ export function useAdminOrderFormController() {
     else if (orderType === 'consignment_receive' || orderType === 'consignment_send') navigate('/admin/consignment');
     else navigate(listReturnTo(window.location.search));
   }, [orderType, navigate]);
+
+  // 儲存變更：先 dry-run 採購單數量同步，僅在有變動時彈出確認
+  const runSave = useCallback(async () => {
+    try {
+      const res = await previewPoQuantities(items, pendingDeletedIds);
+      if (res.ok === false) {
+        if (res.reason) toast.error(res.reason);
+        return;
+      }
+      if (res.changes.length > 0) {
+        poSyncIntentRef.current = 'save';
+        poSyncDeliveryRef.current = null;
+        setPoSyncChanges(res.changes);
+        setPoSyncDialogOpen(true);
+        return;
+      }
+      updateOrderMutation.mutate();
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    }
+  }, [previewPoQuantities, items, pendingDeletedIds, updateOrderMutation]);
+
+  // 轉銷貨單／寄賣出貨：同上，確認後先套用再出貨
+  const runDirectShip = useCallback(async (delivery: DirectShipDelivery) => {
+    try {
+      const res = await previewPoQuantities(items, pendingDeletedIds);
+      if (res.ok === false) {
+        if (res.reason) toast.error(res.reason);
+        return;
+      }
+      if (res.changes.length > 0) {
+        poSyncIntentRef.current = 'directShip';
+        poSyncDeliveryRef.current = delivery;
+        setPoSyncChanges(res.changes);
+        setPoSyncDialogOpen(true);
+        return;
+      }
+      directShipMutation.mutate(delivery);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    }
+  }, [previewPoQuantities, items, pendingDeletedIds, directShipMutation]);
+
+  const confirmPoSync = useCallback(async () => {
+    const intent = poSyncIntentRef.current;
+    const delivery = poSyncDeliveryRef.current;
+    setPoSyncSaving(true);
+    try {
+      const res = await applyPoQuantities(items, pendingDeletedIds);
+      if (res.ok === false) {
+        if (res.reason) toast.error(res.reason);
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ['order-po-bindings', orderId] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-order-detail'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      setPoSyncDialogOpen(false);
+      if (intent === 'save') updateOrderMutation.mutate();
+      else if (intent === 'directShip' && delivery) directShipMutation.mutate(delivery);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setPoSyncSaving(false);
+      poSyncIntentRef.current = null;
+      poSyncDeliveryRef.current = null;
+    }
+  }, [applyPoQuantities, items, pendingDeletedIds, updateOrderMutation, directShipMutation, orderId, queryClient]);
+
+  const declinePoSync = useCallback(() => {
+    setPoSyncDialogOpen(false);
+    poSyncIntentRef.current = null;
+    poSyncDeliveryRef.current = null;
+  }, []);
+
+  const handlePoSyncOpenChange = useCallback((open: boolean) => {
+    if (!open) declinePoSync();
+    else setPoSyncDialogOpen(true);
+  }, [declinePoSync]);
 
   // 從草稿清單載入指定草稿：先清空目前表單狀態，再切換 draftKey／URL，
   // 由 draft sync effect 將目標草稿 merge 進（已清空的）狀態即為該草稿內容。
@@ -647,6 +745,13 @@ export function useAdminOrderFormController() {
     consignmentMode,
     setConsignmentMode,
     handleConsignmentModeChange,
+    runSave,
+    runDirectShip,
+    poSyncDialogOpen,
+    poSyncChanges,
+    poSyncSaving,
+    confirmPoSync,
+    handlePoSyncOpenChange,
     deliveryType,
     setDeliveryType,
     activePanel,

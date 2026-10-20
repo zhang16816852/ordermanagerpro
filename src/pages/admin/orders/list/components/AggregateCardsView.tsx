@@ -6,6 +6,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronRight, Store, Package } from 'lucide-react';
 import type { AggregatedItem } from './AggregateTableView';
+import { getPoBindStatus, poBindBadge } from '@/utils/poBindStatus';
+import type { PoBindStatus } from '@/utils/poBindStatus';
 
 interface AggregateCardsViewProps {
   items: AggregatedItem[];
@@ -14,6 +16,8 @@ interface AggregateCardsViewProps {
   onToggleSelection: (item: AggregatedItem, checked: boolean) => void;
   onUpdateQuantity: (key: string, quantity: number) => void;
   onToggleAll?: (checked: boolean) => void;
+  purchasedByOrderKey?: Map<string, number>;
+  poOverByOrderKey?: Set<string>;
 }
 
 export function AggregateCardsView({
@@ -23,12 +27,24 @@ export function AggregateCardsView({
   onToggleSelection,
   onUpdateQuantity,
   onToggleAll,
+  purchasedByOrderKey,
+  poOverByOrderKey,
 }: AggregateCardsViewProps) {
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 
   const getItemKey = (item: AggregatedItem) => `${item.productId}_${item.variantId || 'null'}`;
   const selectable = !!onToggleAll;
   const selectableItems = items.filter((it) => it.outstandingQty > 0);
+
+  const bindStatusOf = (item: AggregatedItem): { status: PoBindStatus; recorded: number } | null => {
+    let recorded = 0;
+    for (const oid of item.sourceOrderIds) {
+      recorded += purchasedByOrderKey?.get(`${oid}|${item.productId}|${item.variantId || 'null'}`) || 0;
+    }
+    const over = item.sourceOrderIds.some(oid => poOverByOrderKey?.has(`${oid}|${item.productId}|${item.variantId || 'null'}`));
+    if (recorded <= 0 && !over) return null;
+    return { status: getPoBindStatus(item.totalDemand, recorded, over), recorded };
+  };
 
   const toggleExpand = (key: string) => {
     setExpandedCards(prev => {
@@ -100,12 +116,26 @@ export function AggregateCardsView({
                   </div>
 
                   {!isSelected && (
-                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span>總需求 <span className="font-semibold text-foreground">{item.totalDemand}</span></span>
                       <span>
                         已訂 <span className="font-semibold text-foreground">{item.orderedQty}</span>
                         <span className="text-muted-foreground/80">（在途 {item.inTransitQty}・已收 {item.receivedQty}）</span>
                       </span>
+                      {(() => {
+                        const s = bindStatusOf(item);
+                        if (!s) return null;
+                        if (isFullyOrdered && s.status !== 'over') {
+                          return <span className="text-muted-foreground">已全數採購</span>;
+                        }
+                        const b = poBindBadge(s.status, item.totalDemand, s.recorded);
+                        if (!b) return null;
+                        return (
+                          <Badge variant="outline" className={`text-[10px] px-1 py-0 font-normal ${b.className}`}>
+                            {b.text}
+                          </Badge>
+                        );
+                      })()}
                     </div>
                   )}
 

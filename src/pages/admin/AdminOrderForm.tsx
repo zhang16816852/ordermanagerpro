@@ -13,6 +13,7 @@ import { DeliveryTypeCard } from '@/components/shipping/DeliveryTypeCard';
 import { useAdminOrderFormController } from './orders/form/useAdminOrderFormController';
 import { useAdminOrderFormHeader, statusLabels } from './orders/form/useAdminOrderFormHeader';
 import { DirectShipDialog } from './orders/form/DirectShipDialog';
+import { PoSyncConfirmDialog } from './orders/form/PoSyncConfirmDialog';
 import { DraftPickerDialog } from './orders/form/DraftPickerDialog';
 import { selectDraftRows } from './orders/form/draftPicker';
 import { PO_STATUS_LABELS, type PurchaseOrderStatus } from './purchase-orders/types';
@@ -351,7 +352,7 @@ export default function AdminOrderForm() {
                 {c.order?.consignment_mode ? '寄賣出貨' : '轉銷貨單'}
               </Button>
             )}
-            <Button onClick={() => c.updateOrderMutation.mutate()} disabled={c.isSubmitting}>
+            <Button onClick={() => c.runSave()} disabled={c.isSubmitting}>
               <Save className="mr-2 h-4 w-4" />
               {c.updateOrderMutation.isPending ? '儲存中…' : '儲存變更'}
             </Button>
@@ -413,7 +414,15 @@ export default function AdminOrderForm() {
         itemSources={c.itemSources}
         onItemSourceChange={(id, src) => c.setItemSources((prev) => ({ ...prev, [id]: src }))}
         isPending={c.directShipMutation.isPending}
-        onConfirm={(delivery) => c.directShipMutation.mutate(delivery)}
+        onConfirm={(delivery) => c.runDirectShip(delivery)}
+      />
+
+      <PoSyncConfirmDialog
+        open={c.poSyncDialogOpen}
+        changes={c.poSyncChanges}
+        isPending={c.poSyncSaving}
+        onOpenChange={c.handlePoSyncOpenChange}
+        onConfirm={c.confirmPoSync}
       />
     </div>
   );

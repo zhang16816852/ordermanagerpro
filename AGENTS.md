@@ -2,6 +2,23 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（訂單編輯同步採購單來源量 ＋ 採購綁定徽章，Phase B＋C，2026-10-20）
+
+- **問題**：訂單編輯改量後，採購單（PO）的 `source_quantities` 快照未同步 → 訂單數量與採購數量長期不一致（該快照是全站彙總、去重複採購判斷、PO 綁定徽章的基準）。**本批只做「向後同步」前進方向，不改既有資料（Phase A 資料修復由使用者決定延期）**。
+- **Phase B｜後端 RPC `sync_order_po_quantities(p_order_id uuid, p_items jsonb, p_deleted_item_ids uuid[], p_apply boolean)`**（migration `supabase/migrations/20261020000001_update_order_sync_po_source_quantities.sql`，**已套用遠端並以 fixture 驗證**）：
+  - **單一 RPC 兼具 preview/apply**：`p_apply=false` 為 dry-run（**零寫入**）回 `{changes:[…]}`；`p_apply=true` 實際套用回 `{ok:true, applied:[…]}`。`update_order_with_items` **維持不動**（每次儲存不順帶改 PO）。
+  - **delta 對帳（關鍵）**：以訂單品項**當前 DB `quantity`** 為基準（非「先前請求值」），`quantity -= delta`、`share -= delta`；**絕不以 `sum(source_quantities)` 回推 quantity**（`quantity == sum(source_quantities)` **非不變式**，實查有 1 筆 drift）。反覆 apply 從 live DB 狀態累加。
+  - **方向語意**：增補→`quantity += delta`、`share += delta`；調降→`quantity -= delta` 但**新 quantity 不得低於 `quantity_old - my_share`**（＝其他來源訂單份額和 `others`，**避免刪掉別人的貨**）。歸零且 `others=0` 且 `received_quantity=0` → DELETE 該 PO 品項列（`action:'remove'`）；否則 UPDATE 並以 `source_quantities - orderId::text` 移除該訂單 key（`source_order_ids` 陣列**刻意保留**，與 `unlink_orders_from_purchase_order` 一致）。
+  - ⚠️ `source_quantities` 以 **orderId**（非 `order_item.id`）為 key；比對用 `(product_id, variant_id)`。套用後重算 `purchase_orders.total_amount`。
+  - **守門**：任一受影響 PO 品項 `received_quantity > 0` → 整次 `{ok:false, reason:'部分採購單品項已收貨（<單號>），無法自動調整數量，請先處理收貨紀錄'}`（不靜默縮減已收貨庫存）。授權＝admin／store member／`sales_rep_id = v_uid`（`v_uid IS NULL` 直接拒絕、三 disjunct 皆 `COALESCE(…,false)`）；REVOKE public/anon ＋ GRANT authenticated。
+  - `changes`/`applied` 欄位：`purchase_order_item_id`、`purchase_order_id`、`purchase_order_code`（＝`COALESCE(po.supplier_order_number, po.id::text)`）、`product_id`、`variant_id`、`old_quantity`、`new_quantity`、`old_share`、`new_share`、`action`（`'update'`/`'remove'`）。⚠️ **不含顯示名**，前端 `enrichPoChanges` 以 `${productId}|${variantId||'null'}` 自 `currentItems` 補。
+  - **實測（遠端 fixture，全部 ROLLBACK）**：無差異 `changes:[]`；增補 1→3（`quantity 6→8, share 1→3`）；調降 1→0（夾到 `others=5`）；刪品項 `action:'remove'`；apply 與 preview 一致且總額重算；`received_quantity>0` 擋下；無 JWT `not authorized`。
+- **Phase C｜前端確認流＋採購綁定徽章（純前端，零 migration）**：
+  - **確認流（`useAdminOrderFormController.ts`）**：儲存與直接出貨皆先 `previewPoQuantities`（dry-run）→ 若有 `changes.length>0` 開 `PoSyncConfirmDialog.tsx`（`AlertDialog`，標題依方向 增補／調降／調整；逐列「原為 N 調整為 M」、移除列「原為 N，將移除該品項」；取消＝「不調整」、確認＝「確認調整」）→ 確認後 `applyPoQuantities`（`p_apply=true`）再續跑 `runSave`／`runDirectShip`；**拒絕則完全不動採購單、訂單照常儲存**。意圖以 `poSyncIntentRef`（`'save'|'directShip'`）＋`poSyncDeliveryRef` 保存；`confirmPoSync` 成功後 invalidate `['order-po-bindings', orderId]`／`['purchase-order-detail']`／`['purchase-orders']`。`AdminOrderForm.tsx` 已接線（save 按鈕 `c.runSave()`、`DirectShipDialog onConfirm→c.runDirectShip(delivery)`、`<PoSyncConfirmDialog>`）。
+  - **徽章（`src/utils/poBindStatus.ts`）**：`getPoBindStatus(pending, recorded, over)`→`'none'|'covered'|'partial'|'over'`、`poBindBadge(status, pending, recorded)`→`{text, className}`（⚠️ **不回傳 `status`**）、`orderPoBindBadge(items, binds)`（略過 cancelled/discontinued/out_of_stock/return/is_repair；`recorded<=0 && !over` 回 null）。色：`recorded>=pending`→綠「已採購 N」、`recorded<pending`→橙「待採購 N」、超量→紅「採購超量」。超量偵測在 `useOrdersList.ts` 的 `poOverByOrderKey: Set<orderId|productId|variantId>`（任一有效採購品項 `sum(source_quantities)>quantity` 即標記其全部訂單鍵；key 一律 `${orderId}|${productId}|${variantId||'null'}`）。徽章已接線 store/item/aggregate 視圖、aggregate 對話框、訂單表單品項表、edit-mode overlay，並在**銷貨單端加守門**（數量不可低於 `poRecordedQuantity`）。
+  - **採購單號欄位修正**：`purchase_orders` **無 `code` 欄**，顯示單號一律 `supplier_order_number`；`useOrderFormQueries.ts` 的 `['order-po-bindings', orderId]` select 與 `useOrderFormStateSync.ts` 的取值已由 `code` 修正為 `supplier_order_number`。
+- **驗證**：`npx tsc --noEmit -p tsconfig.app.json` 0 errors；本批 7 檔 `eslint` 0 errors（10 個既有 warnings）；`npm run lint` 0 errors／67 warnings（66 既有＋1 既有 react-refresh）；`npm run build` 通過（僅既有 chunk-size warning）。⚠️ **未做瀏覽器實測**（`/admin/orders/*` 需登入）。**本批全部未 commit**。
+
 ## 近期變更（規格快取根因修復：補齊三張規格表 snapshot ＋ Edge Function alias 拆分，2026-10-20）
 
 - **症狀（承接下方 root 判定修正）**：`specTree.ts` root 判定修好後仍不足——**來源資料本身缺**。SyncManager 觸發 `checkServerSequence('specification_definitions')` 重整後，IDB／store 的 `definitions` 由多欄掉到只有 43 筆，導致插座/插頭矩陣只剩「支援快充」1 欄（缺 8 個規格：產品重量、產品體積、其他備註、BSMI認證號、USB接孔類型、電壓(V)、插頭類型、NCC字號）。

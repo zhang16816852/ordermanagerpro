@@ -47,6 +47,9 @@ export default function AdminOrderList() {
     isLoading,
     shippingPoolMap,
     poLinkMap,
+    poBindByOrderItem,
+    purchasedByOrderKey,
+    poOverByOrderKey,
     consignmentBySourceOrderId,
     syncOrdersMutation,
     confirmOrdersMutation,
@@ -170,6 +173,7 @@ export default function AdminOrderList() {
                   sortDirection={c.sortDirection}
                   onSort={handleSort}
                   poLinkMap={poLinkMap}
+                  poBindByOrderItem={poBindByOrderItem}
                   consignmentBySourceOrder={consignmentBySourceOrderId}
                   commissionByOrder={commissionByOrder}
                   profitByOrderId={isRep ? undefined : profitByOrderId}
@@ -186,6 +190,7 @@ export default function AdminOrderList() {
                 onReverseShipment={handleReverseShipment}
                 statusTab={statusTab}
                 consignmentBySourceOrder={consignmentBySourceOrderId}
+                poBindByOrderItem={poBindByOrderItem}
                 getOrderShipmentStatus={getOrderShipmentStatus}
                 getOrderTotal={getOrderTotal}
                 commissionByOrder={commissionByOrder}
@@ -221,6 +226,7 @@ export default function AdminOrderList() {
                   onUpdateQuantity={handleUpdateItemQuantity}
                   onRestoreItem={(id) => cancelItemsMutation.mutate({ itemIds: [id], targetStatus: 'waiting' })}
                   poLinkMap={poLinkMap}
+                  poBindByOrderItem={poBindByOrderItem}
                 />
               </div>
             </div>
@@ -250,6 +256,8 @@ export default function AdminOrderList() {
                   onToggleSelection={handleToggleAggregateSelection}
                   onToggleAll={(checked) => handleToggleAllAggregate(checked, aggregatedItems)}
                   onUpdateQuantity={handleUpdateAggregateQuantity}
+                  purchasedByOrderKey={purchasedByOrderKey}
+                  poOverByOrderKey={poOverByOrderKey}
                 />
               </div>
             </div>
@@ -262,6 +270,8 @@ export default function AdminOrderList() {
                 onToggleSelection={handleToggleAggregateSelection}
                 onToggleAll={(checked) => handleToggleAllAggregate(checked, aggregatedItems)}
                 onUpdateQuantity={handleUpdateAggregateQuantity}
+                purchasedByOrderKey={purchasedByOrderKey}
+                poOverByOrderKey={poOverByOrderKey}
               />
             </div>
           </>
@@ -404,6 +414,8 @@ export default function AdminOrderList() {
         open={convertToPOOpen}
         onOpenChange={setConvertToPOOpen}
         selectedItems={poItemsSource}
+        purchasedByOrderKey={purchasedByOrderKey}
+        poOverByOrderKey={poOverByOrderKey}
         onCreated={() => {
           setSelectedAggregateItems(new Map());
           setSelectedOrderIds(new Set());

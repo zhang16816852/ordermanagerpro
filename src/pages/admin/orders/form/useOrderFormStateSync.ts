@@ -9,6 +9,8 @@ interface OrderFormStateSyncParams {
   order: any;
   isPurchaseEdit: boolean;
   purchaseOrder: any;
+  /** 銷售訂單已被採購單採購的綁定列（purchase_order_items，含 source_order_ids/source_quantities） */
+  orderPoBindings?: any[];
   /** 已取消的採購單：商品目錄新增的品項不得併入（RPC 亦拒絕任何 item payload） */
   blockNewItems?: boolean;
   draft: any;
@@ -36,6 +38,7 @@ export function useOrderFormStateSync(params: OrderFormStateSyncParams) {
     order,
     isPurchaseEdit,
     purchaseOrder,
+    orderPoBindings,
     blockNewItems,
     draft,
     supplierMappings,
@@ -209,6 +212,45 @@ export function useOrderFormStateSync(params: OrderFormStateSyncParams) {
     });
     setPriceSyncMap(draft.priceSyncMap);
   }, [draft.items, draft.priceSyncMap, isEditMode, supplierMappings, setItems, setPriceSyncMap, blockNewItems]);
+
+  // 銷售訂單編輯模式：將「已被採購單採購」的數量覆蓋到既有品項上（來源列可能較晚載入）
+  const poBindAppliedRef = useRef<string>('');
+  useEffect(() => {
+    if (!isEditMode || isPurchaseEdit || !order?.id) return;
+    const signature = JSON.stringify(
+      (orderPoBindings || []).map((row: any) => [row.id, row.quantity, row.source_quantities])
+    );
+    if (signature === poBindAppliedRef.current) return;
+    poBindAppliedRef.current = signature;
+    const orderId = order.id;
+    setItems((prev) => {
+      if (prev.length === 0) return prev;
+      let changed = false;
+      const next = prev.map((item) => {
+        const matches = (orderPoBindings || []).filter((row: any) => {
+          if (row.product_id !== item.productId) return false;
+          if ((row.variant_id || null) !== (item.variantId || null)) return false;
+          const sq = row.source_quantities || {};
+          return Number(sq[orderId] || 0) > 0;
+        });
+        const recorded = matches.reduce(
+          (sum: number, row: any) => sum + Number((row.source_quantities || {})[orderId] || 0),
+          0
+        );
+        const codes = matches
+          .map((row: any) => row.purchase_orders?.supplier_order_number)
+          .filter((code: any) => typeof code === 'string' && code.length > 0) as string[];
+        const nextRecorded = recorded > 0 ? recorded : undefined;
+        const nextCodes = codes.length > 0 ? codes : undefined;
+        if (item.poRecordedQuantity === nextRecorded && item.poRecordedCodes?.join(',') === nextCodes?.join(',')) {
+          return item;
+        }
+        changed = true;
+        return { ...item, poRecordedQuantity: nextRecorded, poRecordedCodes: nextCodes };
+      });
+      return changed ? next : prev;
+    });
+  }, [isEditMode, isPurchaseEdit, order?.id, orderPoBindings, setItems]);
 
   return { itemsRef, notesRef, consignmentModeRef, orderRef, pendingDeletedIdsRef };
 }

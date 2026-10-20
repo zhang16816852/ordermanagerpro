@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ChevronDown, ChevronRight, Store, ClipboardList } from 'lucide-react';
+import { getPoBindStatus, poBindBadge } from '@/utils/poBindStatus';
 
 export interface AggregatedItem {
   productId: string;
@@ -35,6 +36,8 @@ interface AggregateTableViewProps {
   onToggleSelection: (item: AggregatedItem, checked: boolean) => void;
   onToggleAll: (checked: boolean) => void;
   onUpdateQuantity: (key: string, quantity: number) => void;
+  purchasedByOrderKey?: Map<string, number>;
+  poOverByOrderKey?: Set<string>;
 }
 
 export function AggregateTableView({
@@ -44,8 +47,20 @@ export function AggregateTableView({
   onToggleSelection,
   onToggleAll,
   onUpdateQuantity,
+  purchasedByOrderKey,
+  poOverByOrderKey,
 }: AggregateTableViewProps) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const bindBadgeOf = (item: AggregatedItem) => {
+    let recorded = 0;
+    for (const oid of item.sourceOrderIds) {
+      recorded += purchasedByOrderKey?.get(`${oid}|${item.productId}|${item.variantId || 'null'}`) || 0;
+    }
+    const over = item.sourceOrderIds.some(oid => poOverByOrderKey?.has(`${oid}|${item.productId}|${item.variantId || 'null'}`));
+    if (recorded <= 0 && !over) return null;
+    return poBindBadge(getPoBindStatus(item.totalDemand, recorded, over), item.totalDemand, recorded);
+  };
 
   const toggleExpand = (key: string) => {
     setExpandedRows(prev => {
@@ -128,6 +143,15 @@ export function AggregateTableView({
                   <Badge variant="secondary" className="font-bold text-base px-3 py-1">
                     {item.totalDemand}
                   </Badge>
+                  {(() => {
+                    const b = bindBadgeOf(item);
+                    if (!b) return null;
+                    return (
+                      <Badge variant="outline" className={`block mx-auto mt-1 w-fit text-[10px] px-1 py-0 font-normal ${b.className}`}>
+                        {b.text}
+                      </Badge>
+                    );
+                  })()}
                 </TableCell>
                 <TableCell className="text-center">
                   <div className="text-base font-bold">{item.orderedQty}</div>

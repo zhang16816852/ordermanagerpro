@@ -9,6 +9,7 @@ import { zhTW } from 'date-fns/locale';
 import { OrderStatusBadge } from './OrderStatusBadge';
 import { Order, OrderItem } from '@/types/order';
 import { formatCurrency } from '@/lib/formatters';
+import { orderPoBindBadge, type OrderPoBindMap } from '@/utils/poBindStatus';
 import { ProfitCell } from '@/components/shared/ProfitCell';
 import type { OrderProfitView } from '@/pages/admin/orders/list/useOrderListDerived';
 
@@ -29,6 +30,7 @@ interface OrdersCardViewProps {
   selectedOrderIds?: Set<string>;
   onToggleSelection?: (id: string, checked: boolean) => void;
   onToggleAll?: (checked: boolean) => void;
+  poBindByOrderItem?: OrderPoBindMap;
 }
 
 export function OrdersCardView({
@@ -46,6 +48,7 @@ export function OrdersCardView({
   selectedOrderIds,
   onToggleSelection,
   onToggleAll,
+  poBindByOrderItem,
 }: OrdersCardViewProps) {
     const selectable = (statusTab === 'pending' || statusTab === 'processing') && !!onToggleSelection;
     return (
@@ -73,6 +76,7 @@ export function OrdersCardView({
                     const itemStatus = getOrderShipmentStatus(order.order_items);
                     const canEdit = order.status === 'pending';
                     const isSelected = !!selectedOrderIds?.has(order.id);
+                    const poBadge = orderPoBindBadge(order.order_items, poBindByOrderItem);
                     return (
                         <Card key={order.id} className={`rounded-xl shadow-sm ${isSelected ? 'ring-2 ring-primary' : ''}`}>
                             <CardContent className="p-4 space-y-3">
@@ -96,6 +100,11 @@ export function OrdersCardView({
                                             #{order.code || order.id.slice(0, 8)}
                                             {(order.consignment_mode || consignmentBySourceOrder?.has(order.id)) && (
                                                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>
+                                            )}
+                                            {poBadge && (
+                                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 font-normal ${poBadge.className}`}>
+                                                    {poBadge.text}
+                                                </Badge>
                                             )}
                                         </span>
                                     </div>

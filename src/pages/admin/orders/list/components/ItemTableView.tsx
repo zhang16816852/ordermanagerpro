@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { RotateCcw } from 'lucide-react';
+import { poBindBadge, type OrderPoBindMap } from '@/utils/poBindStatus';
 
 interface ItemTableViewProps {
   items: any[];
@@ -26,6 +27,7 @@ interface ItemTableViewProps {
   onUpdateQuantity: (id: string, quantity: number) => void;
   onRestoreItem: (id: string) => void;
   poLinkMap: Map<string, { poCount: number; poIds: string[] }>;
+  poBindByOrderItem?: OrderPoBindMap;
 }
 
 export function ItemTableView({
@@ -39,6 +41,7 @@ export function ItemTableView({
   onUpdateQuantity,
   onRestoreItem,
   poLinkMap,
+  poBindByOrderItem,
 }: ItemTableViewProps) {
   return (
     <div className="rounded-lg border bg-card shadow-soft flex-1 flex flex-col overflow-hidden">
@@ -91,6 +94,8 @@ export function ItemTableView({
               {items.map((item) => {
                 const inPool = shippingPoolMap.get(item.id) || 0;
                 const selection = selectedItems.get(item.id);
+                const bind = poBindByOrderItem?.get(item.id);
+                const bindB = bind ? poBindBadge(bind.status, item.pendingQuantity, bind.recorded) : null;
                 return (
                   <TableRow key={item.id} className={selection ? 'bg-muted/50' : ''}>
                     <TableCell>
@@ -124,6 +129,11 @@ export function ItemTableView({
                       <Badge variant={item.pendingQuantity > 0 ? 'default' : 'secondary'}>
                         {item.pendingQuantity}
                       </Badge>
+                      {bindB && (
+                        <Badge variant="outline" className={`ml-1 text-[10px] px-1 py-0 font-normal ${bindB.className}`}>
+                          {bindB.text}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       {selection && (

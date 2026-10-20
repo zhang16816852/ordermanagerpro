@@ -60,6 +60,22 @@ export function useOrderFormQueries({
     enabled: !!orderId && !isPurchaseEdit,
   });
 
+  // 銷售訂單編輯模式：查此訂單已被哪些採購單品項採購（source_quantities 累計），
+  // 供編輯數量時提示／限制不可低於已採購量
+  const { data: orderPoBindings = [] } = useQuery({
+    queryKey: ['order-po-bindings', orderId],
+    queryFn: async () => {
+      if (!orderId) return [];
+      const { data, error } = await (supabase
+        .from('purchase_order_items') as any)
+        .select('id, product_id, variant_id, quantity, source_order_ids, source_quantities, purchase_orders(supplier_order_number, status)')
+        .contains('source_order_ids', [orderId]);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!orderId && !isPurchaseEdit,
+  });
+
   // 採購編輯模式：查 purchase_orders（與銷售訂單不同表，欄位語意不同）
   const { data: purchaseOrder, isLoading: purchaseLoading } = useQuery({
     queryKey: ['purchase-order-detail', orderId],
@@ -198,6 +214,7 @@ export function useOrderFormQueries({
   return {
     order,
     orderLoading,
+    orderPoBindings,
     purchaseOrder,
     purchaseLoading,
     storeInfo,

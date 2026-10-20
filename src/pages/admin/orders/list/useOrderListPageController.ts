@@ -113,6 +113,7 @@ export function useOrderListPageController() {
     shippingPoolMap,
     poLinkMap,
     purchasedByOrderKey,
+    poOverByOrderKey,
     poProductStats,
     consignmentBySourceOrderId,
     getPendingQuantity,
@@ -138,6 +139,7 @@ export function useOrderListPageController() {
     sortDirection,
     getPendingQuantity,
     purchasedByOrderKey,
+    poOverByOrderKey,
     poProductStats,
     aggStatus,
     selectedOrderIds,
@@ -158,6 +160,7 @@ export function useOrderListPageController() {
     profitByOrderId,
     orderPoolGroupedItems,
     poItemsSource,
+    poBindByOrderItem,
   } = derived;
 
   const mutations = useOrderListMutations({
@@ -443,6 +446,9 @@ export function useOrderListPageController() {
     profitByOrderId,
     orderPoolGroupedItems,
     poItemsSource,
+    poBindByOrderItem,
+    purchasedByOrderKey,
+    poOverByOrderKey,
     selectedOrderIds,
     setSelectedOrderIds,
     selectedItems,

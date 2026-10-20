@@ -33,6 +33,18 @@ function receivedHint(item: OrderItemRow) {
     );
 }
 
+/** 已轉採購提示：數量不可低於已採購量（需先解除採購），此處先提示避免誤填 */
+function poRecordedHint(item: OrderItemRow) {
+    const recorded = item.poRecordedQuantity || 0;
+    if (recorded <= 0) return null;
+    const codes = item.poRecordedCodes || [];
+    return (
+        <p className="mt-0.5 text-[10px] text-orange-600">
+            已轉採購 {recorded}{codes.length > 0 ? `（${codes.join('、')}）` : ''}
+        </p>
+    );
+}
+
 interface OrderItemsDesktopTableProps {
     items: OrderItemRow[];
     sortedItems: OrderItemRow[];
@@ -162,9 +174,10 @@ export function OrderItemsDesktopTable({
                                                             onFocus={selectOnFocus}
                                                             data-col="qty"
                                                             className="w-20 h-8"
-                                                            min={Math.max(1, item.receivedQuantity || 0)}
+                                                            min={Math.max(1, item.receivedQuantity || 0, item.poRecordedQuantity || 0)}
                                                         />
                                                         {receivedHint(item)}
+                                                        {poRecordedHint(item)}
                                                         {(item.shippedQuantity || 0) > 0 && (
                                                             <p className="text-[10px] text-blue-600">已出貨 {item.shippedQuantity}</p>
                                                         )}
@@ -272,9 +285,10 @@ export function OrderItemsDesktopTable({
                                                             onFocus={selectOnFocus}
                                                             data-col="qty"
                                                             className="w-20 h-8"
-                                                            min={Math.max(1, item.receivedQuantity || 0)}
+                                                            min={Math.max(1, item.receivedQuantity || 0, item.poRecordedQuantity || 0)}
                                                         />
                                                         {receivedHint(item)}
+                                                        {poRecordedHint(item)}
                                                         {(item.shippedQuantity || 0) > 0 && (
                                                             <p className="text-[10px] text-blue-600">已出貨 {item.shippedQuantity}</p>
                                                         )}

@@ -29,6 +29,21 @@ export interface DirectShipDelivery {
   shippingCost?: number | null;
 }
 
+export interface PoSyncChange {
+  purchase_order_item_id: string;
+  purchase_order_id: string;
+  purchase_order_code: string;
+  product_id: string;
+  variant_id: string | null;
+  old_quantity: number;
+  new_quantity: number;
+  old_share: number;
+  new_share: number;
+  action: 'update' | 'remove';
+  product_name?: string | null;
+  variant_name?: string | null;
+}
+
 export interface OrderFormMutationParams {
   orderId?: string;
   user: { id: string } | null;
@@ -146,6 +161,70 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     err.reason = reason;
     throw err;
   };
+
+  /**
+   * 訂單編輯同步採購單 source_quantities（Phase B）。
+   * preview：唯讀預覽回傳 { changes }；apply：實際套用回傳 { ok, applied }。
+   * 兩者皆走 sync_order_po_quantities，delta 方式調整、不刪除他單貨品。
+   */
+  const syncPoQuantities = useCallback(async (
+    currentItems: OrderItemRow[],
+    deletedIds: string[],
+    apply: boolean,
+  ): Promise<{ changes: PoSyncChange[]; ok: boolean; reason?: string }> => {
+    if (!orderId) return { changes: [], ok: true };
+    const { data, error } = await (supabase.rpc as any)('sync_order_po_quantities', {
+      p_order_id: orderId,
+      p_items: buildItemsPayload(currentItems),
+      p_deleted_item_ids: deletedIds.length > 0 ? deletedIds : [],
+      p_apply: apply,
+    });
+    if (error) throw error;
+    const result = data as {
+      ok?: boolean;
+      reason?: string;
+      changes?: PoSyncChange[];
+      applied?: PoSyncChange[];
+    } | null;
+    if (apply) {
+      if (result && result.ok === false) return { changes: [], ok: false, reason: result.reason };
+      return { changes: result?.applied || [], ok: true };
+    }
+    return { changes: result?.changes || [], ok: true };
+  }, [orderId, buildItemsPayload]);
+
+  const applyPoQuantities = useCallback(
+    (currentItems: OrderItemRow[], deletedIds: string[]) => syncPoQuantities(currentItems, deletedIds, true),
+    [syncPoQuantities],
+  );
+
+  const enrichPoChanges = useCallback((changes: PoSyncChange[], currentItems: OrderItemRow[]): PoSyncChange[] => {
+    if (changes.length === 0) return changes;
+    const nameMap = new Map<string, { productName?: string; variantName?: string }>();
+    currentItems.forEach((item) => {
+      const key = `${item.productId}|${item.variantId || 'null'}`;
+      if (!nameMap.has(key)) {
+        nameMap.set(key, { productName: item.productName, variantName: item.variantName });
+      }
+    });
+    return changes.map((change) => {
+      const key = `${change.product_id}|${change.variant_id || 'null'}`;
+      const names = nameMap.get(key);
+      return {
+        ...change,
+        product_name: names?.productName ?? change.product_name ?? null,
+        variant_name: names?.variantName ?? change.variant_name ?? null,
+      };
+    });
+  }, []);
+
+  const previewPoQuantities = useCallback(
+    async (currentItems: OrderItemRow[], deletedIds: string[]) => {
+      const res = await syncPoQuantities(currentItems, deletedIds, false);
+      return { ...res, changes: enrichPoChanges(res.changes, currentItems) };
+    },
+    [syncPoQuantities, enrichPoChanges],
+  );
 
   // 同步勾選品項的價格到品牌：auto 時（儲存送出自動執行）不顯示「無品牌/無勾選」提示
   const syncPrices = useCallback(async (opts?: { auto?: boolean }) => {
@@ -717,6 +796,8 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     createPurchaseOrderMutation,
     createConsignmentReceiveMutation,
     createConsignmentSendMutation,
+    previewPoQuantities,
+    applyPoQuantities,
     isPendingMode2,
     isSubmitting,
   };
