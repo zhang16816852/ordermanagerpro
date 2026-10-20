@@ -244,6 +244,7 @@ App 掛載 → QueryClientProvider → TooltipProvider → Toaster/Sonner → Br
 ## 9. 其他 utils
 
 - `src/utils/SpecEngine.ts`、`specLogic.ts`、`specTree.ts`、`specSerializer.ts`、`specFormatter.ts`：規格引擎 v6 前端實作
+  - **root 判定（2026-10-20）**：`getVisibleSpecsTree` 只把「來源存在於本次 `specFields`」的 trigger 視為可達（`reachableTriggers`），據此排除 target 於 root 之外；來源不在表單集合內（跨分類共用 spec）的 target **仍視為根節點**，否則會永久隱形。`activeTriggers`／`quantityTriggers` 不需過濾（僅走訪 `visible` 時讀取）。同一邏輯同時服務分類規格預覽與商品表單
 - `src/utils/productModelResolver.ts`：產品/變體 ↔ 型號關聯解析（`buildModelMaps`、`processEntityModels`）
 - `src/utils/excelImport.ts` / `excelExport.ts` / `templateImport.ts` / `templateExport.ts`：Excel 匯入/匯出與訂單範本
 - `src/utils/variantReferenceCheck.ts`：`checkVariantReferences(variantIds)` 批次檢查 7 張業務表（order_items/purchase_order_items/inventory_movements/product_inventory/consignment_order_items/repair_order_items/supplier_product_mappings）是否引用指定變體，回傳 `{ok, referenced[]}`；`groupReferencesByVariant` 依變體聚合。對齊 RPC `delete_variant_if_safe` 的守門表清單

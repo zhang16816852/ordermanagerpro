@@ -25,8 +25,12 @@ export function getVisibleSpecsTree(
     (specFields || []).forEach((s: any) => specMap.set(s.id, s)); // specFields takes priority (has sourceCategoryIds etc.)
     const settings = tableSettings || {};
 
-    const targetSpecIdsInTriggers = new Set(specTriggers.map(t => t.target_spec_id));
-    const quantityTargetIds = new Set(specTriggers.filter(t => t.relation_type === 'quantity').map(t => t.target_spec_id));
+    // [修正] 只有來源規格也在本次表單集合內的 trigger 才算有效 gating；
+    // 來源缺席（跨分類共用 spec）的 target 永遠不可能被觸發，須視為根節點，否則會永久隱形
+    const specFieldIds = new Set(specFields.map(f => f.id));
+    const reachableTriggers = specTriggers.filter(t => specFieldIds.has(t.source_spec_id));
+    const targetSpecIdsInTriggers = new Set(reachableTriggers.map(t => t.target_spec_id));
+    const quantityTargetIds = new Set(reachableTriggers.filter(t => t.relation_type === 'quantity').map(t => t.target_spec_id));
 
     specFields.forEach(f => {
         if (!targetSpecIdsInTriggers.has(f.id) && !quantityTargetIds.has(f.id)) {

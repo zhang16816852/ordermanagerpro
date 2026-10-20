@@ -2,6 +2,16 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（規格樹 root 判定修正：跨分類共用 spec 不再永久隱形，2026-10-20）
+
+- **症狀**：分類「插座/插頭」的規格預覽（`CategorySpecPreview`）只顯示 4 項，母分類「充電設備」繼承差集 7 項全缺（NCC字號、其他備註、插頭類型、產品重量、產品體積、支援快充協議、USB接孔類型）。
+- **根因**：`src/utils/specTree.ts` 的 root 判定使用**全域** `specTriggers` 建 `targetSpecIdsInTriggers`——任何曾被列為 trigger target 的 spec 永不為 root；當觸發來源不在當前表單 spec 集合內（跨分類共用 spec，如 `插頭轉接頭`、`產品資訊`、`支援無線充電`）時，該 target 既不為 root、也不可能被觸發 ⇒ **永久隱形**。同一邏輯亦用於商品表單（`DynamicSpecsFields`），故 5 個母分類 spec 在實際打單時同樣永不顯示（系統性缺陷）。
+- **修法（純前端，零 migration／RPC／types.ts）**：`specTree.ts` 以 **`specFieldIds = new Set(specFields.map(f => f.id))`** 過濾 `specTriggers` 得 `reachableTriggers`（僅來源在本次表單集合內者），再以之建 `targetSpecIdsInTriggers` / `quantityTargetIds`。來源全缺席者視為 root。⚠️ **必須用 `specFields` 的 id 集合判斷，不可用 `specMap`**（後者含全部 `specDefinitions`，等於沒修）。迴圈內 `activeTriggers` / `quantityTriggers` 不需改（僅走訪 `visible` 時讀取，來源不可見自然不貢獻）；legacy `logic_config.triggers` 不參與 root 判定，維持不動。
+- **A1 決策（保留既有互動語意）**：條件型規格（`支援快充協議` ←`支援快充`=`true`、`USB接孔類型` ←`充電孔數量`=`*`）在來源空值時仍**依條件隱藏**，填值後才浮現；因此插座/插頭預覽由 4 → **9 項**（7 個繼承中 5 個常駐 + 2 個條件型待觸發）。
+- **驗證**：以 esbuild 打包 `specTree.ts` + 真實 DB fixture（11 spec／9 trigger，MCP 查得）跑 17 項斷言全 PASSED——空值 9 項、5 個繼承規格可見、4 個無上游規格可見、2 個條件規格空值隱藏、勾選 `支援快充` 後出現 `支援快充協議`、填 `充電孔數量` 後出現 `USB接孔類型`、回歸（行動電源式來源+target 同在：空值僅來源 1 項／勾選後出現 NCC字號）、無 root 時 fallback 顯示全部。`npm run typecheck` 0 errors、`npm run lint` 0 errors（67 warnings 皆既有）、`npm run build` 通過。
+- **矩陣路徑（`VariantSpecsMatrix`）**：同一修正涵蓋矩陣（矩陣與 `DynamicSpecsFields` 皆呼叫 `getVisibleSpecsTree`）。以真實 DB fixture 鏡射 `useCategorySpecs` 的祖先展開（`socket → 充電設備`）＋ `getVisibleSpecsTree` 跑 16 項斷言全 PASSED——`effectiveIds=2`、`specFields=11`、繼承且非子分類自身 7 項、空值可見 **9** 項、5 個繼承常駐可見、勾選 `支援快充`／填 `充電孔數量` 後 2 個條件型出現。矩陣未命中分組的規格會落在「其他規格」（`VariantSpecsMatrix` L190），不會被濾掉。⚠️ 殘餘風險僅為 store `categoryHierarchy` 部分過時（`fetchCategories` L382 自我修復只在**全空**時觸發）；若矩陣仍缺，可於矩陣掛載時補一次非節流 `fetchCategories(true)`。
+- ⚠️ **未做瀏覽器實測**（`/admin/categories`、商品表單需登入）：請以插座/插頭預覽確認顯示 9 項、商品表單變體矩陣確認 9 個規格欄，並回歸行動電源／充電線／耳機等分類顯示數量不變。
+
 ## 近期變更（刪除訂單：庫存異動淨額守門 + 淨 0 列自動清除，2026-10-18）
 
 - **目的**：當「訂單不存在了、該訂單品項的庫存異動總進出也為 0」時，不再保留 `inventory_movements` 列（無意義），並允許刪除訂單。
