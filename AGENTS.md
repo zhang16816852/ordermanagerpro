@@ -2,6 +2,17 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（規格快取根因修復：補齊三張規格表 snapshot ＋ Edge Function alias 拆分，2026-10-20）
+
+- **症狀（承接下方 root 判定修正）**：`specTree.ts` root 判定修好後仍不足——**來源資料本身缺**。SyncManager 觸發 `checkServerSequence('specification_definitions')` 重整後，IDB／store 的 `definitions` 由多欄掉到只有 43 筆，導致插座/插頭矩陣只剩「支援快充」1 欄（缺 8 個規格：產品重量、產品體積、其他備註、BSMI認證號、USB接孔類型、電壓(V)、插頭類型、NCC字號）。
+- **根因（DB 實查定案）**：`check-data-version` Edge Function 以 `.eq('table_name', tableName)` 查 `data_snapshots`，但規格三張表（`specification_definitions`／`specification_triggers`／`category_spec_links`）**從未有 snapshot 列**（只有過時的 `specs` 一列，36 筆、2026-05-11）→ `snapshot=null`、`snapshotSeq='0-0000'` → 改以 `data_change_logs` 全表差集當「全量」→ 摺疊後僅 43 筆（20 INSERT + 23 UPDATE、1 DELETE）；而**實際 73 筆**規格中有 **30 筆自建立以來從未被寫入 change log**（`defs_never_logged=30`）⇒ 永久遺失。`fetchSpecs` 的 `incomingData` 分支（`useSpecStore.ts` L203–257）把 `definitions` 基底換成此 43 筆差集，且 `defMap.size`=43≠0 故不救援。
+- **修法 B（已完成）**：
+  - **B1｜Edge Function `supabase/functions/check-data-version/index.ts`**：**拆分 alias 用途**——`TABLE_VERSION_ALIASES`（`specification_definitions`/`specification_triggers`/`category_spec_links` → `specs`）**僅供 `getVersionFromDataVersions` 查 `data_versions`**（該表只有 `specs` 一列）；**snapshot 查詢與 change-log 查詢一律改用真實表名**，才能命中新的三張表各自 snapshot 列。change-log 查詢原本已用 `tableName`，維持不變。
+  - **B2｜Migration `supabase/migrations/20261020000001_specs_snapshots_per_table.sql`（已套用遠端、已部署函式）**：`CREATE OR REPLACE` 重發 `fn_create_consistent_snapshot`（**additive**，保留既有 `products`/`specs`/`categories` 三分支），新增三分支並各寫一列**以真實表名為 key** 的快照（`data_snapshots` 主鍵為 `table_name`，故 upsert 安全）：`specification_definitions`（`ORDER BY sort_order, name`）、`specification_triggers`（`ORDER BY priority, created_at, id`）、`category_spec_links`（`ORDER BY sort_order, category_id, spec_id`）；`last_sequence_id = MAX(data_change_logs.id)`。同 migration 呼叫刷新三列，並**權限收斂**：`REVOKE ALL FROM PUBLIC, anon, authenticated` ＋ `GRANT EXECUTE TO service_role`（原 `anon` 可執行＝可寫 `data_snapshots` 的安全缺口，實測已關閉 `anon_can_exec=false`）。
+- **驗證（MCP 實查）**：三列 snapshot 就位，`jsonb_array_length` = **73 / 43 / 90**、`last_sequence_id=15787`（= 當前 `MAX(id)`，故舊 log 不再被當全量重播）；`category_spec_links` logs_after_snapshot=0、`specification_triggers`=109（會疊加為最新 override）、`specification_definitions`：`snapshot_len=73`、`changes_len=43`、`deleted_len=1`，且該唯一 DELETE 的 `record_id` **已非存活列**（`still_live=false`），不會誤刪。**端到端模擬**（snapshot 為基底 ＋ UPSERT 43 筆 override − deletedIds）→ `finalLen=73`，`hasPortCount/hasUsb/hasBSMI/hasQuickCharge/hasProtocol` 全 true、8 個曾遺失規格**全部到位**。Edge Function 已 `supabase functions deploy check-data-version`（專案 `aweqytcelujpqezjitsk`，先 `supabase link`）。
+- ⚠️ **未做瀏覽器實測**（`/admin/*` 與商品表單需登入）：請**硬重載** `useSpecStore`（重新整理商品表單／矩陣頁），確認 console 出現完整重整/快照載入後**不再掉到 1 欄**、矩陣顯示 9 個規格欄。
+- **備註**：`fn_create_consistent_snapshot` 為 `SECURITY INVOKER`、`volatile`；**前端從未呼叫、亦無任何自動呼叫**（snapshot 需由 migration 或後續新增的排程顯式刷新）。本次未動 `src/store/useSpecStore.ts`（修法 A 前端全量兜底，暫緩）。
+
 ## 近期變更（規格樹 root 判定修正：跨分類共用 spec 不再永久隱形，2026-10-20）
 
 - **症狀**：分類「插座/插頭」的規格預覽（`CategorySpecPreview`）只顯示 4 項，母分類「充電設備」繼承差集 7 項全缺（NCC字號、其他備註、插頭類型、產品重量、產品體積、支援快充協議、USB接孔類型）。

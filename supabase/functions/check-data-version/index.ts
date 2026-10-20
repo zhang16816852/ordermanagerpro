@@ -9,6 +9,10 @@ const corsHeaders = {
 /**
  * 表名別名映射：Edge Function 接收的 tableName 可能與 data_versions 的 key 不同
  * 例如 SyncManager 傳 'specification_definitions'，但 data_versions 存的是 'specs'
+ *
+ * ⚠️ 此 alias「僅」供 data_versions 查詢使用。
+ * data_snapshots 與 data_change_logs 一律以「真實表名」查詢——
+ * 三張規格表各自擁有獨立的 snapshot 列，若沿用 alias 會查到過時的 specs 快照。
  */
 const TABLE_VERSION_ALIASES: Record<string, string> = {
   specification_definitions: 'specs',
@@ -141,13 +145,15 @@ Deno.serve(async (req: Request) => {
 /**
  * [V8.2 新增] 從 data_versions 取得正確版本號
  * 支援表名別名映射（specification_definitions → specs）
+ *
+ * ⚠️ 這是 alias 唯一的使用處。快照與日誌查詢一律使用真實表名。
  */
 async function getVersionFromDataVersions(
   supabase: any,
   tableName: string,
   fallback: string
 ): Promise<string> {
-  // 嘗試直接用 tableName 查
+  // data_versions 只有 'specs' 一列（見 TABLE_VERSION_ALIASES），故必須用別名查
   const aliasKey = TABLE_VERSION_ALIASES[tableName] ?? tableName;
 
   // 先查原始表名，再查別名

@@ -122,7 +122,7 @@
 |---|---|---|
 | `data_versions` | 每表版本（快取校驗核心） | table_name PK、version(`YYMMDD-XXXX`)、last_triggered_by |
 | `data_change_logs` | 變更事件 log（Diff 引擎來源） | table_name、record_id、action、version_tag |
-| `data_snapshots` | 全量快照 | table_name、data_json(JSONB)、last_sequence_id |
+| `data_snapshots` | 全量快照（**PK = table_name**，每表至多一列） | table_name、data_json(JSONB)、last_sequence_id、updated_at |
 | `system_sequences` | 流水號計數器 | name PK、current_value |
 | `audit_logs` | 稽核紀錄 | entity_type、entity_id、action、old_value、new_value、performed_by、store_id |
 | `notifications` | 通知（**2026-10-08 已加入 realtime publication**） | user_id、store_id、title、message、link、read |
@@ -198,8 +198,10 @@
 - `bump_data_version(p_table_name, p_source_table)`：INSERT ... ON CONFLICT DO UPDATE version+1（**舊版為 INTEGER 遞增；新版已改 `YYMMDD-XXXX` 格式**，隨表 trigger 各自實作，例如 repair_orders 用 `to_char(now(),'YYMMDD') || '-' || LPAD(random()*10000)`）
 - 版本格式：`YYMMDD-XXXX`，字串字典序即時間序（前端 `versionCache`/`CacheService.isStale` 直接字串比較）
 - `data_change_logs`：record_id、action(INSERT/UPDATE/DELETE)、version_tag，供 Edge Function 做 event compaction + batch fetch
-- `data_snapshots`：全量快照 + `last_sequence_id`，冷啟動或斷層時使用
-- Edge Function `check-data-version`：`sync_mode` = `full`（冷啟動/斷層）或 `incremental`；`serverSequenceId` 以 data_versions 為權威來源
+- `data_snapshots`：全量快照 + `last_sequence_id`，冷啟動或斷層時使用。**PK 為 `table_name`**（每張表至多一列），故查詢以 `.eq('table_name', <真實表名>)`。
+  - **修補（2026-10-20，migration `20261020000001_specs_snapshots_per_table.sql`）**：規格三張表原本**從未有 snapshot 列**（只有一列過時的 `specs`，36 筆、2026-05-11）→ Edge Function `snapshot=null` → 只能以 `data_change_logs` 全表差集當「全量」（43 筆），使 30 筆從未寫入 change log 的規格永久遺失。該 migration 以 **additive** 方式擴充 `fn_create_consistent_snapshot`（保留既有 `products`/`specs`/`categories` 分支），新增三分支並各寫一列**以真實表名為 key** 的快照：`specification_definitions`（`ORDER BY sort_order, name`，73 筆）、`specification_triggers`（`ORDER BY priority, created_at, id`，43 筆）、`category_spec_links`（`ORDER BY sort_order, category_id, spec_id`，90 筆），並立即刷新三列。
+  - ⚠️ `fn_create_consistent_snapshot` 為 `SECURITY INVOKER`、`volatile`，**前端從未呼叫、亦無自動呼叫**——snapshot 需由 migration 或日後新增的排程顯式刷新。同 migration 收斂權限：`REVOKE ALL FROM PUBLIC, anon, authenticated` ＋ `GRANT EXECUTE TO service_role`（修前 `anon` 可執行＝可寫 `data_snapshots` 的缺口）。
+- Edge Function `check-data-version`：`sync_mode` = `full`（冷啟動/斷層）或 `incremental`；`serverSequenceId` 以 data_versions 為權威來源。**（2026-10-20）`TABLE_VERSION_ALIASES` 用途拆分**：alias **只用於 `getVersionFromDataVersions`** 查 `data_versions`（該表規格相關僅 `specs` 一列）；`data_snapshots` 與 `data_change_logs` 一律以**真實表名**查詢，否則規格三張表永遠命不到各自的快照列。
 - ⚠️ Edge Function 查 `sync_table_metadata` 取得 PK 欄位，但**該表不存在於任何 migration**，查詢永遠失敗並回退 `'id'`（目前尚可運作，因主表 PK 皆為 id）
 
 ## 5. 流水號（system_sequences + trigger）
