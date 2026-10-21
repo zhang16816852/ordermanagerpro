@@ -565,12 +565,12 @@ export function useAdminOrderFormController() {
     }
   }, [previewPoQuantities, items, pendingDeletedIds, directShipMutation]);
 
-  const confirmPoSync = useCallback(async () => {
+  const confirmPoSync = useCallback(async (overrides?: Record<string, number>) => {
     const intent = poSyncIntentRef.current;
     const delivery = poSyncDeliveryRef.current;
     setPoSyncSaving(true);
     try {
-      const res = await applyPoQuantities(items, pendingDeletedIds);
+      const res = await applyPoQuantities(items, pendingDeletedIds, overrides);
       if (res.ok === false) {
         if (res.reason) toast.error(res.reason);
         return;

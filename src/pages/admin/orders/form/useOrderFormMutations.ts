@@ -39,6 +39,7 @@ export interface PoSyncChange {
   new_quantity: number;
   old_share: number;
   new_share: number;
+  received_quantity?: number;
   action: 'update' | 'remove';
   product_name?: string | null;
   variant_name?: string | null;
@@ -171,6 +172,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     currentItems: OrderItemRow[],
     deletedIds: string[],
     apply: boolean,
+    overrides?: Record<string, number>,
   ): Promise<{ changes: PoSyncChange[]; ok: boolean; reason?: string }> => {
     if (!orderId) return { changes: [], ok: true };
     const { data, error } = await (supabase.rpc as any)('sync_order_po_quantities', {
@@ -178,6 +180,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       p_items: buildItemsPayload(currentItems),
       p_deleted_item_ids: deletedIds.length > 0 ? deletedIds : [],
       p_apply: apply,
+      p_overrides: overrides && Object.keys(overrides).length > 0 ? overrides : undefined,
     });
     if (error) throw error;
     const result = data as {
@@ -194,7 +197,8 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
   }, [orderId, buildItemsPayload]);
 
   const applyPoQuantities = useCallback(
-    (currentItems: OrderItemRow[], deletedIds: string[]) => syncPoQuantities(currentItems, deletedIds, true),
+    (currentItems: OrderItemRow[], deletedIds: string[], overrides?: Record<string, number>) =>
+      syncPoQuantities(currentItems, deletedIds, true, overrides),
     [syncPoQuantities],
   );
 

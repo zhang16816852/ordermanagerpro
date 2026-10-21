@@ -422,7 +422,7 @@ export default function AdminOrderForm() {
         changes={c.poSyncChanges}
         isPending={c.poSyncSaving}
         onOpenChange={c.handlePoSyncOpenChange}
-        onConfirm={c.confirmPoSync}
+        onConfirm={(overrides) => c.confirmPoSync(overrides)}
       />
     </div>
   );
