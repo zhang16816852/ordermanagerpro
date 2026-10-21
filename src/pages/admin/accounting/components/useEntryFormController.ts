@@ -217,15 +217,23 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
     if (isTransferLike && sourceCurrency !== destCurrency && !exchangeRate) {
       setOriginalCurrency(sourceCurrency);
     }
-  }, [sourceCurrency, destCurrency, isTransferLike]);
+  }, [sourceCurrency, destCurrency, isTransferLike]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (isTransferLike && exchangeRate && originalAmount) {
       const rate = parseFloat(exchangeRate);
       const orig = parseFloat(originalAmount);
-      if (!isNaN(rate) && !isNaN(orig)) setAmount((rate * orig).toString());
+      if (isNaN(rate) || isNaN(orig) || !rate) return;
+      const sourceIsForeign = sourceCurrency !== 'TWD';
+      if (sourceIsForeign) {
+        // Foreign → TWD: multiply
+        setAmount((orig * rate).toFixed(2));
+      } else {
+        // TWD → Foreign: divide
+        setAmount((orig / rate).toFixed(2));
+      }
     }
-  }, [exchangeRate, originalAmount, isTransferLike]);
+  }, [exchangeRate, originalAmount, isTransferLike, sourceCurrency]);
 
   useEffect(() => {
     if (isList && docItems.length > 0) {

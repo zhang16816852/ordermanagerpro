@@ -29,6 +29,31 @@ export function EntryTransferFields({ ctl }: { ctl: EntryFormController }) {
     amount,
     setAmount,
   } = ctl;
+
+  // Determine if this is a foreign currency exchange
+  const sourceIsForeign = sourceCurrency !== 'TWD';
+  const destIsForeign = destCurrency !== 'TWD';
+  const isForeignExchange = sourceIsForeign !== destIsForeign;
+  const foreignCurrency = sourceIsForeign ? sourceCurrency : destCurrency;
+
+  // Calculate the converted amount based on direction
+  // Exchange rate is always "1 foreign = ? TWD"
+  // TWD → Foreign: amount = originalAmount / exchangeRate
+  // Foreign → TWD: amount = originalAmount × exchangeRate
+  const calcConvertedAmount = (): string => {
+    if (!originalAmount || !exchangeRate) return '';
+    const oa = parseFloat(originalAmount);
+    const er = parseFloat(exchangeRate);
+    if (!er || isNaN(oa) || isNaN(er)) return '';
+    if (sourceIsForeign) {
+      // Foreign → TWD: multiply
+      return (oa * er).toFixed(2);
+    } else {
+      // TWD → Foreign: divide
+      return (oa / er).toFixed(2);
+    }
+  };
+  const convertedAmount = calcConvertedAmount();
   return (
     <div className="space-y-4 border rounded-md p-4 bg-muted/20">
       <div className="grid grid-cols-2 gap-4">
@@ -66,7 +91,7 @@ export function EntryTransferFields({ ctl }: { ctl: EntryFormController }) {
         <div className="grid grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label>原始幣別</Label>
-            <Select value={originalCurrency} onValueChange={setOriginalCurrency}>
+            <Select value={originalCurrency || foreignCurrency} onValueChange={setOriginalCurrency}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {CURRENCY_OPTIONS.map(c => (
@@ -80,8 +105,8 @@ export function EntryTransferFields({ ctl }: { ctl: EntryFormController }) {
             <Input type="number" value={originalAmount} onChange={e => setOriginalAmount(e.target.value)} placeholder="轉換前金額" />
           </div>
           <div className="space-y-2">
-            <Label>匯率（1 {originalCurrency || sourceCurrency} = ? {destCurrency}）</Label>
-            <Input type="number" step="0.0001" value={exchangeRate} onChange={e => setExchangeRate(e.target.value)} placeholder="匯率" />
+            <Label>匯率（1 {foreignCurrency} = ? TWD）</Label>
+            <Input type="number" step="0.0001" value={exchangeRate} onChange={e => setExchangeRate(e.target.value)} placeholder={`如：1 ${foreignCurrency} = 4.5 TWD`} />
           </div>
         </div>
       )}
@@ -98,7 +123,7 @@ export function EntryTransferFields({ ctl }: { ctl: EntryFormController }) {
         <div className="p-3 bg-background rounded-md border">
           <p className="text-sm text-muted-foreground">換算結果</p>
           <p className="text-lg font-bold">
-            {originalAmount} {originalCurrency || sourceCurrency} × {exchangeRate} = {amount} {destCurrency}
+            {originalAmount} {originalCurrency || sourceCurrency} {sourceIsForeign ? '×' : '÷'} {exchangeRate} = {convertedAmount || amount} {destCurrency}
           </p>
         </div>
       )}

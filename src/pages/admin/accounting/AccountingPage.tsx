@@ -17,22 +17,26 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
+import { toast } from 'sonner';
 import { format, subMonths } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 
 import { useAccounting } from './hooks/useAccounting';
 import { useCommissionPayout } from '@/hooks/useCommissionPayout';
 import { useShippingSettlement } from '@/hooks/useShippingSettlement';
+import { useCurrencyFifoEntry } from './components/currencyFifo/useCurrencyFifoEntry';
 import { StatsCards } from './components/StatsCards';
 import { EntriesTab } from './components/EntriesTab';
 import { AccountsTab } from './components/AccountsTab';
 import { CategoriesTab } from './components/CategoriesTab';
 import { EntryDialog } from './components/EntryDialog';
+import { CurrencyFifoTab } from './components/currencyFifo/CurrencyFifoTab';
 import { AccountForm } from './components/AccountForm';
 import { CategoryForm } from './components/CategoryForm';
 import { ReferenceViewer } from './components/ReferenceViewer';
 import { ReferenceListDialog } from './components/ReferenceListDialog';
 import { AccountingEntry, ViewableReference } from './types';
+import { buildSubmitData } from './components/entrySubmitData';
 
 export default function AdminAccounting() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -75,6 +79,7 @@ export default function AdminAccounting() {
 
   const { registerPayout, bulkRegisterPayout } = useCommissionPayout();
   const { settleMutation } = useShippingSettlement();
+  const currencyFifoEntry = useCurrencyFifoEntry();
 
   return (
     <div className="space-y-6">
@@ -122,6 +127,7 @@ export default function AdminAccounting() {
           <TabsTrigger value="entries">收支明細</TabsTrigger>
           <TabsTrigger value="accounts">帳戶管理</TabsTrigger>
           <TabsTrigger value="categories">收支類型</TabsTrigger>
+          <TabsTrigger value="currency-fifo">外幣 FIFO</TabsTrigger>
         </TabsList>
 
         <TabsContent value="entries" className="space-y-4">
@@ -156,6 +162,13 @@ export default function AdminAccounting() {
             isLoading={false} // Categories are usually fast
           />
         </TabsContent>
+
+        <TabsContent value="currency-fifo" className="space-y-4">
+          <CurrencyFifoTab
+            accounts={accounts}
+            isLoading={isLoadingAccounts}
+          />
+        </TabsContent>
       </Tabs>
 
       {/* Entry Dialog — unified for create / edit / payment */}
@@ -170,8 +183,68 @@ export default function AdminAccounting() {
         categories={categories}
         accounts={accounts}
         isLoading={createEntryMutation.isPending || updateEntryMutation.isPending || recordPaymentMutation.isPending || registerPayout.isPending || settleMutation.isPending}
-        onSubmit={(data, references) => {
-          if (editingEntry) {
+        onSubmit={async (data, references) => {
+          // Check if this is a foreign currency exchange that should use FIFO RPCs
+          const isForeignExchange = currencyFifoEntry.isCurrencyExchange({
+            view: editingEntry?.type === 'currency_exchange' ? 'currency_exchange' : 'list',
+            accountId: data.account_id || '',
+            transferToAccountId: data.transfer_to_account_id || '',
+            amount: data.amount?.toString() || '',
+            originalCurrency: data.original_currency || '',
+            originalAmount: data.original_amount?.toString() || '',
+            exchangeRate: data.exchange_rate?.toString() || '',
+            description: data.description || '',
+            transactionDate: data.transaction_date || '',
+            accounts,
+          });
+
+          if (isForeignExchange && !editingEntry) {
+            try {
+              const { data: entryData, references: entryRefs } = buildSubmitData({
+                isList: false,
+                isRepair: false,
+                isTransferLike: true,
+                view: 'currency_exchange',
+                repairMode: 'income_repair',
+                repairOrders: [],
+                purchaseOrders: [],
+                selectedRepairOrderId: '',
+                selectedPurchaseOrderId: '',
+                serviceVendorName: '',
+                categoryId: data.category_id || '',
+                accountId: data.account_id || '',
+                transferToAccountId: data.transfer_to_account_id || '',
+                exchangeRate: data.exchange_rate?.toString() || '',
+                originalCurrency: data.original_currency || '',
+                originalAmount: data.original_amount?.toString() || '',
+                amount: data.amount?.toString() || '',
+                description: data.description || '',
+                transactionDate: data.transaction_date || '',
+                dueDate: data.due_date || '',
+                docItems: [],
+                markAsPaid: data.payment_status === 'paid',
+                totalAmount: parseFloat(data.amount?.toString() || '0') || 0,
+              });
+              await currencyFifoEntry.submitCurrencyExchange({
+                view: 'currency_exchange',
+                accountId: data.account_id || '',
+                transferToAccountId: data.transfer_to_account_id || '',
+                amount: data.amount?.toString() || '',
+                originalCurrency: data.original_currency || '',
+                originalAmount: data.original_amount?.toString() || '',
+                exchangeRate: data.exchange_rate?.toString() || '',
+                description: data.description || '',
+                transactionDate: data.transaction_date || '',
+                accounts,
+                createEntry: async () => {
+                  await createEntryMutation.mutateAsync({ data: entryData, references: entryRefs });
+                },
+              });
+              setEntryDialogOpen(false);
+            } catch (error: any) {
+              toast.error(error?.message || '外幣換匯失敗');
+            }
+          } else if (editingEntry) {
             updateEntryMutation.mutate({ id: editingEntry.id, ...data, references }, {
               onSuccess: () => setEntryDialogOpen(false)
             });
