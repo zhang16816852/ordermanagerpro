@@ -22,6 +22,7 @@ import { format, subMonths } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 
 import { useAccounting } from './hooks/useAccounting';
+import { useCurrencyFifoMutations } from './components/currencyFifo/useCurrencyFifo';
 import { useCommissionPayout } from '@/hooks/useCommissionPayout';
 import { useShippingSettlement } from '@/hooks/useShippingSettlement';
 import { useCurrencyFifoEntry } from './components/currencyFifo/useCurrencyFifoEntry';
@@ -36,6 +37,7 @@ import { CategoryForm } from './components/CategoryForm';
 import { ReferenceViewer } from './components/ReferenceViewer';
 import { ReferenceListDialog } from './components/ReferenceListDialog';
 import { AccountingEntry, ViewableReference } from './types';
+import { EntryPrefill } from './components/EntryFormTypes';
 import { buildSubmitData } from './components/entrySubmitData';
 
 export default function AdminAccounting() {
@@ -51,6 +53,7 @@ export default function AdminAccounting() {
   // Form selections
   const [editingEntry, setEditingEntry] = useState<AccountingEntry | null>(null);
   const [payingEntry, setPayingEntry] = useState<AccountingEntry | null>(null);
+  const [entryPrefill, setEntryPrefill] = useState<EntryPrefill | null>(null);
 
   const [viewingReference, setViewingReference] = useState<{ referenceType: string; referenceId: string } | null>(null);
   const [viewingReferences, setViewingReferences] = useState<ViewableReference[] | null>(null);
@@ -78,6 +81,7 @@ export default function AdminAccounting() {
   } = useAccounting(selectedMonth);
 
   const { registerPayout, bulkRegisterPayout } = useCommissionPayout();
+  const currencyFifoMutations = useCurrencyFifoMutations();
   const { settleMutation } = useShippingSettlement();
   const currencyFifoEntry = useCurrencyFifoEntry();
 
@@ -150,6 +154,8 @@ export default function AdminAccounting() {
         <TabsContent value="accounts" className="space-y-4">
           <AccountsTab
             accounts={accounts}
+            categories={categories}
+            selectedMonth={selectedMonth}
             onAdd={() => setAccountDialogOpen(true)}
             isLoading={isLoadingAccounts}
           />
@@ -167,6 +173,12 @@ export default function AdminAccounting() {
           <CurrencyFifoTab
             accounts={accounts}
             isLoading={isLoadingAccounts}
+            onOpenConsume={(accountId) => {
+              setEntryPrefill({ consume: { accountId, sourceType: 'purchase_payment', transactionDate: format(new Date(), 'yyyy-MM-dd') } });
+              setEditingEntry(null);
+              setPayingEntry(null);
+              setEntryDialogOpen(true);
+            }}
           />
         </TabsContent>
       </Tabs>
@@ -176,10 +188,11 @@ export default function AdminAccounting() {
         open={entryDialogOpen}
         onOpenChange={(open) => {
           setEntryDialogOpen(open);
-          if (!open) { setEditingEntry(null); setPayingEntry(null); }
+          if (!open) { setEditingEntry(null); setPayingEntry(null); setEntryPrefill(null); }
         }}
         entry={editingEntry}
         paymentEntry={payingEntry}
+        prefill={entryPrefill}
         categories={categories}
         accounts={accounts}
         isLoading={createEntryMutation.isPending || updateEntryMutation.isPending || recordPaymentMutation.isPending || registerPayout.isPending || settleMutation.isPending}
@@ -288,6 +301,40 @@ export default function AdminAccounting() {
               setEditingEntry(null);
             }
           });
+        }}
+        onConsumeSubmit={async (payload) => {
+          try {
+            await currencyFifoMutations.consumeMutation.mutateAsync({
+              accountId: payload.accountId,
+              amount: payload.amount,
+              sourceType: payload.sourceType,
+              referenceId: payload.referenceId,
+              transactionDate: payload.transactionDate,
+            });
+            const data = {
+              type: 'expense' as const,
+              account_id: payload.accountId,
+              amount: payload.amount,
+              paid_amount: payload.amount,
+              payment_status: 'paid' as const,
+              description: `外幣消耗 (${payload.sourceType})`,
+              transaction_date: payload.transactionDate,
+              reference_type: payload.docItems?.[0]?.docType || 'currency_consume',
+              reference_id: payload.docItems?.[0]?.docId || payload.referenceId || null,
+            };
+            await createEntryMutation.mutateAsync({ data, references: payload.docItems?.length ? payload.docItems.map((d: any) => ({
+              id: '',
+              entry_id: '',
+              reference_type: d.docType,
+              reference_id: d.docId,
+              item_name: d.code,
+              amount_applied: d.amountApplied,
+              created_at: '',
+            })) : undefined });
+            setEntryDialogOpen(false);
+          } catch (e: any) {
+            toast.error(e?.message || '外幣消耗失敗');
+          }
         }}
       />
 

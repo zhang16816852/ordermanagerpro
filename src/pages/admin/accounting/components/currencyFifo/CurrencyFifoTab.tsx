@@ -18,7 +18,7 @@ import { Account } from '../../types';
 import { useCurrencyBatchesWithInventory, useCurrencyMovements, useCurrencyFifoMutations } from './useCurrencyFifo';
 import { CurrencyBatchWithInventory, CurrencyMovement, SOURCE_TYPE_LABELS, OPERATION_TYPE_LABELS } from './currencyFifoTypes';
 import { CurrencyInboundDialog } from './CurrencyInboundDialog';
-import { CurrencyConsumeDialog } from './CurrencyConsumeDialog';
+
 // Exchange is handled via EntryForm's currency exchange view (幣值換算)
 import { CurrencyTransferDialog } from './CurrencyTransferDialog';
 import { CurrencyOpeningBalanceDialog } from './CurrencyOpeningBalanceDialog';
@@ -26,9 +26,10 @@ import { CurrencyOpeningBalanceDialog } from './CurrencyOpeningBalanceDialog';
 interface CurrencyFifoTabProps {
   accounts: Account[];
   isLoading: boolean;
+  onOpenConsume?: (accountId: string) => void;
 }
 
-export function CurrencyFifoTab({ accounts, isLoading }: CurrencyFifoTabProps) {
+export function CurrencyFifoTab({ accounts, isLoading, onOpenConsume }: CurrencyFifoTabProps) {
   const foreignAccounts = accounts.filter((a) => a.currency !== 'TWD');
   const [selectedAccountId, setSelectedAccountId] = useState<string>(foreignAccounts[0]?.id || '');
   const [activeSubTab, setActiveSubTab] = useState('batches');
@@ -67,7 +68,7 @@ export function CurrencyFifoTab({ accounts, isLoading }: CurrencyFifoTabProps) {
           <Button size="sm" variant="outline" onClick={() => setShowInboundDialog(true)} disabled={!selectedAccountId}>
             <Plus className="h-4 w-4 mr-1" /> 外幣入帳
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setShowConsumeDialog(true)} disabled={!selectedAccountId}>
+          <Button size="sm" variant="outline" onClick={() => onOpenConsume?.(selectedAccountId)} disabled={!selectedAccountId}>
             <DollarSign className="h-4 w-4 mr-1" /> 外幣消耗
           </Button>
           {/* Exchange is handled via EntryForm's currency exchange view (幣值換算) */}
@@ -259,15 +260,6 @@ export function CurrencyFifoTab({ accounts, isLoading }: CurrencyFifoTabProps) {
         isLoading={mutations.createInboundMutation.isPending}
       />
 
-      {/* Consume Dialog */}
-      <CurrencyConsumeDialog
-        open={showConsumeDialog}
-        onOpenChange={setShowConsumeDialog}
-        accountId={selectedAccountId}
-        currency={selectedAccount?.currency || 'CNY'}
-        onSubmit={(params) => mutations.consumeMutation.mutate(params)}
-        isLoading={mutations.consumeMutation.isPending}
-      />
 
       {/* Exchange is handled via EntryForm's currency exchange view (幣值換算) */}
 

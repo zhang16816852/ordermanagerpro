@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -978,6 +978,299 @@ export type Database = {
             columns: ["settled_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      currency_batch_consumptions: {
+        Row: {
+          batch_id: string
+          consumed_amount: number
+          created_at: string
+          historical_twd_cost: number
+          id: string
+          movement_id: string
+          receipt_id: string | null
+          refund_of_movement_id: string | null
+          reversal_of_movement_id: string | null
+          status: string
+          transfer_fee_amount: number | null
+        }
+        Insert: {
+          batch_id: string
+          consumed_amount: number
+          created_at?: string
+          historical_twd_cost: number
+          id?: string
+          movement_id: string
+          receipt_id?: string | null
+          refund_of_movement_id?: string | null
+          reversal_of_movement_id?: string | null
+          status?: string
+          transfer_fee_amount?: number | null
+        }
+        Update: {
+          batch_id?: string
+          consumed_amount?: number
+          created_at?: string
+          historical_twd_cost?: number
+          id?: string
+          movement_id?: string
+          receipt_id?: string | null
+          refund_of_movement_id?: string | null
+          reversal_of_movement_id?: string | null
+          status?: string
+          transfer_fee_amount?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "currency_batch_consumptions_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "currency_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "currency_batch_consumptions_movement_id_fkey"
+            columns: ["movement_id"]
+            isOneToOne: false
+            referencedRelation: "currency_movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "currency_batch_consumptions_refund_of_movement_id_fkey"
+            columns: ["refund_of_movement_id"]
+            isOneToOne: false
+            referencedRelation: "currency_movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "currency_batch_consumptions_reversal_of_movement_id_fkey"
+            columns: ["reversal_of_movement_id"]
+            isOneToOne: false
+            referencedRelation: "currency_movements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      currency_batch_inventory: {
+        Row: {
+          account_id: string
+          batch_id: string
+          remaining_amount: number
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          batch_id: string
+          remaining_amount: number
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          batch_id?: string
+          remaining_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_cbi_batch_account"
+            columns: ["batch_id", "account_id"]
+            isOneToOne: false
+            referencedRelation: "currency_batches"
+            referencedColumns: ["id", "account_id"]
+          },
+        ]
+      }
+      currency_batches: {
+        Row: {
+          account_id: string
+          amount: number
+          created_at: string
+          exchange_rate: number
+          id: string
+          inbound_movement_id: string | null
+          source_id: string | null
+          source_type: string
+          status: string
+          transaction_date: string
+          transfer_source_batch_id: string | null
+          twd_equivalent: number
+        }
+        Insert: {
+          account_id: string
+          amount: number
+          created_at?: string
+          exchange_rate: number
+          id?: string
+          inbound_movement_id?: string | null
+          source_id?: string | null
+          source_type: string
+          status?: string
+          transaction_date: string
+          transfer_source_batch_id?: string | null
+          twd_equivalent: number
+        }
+        Update: {
+          account_id?: string
+          amount?: number
+          created_at?: string
+          exchange_rate?: number
+          id?: string
+          inbound_movement_id?: string | null
+          source_id?: string | null
+          source_type?: string
+          status?: string
+          transaction_date?: string
+          transfer_source_batch_id?: string | null
+          twd_equivalent?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "currency_batches_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "currency_batches_inbound_movement_id_fkey"
+            columns: ["inbound_movement_id"]
+            isOneToOne: false
+            referencedRelation: "currency_movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "currency_batches_transfer_source_batch_id_fkey"
+            columns: ["transfer_source_batch_id"]
+            isOneToOne: false
+            referencedRelation: "currency_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      currency_cost_adjustments: {
+        Row: {
+          created_at: string
+          delta_amount: number
+          id: string
+          movement_id: string
+          new_consumptions: Json
+          original_consumptions: Json
+          trigger_reason: string
+        }
+        Insert: {
+          created_at?: string
+          delta_amount: number
+          id?: string
+          movement_id: string
+          new_consumptions: Json
+          original_consumptions: Json
+          trigger_reason: string
+        }
+        Update: {
+          created_at?: string
+          delta_amount?: number
+          id?: string
+          movement_id?: string
+          new_consumptions?: Json
+          original_consumptions?: Json
+          trigger_reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "currency_cost_adjustments_movement_id_fkey"
+            columns: ["movement_id"]
+            isOneToOne: false
+            referencedRelation: "currency_movements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      currency_movements: {
+        Row: {
+          account_id: string
+          amount_change: number
+          created_at: string
+          exchange_rate: number
+          id: string
+          receipt_id: string | null
+          reference_id: string | null
+          source_type: string
+          transaction_date: string
+          twd_equivalent: number
+        }
+        Insert: {
+          account_id: string
+          amount_change: number
+          created_at?: string
+          exchange_rate: number
+          id?: string
+          receipt_id?: string | null
+          reference_id?: string | null
+          source_type: string
+          transaction_date: string
+          twd_equivalent: number
+        }
+        Update: {
+          account_id?: string
+          amount_change?: number
+          created_at?: string
+          exchange_rate?: number
+          id?: string
+          receipt_id?: string | null
+          reference_id?: string | null
+          source_type?: string
+          transaction_date?: string
+          twd_equivalent?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "currency_movements_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      currency_transaction_results: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          group_id: string | null
+          is_reversed: boolean
+          operation_type: string
+          receipt_id: string
+          request_hash: string
+          result_json: Json
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          group_id?: string | null
+          is_reversed?: boolean
+          operation_type: string
+          receipt_id: string
+          request_hash: string
+          result_json: Json
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          group_id?: string | null
+          is_reversed?: boolean
+          operation_type?: string
+          receipt_id?: string
+          request_hash?: string
+          result_json?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "currency_transaction_results_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -1979,6 +2272,101 @@ export type Database = {
           },
         ]
       }
+      notification_bots: {
+        Row: {
+          bot_token: string | null
+          channel: string
+          chat_id: string | null
+          created_at: string
+          event_types: string[]
+          id: string
+          is_active: boolean
+          is_default: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          bot_token?: string | null
+          channel?: string
+          chat_id?: string | null
+          created_at?: string
+          event_types?: string[]
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          bot_token?: string | null
+          channel?: string
+          chat_id?: string | null
+          created_at?: string
+          event_types?: string[]
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      notification_outbox: {
+        Row: {
+          attempts: number
+          bot_id: string | null
+          chat_id: string | null
+          created_at: string
+          event_type: string
+          id: string
+          last_error: string | null
+          message_id: number | null
+          payload: Json
+          processed_at: string | null
+          ref_id: string | null
+          ref_type: string | null
+          status: string
+        }
+        Insert: {
+          attempts?: number
+          bot_id?: string | null
+          chat_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          last_error?: string | null
+          message_id?: number | null
+          payload?: Json
+          processed_at?: string | null
+          ref_id?: string | null
+          ref_type?: string | null
+          status?: string
+        }
+        Update: {
+          attempts?: number
+          bot_id?: string | null
+          chat_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          last_error?: string | null
+          message_id?: number | null
+          payload?: Json
+          processed_at?: string | null
+          ref_id?: string | null
+          ref_type?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_outbox_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "notification_bots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string
@@ -2799,6 +3187,8 @@ export type Database = {
         Row: {
           code: string | null
           created_at: string
+          default_variant_name_prefix: string | null
+          default_variant_sku_prefix: string | null
           description: string | null
           id: string
           is_hidden: boolean
@@ -2809,12 +3199,12 @@ export type Database = {
           unified_retail_price: number | null
           unified_wholesale_price: number | null
           updated_at: string
-          default_variant_name_prefix: string | null
-          default_variant_sku_prefix: string | null
         }
         Insert: {
           code?: string | null
           created_at?: string
+          default_variant_name_prefix?: string | null
+          default_variant_sku_prefix?: string | null
           description?: string | null
           id?: string
           is_hidden?: boolean
@@ -2825,12 +3215,12 @@ export type Database = {
           unified_retail_price?: number | null
           unified_wholesale_price?: number | null
           updated_at?: string
-          default_variant_name_prefix?: string | null
-          default_variant_sku_prefix?: string | null
         }
         Update: {
           code?: string | null
           created_at?: string
+          default_variant_name_prefix?: string | null
+          default_variant_sku_prefix?: string | null
           description?: string | null
           id?: string
           is_hidden?: boolean
@@ -2841,8 +3231,6 @@ export type Database = {
           unified_retail_price?: number | null
           unified_wholesale_price?: number | null
           updated_at?: string
-          default_variant_name_prefix?: string | null
-          default_variant_sku_prefix?: string | null
         }
         Relationships: [
           {
@@ -3097,6 +3485,7 @@ export type Database = {
           order_date: string
           purpose: string
           received_date: string | null
+          source_purchase_order_id: string | null
           status: Database["public"]["Enums"]["purchase_order_status"]
           supplier_id: string | null
           supplier_order_number: string | null
@@ -3112,6 +3501,7 @@ export type Database = {
           order_date?: string
           purpose?: string
           received_date?: string | null
+          source_purchase_order_id?: string | null
           status?: Database["public"]["Enums"]["purchase_order_status"]
           supplier_id?: string | null
           supplier_order_number?: string | null
@@ -3127,6 +3517,7 @@ export type Database = {
           order_date?: string
           purpose?: string
           received_date?: string | null
+          source_purchase_order_id?: string | null
           status?: Database["public"]["Enums"]["purchase_order_status"]
           supplier_id?: string | null
           supplier_order_number?: string | null
@@ -3134,6 +3525,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "purchase_orders_source_purchase_order_id_fkey"
+            columns: ["source_purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "purchase_orders_supplier_id_fkey"
             columns: ["supplier_id"]
@@ -4506,6 +4904,7 @@ export type Database = {
           address: string | null
           contact_name: string | null
           created_at: string
+          currency: string
           email: string | null
           id: string
           is_active: boolean
@@ -4519,6 +4918,7 @@ export type Database = {
           address?: string | null
           contact_name?: string | null
           created_at?: string
+          currency?: string
           email?: string | null
           id?: string
           is_active?: boolean
@@ -4532,6 +4932,7 @@ export type Database = {
           address?: string | null
           contact_name?: string | null
           created_at?: string
+          currency?: string
           email?: string | null
           id?: string
           is_active?: boolean
@@ -4908,6 +5309,17 @@ export type Database = {
       }
     }
     Functions: {
+      _consume_currency_fifo: {
+        Args: {
+          p_account_id: string
+          p_amount: number
+          p_receipt_id: string
+          p_reference_id: string
+          p_source_type: string
+          p_transaction_date: string
+        }
+        Returns: Json
+      }
       _po_create_with_items: {
         Args: {
           p_created_by: string
@@ -5046,6 +5458,17 @@ export type Database = {
         Args: { p_confirmed_by: string; p_report_ids: string[] }
         Returns: number
       }
+      consume_currency_fifo: {
+        Args: {
+          p_account_id: string
+          p_amount: number
+          p_receipt_id: string
+          p_reference_id: string
+          p_source_type: string
+          p_transaction_date: string
+        }
+        Returns: Json
+      }
       convert_order_to_consignment_draft: {
         Args: { p_created_by: string; p_order_id: string }
         Returns: Json
@@ -5076,6 +5499,7 @@ export type Database = {
           p_created_by: string
           p_delivery_method_id?: string
           p_delivery_type?: string
+          p_lots?: Json
           p_notes?: string
           p_shipped_at?: string
           p_shipping_address?: Json
@@ -5106,6 +5530,18 @@ export type Database = {
         }
         Returns: undefined
       }
+      create_currency_inbound: {
+        Args: {
+          p_account_id: string
+          p_amount: number
+          p_exchange_rate: number
+          p_receipt_id: string
+          p_source_id: string
+          p_source_type: string
+          p_transaction_date: string
+        }
+        Returns: Json
+      }
       create_order_with_sales_note: {
         Args: {
           p_consignment_mode?: boolean
@@ -5113,6 +5549,7 @@ export type Database = {
           p_delivery_method_id?: string
           p_delivery_type?: string
           p_items?: Json
+          p_lots?: Json
           p_notes?: string
           p_shipped_at?: string
           p_shipping_address?: Json
@@ -5157,6 +5594,10 @@ export type Database = {
         Args: { p_consignment_order_id: string }
         Returns: Json
       }
+      delete_currency_exchange: {
+        Args: { p_movement_id: string }
+        Returns: Json
+      }
       delete_order_if_unadopted: {
         Args: { p_allow_consignment_mirror?: boolean; p_order_id: string }
         Returns: Json
@@ -5182,8 +5623,30 @@ export type Database = {
           p_created_by: string
           p_delivery_method_id?: string
           p_delivery_type?: string
+          p_lots?: Json
           p_notes?: string
           p_order_id: string
+          p_shipped_at?: string
+          p_shipping_address?: Json
+          p_shipping_cost?: number
+          p_shipping_fee?: number
+          p_source_map?: Json
+          p_tracking_company?: string
+          p_tracking_number?: string
+          p_tracking_url?: string
+          p_warehouse_id?: string
+          p_warehouse_map?: Json
+        }
+        Returns: Json
+      }
+      direct_ship_orders: {
+        Args: {
+          p_created_by: string
+          p_delivery_method_id?: string
+          p_delivery_type?: string
+          p_lots?: Json
+          p_notes?: string
+          p_order_ids: string[]
           p_shipped_at?: string
           p_shipping_address?: Json
           p_shipping_cost?: number
@@ -5200,6 +5663,28 @@ export type Database = {
       duplicate_product_with_variants: {
         Args: { new_name: string; new_sku?: string; target_product_id: string }
         Returns: string
+      }
+      enqueue_notification: {
+        Args: {
+          p_event_type: string
+          p_payload?: Json
+          p_ref_id: string
+          p_ref_type: string
+        }
+        Returns: string
+      }
+      exchange_currency_fifo: {
+        Args: {
+          p_amount: number
+          p_bank_fee: number
+          p_from_account_id: string
+          p_receipt_id: string
+          p_reference_id: string
+          p_to_account_id: string
+          p_transaction_date: string
+          p_twd_gross_received: number
+        }
+        Returns: Json
       }
       expire_market_listings: { Args: never; Returns: undefined }
       find_uuid_occurrences: {
@@ -5303,6 +5788,17 @@ export type Database = {
         Args: { p_created_by?: string; p_rows: Json }
         Returns: Json
       }
+      import_currency_opening_balance: {
+        Args: {
+          p_account_id: string
+          p_amount: number
+          p_exchange_rate: number
+          p_receipt_id: string
+          p_source_type: string
+          p_transaction_date: string
+        }
+        Returns: Json
+      }
       import_orders_batch: {
         Args: { p_created_by?: string; p_rows: Json }
         Returns: Json
@@ -5314,6 +5810,17 @@ export type Database = {
           p_groups: Json
           p_supplier_id: string
           p_warehouse_id?: string
+        }
+        Returns: Json
+      }
+      import_purchase_returns_batch: {
+        Args: {
+          p_account_id?: string
+          p_category_id?: string
+          p_created_by?: string
+          p_groups: Json
+          p_post_entries?: boolean
+          p_supplier_id: string
         }
         Returns: Json
       }
@@ -5373,6 +5880,37 @@ export type Database = {
         Args: { p_shipped_at: string; p_store_id: string }
         Returns: string
       }
+      notify_admins: {
+        Args: {
+          p_link: string
+          p_message: string
+          p_store_id?: string
+          p_title: string
+        }
+        Returns: undefined
+      }
+      pay_freight_foreign: {
+        Args: {
+          p_account_id: string
+          p_amount: number
+          p_freight_id: string
+          p_receipt_id: string
+          p_reference_id: string
+          p_transaction_date: string
+        }
+        Returns: Json
+      }
+      pay_purchase_order_foreign: {
+        Args: {
+          p_account_id: string
+          p_amount: number
+          p_purchase_order_id: string
+          p_receipt_id: string
+          p_reference_id: string
+          p_transaction_date: string
+        }
+        Returns: Json
+      }
       process_order_return_lines: {
         Args: {
           p_action?: string
@@ -5418,6 +5956,22 @@ export type Database = {
       receive_purchase_items: {
         Args: { p_items: Json; p_lots?: Json; p_warehouse_id?: string }
         Returns: undefined
+      }
+      reconcile_currency_fifo: {
+        Args: { p_account_id: string; p_currency: string }
+        Returns: Json
+      }
+      refund_currency_fifo: {
+        Args: {
+          p_account_id: string
+          p_amount: number
+          p_original_movement_id: string
+          p_receipt_id: string
+          p_source_id: string
+          p_source_type: string
+          p_transaction_date: string
+        }
+        Returns: Json
       }
       register_batch_rep_commission_payout: {
         Args: {
@@ -5505,6 +6059,7 @@ export type Database = {
         Args: { p_consignment_order_id: string }
         Returns: Json
       }
+      retry_failed_notifications: { Args: never; Returns: undefined }
       return_consignment_items: {
         Args: {
           p_consignment_order_id: string
@@ -5519,6 +6074,15 @@ export type Database = {
           p_consignment_order_id: string
           p_created_by: string
           p_note?: string
+        }
+        Returns: Json
+      }
+      reverse_currency_fifo: {
+        Args: {
+          p_movement_id: string
+          p_reason: string
+          p_receipt_id: string
+          p_transaction_date: string
         }
         Returns: Json
       }
@@ -5557,6 +6121,7 @@ export type Database = {
           p_delivery_method_id?: string
           p_delivery_overrides?: Json
           p_delivery_type?: string
+          p_lots?: Json
           p_notes?: string
           p_shipped_at?: string
           p_shipping_address?: Json
@@ -5569,6 +6134,16 @@ export type Database = {
           p_tracking_url?: string
           p_warehouse_id?: string
           p_warehouse_map?: Json
+        }
+        Returns: Json
+      }
+      sync_order_po_quantities: {
+        Args: {
+          p_apply?: boolean
+          p_deleted_item_ids?: string[]
+          p_items?: Json
+          p_order_id: string
+          p_overrides?: Json
         }
         Returns: Json
       }
@@ -5592,6 +6167,18 @@ export type Database = {
       sync_storefront_items: {
         Args: { p_product_id: string }
         Returns: undefined
+      }
+      transfer_currency_fifo: {
+        Args: {
+          p_amount: number
+          p_fee_amount: number
+          p_from_account_id: string
+          p_receipt_id: string
+          p_reference_id: string
+          p_to_account_id: string
+          p_transaction_date: string
+        }
+        Returns: Json
       }
       unlink_orders_from_purchase_order: {
         Args: { p_order_ids: string[]; p_purchase_order_id: string }

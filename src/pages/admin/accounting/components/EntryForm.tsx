@@ -7,6 +7,7 @@ import { EntryDocListFields } from './EntryDocListFields';
 import { EntryPayoutFields } from './EntryPayoutFields';
 import { EntryShippingFields } from './EntryShippingFields';
 import { EntryRepairFields } from './EntryRepairFields';
+import { EntryConsumeFields } from './EntryConsumeFields';
 import { EntryCommonFields } from './EntryCommonFields';
 
 export function EntryForm(props: EntryFormProps) {
@@ -21,6 +22,7 @@ export function EntryForm(props: EntryFormProps) {
       {ctl.isPayout && <EntryPayoutFields ctl={ctl} />}
       {ctl.isShipping && <EntryShippingFields ctl={ctl} />}
       {ctl.isRepair && <EntryRepairFields ctl={ctl} />}
+      {ctl.isConsume && <EntryConsumeFields ctl={ctl} />}
       <EntryCommonFields ctl={ctl} />
     </div>
   );

@@ -3,16 +3,40 @@
  * @param amount 數值
  * @param currency 幣別碼, 預設為 USD
  */
+const CURRENCY_SYMBOLS: Record<string, string> = {
+    TWD: 'NT$',
+    USD: '$',
+    CNY: '¥',
+    JPY: '¥',
+    EUR: '€',
+    HKD: 'HK$',
+    KRW: '₩',
+    GBP: '£',
+};
+
+const CURRENCY_DECIMALS: Record<string, number> = {
+    TWD: 0,
+    JPY: 0,
+    KRW: 0,
+    USD: 2,
+    CNY: 2,
+    EUR: 2,
+    HKD: 2,
+    GBP: 2,
+};
+
 export function formatCurrency(amount: number | string, currency: string = 'USD'): string {
     const value = typeof amount === 'string' ? parseFloat(amount) : amount;
-    if (isNaN(value)) return '$0';
+    if (isNaN(value)) return `${CURRENCY_SYMBOLS[currency] || currency}0`;
 
-    return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: currency,
+    const symbol = CURRENCY_SYMBOLS[currency] || currency;
+    const decimals = CURRENCY_DECIMALS[currency] ?? 2;
+    const formatted = Math.abs(value).toLocaleString('en-US', {
         minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-    }).format(value);
+        maximumFractionDigits: decimals,
+    });
+    const sign = value < 0 ? '-' : '';
+    return `${sign}${symbol}${formatted}`;
 }
 
 /**

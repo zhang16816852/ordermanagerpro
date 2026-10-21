@@ -21,10 +21,11 @@ export function StatsCards({ entries, accounts }: StatsCardsProps) {
     return groups;
   }, {} as Record<string, number>);
 
-  const primaryCurrency = Object.entries(currencyGroups).sort((a, b) => b[1] - a[1])[0];
-  const totalBalance = primaryCurrency ? primaryCurrency[1] : 0;
-  const totalBalanceCurrency = primaryCurrency ? primaryCurrency[0] : 'TWD';
+  // 主幣別統一為台幣：帳戶餘額主數字僅加總 TWD 帳戶
+  const totalBalance = currencyGroups['TWD'] || 0;
+  const totalBalanceCurrency = 'TWD';
   const hasMultipleCurrencies = Object.keys(currencyGroups).length > 1;
+  const foreignEntries = Object.entries(currencyGroups).filter(([c]) => c !== 'TWD');
 
   const transferCount = entries.filter(e => e.type === 'transfer' || e.type === 'currency_exchange' || e.type === 'topup').length;
   const settlementCount = entries.filter(e => e.type === 'settlement').length;
@@ -74,7 +75,7 @@ export function StatsCards({ entries, accounts }: StatsCardsProps) {
           <div className="text-2xl font-bold">{formatCurrency(totalBalance, totalBalanceCurrency)}</div>
           {hasMultipleCurrencies && (
             <p className="text-xs text-muted-foreground">
-              多幣別：{Object.entries(currencyGroups).map(([c, b]) => `${c} ${formatCurrency(b, c)}`).join(' / ')}
+              多幣別（未換算）：{foreignEntries.map(([c, b]) => `${c} ${formatCurrency(b, c)}`).join(' / ')}
             </p>
           )}
         </CardContent>

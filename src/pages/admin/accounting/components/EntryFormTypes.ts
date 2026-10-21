@@ -48,6 +48,13 @@ export interface EntryPrefill {
     periodEnd?: string;
   };
   repair?: RepairAccountingPrefill;
+  consume?: {
+    accountId?: string;
+    amount?: number;
+    sourceType?: string;
+    referenceId?: string;
+    transactionDate?: string;
+  };
 }
 
 export interface PayoutSubmission {
@@ -81,7 +88,7 @@ export interface ShippingSettlementSubmission {
   note?: string;
 }
 
-export type FormView = 'list' | 'transfer' | 'currency_exchange' | 'payout' | 'shipping' | 'repair';
+export type FormView = 'list' | 'transfer' | 'currency_exchange' | 'payout' | 'shipping' | 'repair' | 'consume';
 
 export interface EntryFormProps {
   entry: AccountingEntry | null;
@@ -94,6 +101,7 @@ export interface EntryFormProps {
   onPayoutSubmit?: (payload: PayoutSubmission) => void;
   onBatchPayoutSubmit?: (payload: BatchPayoutSubmission) => void;
   onShippingSettleSubmit?: (payload: ShippingSettlementSubmission) => void;
+  onConsumeSubmit?: (payload: { accountId: string; amount: number; sourceType: string; referenceId?: string; transactionDate: string; docItems: DocItem[] }) => void;
   isLoading: boolean;
 }
 

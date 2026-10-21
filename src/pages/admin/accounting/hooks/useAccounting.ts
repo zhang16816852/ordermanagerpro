@@ -266,7 +266,19 @@ export function useAccounting(selectedMonth?: string) {
 
   const deleteEntryMutation = useMutation({
     mutationFn: async (entry: AccountingEntry) => {
-      // 改走單一事務 RPC：後端回退帳戶餘額 + 清理子表 + 同步收款狀態
+      // 換匯紀錄：走專用回滾 RPC
+      if (entry.reference_type === 'currency_exchange' && entry.reference_id) {
+        const { data: cdata, error: cerror } = await (supabase as any).rpc('delete_currency_exchange', { p_movement_id: entry.reference_id });
+        if (cerror) throw cerror;
+        const cresult = cdata as { ok?: boolean; reason?: string } | null;
+        if (cresult && cresult.ok === false) {
+          const err = new Error(cresult.reason || '刪除失敗') as any;
+          err.reason = cresult.reason;
+          throw err;
+        }
+        return;
+      }
+      // 其他分錄：走單一事務 RPC
       const { data, error } = await (supabase as any).rpc('delete_accounting_entry', { p_entry_id: entry.id });
       if (error) throw error;
       const result = data as { ok?: boolean; reason?: string; adopted_by?: Array<{ label?: string }> } | null;
@@ -284,6 +296,9 @@ export function useAccounting(selectedMonth?: string) {
       queryClient.invalidateQueries({ queryKey: ['admin-sales-notes'] });
       queryClient.invalidateQueries({ queryKey: ['store-sales-notes'] });
       queryClient.invalidateQueries({ queryKey: ['shipping-settlements'] });
+      queryClient.invalidateQueries({ queryKey: ['currency-batches'] });
+      queryClient.invalidateQueries({ queryKey: ['currency-batch-inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['currency-movements'] });
       invalidateRepairQueries();
       toast.success('記錄已刪除');
     },

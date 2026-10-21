@@ -55,6 +55,7 @@ export interface Supplier {
   notes: string | null;
   is_active: boolean;
   is_logistics_company: boolean;
+  currency: string;
 }
 
 export type PurchaseOrderPurpose = 'general' | 'repair_parts' | 'purchase_return';

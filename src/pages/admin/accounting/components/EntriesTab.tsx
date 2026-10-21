@@ -171,7 +171,7 @@ export function EntriesTab({
               <TableHead>日期</TableHead>
               <TableHead>類型</TableHead>
               <TableHead>分類</TableHead>
-              <TableHead>對象</TableHead>
+              <TableHead>店家/廠商</TableHead>
               <TableHead>說明</TableHead>
               <TableHead className="text-right">金額</TableHead>
               <TableHead className="text-right">已付/已收</TableHead>

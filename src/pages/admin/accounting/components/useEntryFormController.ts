@@ -69,6 +69,7 @@ export interface EntryFormController {
   isShipping: boolean;
   isRepair: boolean;
   isPaymentMode: boolean;
+  isConsume: boolean;
   allCategories: AccountingCategory[];
   payoutCategories: AccountingCategory[];
   selectedPayoutTotal: number;
@@ -96,6 +97,10 @@ export interface EntryFormController {
   setSelectedRepairOrderId: (v: string) => void;
   setSelectedPurchaseOrderId: (v: string) => void;
   setServiceVendorName: (v: string) => void;
+  setConsumeSourceType: (v: string) => void;
+  consumeSourceType: string;
+  consumeReferenceId: string;
+  setConsumeReferenceId: (v: string) => void;
   setPaymentAmount: (v: string) => void;
   addDocItem: (item: DocCandidate) => void;
   removeDocItem: (index: number) => void;
@@ -110,7 +115,7 @@ export interface EntryFormController {
 }
 
 export function useEntryFormController(props: EntryFormProps): EntryFormController {
-  const { entry, paymentEntry, prefill, categories, accounts, onSubmit, onRecordPayment, onPayoutSubmit, onBatchPayoutSubmit, onShippingSettleSubmit, isLoading } = props;
+  const { entry, paymentEntry, prefill, categories, accounts, onSubmit, onRecordPayment, onPayoutSubmit, onBatchPayoutSubmit, onShippingSettleSubmit, onConsumeSubmit, isLoading } = props;
   const isPaymentMode = !!paymentEntry;
 
   const initialPayoutIds = useMemo(() => {
@@ -127,17 +132,18 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
     if (prefill?.payout?.repId) return 'payout';
     if (prefill?.shipping) return 'shipping';
     if (prefill?.repair) return 'repair';
+    if (prefill?.consume) return 'consume';
     return 'list';
   });
   const [categoryId, setCategoryId] = useState(entry?.category_id || prefill?.categoryId || '');
-  const [accountId, setAccountId] = useState(entry?.account_id || prefill?.accountId || '');
+  const [accountId, setAccountId] = useState(entry?.account_id || prefill?.accountId || prefill?.consume?.accountId || '');
   const [transferToAccountId, setTransferToAccountId] = useState(entry?.transfer_to_account_id || '');
   const [exchangeRate, setExchangeRate] = useState(entry?.exchange_rate?.toString() || '');
   const [originalCurrency, setOriginalCurrency] = useState(entry?.original_currency || '');
   const [originalAmount, setOriginalAmount] = useState(entry?.original_amount?.toString() || '');
-  const [amount, setAmount] = useState(entry?.amount?.toString() || prefill?.amount?.toString() || '');
+  const [amount, setAmount] = useState(entry?.amount?.toString() || prefill?.amount?.toString() || prefill?.consume?.amount?.toString() || '');
   const [description, setDescription] = useState(entry?.description || prefill?.description || '');
-  const [transactionDate, setTransactionDate] = useState(entry?.transaction_date || prefill?.transactionDate || format(new Date(), 'yyyy-MM-dd'));
+  const [transactionDate, setTransactionDate] = useState(entry?.transaction_date || prefill?.transactionDate || prefill?.consume?.transactionDate || format(new Date(), 'yyyy-MM-dd'));
   const [dueDate, setDueDate] = useState(entry?.due_date || '');
 
   const [docItems, setDocItems] = useState<DocItem[]>(prefill?.docItems || []);
@@ -155,7 +161,8 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
   const [selectedRepairOrderId, setSelectedRepairOrderId] = useState<string>(prefill?.repair?.repairOrderId || '');
   const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState<string>(prefill?.repair?.purchaseOrderId || '');
   const [serviceVendorName, setServiceVendorName] = useState<string>(prefill?.repair?.vendorName || '');
-
+  const [consumeSourceType, setConsumeSourceType] = useState<string>(prefill?.consume?.sourceType || 'purchase_payment');
+  const [consumeReferenceId, setConsumeReferenceId] = useState<string>(prefill?.consume?.referenceId || '');
   const [paymentAmount, setPaymentAmount] = useState(
     paymentEntry ? (paymentEntry.amount - paymentEntry.paid_amount).toString() : ''
   );
@@ -168,7 +175,7 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
   const isPayout = view === 'payout';
   const isShipping = view === 'shipping';
   const isRepair = view === 'repair';
-
+  const isConsume = view === 'consume';
   const allCategories = useMemo(
     () => categories.filter(c => c.type === 'income' || c.type === 'expense'),
     [categories],
@@ -300,7 +307,7 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
     }
   };
 
-  const { salesNotes, purchaseOrders, repairOrders } = useEntryDocQueries({ isList, isRepair, docTab });
+  const { salesNotes, purchaseOrders, repairOrders } = useEntryDocQueries({ isList, isRepair, isConsume, docTab });
   const { payoutReps, payoutNotes } = useEntryPayoutQueries({ isPayout, payoutRepId });
   const { shippingSuppliers, shipSettleItems } = useEntryShippingQueries({ isShipping, shippingSupplierId });
 
@@ -335,12 +342,18 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
   };
 
   const currentDocList = useMemo(() => {
+    let list: DocCandidate[] = [];
     switch (docTab) {
-      case 'sales_note': return salesNotes;
-      case 'purchase_order': return purchaseOrders;
-      case 'repair_order': return repairOrders;
+      case 'sales_note': list = salesNotes; break;
+      case 'purchase_order': list = purchaseOrders; break;
+      case 'repair_order': list = repairOrders; break;
     }
-  }, [docTab, salesNotes, purchaseOrders, repairOrders]);
+    if (isConsume && docTab === 'purchase_order') {
+      const accCurrency = accounts.find((a) => a.id === accountId)?.currency || 'TWD';
+      list = list.filter((po) => (po.currency || 'TWD') === accCurrency);
+    }
+    return list;
+  }, [docTab, salesNotes, purchaseOrders, repairOrders, isConsume, accountId, accounts]);
 
   // 比對「說明」是否為自動產生的格式（空白、或常見的自動前綴），是才隨單據清單連動更新
   const isAutoDescription = (s: string) => {
@@ -450,6 +463,15 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
         description: description || undefined,
         note: description || undefined,
       });
+    } else if (isConsume && onConsumeSubmit) {
+      onConsumeSubmit({
+        accountId,
+        amount: parseFloat(amount) || 0,
+        sourceType: consumeSourceType,
+        referenceId: consumeReferenceId || undefined,
+        transactionDate,
+        docItems: [],
+      });
     } else if (isPaymentMode && paymentEntry && onRecordPayment) {
       onRecordPayment({
         entryId: paymentEntry.id,
@@ -533,6 +555,7 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
     isPayout,
     isShipping,
     isRepair,
+    isConsume,
     isPaymentMode,
     allCategories,
     payoutCategories,
@@ -561,6 +584,10 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
     setSelectedRepairOrderId,
     setSelectedPurchaseOrderId,
     setServiceVendorName,
+    setConsumeSourceType,
+    setConsumeReferenceId,
+    consumeSourceType,
+    consumeReferenceId,
     setPaymentAmount,
     addDocItem,
     removeDocItem,

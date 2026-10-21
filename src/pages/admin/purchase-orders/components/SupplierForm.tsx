@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DialogFooter } from '@/components/ui/dialog';
 import { Truck } from 'lucide-react';
 import { Supplier } from '../types';
@@ -27,6 +28,7 @@ export function SupplierForm({
   const [address, setAddress] = useState(initial?.address || '');
   const [notes, setNotes] = useState(initial?.notes || '');
   const [isLogistics, setIsLogistics] = useState(!!initial?.is_logistics_company);
+  const [currency, setCurrency] = useState(initial?.currency || 'TWD');
 
   return (
     <div className="space-y-4">
@@ -56,6 +58,22 @@ export function SupplierForm({
         <Label>備註</Label>
         <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
       </div>
+      <div className="space-y-2">
+        <Label>幣別</Label>
+        <Select value={currency} onValueChange={setCurrency}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="TWD">台幣 TWD</SelectItem>
+            <SelectItem value="CNY">人民幣 CNY</SelectItem>
+            <SelectItem value="USD">美金 USD</SelectItem>
+            <SelectItem value="JPY">日圓 JPY</SelectItem>
+            <SelectItem value="EUR">歐元 EUR</SelectItem>
+            <SelectItem value="HKD">港幣 HKD</SelectItem>
+            <SelectItem value="KRW">韓元 KRW</SelectItem>
+            <SelectItem value="GBP">英鎊 GBP</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
       <div className="flex items-start gap-3 rounded-lg border p-3">
         <Checkbox
           id="supplier-is-logistics"
@@ -83,6 +101,7 @@ export function SupplierForm({
             address: address || null,
             notes: notes || null,
             is_logistics_company: isLogistics,
+            currency,
           })}
           disabled={!name || isLoading}
         >

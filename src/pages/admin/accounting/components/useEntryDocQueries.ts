@@ -8,6 +8,7 @@ export interface DocCandidate {
   name: string;
   date: string;
   amount: number;
+  currency?: string;
   supplierName?: string;
   customerName?: string;
   deviceModelName?: string;
@@ -16,10 +17,11 @@ export interface DocCandidate {
 interface UseEntryDocQueriesOptions {
   isList: boolean;
   isRepair: boolean;
+  isConsume?: boolean;
   docTab: DocType;
 }
 
-export function useEntryDocQueries({ isList, isRepair, docTab }: UseEntryDocQueriesOptions) {
+export function useEntryDocQueries({ isList, isRepair, isConsume, docTab }: UseEntryDocQueriesOptions) {
   const { data: salesNotes = [] } = useQuery<DocCandidate[]>({
     queryKey: ['doc-sales-notes'],
     queryFn: async () => {
@@ -53,7 +55,7 @@ export function useEntryDocQueries({ isList, isRepair, docTab }: UseEntryDocQuer
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('purchase_orders')
-        .select('id, supplier_order_number, total_amount, order_date, status, supplier:suppliers(name)')
+        .select('id, supplier_order_number, total_amount, order_date, status, supplier:suppliers(name, currency)')
         .neq('status', 'cancelled')
         .order('order_date', { ascending: false })
         .limit(100);
@@ -64,10 +66,11 @@ export function useEntryDocQueries({ isList, isRepair, docTab }: UseEntryDocQuer
         name: po.supplier?.name || '未知供應商',
         date: po.order_date,
         amount: Number(po.total_amount) || 0,
+        currency: po.supplier?.currency || 'TWD',
         supplierName: po.supplier?.name || '',
       }));
     },
-    enabled: (isList && docTab === 'purchase_order') || isRepair,
+    enabled: ((isList || !!isConsume) && docTab === 'purchase_order') || isRepair,
   });
 
   const { data: repairOrders = [] } = useQuery<DocCandidate[]>({

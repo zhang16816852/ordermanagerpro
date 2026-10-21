@@ -45,6 +45,9 @@ export function SupplierTab({
                   物流
                 </Badge>
               )}
+              <Badge variant="outline" className="ml-2 shrink-0 font-mono text-xs">
+                {supplier.currency || 'TWD'}
+              </Badge>
               <div className="flex gap-1 ml-auto">
                 <Button variant="outline" size="sm" onClick={() => onEdit(supplier)}>
                   <Pencil className="h-4 w-4 mr-2" aria-hidden="true" />

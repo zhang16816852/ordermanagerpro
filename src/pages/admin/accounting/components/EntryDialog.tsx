@@ -22,6 +22,7 @@ interface EntryDialogProps {
   onPayoutSubmit?: (payload: PayoutSubmission) => void;
   onBatchPayoutSubmit?: (payload: BatchPayoutSubmission) => void;
   onShippingSettleSubmit?: (payload: ShippingSettlementSubmission) => void;
+  onConsumeSubmit?: (payload: { accountId: string; amount: number; sourceType: string; referenceId?: string; transactionDate: string; docItems: any[] }) => void;
 }
 
 export function EntryDialog({
@@ -38,6 +39,7 @@ export function EntryDialog({
   onPayoutSubmit,
   onBatchPayoutSubmit,
   onShippingSettleSubmit,
+  onConsumeSubmit,
 }: EntryDialogProps) {
   const title = paymentEntry ? '記錄付款' : entry ? '編輯收支記錄' : '新增收支記錄';
 
@@ -64,6 +66,7 @@ export function EntryDialog({
           onPayoutSubmit={onPayoutSubmit}
           onBatchPayoutSubmit={onBatchPayoutSubmit}
           onShippingSettleSubmit={onShippingSettleSubmit}
+          onConsumeSubmit={onConsumeSubmit}
         />
       </DialogContent>
     </Dialog>

@@ -3,7 +3,7 @@ import { HandCoins, Truck, Wrench } from 'lucide-react';
 import { EntryFormController } from './useEntryFormController';
 
 export function EntryViewSwitcher({ ctl }: { ctl: EntryFormController }) {
-  const { isList, isTransferLike, isPayout, isShipping, isRepair, view, entry, handleViewChange } = ctl;
+  const { isList, isTransferLike, isPayout, isShipping, isRepair, isConsume, view, entry, handleViewChange } = ctl;
   return (
     <div className="flex flex-wrap gap-2">
       <Button
@@ -54,6 +54,14 @@ export function EntryViewSwitcher({ ctl }: { ctl: EntryFormController }) {
       >
         <Wrench className="h-4 w-4 mr-1" /> 維修收支
       </Button>
+  <Button
+    variant={isConsume ? 'default' : 'outline'}
+    size="sm"
+    onClick={() => handleViewChange('consume')}
+    disabled={!!entry}
+  >
+    外幣消耗
+  </Button>
     </div>
   );
 }
