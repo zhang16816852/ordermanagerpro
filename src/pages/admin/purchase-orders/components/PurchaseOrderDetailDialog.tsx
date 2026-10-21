@@ -152,7 +152,7 @@ interface PurchaseOrderDetailDialogProps {
   paidAmount?: number;
   sourceOrderMap: Record<string, string>;
   sourceOrderStoreMap?: Record<string, string>;
-  supplierMappingMap: Record<string, { id?: string; supplier_id?: string; vendor_product_id: string; vendor_product_name: string; is_primary?: boolean }>;
+  supplierMappingMap: Record<string, { id?: string; supplier_id?: string; vendor_product_id: string; vendor_product_name: string; vendor_unit_cost?: number | null; is_primary?: boolean }>;
   canEditVendorMapping?: boolean;
   onSaveVendorMapping?: (payload: {
     mappingId?: string;
@@ -161,6 +161,7 @@ interface PurchaseOrderDetailDialogProps {
     vendorProductName: string | null;
     productId: string;
     variantId: string | null;
+    vendorUnitCost?: number | null;
   }) => Promise<unknown>;
   /** 匯入／追加品項：items 為「既有品項 + 新品項（id: null）」的整單清單 */
   onImportItems: (data: { purchaseOrderId: string; items: PoUpdateItemPayload[] }) => Promise<unknown>;
@@ -428,7 +429,7 @@ export function PurchaseOrderDetailDialog({
                     vendor_product_name: mapping?.vendor_product_name || null,
                     internal_product_id: item.product_id,
                     internal_variant_id: item.variant_id || null,
-                    vendor_unit_cost: null,
+                    vendor_unit_cost: mapping?.vendor_unit_cost ?? null,
                     is_primary: mapping?.is_primary ?? false,
                     internal_product: { name: item.product?.name || '' },
                     internal_variant: item.variant ? { name: item.variant.name } : null,
@@ -999,7 +1000,32 @@ export function PurchaseOrderDetailDialog({
               vendorProductName: data.vendor_product_name,
               productId: data.internal_product_id,
               variantId: data.internal_variant_id,
+              vendorUnitCost: data.vendor_unit_cost,
             });
+            // 只更新該單：把廠商對照的進貨價同步回此採購單品項的進貨價（僅未收貨品項）
+            if (data.vendor_unit_cost != null && onUpdateItem) {
+              const newCost = Number(data.vendor_unit_cost);
+              const affected = localItems.filter(
+                (i) => i.product_id === data.internal_product_id && (i.variant_id || null) === (data.internal_variant_id || null) && (i.received_quantity || 0) <= 0,
+              );
+              if (affected.length > 0) {
+                const next = localItems.map((i) =>
+                  affected.some((a) => a.id === i.id) ? { ...i, unit_cost: newCost } : i,
+                );
+                setLocalItems(next);
+                try {
+                  await onUpdateItem({ purchaseOrderId: order.id, items: next.map((i) => ({
+                    id: i.id,
+                    product_id: i.product_id || '',
+                    variant_id: i.variant_id || null,
+                    quantity: i.quantity,
+                    unit_cost: Number(i.unit_cost) || 0,
+                  })) });
+                } catch {
+                  setLocalItems(localItems);
+                }
+              }
+            }
           } catch {
             // toast 由 mutation 顯示
           }

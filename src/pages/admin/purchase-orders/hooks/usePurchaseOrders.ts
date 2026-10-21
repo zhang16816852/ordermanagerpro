@@ -226,16 +226,16 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
       if (!viewingOrder?.supplier_id) return {};
       const { data, error } = await (supabase as any)
         .from('supplier_product_mappings')
-        .select('id, supplier_id, internal_product_id, internal_variant_id, vendor_product_id, vendor_product_name, is_primary')
+        .select('id, supplier_id, internal_product_id, internal_variant_id, vendor_product_id, vendor_product_name, vendor_unit_cost, is_primary')
         .eq('supplier_id', viewingOrder.supplier_id)
         .order('is_primary', { ascending: false });
       if (error) throw error;
       // 同一料號可對多個內部目標，反向查詢（目標 → 料號）時以主對照優先
-      return (data || []).reduce((acc: Record<string, { id: string; supplier_id: string; vendor_product_id: string; vendor_product_name: string; is_primary: boolean }>, m: any) => {
+      return (data || []).reduce((acc: Record<string, { id: string; supplier_id: string; vendor_product_id: string; vendor_product_name: string; vendor_unit_cost: number | null; is_primary: boolean }>, m: any) => {
         const key = `${m.internal_product_id}_${m.internal_variant_id || 'null'}`;
         const existing = acc[key];
         if (existing && existing.is_primary) return acc;
-        acc[key] = { id: m.id, supplier_id: m.supplier_id, vendor_product_id: m.vendor_product_id, vendor_product_name: m.vendor_product_name, is_primary: !!m.is_primary };
+        acc[key] = { id: m.id, supplier_id: m.supplier_id, vendor_product_id: m.vendor_product_id, vendor_product_name: m.vendor_product_name, vendor_unit_cost: m.vendor_unit_cost ?? null, is_primary: !!m.is_primary };
         return acc;
       }, {});
     },
@@ -408,13 +408,14 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
       vendorProductName: string | null;
       productId: string;
       variantId: string | null;
+      vendorUnitCost?: number | null;
     }) => {
       const vpid = payload.vendorProductId.trim();
       if (!vpid) throw new Error('廠商代碼不可為空白');
       if (payload.mappingId) {
         const { error } = await (supabase as any)
           .from('supplier_product_mappings')
-          .update({ vendor_product_id: vpid, vendor_product_name: payload.vendorProductName })
+          .update({ vendor_product_id: vpid, vendor_product_name: payload.vendorProductName, vendor_unit_cost: payload.vendorUnitCost ?? null })
           .eq('id', payload.mappingId);
         if (error) throw error;
       } else {
@@ -435,12 +436,14 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
             vendor_product_name: payload.vendorProductName,
             internal_product_id: payload.productId,
             internal_variant_id: payload.variantId,
+            vendor_unit_cost: payload.vendorUnitCost ?? null,
             is_primary: isPrimary,
           });
         if (error) throw error;
       }
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['supplier-mappings', viewingOrder?.supplier_id] });
       queryClient.invalidateQueries({ queryKey: ['supplier-mappings-export', viewingOrder?.supplier_id] });
       toast.success('廠商對照已儲存');
     },
