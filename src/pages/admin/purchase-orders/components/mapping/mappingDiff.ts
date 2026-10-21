@@ -65,7 +65,7 @@ export const diffRowsOf = (row: MappingDiffInput): MappingFieldDiff[] => {
   return [
     { label: '對照目標', before: beforeTarget, after: afterTarget, changed: beforeTarget !== afterTarget },
     { label: '廠商品名', before: beforeName, after: afterName, changed: beforeName !== afterName },
-    { label: '供應商單價', before: beforeCost, after: afterCost, changed: beforeCost !== afterCost },
+    { label: '供應商進貨價', before: beforeCost, after: afterCost, changed: beforeCost !== afterCost },
     {
       label: '主對照',
       before: beforePrimary,

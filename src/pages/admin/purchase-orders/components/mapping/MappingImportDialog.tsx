@@ -338,7 +338,7 @@ export function MappingImportDialog({
         h === '內部變體名稱' || h === 'internal_variant_name' || h === '變體名稱'
       );
       const unitCostIdx = headers.findIndex((h) =>
-        h === '單價' || h === 'unit_cost' || h === 'vendor_unit_cost'
+        h === '單價' || h === '進貨價' || h === 'unit_cost' || h === 'vendor_unit_cost'
       );
       const primaryIdx = headers.findIndex((h) =>
         h === '主對照' || h === 'is_primary' || h === 'primary' || h === '是否主對照'
@@ -551,7 +551,7 @@ export function MappingImportDialog({
                   </li>
                   <li>比對方式為<span className="font-medium text-foreground">去除頭尾空白後完全相同、忽略英文大小寫</span>；產品代碼與產品名稱<span className="font-medium text-foreground">不參與比對</span></li>
                   <li>兩個匹配欄位若指向<span className="font-medium text-foreground">不同變體</span>，或變體名稱對應到多個變體，該列會標示為<span className="font-medium text-foreground">欄位矛盾</span>／<span className="font-medium text-foreground">變體名稱歧義</span>並<span className="font-medium text-foreground">不予匯入</span>，需修正後重新上傳</li>
-                  <li>可選欄位：廠商品名、單價</li>
+                  <li>可選欄位：廠商品名、進貨價</li>
                   <li>可選欄位：<span className="font-medium text-foreground">主對照</span>（是／否；未提供時該料號第一個目標會自動成為主對照）</li>
                   <li>同一個「廠商代號」可對應多個內部產品／變體，系統不再視為重複資料</li>
                   <li>已存在對照時，預覽表會顯示<span className="font-medium text-foreground">原始資料 → 變更後</span>的差異，<span className="font-medium text-foreground">只列出有變動的欄位</span>（沒變動的不會被覆寫）</li>
@@ -675,7 +675,7 @@ export function MappingImportDialog({
                       <TableHead>變體名稱</TableHead>
                       <TableHead>匹配結果</TableHead>
                       <TableHead>既有對照 / 變更內容</TableHead>
-                      <TableHead className="text-right">單價</TableHead>
+                      <TableHead className="text-right">進貨價</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

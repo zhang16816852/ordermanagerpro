@@ -28,7 +28,7 @@ export function ExcelImportDialog({ supplierId, supplierName, onImport, isLoadin
     { key: 'vendor_product_id', header: '外部代號', width: '150px' },
     { key: 'vendor_product_name', header: '品名', width: '200px' },
     { key: 'quantity', header: '數量', width: '80px', align: 'right' },
-    { key: 'unit_cost', header: '單價', width: '100px', align: 'right' },
+    { key: 'unit_cost', header: '進貨價', width: '100px', align: 'right' },
   ];
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

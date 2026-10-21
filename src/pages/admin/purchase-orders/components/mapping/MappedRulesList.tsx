@@ -168,7 +168,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, onSetPrimary, isSa
                 />
               </div>
               <div className="space-y-2">
-                <Label>單價</Label>
+                <Label>進貨價</Label>
                 <Input
                   type="number"
                   value={addValues.vendor_unit_cost}
@@ -273,7 +273,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, onSetPrimary, isSa
                 <TableHead>廠商產品名稱</TableHead>
                 <TableHead>系統內部產品</TableHead>
                 <TableHead className="w-[90px] text-center">主對照</TableHead>
-                <TableHead className="w-[100px] text-right">單價</TableHead>
+                <TableHead className="w-[100px] text-right">進貨價</TableHead>
                 <TableHead className="w-[100px] text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
@@ -410,7 +410,7 @@ export function MappedRulesList({ mappings, onDelete, onSave, onSetPrimary, isSa
               />
             </div>
             <div className="space-y-2">
-              <Label>單價</Label>
+              <Label>進貨價</Label>
               <Input
                 type="number"
                 value={addValues.vendor_unit_cost}

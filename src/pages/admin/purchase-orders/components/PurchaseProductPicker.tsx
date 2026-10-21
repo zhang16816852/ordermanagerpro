@@ -231,7 +231,7 @@ export function PurchaseProductPicker({
                   type="number"
                   min={0}
                   step="any"
-                  aria-label="單價"
+                  aria-label="進貨價"
                   className="h-8 w-24 shrink-0"
                   value={costOf(item)}
                   onChange={(e) =>

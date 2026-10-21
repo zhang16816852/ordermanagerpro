@@ -89,7 +89,7 @@ export function MappedRuleEditDialog({ open, onOpenChange, rule, isSaving, onSav
             />
           </div>
           <div className="space-y-2">
-            <Label>單價</Label>
+            <Label>進貨價</Label>
             <Input
               type="number"
               value={vendorUnitCost}

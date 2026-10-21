@@ -74,8 +74,8 @@ export function MappingConfigForm({ initialConfig, onSave, isLoading }: MappingC
           <Input {...register('quantity')} placeholder="例如：本期進貨" />
         </div>
         <div className="space-y-2">
-          <Label>單價</Label>
-          <Input {...register('unit_cost')} placeholder="例如：單價" />
+          <Label>進貨價</Label>
+          <Input {...register('unit_cost')} placeholder="例如：進貨價" />
         </div>
       </div>
       

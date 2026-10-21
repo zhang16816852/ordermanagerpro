@@ -48,7 +48,7 @@ export function ExistingTargetsList({ rows }: { rows: SupplierProductMapping[] }
             {m.is_primary && (
               <Badge variant="secondary" className="px-1 py-0 text-[10px]">主對照</Badge>
             )}
-            <span>・單價 {costTextOf(m.vendor_unit_cost)}</span>
+            <span>・進貨價 {costTextOf(m.vendor_unit_cost)}</span>
             {m.vendor_product_name && <span>・{m.vendor_product_name}</span>}
           </li>
         ))}

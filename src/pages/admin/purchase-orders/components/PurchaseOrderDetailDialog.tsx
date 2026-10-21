@@ -170,7 +170,7 @@ interface PurchaseOrderDetailDialogProps {
   onUnlinkOrder: (orderId: string) => void;
   /** 導向統一採購編輯頁（/admin/purchase-orders/:id/edit） */
   onEditOrder?: () => void;
-  /** 品項數量／單價更新：items 為整單品項（已帶 id），由伺服端依序重編 sort_order 並重算總額 */
+  /** 品項數量／進貨價更新：items 為整單品項（已帶 id），由伺服端依序重編 sort_order 並重算總額 */
   onUpdateItem?: (data: { purchaseOrderId: string; items: PoItemWritePayload[] }) => Promise<unknown>;
   /** 刪除品項：items 為刪除後的整單品項，deletedItemIds 為要移除的品項 */
   onDeleteItem?: (data: { purchaseOrderId: string; items: PoItemWritePayload[]; deletedItemIds: string[] }) => Promise<unknown>;
@@ -213,7 +213,7 @@ export function PurchaseOrderDetailDialog({
   const [itemView, setItemView] = useState<'items' | 'byStore'>('items');
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
 
-  // 數量 / 單價 的行內編輯暫存值
+  // 數量 / 進貨價 的行內編輯暫存值
   const [rowDrafts, setRowDrafts] = useState<Record<string, { quantity: number; unit_cost: number }>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -481,7 +481,7 @@ export function PurchaseOrderDetailDialog({
                 setRowDrafts(prev => ({ ...prev, [item.id]: { ...draftOf(item), unit_cost: Number.isNaN(v) ? 0 : Math.max(0, v) } }));
               }}
               className="h-7 w-24 text-right"
-              aria-label={`${item.variant?.name || item.product?.name || ''} 單價`}
+              aria-label={`${item.variant?.name || item.product?.name || ''} 進貨價`}
             />
           ) : (
             formatCurrency(item.unit_cost)
@@ -558,7 +558,7 @@ export function PurchaseOrderDetailDialog({
         '廠商名稱': mapping?.vendor_product_name || '',
         '數量': item.quantity,
         '已收': item.received_quantity,
-        '單價': item.unit_cost,
+        '進貨價': item.unit_cost,
         '總額': item.quantity * item.unit_cost,
         '來源訂單': (item.source_order_ids || []).map(id => sourceOrderMap[id] || id.slice(0, 8)).join(', '),
       };
@@ -577,7 +577,7 @@ export function PurchaseOrderDetailDialog({
         '廠商名稱': mapping?.vendor_product_name || '',
         '數量': item.quantity,
         '已收': item.received_quantity,
-        '單價': item.unit_cost,
+        '進貨價': item.unit_cost,
         '總額': item.quantity * item.unit_cost,
         '來源訂單': (item.source_order_ids || []).map(id => sourceOrderMap[id] || id.slice(0, 8)).join(', '),
       };
@@ -602,7 +602,7 @@ export function PurchaseOrderDetailDialog({
         '廠商名稱': mapping?.vendor_product_name || '',
         '數量': r.quantity,
         '已收': r.received,
-        '單價': item.unit_cost,
+        '進貨價': item.unit_cost,
         '總額': r.quantity * item.unit_cost,
         '來源訂單': (r.sourceOrderIds.length > 0 ? r.sourceOrderIds : sources).map(id => sourceOrderMap[id] || id.slice(0, 8)).join(', '),
       };
@@ -660,7 +660,7 @@ export function PurchaseOrderDetailDialog({
               <DialogHeader>
                 <DialogTitle>新增品項</DialogTitle>
                 <DialogDescription>
-                  請挑選預算外需額外採購的品項，可調整數量與單價後一次加入。
+                  請挑選預算外需額外採購的品項，可調整數量與進貨價後一次加入。
                 </DialogDescription>
               </DialogHeader>
               <PurchaseProductPicker
@@ -787,7 +787,7 @@ export function PurchaseOrderDetailDialog({
 
                     <TableHead className="text-right">數量</TableHead>
                     <TableHead className="text-right">已收</TableHead>
-                    <TableHead className="text-right">單價</TableHead>
+                    <TableHead className="text-right">進貨價</TableHead>
                     <TableHead className="text-right">總額</TableHead>
                                         <TableHead>來源訂單</TableHead>
                     {canDelete && <TableHead className="w-12 text-right">操作</TableHead>}
@@ -820,7 +820,7 @@ export function PurchaseOrderDetailDialog({
 
                   <TableHead className="text-right">數量</TableHead>
                   <TableHead className="text-right">已收</TableHead>
-                  <TableHead className="text-right">單價</TableHead>
+                  <TableHead className="text-right">進貨價</TableHead>
                   <TableHead className="text-right">總額</TableHead>
                   <TableHead>來源訂單</TableHead>
                   {canDelete && <TableHead className="w-12 text-right">操作</TableHead>}
@@ -866,7 +866,7 @@ export function PurchaseOrderDetailDialog({
                       <TableHead className="min-w-[200px]">廠商（代碼 / 名稱）</TableHead>
                       <TableHead className="text-right">數量</TableHead>
                       <TableHead className="text-right">已收</TableHead>
-                      <TableHead className="text-right">單價</TableHead>
+                      <TableHead className="text-right">進貨價</TableHead>
                       <TableHead className="text-right">總額</TableHead>
                     </TableRow>
                   </TableHeader>

@@ -29,7 +29,7 @@ export function MappingExportDialog({
       '內部變體名稱': m.internal_variant?.name || '',
       '廠商代號': m.vendor_product_id,
       '廠商品名': m.vendor_product_name || '',
-      '單價': m.vendor_unit_cost ?? '',
+      '進貨價': m.vendor_unit_cost ?? '',
       '主對照': m.is_primary ? '是' : '否',
     }));
 
@@ -85,7 +85,7 @@ export function MappingExportDialog({
 
           <div className="text-sm text-muted-foreground bg-muted/50 rounded-md p-3">
             <p className="font-medium mb-1">匯出欄位：</p>
-            <p>變體 SKU、內部變體名稱、廠商代號、廠商品名、單價、主對照</p>
+            <p>變體 SKU、內部變體名稱、廠商代號、廠商品名、進貨價、主對照</p>
             <p className="text-xs mt-1">匯入時以「變體 SKU」或「變體名稱」比對內部變體（去除頭尾空白、忽略英文大小寫）；同一廠商代號可有多列，代表對應多個內部變體</p>
           </div>
         </div>
