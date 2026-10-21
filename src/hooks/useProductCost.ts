@@ -116,12 +116,27 @@ export function useProductCostMap() {
         });
       }
 
+      // 跨變體 fallback：為每個 product 記錄「最近一筆 PO 成本（不限變體）」，
+      // 供 costOf 在變體精確與產品層都 miss 時使用（避免「成本未知」）。
+      // 僅在該 product 尚無 product 層（variant null）成本時寫入，避免覆蓋精確值。
+      const productWidePo = new Map<string, ResolvedProductCost>();
+      for (const p of poRows) {
+        const cost = Number(p.unit_cost);
+        if (!Number.isFinite(cost) || cost <= 0) continue;
+        const pk = costKey(p.product_id, null);
+        if (productWidePo.has(pk)) continue;
+        productWidePo.set(pk, { cost, source: 'purchase', asOf: poAsOf(p) });
+      }
+      for (const [pk, val] of productWidePo) {
+        if (!map.has(pk)) map.set(pk, val);
+      }
+
       return map;
     },
     staleTime: 5 * 60 * 1000,
   });
 
-  /** 查單一產品／變體的成本：變體層 → 產品層 → undefined（未知） */
+  /** 查單一產品／變體的成本：變體層 → 產品層 → 跨變體 PO fallback → undefined（未知） */
   const costOf = useMemo(() => {
     return (productId?: string | null, variantId?: string | null): ResolvedProductCost | undefined => {
       if (!productId) return undefined;
@@ -129,7 +144,10 @@ export function useProductCostMap() {
         const hit = data?.get(costKey(productId, variantId));
         if (hit) return hit;
       }
-      return data?.get(costKey(productId, null));
+      // 產品層（variant null）——含跨變體 fallback 寫入的 product-wide PO 成本
+      const productLevel = data?.get(costKey(productId, null));
+      if (productLevel) return productLevel;
+      return undefined;
     };
   }, [data]);
 
