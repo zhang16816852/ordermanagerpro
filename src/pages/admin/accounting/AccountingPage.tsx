@@ -311,26 +311,6 @@ export default function AdminAccounting() {
               referenceId: payload.referenceId,
               transactionDate: payload.transactionDate,
             });
-            const data = {
-              type: 'expense' as const,
-              account_id: payload.accountId,
-              amount: payload.amount,
-              paid_amount: payload.amount,
-              payment_status: 'paid' as const,
-              description: `外幣消耗 (${payload.sourceType})`,
-              transaction_date: payload.transactionDate,
-              reference_type: payload.docItems?.[0]?.docType || 'currency_consume',
-              reference_id: payload.docItems?.[0]?.docId || payload.referenceId || null,
-            };
-            await createEntryMutation.mutateAsync({ data, references: payload.docItems?.length ? payload.docItems.map((d: any) => ({
-              id: '',
-              entry_id: '',
-              reference_type: d.docType,
-              reference_id: d.docId,
-              item_name: d.code,
-              amount_applied: d.amountApplied,
-              created_at: '',
-            })) : undefined });
             setEntryDialogOpen(false);
           } catch (e: any) {
             toast.error(e?.message || '外幣消耗失敗');
