@@ -245,6 +245,8 @@ export default function AdminShippingPool() {
       newSelected.delete(storeId);
     } else {
       newSelected.add(storeId);
+      // 以店家為動作時，清掉品項級選擇（兩者互斥）
+      setSelectedPoolItemIds(new Set());
     }
     setSelectedStores(newSelected);
   };
@@ -257,6 +259,8 @@ export default function AdminShippingPool() {
       else next.add(poolId);
       return next;
     });
+    // 以品項為動作時，清掉店家級選擇（兩者互斥）
+    setSelectedStores(new Set());
   };
 
   const toggleAllInGroup = (group: GroupedByStore) => {
@@ -270,6 +274,7 @@ export default function AdminShippingPool() {
       }
       return next;
     });
+    setSelectedStores(new Set());
   };
 
   const { batchRemoveMutation, shipMutation } = useShippingPoolMutations({
@@ -332,33 +337,33 @@ export default function AdminShippingPool() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Package className="h-5 w-5" />
-              待出貨項目
-            </div>
-            <div className="flex items-center gap-2">
+          <CardTitle className="flex items-center">
+            <Package className="h-5 w-5 mr-2" />
+            待出貨項目
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* 統一批次動作列：品項級＝回滾成訂單，店家級＝確認出貨，兩者互斥 */}
+          <div className="flex items-center gap-2 mb-3">
+            {selectedPoolItemIds.size > 0 ? (
               <Button
                 variant="destructive"
                 onClick={() => batchRemoveMutation.mutate(Array.from(selectedPoolItemIds))}
-                disabled={selectedPoolItemIds.size === 0 || batchRemoveMutation.isPending}
-                className="hidden md:flex"
+                disabled={batchRemoveMutation.isPending}
               >
                 <Undo2 className="h-4 w-4 mr-2" />
                 回滾成訂單 ({selectedPoolItemIds.size})
               </Button>
+            ) : selectedStores.size > 0 ? (
               <Button
                 onClick={handleOpenShipDialog}
-                disabled={selectedStores.size === 0}
-                className="hidden md:flex"
+                disabled={selectedStores.size === 0 || shipMutation.isPending}
               >
                 <Truck className="h-4 w-4 mr-2" />
                 確認出貨 ({selectedStores.size} 店家)
               </Button>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+            ) : null}
+          </div>
           <ShippingPoolFilterBar
             search={search}
             onSearchChange={handleSearchChange}
@@ -420,13 +425,24 @@ export default function AdminShippingPool() {
       />
 
       <ShippingPoolMobileFooters
-        rollbackCount={selectedPoolItemIds.size}
-        isRollbackPending={batchRemoveMutation.isPending}
-        onRollback={() => batchRemoveMutation.mutate(Array.from(selectedPoolItemIds))}
-        storeCount={summary.storeCount}
-        totalQuantity={summary.totalQuantity}
-        isShipPending={shipMutation.isPending}
-        onOpenShipDialog={handleOpenShipDialog}
+        actionType={
+          selectedPoolItemIds.size > 0
+            ? 'rollback'
+            : selectedStores.size > 0
+              ? 'ship'
+              : null
+        }
+        count={selectedPoolItemIds.size > 0 ? selectedPoolItemIds.size : selectedStores.size}
+        isPending={
+          selectedPoolItemIds.size > 0
+            ? batchRemoveMutation.isPending
+            : shipMutation.isPending
+        }
+        onAction={
+          selectedPoolItemIds.size > 0
+            ? () => batchRemoveMutation.mutate(Array.from(selectedPoolItemIds))
+            : handleOpenShipDialog
+        }
       />
     </div>
   );

@@ -78,13 +78,24 @@ export function useShippingPoolMutations({
         p_created_by: user.id,
       });
       if (error) throw error;
-      return data as { deleted_count: number; reverted_order_ids: string[] };
+      return data as {
+        deleted_count: number;
+        reverted_order_ids: string[];
+        cleaned_order_ids: string[];
+      };
     },
     onSuccess: (data) => {
+      const deletedCount = data?.deleted_count ?? 0;
       const revertedCount = data?.reverted_order_ids?.length || 0;
-      toast.success(
-        `已將 ${data?.deleted_count ?? 0} 個品項移出出貨池${revertedCount > 0 ? `，${revertedCount} 個訂單回退為待確認` : ""}`
-      );
+      const cleanedCount = data?.cleaned_order_ids?.length || 0;
+      let msg = `已將 ${deletedCount} 個品項移出出貨池`;
+      if (cleanedCount > 0) {
+        msg += `，${cleanedCount} 個訂單因已出貨已一併清除殘留`;
+      }
+      if (revertedCount > 0) {
+        msg += `，${revertedCount} 個訂單回退為待確認`;
+      }
+      toast.success(msg);
       setSelectedPoolItemIds(new Set());
       queryClient.invalidateQueries({ queryKey: ["shipping-pool"] });
       queryClient.invalidateQueries({ queryKey: ["shipping-pool-items"] });
