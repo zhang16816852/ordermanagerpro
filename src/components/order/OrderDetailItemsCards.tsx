@@ -1,22 +1,33 @@
 import { useState, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowUpDown, ShoppingCart, ChevronDown, ChevronRight } from 'lucide-react';
 import { OrderStatusBadge } from './OrderStatusBadge';
 import { LineTypeBadge } from './LineTypeBadge';
 import { OrderItem } from '@/types/order';
 import { formatCurrency } from '@/lib/formatters';
+import { Badge } from '@/components/ui/badge';
 import type { NameSort } from './orderItemsTypes';
+
+interface OrderPoBindInfo {
+    poCode: string | null;
+    purchasedQty: number;
+    receivedQty: number;
+    status: 'none' | 'covered' | 'partial' | 'over' | 'stock';
+}
 
 interface OrderItemsCardsProps {
     items: OrderItem[];
     /** 品項成本（id → 成本）。未傳則不顯示「成本」。成本未知以 costKnown=false 標示。 */
     costByItem?: Map<string, { unitCost: number | null; costKnown: boolean }>;
+    /** 採購綁定（id → 採購狀態）。未傳則不顯示採購 badge。 */
+    poBindByItem?: Map<string, OrderPoBindInfo>;
 }
 
-export function OrderDetailItemsCards({ items, costByItem }: OrderItemsCardsProps) {
+export function OrderDetailItemsCards({ items, costByItem, poBindByItem }: OrderItemsCardsProps) {
     const [nameSort, setNameSort] = useState<NameSort>('default');
     const [statusSort, setStatusSort] = useState<NameSort>('default');
+    const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
     const getItemName = (item: OrderItem) => item.product_variant?.name || item.product?.name || '';
 
@@ -69,14 +80,20 @@ export function OrderDetailItemsCards({ items, costByItem }: OrderItemsCardsProp
                     狀態
                 </Button>
             </div>
-            {sortedItems.map((item) => (
-                <Card key={item.id} className="rounded-2xl w-full">
+            {sortedItems.map((item) => {
+                const bind = poBindByItem?.get(item.id);
+                const hasPo = bind && bind.status !== 'none';
+                const isExpanded = expandedItems.has(item.id);
+                const pending = Math.max(0, item.quantity - (item.shipped_quantity || 0));
+                return (
+                <Card key={item.id} className={`rounded-2xl w-full ${hasPo ? 'bg-amber-50/60 border-l-2 border-l-amber-500' : ''}`}>
                     <CardContent className="p-2 space-y-3 text-sm">
                         <div className="font-medium min-w-0">
-                            <span className="block text-muted-foreground ml-1 break-all">
-                                {item.product_variant?.name || item.product?.name}
-                            </span>
-                            <span className="inline-flex items-center mt-0.5">
+                            <span className="flex items-center flex-wrap gap-1">
+                                {hasPo && <ShoppingCart className="h-3.5 w-3.5 text-amber-600 shrink-0" />}
+                                <span className="block text-muted-foreground ml-1 break-all">
+                                    {item.product_variant?.name || item.product?.name}
+                                </span>
                                 <LineTypeBadge
                                     row={{
                                         lineType: item.line_type ?? 'sale',
@@ -84,7 +101,39 @@ export function OrderDetailItemsCards({ items, costByItem }: OrderItemsCardsProp
                                         returnStatus: item.return_status ?? null,
                                     }}
                                 />
+                                {hasPo && (
+                                    <>
+                                        <Badge
+                                            variant={bind.status === 'over' ? 'destructive' : bind.status === 'covered' ? 'secondary' : bind.status === 'partial' ? 'outline' : 'secondary'}
+                                            className="text-[10px] px-1.5 py-0"
+                                        >
+                                            {bind.status === 'stock' ? '庫存' : bind.status === 'over' ? '採購超量' : bind.status === 'covered' ? `已採購 ${bind.purchasedQty}` : `待採購 ${Math.max(0, pending - bind.purchasedQty)}`}
+                                        </Badge>
+                                        <button
+                                            type="button"
+                                            className="text-[10px] text-muted-foreground"
+                                            onClick={() => setExpandedItems((prev) => {
+                                                const next = new Set(prev);
+                                                if (next.has(item.id)) next.delete(item.id);
+                                                else next.add(item.id);
+                                                return next;
+                                            })}
+                                        >
+                                            {isExpanded ? '▴' : '▾'}
+                                        </button>
+                                    </>
+                                )}
                             </span>
+                            {hasPo && isExpanded && (
+                                <div className="mt-1 ml-1 flex flex-wrap gap-2 items-center text-sm bg-amber-50/50 rounded px-2 py-1">
+                                    {bind.poCode && (
+                                        <span className="font-mono text-muted-foreground">{bind.poCode}</span>
+                                    )}
+                                    <span className="text-muted-foreground">
+                                        已採購 {bind.purchasedQty} / 已收 {bind.receivedQty}
+                                    </span>
+                                </div>
+                            )}
                         </div>
 
                         <div className="grid grid-cols-2 gap-2 min-w-0">
@@ -121,7 +170,8 @@ export function OrderDetailItemsCards({ items, costByItem }: OrderItemsCardsProp
                         </div>
                     </CardContent>
                 </Card>
-            ))}
+            );
+        })}
         </div>
     );
 }

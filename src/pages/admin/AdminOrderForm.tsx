@@ -394,7 +394,7 @@ export default function AdminOrderForm() {
         onDeleteDraft={c.deleteDraft}
       />
 
-      {/* Direct Ship Dialog */}
+      {/* Direct Ship Dialog：僅顯示尚有未出貨量的品項，避免已出貨品項重複出貨 */}
       <DirectShipDialog
         open={c.directShipDialogOpen}
         onOpenChange={(open) => {
@@ -403,7 +403,7 @@ export default function AdminOrderForm() {
         }}
         order={c.order}
         orderId={c.orderId}
-        items={c.items}
+        items={c.items.filter((i) => (i.shippedQuantity ?? 0) < i.quantity)}
         displayStoreName={c.displayStoreName}
         defaultDeliveryMethodId={c.storeInfo?.default_delivery_method_id}
         deliveryType={c.deliveryType}

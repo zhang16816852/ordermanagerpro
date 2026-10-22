@@ -145,15 +145,33 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     })), []);
 
   // 採購品項 payload：unit_cost 即 UI 的單價欄位；id 為 null ＝ 新品項
-  const buildPoItemsPayload = useCallback((currentItems: OrderItemRow[]) =>
-    currentItems.map((item, index) => ({
-      id: item.isNew ? null : item.id,
-      product_id: item.productId,
-      variant_id: item.variantId || null,
-      quantity: item.quantity,
-      unit_cost: item.unitPrice ?? 0,
-      sort_order: index + 1,
-    })), []);
+  // 轉採購時扣除已出貨量（shippedQuantity）與已被其他採購單採購量（poRecordedQuantity = source_quantities 累計），
+  // 避免重複採購；僅採購「尚未出貨且未被其他 PO 採購」的剩餘量。
+  const buildPoItemsPayload = useCallback((currentItems: OrderItemRow[]) => {
+    const payload: any[] = [];
+    let sortIdx = 1;
+    for (const item of currentItems) {
+      const shipped = item.shippedQuantity ?? 0;
+      const alreadyPurchased = item.poRecordedQuantity ?? 0;
+      const remaining = Math.max(0, item.quantity - shipped - alreadyPurchased);
+      if (remaining <= 0) continue;
+      payload.push({
+        id: item.isNew ? null : item.id,
+        product_id: item.productId,
+        variant_id: item.variantId || null,
+        quantity: remaining,
+        unit_cost: item.unitPrice ?? 0,
+        sort_order: sortIdx++,
+        ...(orderId
+          ? {
+              source_order_ids: [orderId],
+              source_quantities: { [orderId]: remaining },
+            }
+          : {}),
+      });
+    }
+    return payload;
+  }, [orderId]);
 
   /** 丟出帶 reason 的守門錯誤（PO / 訂單共用呈現格式） */
   const throwGuard = (reason: string, hint?: string) => {
@@ -588,16 +606,24 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       // 勾選「同步價格」的品項，儲存送出時自動同步到品牌價
       await syncPrices({ auto: true });
 
-      const warehouseMap = currentItems.reduce((acc, i) => {
+      // 僅納入尚有未出貨量的品項（shippedQuantity < quantity），避免已出貨品項被重複出貨
+      const shippableItems = currentItems.filter(
+        (i) => (i.shippedQuantity ?? 0) < i.quantity,
+      );
+      const warehouseMap = shippableItems.reduce((acc, i) => {
         const wh = getItemWarehouse(i.id);
         if (wh) acc[i.id] = wh;
         return acc;
       }, {} as Record<string, string>);
-      const sourceMap = currentItems.reduce((acc, i) => {
+      const sourceMap = shippableItems.reduce((acc, i) => {
         const src = itemSources[i.id];
         if (src) acc[i.id] = src;
         return acc;
       }, {} as Record<string, string>);
+
+      if (shippableItems.length === 0) {
+        throw new Error('所有品項均已出貨完畢，無法再轉銷貨單');
+      }
       const loader = delivery || { deliveryType: getDeliveryType(), deliveryMethodId: null, trackingCompany: null, trackingNumber: null, trackingUrl: null };
       const addr = loader?.deliveryType === 'logistics' && loader.shippingAddress ? loader.shippingAddress : undefined;
       const { data, error } = await supabase.rpc('direct_ship_order', {

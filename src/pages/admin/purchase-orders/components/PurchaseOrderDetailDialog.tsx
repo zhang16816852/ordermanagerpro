@@ -138,6 +138,18 @@ function buildByStoreRows(
         sourceOrderIds: storeSourceIds,
       });
     }
+    // 庫存虛擬行：PO 品項數量高於所有來源訂單已採購總和時，差額歸屬「庫存」
+    const sourceQtyTotal = Object.values(storeQty).reduce((a, b) => a + b, 0);
+    const inventoryQty = Math.max(0, item.quantity - sourceQtyTotal);
+    if (inventoryQty > 0) {
+      rows.push({
+        store: '庫存',
+        item,
+        quantity: inventoryQty,
+        received: 0,
+        sourceOrderIds: [],
+      });
+    }
   }
   return rows;
 }
@@ -524,6 +536,17 @@ export function PurchaseOrderDetailDialog({
                   ))}
                 </div>
               )}
+              {/* 庫存差額：PO 數量高於所有來源訂單已採購總和 */}
+              {(() => {
+                const sq = item.source_quantities || {};
+                const purchasedTotal = Object.values(sq).reduce((sum, v) => sum + Number(v || 0), 0);
+                const inventoryQty = Math.max(0, item.quantity - purchasedTotal);
+                return inventoryQty > 0 ? (
+                  <span key="inventory" className="inline-flex items-center gap-1 text-[10px] text-blue-600 bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">
+                    庫存 {inventoryQty}
+                  </span>
+                ) : null;
+              })()}
             </div>
           ) : (
             <span className="text-muted-foreground text-xs">-</span>

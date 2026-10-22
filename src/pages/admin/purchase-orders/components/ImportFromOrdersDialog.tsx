@@ -46,6 +46,7 @@ export function ImportFromOrdersDialog({
             id,
             quantity,
             shipped_quantity,
+            source_order_ids,
             product_id,
             variant_id,
             line_type,
@@ -59,13 +60,16 @@ export function ImportFromOrdersDialog({
 
       if (error) throw error;
 
-      // Flatten items and filter those that need purchasing (simple logic: not fully shipped)
+      // Flatten items and filter those that need purchasing.
+      // 排除已綁定採購單（source_order_ids 非空）的品項，避免重複採購。
       const items: any[] = [];
       orders?.forEach((order: any) => {
         order.order_items?.forEach((item: any) => {
           if (item.quantity > item.shipped_quantity) {
             if (item.line_type === 'return') return;
             if (item.line_type === 'exchange' && item.is_repair) return;
+            // 已被採購單綁定，不可重複匯入
+            if (item.source_order_ids && item.source_order_ids.length > 0) return;
             items.push({
               _id: item.id, // Unique Key
               order_id: order.id,

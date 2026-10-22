@@ -19,6 +19,7 @@ interface BatchActionBarProps {
   onConvertToConsignment: () => void;
   onShipOrdersToPool: () => void;
   onConvertToPO: () => void;
+  convertToPoDisabled?: boolean;
   onUnlinkOrders: () => void;
   onExportAggregateCSV: () => void;
   onExportAggregateExcel: () => void;
@@ -44,6 +45,7 @@ export function BatchActionBar({
   onConvertToConsignment,
   onShipOrdersToPool,
   onConvertToPO,
+  convertToPoDisabled = false,
   onUnlinkOrders,
   onExportAggregateCSV,
   onExportAggregateExcel,
@@ -160,7 +162,8 @@ export function BatchActionBar({
                   variant="secondary"
                   size="sm"
                   onClick={onConvertToPO}
-                  disabled={isLoading}
+                  disabled={isLoading || convertToPoDisabled}
+                  title={convertToPoDisabled ? '選取的品項均已採購完畢' : undefined}
                   className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
                 >
                   <ClipboardList className="h-4 w-4 mr-2" />
@@ -208,7 +211,8 @@ export function BatchActionBar({
                   variant="secondary"
                   size="sm"
                   onClick={onConvertToPO}
-                  disabled={isLoading}
+                  disabled={isLoading || convertToPoDisabled}
+                  title={convertToPoDisabled ? '選取的品項均已採購完畢' : undefined}
                   className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
                 >
                   <ClipboardList className="h-4 w-4 mr-2" />
@@ -265,7 +269,8 @@ export function BatchActionBar({
                   variant="secondary"
                   size="sm"
                   onClick={onConvertToPO}
-                  disabled={isLoading}
+                  disabled={isLoading || convertToPoDisabled}
+                  title={convertToPoDisabled ? '選取的品項均已採購完畢' : undefined}
                   className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
                 >
                   <ClipboardList className="h-4 w-4 mr-2" />
@@ -367,7 +372,8 @@ export function BatchActionBar({
                 variant="secondary"
                 size="sm"
                 onClick={onConvertToPO}
-                disabled={isLoading}
+                disabled={isLoading || convertToPoDisabled}
+                title={convertToPoDisabled ? '選取的品項均已採購完畢' : undefined}
                 className="snap-start shrink-0"
               >
                 <ClipboardList className="h-4 w-4 mr-1.5" />
@@ -414,7 +420,8 @@ export function BatchActionBar({
                 variant="secondary"
                 size="sm"
                 onClick={onConvertToPO}
-                disabled={isLoading}
+                disabled={isLoading || convertToPoDisabled}
+                title={convertToPoDisabled ? '選取的品項均已採購完畢' : undefined}
                 className="snap-start shrink-0"
               >
                 <ClipboardList className="h-4 w-4 mr-1.5" />
@@ -459,7 +466,8 @@ export function BatchActionBar({
                 variant="secondary"
                 size="sm"
                 onClick={onConvertToPO}
-                disabled={isLoading}
+                disabled={isLoading || convertToPoDisabled}
+                title={convertToPoDisabled ? '選取的品項均已採購完畢' : undefined}
                 className="snap-start shrink-0"
               >
                 <ClipboardList className="h-4 w-4 mr-1.5" />

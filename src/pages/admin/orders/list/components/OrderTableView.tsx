@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Eye, Pencil, RotateCcw, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Eye, Pencil, RotateCcw, ArrowUpDown, ArrowUp, ArrowDown, ShoppingCart } from 'lucide-react';
 import { format } from 'date-fns';
 import { formatCurrency } from '@/lib/formatters';
 import { zhTW } from 'date-fns/locale';
@@ -129,6 +129,7 @@ export function OrderTableView({
             <TableHead>來源</TableHead>
             <TableHead>訂單狀態</TableHead>
             <TableHead>出貨狀態</TableHead>
+            <TableHead>採購</TableHead>
             <SortableHead field="created_at">建立時間</SortableHead>
             <TableHead className="text-right">操作</TableHead>
           </TableRow>
@@ -146,6 +147,7 @@ export function OrderTableView({
                 <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-12" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+                <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                 <TableCell><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
               </TableRow>
@@ -155,7 +157,7 @@ export function OrderTableView({
               <TableCell colSpan={
                 (statusTab === 'pending' || statusTab === 'processing' ? 1 : 0) +
                 (profitByOrderId || commissionByOrder ? 1 : 0) +
-                (statusTab === 'pending' || statusTab === 'processing' ? 10 : 9)
+                (statusTab === 'pending' || statusTab === 'processing' ? 11 : 10)
               } className="text-center py-12 text-muted-foreground italic">
                 沒有找到符合條件的訂單
               </TableCell>
@@ -165,7 +167,7 @@ export function OrderTableView({
               const itemStatus = getOrderShipmentStatus(order.order_items);
               const displayId = order.code || order.id;
               return (
-                <TableRow key={order.id} className={selectedOrderIds.has(order.id) ? 'bg-muted/50' : ''}>
+                <TableRow key={order.id} className={selectedOrderIds.has(order.id) ? 'bg-muted/50' : poLinkMap.has(order.id) ? 'bg-amber-50/50 border-l-2 border-l-amber-500' : ''}>
                   {(statusTab === 'pending' || statusTab === 'processing') && (
                     <TableCell>
                       <Checkbox
@@ -244,6 +246,29 @@ export function OrderTableView({
                     </TableCell>
                     <TableCell><OrderStatusBadge status={order.status} type="order" /></TableCell>
                     <TableCell><OrderStatusBadge status={itemStatus} type="shipping" /></TableCell>
+                    <TableCell>
+                      {(() => {
+                        const b = orderPoBindBadge(order.order_items, poBindByOrderItem);
+                        const hasPo = poLinkMap.has(order.id);
+                        if (hasPo || b) {
+                          return (
+                            <div className="flex items-center gap-1">
+                              <ShoppingCart className="h-3.5 w-3.5 text-amber-600" />
+                              {b ? (
+                                <Badge variant="outline" className={`text-[10px] px-1.5 py-0 font-normal ${b.className}`}>
+                                  {b.text}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal border-amber-500 text-amber-600">
+                                  已轉採購
+                                </Badge>
+                              )}
+                            </div>
+                          );
+                        }
+                        return <span className="text-muted-foreground text-xs">-</span>;
+                      })()}
+                    </TableCell>
                   <TableCell className="text-muted-foreground text-xs uppercase">
                     {format(new Date(order.created_at), 'MM/dd HH:mm', { locale: zhTW })}
                   </TableCell>

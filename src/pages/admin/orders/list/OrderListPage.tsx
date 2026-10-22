@@ -299,6 +299,7 @@ export default function AdminOrderList() {
           }
         }}
         onConvertToPO={() => setConvertToPOOpen(true)}
+        convertToPoDisabled={poItemsSource.length === 0}
         linkedToPO={Array.from(selectedOrderIds).some(id => poLinkMap.has(id))}
         onUnlinkOrders={() => {
           const ids = Array.from(selectedOrderIds).filter(id => poLinkMap.has(id));

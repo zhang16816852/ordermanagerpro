@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import {
@@ -9,6 +10,7 @@ import {
     DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+
 import { OrderInfo } from './OrderInfo';
 import { OrderDetailItemsTable } from './OrderDetailItemsTable';
 import { OrderDetailItemsCards } from './OrderDetailItemsCards';
@@ -23,6 +25,8 @@ import { useDocumentProfit, type DocProfitInputItem } from '@/hooks/useDocumentP
 import { sumProfit } from '@/utils/grossProfit';
 import { ProfitCell } from '@/components/shared/ProfitCell';
 import { ParcelManager } from '@/components/shipping/ParcelManager';
+import { supabase } from '@/integrations/supabase/client';
+
 
 interface OrderDetailDialogProps {
     order: Order | null;
@@ -73,6 +77,81 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, on
 
     const detailDocProfit = useDocumentProfit(detailProfitInput);
 
+    // 採購綁定：查詢此訂單已被哪些採購單品項採購（source_order_ids 含本訂單 id）
+    const { data: poBindings = [] } = useQuery({
+      queryKey: ['order-po-bindings', order?.id],
+      queryFn: async () => {
+        if (!order?.id) return [];
+        const { data, error } = await (supabase as any)
+          .from('purchase_order_items')
+          .select(`
+            id, source_order_ids, source_quantities, quantity, received_quantity, product_id, variant_id,
+            purchase_orders (supplier_order_number, status)
+          `)
+          .contains('source_order_ids', [order.id]);
+        if (error) throw error;
+        return (data || []) as {
+          id: string;
+          source_order_ids: string[] | null;
+          source_quantities: Record<string, number> | null;
+          quantity: number;
+          received_quantity: number;
+          product_id: string | null;
+          variant_id: string | null;
+          purchase_orders?: { supplier_order_number: string | null; status: string | null } | null;
+        }[];
+      },
+      enabled: !!order?.id,
+    });
+
+    // 每個 order_item 的採購狀態：key = order_item.id
+    const poBindByItem = useMemo(() => {
+      const map = new Map<string, {
+        poCode: string | null;
+        poStatus: string | null;
+        purchasedQty: number;
+        receivedQty: number;
+        status: 'none' | 'covered' | 'partial' | 'over' | 'stock';
+      }>();
+      if (!order) return map;
+      for (const item of order.order_items) {
+        const poCodeList: string[] = [];
+        let purchasedQty = 0;
+        let receivedQty = 0;
+        let over = false;
+        for (const poi of poBindings) {
+          // ⚠️ 必須匹配 product_id + variant_id，否則會把所有 PO 都歸屬到所有品項
+          if (poi.product_id !== item.product_id) continue;
+          if ((poi.variant_id || null) !== (item.variant_id || null)) continue;
+          const sq = poi.source_quantities || {};
+          const qtyForThisOrder = Number(sq[order.id!] || 0);
+          if (qtyForThisOrder > 0) {
+            const po = Array.isArray(poi.purchase_orders) ? poi.purchase_orders?.[0] : poi.purchase_orders;
+            poCodeList.push(po?.supplier_order_number || poi.id.slice(0, 8));
+            purchasedQty += qtyForThisOrder;
+            receivedQty += poi.received_quantity || 0;
+          }
+          // 該採購單品項總採購量超過 PO 品項數量＝超量
+          const sqTotal = Object.values(sq).reduce((s, v) => s + Number(v || 0), 0);
+          if (sqTotal > (poi.quantity || 0)) over = true;
+        }
+        const pending = Math.max(0, item.quantity - (item.shipped_quantity || 0));
+        let status: 'none' | 'covered' | 'partial' | 'over' | 'stock' = 'none';
+        if (over) status = 'over';
+        else if (purchasedQty <= 0) status = 'none';
+        else if (purchasedQty >= pending) status = 'covered';
+        else if (purchasedQty > 0) status = 'partial';
+        map.set(item.id, {
+          poCode: poCodeList.join('、') || null,
+          poStatus: poBindings.length > 0 ? (Array.isArray(poBindings[0].purchase_orders) ? poBindings[0].purchase_orders?.[0]?.status : poBindings[0].purchase_orders?.status) : null,
+          purchasedQty,
+          receivedQty,
+          status,
+        });
+      }
+      return map;
+    }, [order, poBindings]);
+
     const storeProfit = useMemo(() => {
         if (!order) return null;
         const lines: DocProfitInputItem[] = [];
@@ -120,6 +199,8 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, on
         }
         return map;
     }, [order, isRep, isRepStore, detailProfitInput, detailDocProfit.byKey, costOf]);
+
+
 
     if (!order) return null;
 
@@ -211,10 +292,10 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, on
                     />
 
                     {/* Order Items - Desktop Table */}
-                    <OrderDetailItemsTable items={sortedOrderItems} costByItem={costByItem} />
+                    <OrderDetailItemsTable items={sortedOrderItems} costByItem={costByItem} poBindByItem={poBindByItem} />
 
                     {/* Order Items - Mobile Cards */}
-                    <OrderDetailItemsCards items={sortedOrderItems} costByItem={costByItem} />
+                    <OrderDetailItemsCards items={sortedOrderItems} costByItem={costByItem} poBindByItem={poBindByItem} />
 
                     {/* Shipping / Parcels */}
                     <div className="border-t pt-2 mt-1 space-y-2">
