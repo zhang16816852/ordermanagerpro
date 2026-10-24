@@ -982,6 +982,80 @@ export type Database = {
           },
         ]
       }
+      countries: {
+        Row: {
+          code: string
+          created_at: string
+          default_currency_code: string
+          is_active: boolean
+          name_en: string | null
+          name_zh: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          default_currency_code: string
+          is_active?: boolean
+          name_en?: string | null
+          name_zh: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          default_currency_code?: string
+          is_active?: boolean
+          name_en?: string | null
+          name_zh?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "countries_default_currency_code_fkey"
+            columns: ["default_currency_code"]
+            isOneToOne: false
+            referencedRelation: "currencies"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
+      currencies: {
+        Row: {
+          code: string
+          created_at: string
+          decimals: number
+          is_active: boolean
+          name_zh: string
+          sort_order: number
+          symbol: string | null
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          decimals?: number
+          is_active?: boolean
+          name_zh: string
+          sort_order?: number
+          symbol?: string | null
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          decimals?: number
+          is_active?: boolean
+          name_zh?: string
+          sort_order?: number
+          symbol?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       currency_batch_consumptions: {
         Row: {
           batch_id: string
@@ -2018,6 +2092,7 @@ export type Database = {
           repair_order_id: string | null
           sales_note_id: string | null
           source_type: string
+          unit_cost: number | null
           variant_id: string | null
           warehouse_id: string
         }
@@ -2039,6 +2114,7 @@ export type Database = {
           repair_order_id?: string | null
           sales_note_id?: string | null
           source_type: string
+          unit_cost?: number | null
           variant_id?: string | null
           warehouse_id: string
         }
@@ -2060,6 +2136,7 @@ export type Database = {
           repair_order_id?: string | null
           sales_note_id?: string | null
           source_type?: string
+          unit_cost?: number | null
           variant_id?: string | null
           warehouse_id?: string
         }
@@ -3143,6 +3220,8 @@ export type Database = {
           status: Database["public"]["Enums"]["product_status"]
           tracking_mode: string
           updated_at: string
+          volume_m3: number | null
+          weight_kg: number | null
           wholesale_price: number
         }
         Insert: {
@@ -3157,6 +3236,8 @@ export type Database = {
           status?: Database["public"]["Enums"]["product_status"]
           tracking_mode?: string
           updated_at?: string
+          volume_m3?: number | null
+          weight_kg?: number | null
           wholesale_price?: number
         }
         Update: {
@@ -3171,6 +3252,8 @@ export type Database = {
           status?: Database["public"]["Enums"]["product_status"]
           tracking_mode?: string
           updated_at?: string
+          volume_m3?: number | null
+          weight_kg?: number | null
           wholesale_price?: number
         }
         Relationships: [
@@ -3199,6 +3282,8 @@ export type Database = {
           unified_retail_price: number | null
           unified_wholesale_price: number | null
           updated_at: string
+          volume_m3: number | null
+          weight_kg: number | null
         }
         Insert: {
           code?: string | null
@@ -3215,6 +3300,8 @@ export type Database = {
           unified_retail_price?: number | null
           unified_wholesale_price?: number | null
           updated_at?: string
+          volume_m3?: number | null
+          weight_kg?: number | null
         }
         Update: {
           code?: string | null
@@ -3231,6 +3318,8 @@ export type Database = {
           unified_retail_price?: number | null
           unified_wholesale_price?: number | null
           updated_at?: string
+          volume_m3?: number | null
+          weight_kg?: number | null
         }
         Relationships: [
           {
@@ -3275,11 +3364,182 @@ export type Database = {
         }
         Relationships: []
       }
+      purchase_cost_adjustments: {
+        Row: {
+          commission_delta: number | null
+          created_at: string
+          created_by: string | null
+          delta_amount: number | null
+          id: string
+          new_unit_cost: number | null
+          old_unit_cost: number | null
+          order_item_id: string | null
+          purchase_order_id: string
+          purchase_order_item_id: string | null
+          reason: string | null
+          rep_id: string | null
+          sales_note_id: string | null
+        }
+        Insert: {
+          commission_delta?: number | null
+          created_at?: string
+          created_by?: string | null
+          delta_amount?: number | null
+          id?: string
+          new_unit_cost?: number | null
+          old_unit_cost?: number | null
+          order_item_id?: string | null
+          purchase_order_id: string
+          purchase_order_item_id?: string | null
+          reason?: string | null
+          rep_id?: string | null
+          sales_note_id?: string | null
+        }
+        Update: {
+          commission_delta?: number | null
+          created_at?: string
+          created_by?: string | null
+          delta_amount?: number | null
+          id?: string
+          new_unit_cost?: number | null
+          old_unit_cost?: number | null
+          order_item_id?: string | null
+          purchase_order_id?: string
+          purchase_order_item_id?: string | null
+          reason?: string | null
+          rep_id?: string | null
+          sales_note_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_cost_adjustments_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_cost_adjustments_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_cost_adjustments_purchase_order_item_id_fkey"
+            columns: ["purchase_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_cost_adjustments_sales_note_id_fkey"
+            columns: ["sales_note_id"]
+            isOneToOne: false
+            referencedRelation: "sales_notes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_freight_costs: {
+        Row: {
+          accounting_entry_id: string | null
+          amount: number
+          amount_twd: number | null
+          created_at: string
+          created_by: string | null
+          currency_movement_id: string | null
+          freight_type: string
+          id: string
+          note: string | null
+          paid_date: string | null
+          payment_account_id: string | null
+          payment_status: string
+          purchase_order_id: string
+          supplier_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          accounting_entry_id?: string | null
+          amount: number
+          amount_twd?: number | null
+          created_at?: string
+          created_by?: string | null
+          currency_movement_id?: string | null
+          freight_type: string
+          id?: string
+          note?: string | null
+          paid_date?: string | null
+          payment_account_id?: string | null
+          payment_status?: string
+          purchase_order_id: string
+          supplier_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          accounting_entry_id?: string | null
+          amount?: number
+          amount_twd?: number | null
+          created_at?: string
+          created_by?: string | null
+          currency_movement_id?: string | null
+          freight_type?: string
+          id?: string
+          note?: string | null
+          paid_date?: string | null
+          payment_account_id?: string | null
+          payment_status?: string
+          purchase_order_id?: string
+          supplier_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_freight_costs_accounting_entry_id_fkey"
+            columns: ["accounting_entry_id"]
+            isOneToOne: false
+            referencedRelation: "accounting_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_freight_costs_currency_movement_id_fkey"
+            columns: ["currency_movement_id"]
+            isOneToOne: false
+            referencedRelation: "currency_movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_freight_costs_payment_account_id_fkey"
+            columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_freight_costs_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_freight_costs_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       purchase_order_items: {
         Row: {
+          allocated_freight: number
           consumed_quantity: number
           created_at: string
+          freight_manual_weight: number | null
           id: string
+          landed_unit_cost: number | null
+          original_unit_cost: number | null
           product_id: string | null
           purchase_order_id: string
           quantity: number
@@ -3287,14 +3547,21 @@ export type Database = {
           returned_quantity: number
           sort_order: number
           source_order_ids: string[] | null
+          source_order_item_ids: string[] | null
           source_quantities: Json | null
           unit_cost: number
           variant_id: string | null
+          volume_m3: number | null
+          weight_kg: number | null
         }
         Insert: {
+          allocated_freight?: number
           consumed_quantity?: number
           created_at?: string
+          freight_manual_weight?: number | null
           id?: string
+          landed_unit_cost?: number | null
+          original_unit_cost?: number | null
           product_id?: string | null
           purchase_order_id: string
           quantity?: number
@@ -3302,14 +3569,21 @@ export type Database = {
           returned_quantity?: number
           sort_order?: number
           source_order_ids?: string[] | null
+          source_order_item_ids?: string[] | null
           source_quantities?: Json | null
           unit_cost?: number
           variant_id?: string | null
+          volume_m3?: number | null
+          weight_kg?: number | null
         }
         Update: {
+          allocated_freight?: number
           consumed_quantity?: number
           created_at?: string
+          freight_manual_weight?: number | null
           id?: string
+          landed_unit_cost?: number | null
+          original_unit_cost?: number | null
           product_id?: string | null
           purchase_order_id?: string
           quantity?: number
@@ -3317,9 +3591,12 @@ export type Database = {
           returned_quantity?: number
           sort_order?: number
           source_order_ids?: string[] | null
+          source_order_item_ids?: string[] | null
           source_quantities?: Json | null
           unit_cost?: number
           variant_id?: string | null
+          volume_m3?: number | null
+          weight_kg?: number | null
         }
         Relationships: [
           {
@@ -3479,10 +3756,19 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string
+          currency: string
+          exchange_rate: number
           expected_date: string | null
+          freight_actual_weight: number | null
+          freight_allocation_method: string
+          freight_allocation_stale: boolean
+          freight_weight_factor: number
           id: string
+          landed_total_amount: number | null
           notes: string | null
           order_date: string
+          origin_country_code: string | null
+          original_total_amount: number | null
           purpose: string
           received_date: string | null
           source_purchase_order_id: string | null
@@ -3495,10 +3781,19 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by: string
+          currency?: string
+          exchange_rate?: number
           expected_date?: string | null
+          freight_actual_weight?: number | null
+          freight_allocation_method?: string
+          freight_allocation_stale?: boolean
+          freight_weight_factor?: number
           id?: string
+          landed_total_amount?: number | null
           notes?: string | null
           order_date?: string
+          origin_country_code?: string | null
+          original_total_amount?: number | null
           purpose?: string
           received_date?: string | null
           source_purchase_order_id?: string | null
@@ -3511,10 +3806,19 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string
+          currency?: string
+          exchange_rate?: number
           expected_date?: string | null
+          freight_actual_weight?: number | null
+          freight_allocation_method?: string
+          freight_allocation_stale?: boolean
+          freight_weight_factor?: number
           id?: string
+          landed_total_amount?: number | null
           notes?: string | null
           order_date?: string
+          origin_country_code?: string | null
+          original_total_amount?: number | null
           purpose?: string
           received_date?: string | null
           source_purchase_order_id?: string | null
@@ -3544,10 +3848,12 @@ export type Database = {
       rep_commission_payouts: {
         Row: {
           amount: number
+          collection_status: string | null
           created_at: string
           created_by: string | null
           entry_id: string | null
           id: string
+          kind: string
           note: string | null
           paid_date: string
           rep_id: string
@@ -3555,10 +3861,12 @@ export type Database = {
         }
         Insert: {
           amount?: number
+          collection_status?: string | null
           created_at?: string
           created_by?: string | null
           entry_id?: string | null
           id?: string
+          kind?: string
           note?: string | null
           paid_date?: string
           rep_id: string
@@ -3566,10 +3874,12 @@ export type Database = {
         }
         Update: {
           amount?: number
+          collection_status?: string | null
           created_at?: string
           created_by?: string | null
           entry_id?: string | null
           id?: string
+          kind?: string
           note?: string | null
           paid_date?: string
           rep_id?: string
@@ -4903,6 +5213,7 @@ export type Database = {
         Row: {
           address: string | null
           contact_name: string | null
+          country_code: string | null
           created_at: string
           currency: string
           email: string | null
@@ -4917,6 +5228,7 @@ export type Database = {
         Insert: {
           address?: string | null
           contact_name?: string | null
+          country_code?: string | null
           created_at?: string
           currency?: string
           email?: string | null
@@ -4931,6 +5243,7 @@ export type Database = {
         Update: {
           address?: string | null
           contact_name?: string | null
+          country_code?: string | null
           created_at?: string
           currency?: string
           email?: string | null
@@ -4942,7 +5255,15 @@ export type Database = {
           phone?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "suppliers_country_code_fkey"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "countries"
+            referencedColumns: ["code"]
+          },
+        ]
       }
       system_sequences: {
         Row: {
@@ -5320,6 +5641,10 @@ export type Database = {
         }
         Returns: Json
       }
+      _po_allocate_freight: {
+        Args: { p_actor?: string; p_dry_run?: boolean; p_po_id: string }
+        Returns: Json
+      }
       _po_create_with_items: {
         Args: {
           p_created_by: string
@@ -5390,15 +5715,26 @@ export type Database = {
         Args: { p_invitation_id: string }
         Returns: undefined
       }
-      adjust_inventory: {
-        Args: {
-          p_created_by: string
-          p_id: string
-          p_new_quantity: number
-          p_note?: string
-        }
-        Returns: undefined
-      }
+      adjust_inventory:
+        | {
+            Args: {
+              p_created_by: string
+              p_id: string
+              p_new_quantity: number
+              p_note?: string
+            }
+            Returns: undefined
+          }
+        | {
+            Args: {
+              p_created_by: string
+              p_id: string
+              p_new_quantity: number
+              p_note?: string
+              p_unit_cost?: number
+            }
+            Returns: undefined
+          }
       allocate_inventory: {
         Args: {
           p_created_by?: string
@@ -5412,6 +5748,10 @@ export type Database = {
           p_variant_id: string
           p_warehouse_id?: string
         }
+        Returns: Json
+      }
+      allocate_purchase_freight: {
+        Args: { p_apply?: boolean; p_purchase_order_id: string }
         Returns: Json
       }
       batch_upsert_product_options: {
@@ -5594,7 +5934,19 @@ export type Database = {
         Args: { p_consignment_order_id: string }
         Returns: Json
       }
+      delete_currency_consume: {
+        Args: { p_movement_id: string }
+        Returns: Json
+      }
       delete_currency_exchange: {
+        Args: { p_movement_id: string }
+        Returns: Json
+      }
+      delete_currency_inbound: {
+        Args: { p_movement_id: string }
+        Returns: Json
+      }
+      delete_currency_transfer: {
         Args: { p_movement_id: string }
         Returns: Json
       }
@@ -5603,6 +5955,7 @@ export type Database = {
         Returns: Json
       }
       delete_product_if_safe: { Args: { p_product_id: string }; Returns: Json }
+      delete_purchase_freight_cost: { Args: { p_id: string }; Returns: Json }
       delete_purchase_order_if_empty: {
         Args: { p_purchase_order_id: string }
         Returns: Json
@@ -5906,7 +6259,6 @@ export type Database = {
           p_amount: number
           p_purchase_order_id: string
           p_receipt_id: string
-          p_reference_id: string
           p_transaction_date: string
         }
         Returns: Json
@@ -5945,6 +6297,10 @@ export type Database = {
           out_warehouse_id: string
         }[]
       }
+      recalculate_purchase_order_landed_costs: {
+        Args: { p_apply?: boolean; p_purchase_order_id: string }
+        Returns: Json
+      }
       receive_consignment_items: {
         Args: {
           p_consignment_order_id: string
@@ -5982,6 +6338,17 @@ export type Database = {
           p_paid_date: string
           p_rep_id: string
           p_sales_note_ids: string[]
+        }
+        Returns: Json
+      }
+      register_rep_commission_adjustment: {
+        Args: {
+          p_amount: number
+          p_created_by?: string
+          p_description?: string
+          p_paid_date?: string
+          p_rep_id: string
+          p_sales_note_id: string
         }
         Returns: Json
       }
@@ -6102,6 +6469,16 @@ export type Database = {
         Args: { p_delivery_type: string; p_doc_id: string; p_doc_type: string }
         Returns: Json
       }
+      set_purchase_order_currency: {
+        Args: {
+          p_currency: string
+          p_exchange_rate: number
+          p_origin_country_code?: string
+          p_original_total_amount?: number
+          p_purchase_order_id: string
+        }
+        Returns: Json
+      }
       settle_consignment: {
         Args: {
           p_account_id?: string
@@ -6112,6 +6489,14 @@ export type Database = {
           p_settlement_type: string
         }
         Returns: string
+      }
+      settle_rep_commission_adjustment: {
+        Args: {
+          p_adjustment_id: string
+          p_entry_id?: string
+          p_paid_date: string
+        }
+        Returns: Json
       }
       share_token_for_code: { Args: { p_code: string }; Returns: string }
       ship_from_pool: {
@@ -6217,6 +6602,23 @@ export type Database = {
       }
       upsert_product_variant_options_batch: {
         Args: { p_product_id: string; p_variants: Json }
+        Returns: Json
+      }
+      upsert_purchase_freight_cost: {
+        Args: {
+          p_amount?: number
+          p_created_by?: string
+          p_currency?: string
+          p_exchange_rate?: number
+          p_freight_type?: string
+          p_id?: string
+          p_note?: string
+          p_paid_date?: string
+          p_payment_account_id?: string
+          p_payment_status?: string
+          p_purchase_order_id?: string
+          p_supplier_id?: string
+        }
         Returns: Json
       }
       upsert_rep_product_costs: {

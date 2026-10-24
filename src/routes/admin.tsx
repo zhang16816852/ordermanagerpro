@@ -10,6 +10,7 @@ import AdminShippingPool from "@/pages/admin/ShippingPool";
 import AdminStorePricing from "@/pages/admin/BrandPricing";
 import AdminAccounting from "@/pages/admin/accounting/AccountingPage";
 import AdminPurchaseOrders from "@/pages/admin/purchase-orders/PurchaseOrdersPage";
+import AdminCrossBorder from "@/pages/admin/cross-border/CrossBorderPage";
 import AdminConsignment from "@/pages/admin/consignment/ConsignmentPage";
 import AdminCategories from "@/pages/admin/categories/CategoriesPage";
 import CategoryEditor from "@/pages/admin/categories/CategoryEditor";
@@ -50,6 +51,7 @@ export const adminRoutes = [
     { path: "/admin/shipping-settlements", element: <Navigate to="/admin/logistics?tab=shipping-settlements" replace /> },
     { path: "/admin/delivery-methods", element: <Navigate to="/admin/logistics?tab=delivery-methods" replace /> },
     { path: "/admin/purchase-orders", element: <AdminPurchaseOrders /> },
+    { path: "/admin/cross-border", element: <AdminCrossBorder /> },
     { path: "/admin/purchase-orders/:orderId/edit", element: <AdminOrderForm /> },
     { path: "/admin/consignment", element: <AdminConsignment /> },
     { path: "/admin/audit-logs", element: <AdminAuditLogs /> },

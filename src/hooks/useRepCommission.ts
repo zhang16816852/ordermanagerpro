@@ -67,11 +67,12 @@ export function useRepCommission() {
     const unitCost = snapshotCost > 0 ? snapshotCost : getItemCost(item.productId, item.variantId);
     const unitProfit = (Number(item.unitPrice) || 0) - unitCost;
     const qty = Number(item.quantity) || 0;
+    const profit = unitProfit * qty;
     return {
       unitCost,
       unitProfit,
-      profit: unitProfit * qty,
-      commission: unitProfit * qty * rate,
+      profit,
+      commission: Math.max(0, profit) * rate,
     };
   }
 

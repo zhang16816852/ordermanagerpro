@@ -75,7 +75,8 @@ export default function RepDashboard() {
       const { data } = await (supabase
         .from('rep_commission_payouts') as any)
         .select('amount')
-        .eq('rep_id', user.id);
+        .eq('rep_id', user.id)
+        .eq('kind', 'payout');
       const paidTotal = (data || []).reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
       return { paidTotal };
     },

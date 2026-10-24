@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Dialog,
   DialogContent,
@@ -18,11 +19,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { supabase } from '@/integrations/supabase/client';
 import { Plus, PackageCheck, CreditCard, Download, FileSpreadsheet, X, GripVertical, ArrowUpDown, ArrowUp, ArrowDown, Trash2, Search, Pencil } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 import { toast } from 'sonner';
 import { PurchaseOrder, PurchaseOrderItem, ProductWithPrice, type PoItemWritePayload, type PoUpdateItemPayload } from '../types';
 import { PurchaseProductPicker } from './PurchaseProductPicker';
+import { PurchaseFreightSection } from '@/components/purchase/PurchaseFreightSection';
 import { MappedRuleEditDialog } from './mapping/MappedRuleEditDialog';
 import { ImportFromOrdersDialog } from './ImportFromOrdersDialog';
 import { ReceiveForm } from './ReceiveForm';
@@ -926,6 +931,16 @@ export function PurchaseOrderDetailDialog({
           })()}
         </div>
       )}
+
+      <PurchaseFreightSection
+        purchaseOrderId={order.id}
+        freightAllocationMethod={order.freight_allocation_method || 'by_value'}
+        freightActualWeight={order.freight_actual_weight ?? null}
+        freightAllocationStale={order.freight_allocation_stale ?? false}
+        landedTotalAmount={order.landed_total_amount ?? null}
+        totalAmount={Number(order.total_amount)}
+        items={localItems}
+      />
 
       <div className="flex justify-between items-end bg-muted/30 p-4 rounded-lg">
         <div className="flex gap-3">

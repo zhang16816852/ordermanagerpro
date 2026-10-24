@@ -89,7 +89,8 @@ export function OrderReturnRevertDialog({ open, onOpenChange, order }: OrderRetu
                     (supabase as any)
                         .from('rep_commission_payouts')
                         .select('sales_note_id')
-                        .in('sales_note_id', noteIds),
+                        .in('sales_note_id', noteIds)
+                        .eq('kind', 'payout'),
                     (supabase as any)
                         .from('consignment_sales')
                         .select('sales_note_id, reversed')

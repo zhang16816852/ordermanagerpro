@@ -46,7 +46,7 @@ export function useEntryPayoutQueries({ isPayout, payoutRepId }: UseEntryPayoutQ
 
       const [{ data: costsRes }, { data: payoutsRes }, { data: notesRes }, { data: wholesaleRes }] = await Promise.all([
         (supabase as any).from('rep_product_costs').select('product_id, variant_id, cost').eq('rep_id', payoutRepId),
-        (supabase as any).from('rep_commission_payouts').select('sales_note_id').eq('rep_id', payoutRepId),
+        (supabase as any).from('rep_commission_payouts').select('sales_note_id').eq('rep_id', payoutRepId).eq('kind', 'payout'),
         (supabase as any)
           .from('sales_notes')
           .select(`

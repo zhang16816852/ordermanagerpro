@@ -209,6 +209,7 @@ export default function MyCommissionPage() {
         .from('rep_commission_payouts') as any)
         .select('id, rep_id, sales_note_id, paid_date, amount, note')
         .eq('rep_id', userId!)
+        .eq('kind', 'payout')
         .order('paid_date', { ascending: false });
       if (error) throw error;
       return (data || []) as PayoutRecord[];

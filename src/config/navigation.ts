@@ -14,6 +14,7 @@ import {
   History as HistoryIcon,
   PlusCircle,
   Wallet,
+  Globe,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -39,6 +40,7 @@ export const adminNavItems: NavItem[] = [
   { title: '出貨池', href: '/admin/shipping-pool', icon: Truck },
   { title: '銷售單', href: '/admin/sales-notes', icon: FileText },
   { title: '採購管理', href: '/admin/purchase-orders', icon: Truck },
+  { title: '集運倉管理', href: '/admin/cross-border', icon: Globe },
   { title: '寄賣管理', href: '/admin/consignment', icon: Package },
   { title: '會計管理', href: '/admin/accounting', icon: FileText },
   { title: '物流管理', href: '/admin/logistics', icon: Truck },

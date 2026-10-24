@@ -464,3 +464,47 @@
 `：找該銷貨單**最新一筆 `message_id` 非空**的 outbox 列 → `editMessageText`（標題改為「✏️ 銷貨單已更新」）；Telegram 回 `not modified` 視為成功（同內容 no-op）；找不到原訊息則 fallback `sendMessage`。
   - `markSent` 現在一併回寫 `bot_id`／`chat_id`／`message_id`。
   - `sales_note_created` 改走 `resolveBot` + `buildSalesNoteText`；`sales_note_recalled` 行為不變（`deleteMessage`，逾 48h 失敗 → `editMessageText` 標記作廢）。
+
+## 12. 跨國採購／運費分攤（2026-10-23，migration `20261023000001`–`000013`，已套用遠端，未 commit）
+
+### 12.1 範圍
+依 `C:\Users\qaz20\.opencode\plan\cross-border-procurement-plan.md` 實作「跨國採購」模組：運費單據 → 落地成本分攤 → 外幣付款 → 成本回溯重算。**第二批（同日）改為「單張採購單自我完足」**：運費管理移入採購單明細對話框，`/admin/cross-border` 轉型為純唯讀「集運倉管理」。
+
+### 12.2 表與欄位
+- **`purchase_freight_costs`**：採購單運費單據（一筆 PO 可有多筆）。欄位含 `id`、`purchase_order_id`、`freight_type`、`amount`、`currency`（TWD/USD/JPY/CNY/EUR/HKD）、`exchange_rate`（非 TWD 必填，切回 TWD 自動歸 1）、`amount_twd`（換算後彙總基準，由 trigger/RPC 寫入）、`supplier_id`、`payment_account_id`、`payment_status`、`paid_date`、`note`、`created_by`、`created_at/updated_at`。CRUD 走 `upsert_purchase_freight_cost`（12 參數單一簽名，已 DROP 舊 10 參數 overload 以修 `PGRST203`）與 `delete_purchase_freight_cost`。**不跨採購單混算**：每張運費列歸屬單一 `purchase_order_id`。
+- **`purchase_orders`** 新增：`currency`、`freight_actual_weight`、`freight_allocation_method`（`by_quantity`/`by_weight`/`by_manual`）、`freight_allocation_stale`、`freight_weight_factor`、`landed_total_amount`、`original_total_amount`。（無 `code` 欄，單號以 `supplier_order_number` 顯示；無 `freight_total_amount`。）
+- **`purchase_order_items`** 運費相關欄位：`unit_cost`、`original_unit_cost`、`allocated_freight`、`landed_unit_cost`、`weight_kg`、`volume_m3`、`freight_manual_weight`。（**沒有** `weight_variance`／`weight` 欄。）
+- **`inventory_movements`** 新增 `unit_cost`（並回填既有列＋索引＋trigger `trgfn_inventory_movement_unit_cost`）；`receive_purchase_items` 寫入 `unit_cost`；`adjust_inventory` 加 `p_unit_cost`。
+- `purchase_freight_costs.amount_twd`：非 TWD 以 `amount × exchange_rate` 換算；以此彙總運費合計。
+
+### 12.3 RPC 簽名
+- `allocate_purchase_freight(p_purchase_order_id uuid, p_apply boolean DEFAULT false) RETURNS jsonb`：公開 RPC，`SECURITY DEFINER`，僅 `authenticated` EXECUTE。`p_apply=true` 實際寫入 `allocated_freight`/`landed_unit_cost`/`landed_total_amount`/`freight_allocation_stale`/`freight_allocation_method`；`p_apply=false` dry-run（零寫入）**僅內部 `_po_allocate_freight(p_po_id, p_actor, p_dry_run)` 使用**，公開 RPC 無 dry-run 參數。
+- `_po_allocate_freight(p_po_id uuid, p_actor uuid DEFAULT NULL, p_dry_run boolean DEFAULT false)`：內部 `SECURITY INVOKER` 分攤引擎，不直接對外開放。以「最大餘數法」（以分計）分攤，回傳 `{ok, method, changes:[…], dry_run, fallback, warnings, actual_weight, weight_factor, base_weight_total, freight_total_twd}`。`changes` 以 `jsonb_agg … ORDER BY sort_order, id`。
+- `receive_purchase_items`：收貨時 landed cost 優先寫入 `unit_cost`。
+- `pay_freight_foreign` / `pay_purchase_order_foreign`（6→5 參數）：外幣付款。
+- `recalculate_purchase_order_landed_costs`：成本回溯重算。
+
+### 12.4 `21000` pg_safeupdate 根因與修正（migration `20261023000013`）
+- **症狀**：點「儲存並分攤」拋 `21000 "UPDATE requires a WHERE clause"`，遠端 `allocate_purchase_freight` line 10、`application_name=postgrest`、`user_name=authenticator`。
+- **根因**：`_po_allocate_freight` 內對臨時表 `pg_temp._po_alloc_<po_id_no_dashes>`（`ON COMMIT DROP`）執行的 12 處 `EXECUTE format('UPDATE …')` **全無 `WHERE` 子句**，被 PostgREST `authenticator` session 的 pg_safeupdate 守門攔下。DB 權限層本身無問題。
+- **修正**：不改 `set_config('safe_updates','off',true)`，採新編號 migration `20261023000013`（append-only，不動 `00004`），以 DO-block 錨點補丁（`pg_get_functiondef` + 字面 `replace()` + 命中次數斷言 + fail-loud + 補後計數斷言）為 12 處臨時表 `UPDATE` 逐一補上 ` WHERE poi_id IS NOT NULL`。數學完全不變。10 組錨點，預期命中 3/1/1/1/1/1/1/1/1/1，補後 `WHERE` 計數須為 12。
+- **遠端驗證**：`patched_count = 12`、`update_count = 12`；端到端呼叫 `allocate_purchase_freight('b8ee03f6-…', true)` 回 `{ok:true, method:'by_quantity', freight_total_twd:80, warnings:[], fallback:false}`，**無 `21000`**；DB 落地 `allocated_freight` 合計 `80.00`、`landed_unit_cost` 386.16 / 386.15 / 31.15、`landed_total_amount=1470.00`（原 `total_amount=1390`）、`freight_allocation_stale=false`、`freight_allocation_method='by_quantity'`。
+- `CREATE OR REPLACE` 不會重設 ACL；遠端確認 `proconfig={"search_path=public, extensions"}`、`provolatile=v`；`anon_exec=false`、`auth_exec=true`、`public_exec=false`。
+
+### 12.5 權限
+- `allocate_purchase_freight`、`delete_purchase_freight_cost`、`recalculate_purchase_order_landed_costs`、`upsert_purchase_freight_cost` → `anon_exec=false`、`auth_exec=true`、`public_exec=false`。
+- `_po_allocate_freight` 對 `anon`/`authenticated`/`public` 皆無 EXECUTE（僅經公開 RPC 內部呼叫）。
+
+### 12.6 前端
+- `src/components/purchase/PurchaseFreightSection.tsx`：可重用元件，新增/刪除運費列、運費合計（`amount_twd`）、分攤方式選擇、實際重量輸入、預覽/套用分攤、分配結果以 `items` prop 顯示可讀品名（由父層 `localItems` 帶入，fallback `id.slice(0,8)`）。非 TWD 可填匯率，切回 TWD 自動歸 1；金額顯示統一 `formatCurrency`。
+- `PurchaseOrderDetailDialog.tsx`：內嵌 `<PurchaseFreightSection items={localItems} />`，**完全不需要離開採購單明細**；舊佔位運費 Card 已移除。
+- `PurchaseOrdersPage.tsx`：移除 `onCrossBorder` 與 `?po=` 深連結（repo 內已零引用）。
+- `CrossBorderPage.tsx`：重寫為唯讀集運倉管理（單號搜尋＋卡片顯示商品總額/落地總額/待集運徽章，**無運費 CRUD、無明細檢視、不可點入**）；文案導引使用者至「採購單明細」處理。
+- `navigation.ts`：側欄標籤改「集運倉管理」（`Globe` icon，路徑 `/admin/cross-border`；`routes/admin.tsx` 已註冊）。
+- `purchase-orders/types.ts`：補 PO 與 PO 品項運費欄位。
+- `types.ts` 已重生（UTF-8 no BOM）。
+
+### 12.7 驗證
+- `npm run typecheck` 0 errors；本批前端檔 `npx eslint` 0 problems；`npm run build` 通過（4005 modules，僅既有 chunk-size warning）。
+- ⚠️ **未做登入後瀏覽器實測**（`/admin/purchase-orders`、`/admin/cross-border` 需登入）；UI 端「儲存並分攤」（含運費列為 0 的情境）最終確認需使用者重試。
+- DB 落地與 RPC 權限見 §12.4／§12.5。

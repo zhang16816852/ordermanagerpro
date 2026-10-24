@@ -2,6 +2,16 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（跨國採購模組 P1–P6 ＋ 採購單內建運費管理，2026-10-23）
+
+- **範圍**：依 `C:\Users\qaz20\.opencode\plan\cross-border-procurement-plan.md` 實作「跨國採購」模組：運費單據 → 落地成本分攤 → 外幣付款 → 成本回溯重算。**第二批（同日）改為「單張採購單自我完足」**：運費管理移入採購單明細對話框，`/admin/cross-border` 轉型為純「集運倉管理」。
+- **後端 migrations**（`supabase/migrations/20261023000001`–`000013`，全部已套用遠端，未 commit）：countries/currencies 主資料＋PO 幣別骨架＋`purchase_freight_costs`（stale trigger＋CRUD RPC）＋分攤引擎（`_po_allocate_freight`/`allocate_purchase_freight`）＋`receive_purchase_items` landed cost 優先＋`pay_freight_foreign`/`pay_purchase_order_foreign`（6→5 參數）＋ M4（`purchase_cost_adjustments`＋`rep_commission_payouts` kind/collection_status＋`recalculate_purchase_order_landed_costs`/`register_rep_commission_adjustment`/`settle_rep_commission_adjustment`）。第二批追加：`inventory_movements.unit_cost`＋回填＋索引＋`trgfn_inventory_movement_unit_cost`、`receive_purchase_items` 寫入 `unit_cost`、`adjust_inventory` 加 `p_unit_cost`、`purchase_freight_costs.currency`/`exchange_rate` 欄位、**DROP 舊 10 參數 `upsert_purchase_freight_cost` overload**（修 `PGRST203`；現僅剩 12 參數單一簽名）、**`00013` safe-updates 補丁**（見下方「修正」）。
+- **前端（採購單內建運費）**：新增可重用元件 `src/components/purchase/PurchaseFreightSection.tsx`（新增/刪除運費列、運費合計、分攤方式選擇、實際重量輸入、預覽/套用分攤、分配結果以 `items` 顯示可讀品名），內嵌於 `PurchaseOrderDetailDialog.tsx`（`items={localItems}`），**完全不需要離開採購單明細**；`PurchaseOrdersPage` 的 `onCrossBorder` 與 `?po=` 深連結已移除。運費列支援 TWD/USD/JPY/CNY/EUR/HKD（非 TWD 可填匯率，切回 TWD 自動歸 1），以 `amount_twd` 彙總；金額顯示統一 `formatCurrency`。
+- **前端（集運倉管理）**：`src/pages/admin/cross-border/CrossBorderPage.tsx` 重寫為唯讀候選清單（單號搜尋＋卡片顯示商品總額/落地總額/待集運徽章），**無運費 CRUD、無明細檢視、不可點入**；文案導引使用者至「採購單明細」處理。側欄標籤改「**集運倉管理**」（`src/config/navigation.ts`，`Globe` icon，路徑仍 `/admin/cross-border`；`src/routes/admin.tsx` 已註冊）。
+- **其他前端**：5 處佣金讀取面加 `.eq('kind','payout')`；`useRepCommission` 補 `Math.max(0, …)`。`src/integrations/supabase/types.ts` 已重生（Windows CLI 產 UTF-16LE，已轉回 UTF-8 no BOM）。
+- **修正**：運費列為 0 時按「儲存並分攤」不再觸發 `UPDATE requires a WHERE clause`（修復根因：`_po_allocate_freight` 內 12 處臨時表 `UPDATE` 缺少 `WHERE` 觸發 pg_safeupdate 錯誤 `21000`；已發布 migration `20261023000013` 補上 `WHERE poi_id IS NOT NULL`）；分配結果表格顯示可讀品名（由父層 `localItems` 帶入，非 UUID 片段）。
+- **驗證**：`npm run typecheck` 0 errors、本批前端檔 `npx eslint` 0 problems、`npm run build` 通過（4005 modules，僅既有 chunk-size warning）。遠端端到端呼叫 `allocate_purchase_freight` 通過（`freight_total_twd=80`、`landed_total_amount=1470`、`patched_count=12`，無 `21000`）。⚠️ **未做登入後瀏覽器實測**（`/admin/purchase-orders`、`/admin/cross-border` 需登入）。
+
 ## 近期變更（訂單編輯同步採購單來源量 ＋ 採購綁定徽章，Phase B＋C，2026-10-20）
 
 - **問題**：訂單編輯改量後，採購單（PO）的 `source_quantities` 快照未同步 → 訂單數量與採購數量長期不一致（該快照是全站彙總、去重複採購判斷、PO 綁定徽章的基準）。**本批只做「向後同步」前進方向，不改既有資料（Phase A 資料修復由使用者決定延期）**。

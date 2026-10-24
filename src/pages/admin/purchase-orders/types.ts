@@ -74,6 +74,16 @@ export interface PurchaseOrder {
   created_by: string;
   created_at: string;
   supplier?: Supplier;
+  // Cross-border freight fields
+  currency?: string;
+  exchange_rate?: number;
+  original_total_amount?: number | null;
+  origin_country_code?: string | null;
+  freight_allocation_method?: string;
+  freight_actual_weight?: number | null;
+  freight_weight_factor?: number;
+  freight_allocation_stale?: boolean;
+  landed_total_amount?: number | null;
 }
 
 export interface PurchaseOrderItem {
@@ -89,6 +99,14 @@ export interface PurchaseOrderItem {
   sort_order?: number;
   source_order_ids?: string[] | null;
   source_quantities?: Record<string, number> | null;
+  // Cross-border freight fields
+  source_order_item_ids?: string[] | null;
+  original_unit_cost?: number | null;
+  allocated_freight?: number;
+  landed_unit_cost?: number | null;
+  weight_kg?: number | null;
+  volume_m3?: number | null;
+  freight_manual_weight?: number | null;
   product?: { id: string; name: string; code: string };
   variant?: { id: string; name: string; sku: string; tracking_mode?: 'none' | 'serial' | 'batch' };
 }
