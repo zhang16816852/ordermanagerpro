@@ -24,8 +24,6 @@ const FREIGHT_TYPES = [
 const EMPTY_NEW_FREIGHT = {
   freight_type: 'domestic',
   amount: '',
-  currency: 'TWD',
-  exchange_rate: '1',
   note: '',
 };
 
@@ -208,13 +206,10 @@ export function PurchaseFreightSection({
 
   const handleAddFreight = () => {
     if (!newFreight.amount) { toast.error('請輸入金額'); return; }
-    const rate = Number(newFreight.exchange_rate) || 1;
     upsertMut.mutate({
       p_purchase_order_id: purchaseOrderId,
       p_freight_type: newFreight.freight_type,
       p_amount: Number(newFreight.amount),
-      p_currency: newFreight.currency,
-      p_exchange_rate: rate,
       p_note: newFreight.note || null,
     }, {
       onSuccess: () => setNewFreight({ ...EMPTY_NEW_FREIGHT }),
@@ -251,7 +246,7 @@ export function PurchaseFreightSection({
               {(freights as any[]).map((f: any) => (
                 <TableRow key={f.id}>
                   <TableCell className="text-xs">{FREIGHT_TYPES.find(t => t.value === f.freight_type)?.label ?? f.freight_type}</TableCell>
-                  <TableCell className="text-right text-xs">{formatCurrency(f.amount, f.currency)} {f.currency !== 'TWD' && f.currency}</TableCell>
+                    <TableCell className="text-right text-xs">{f.amount}</TableCell>
                   <TableCell className="text-right text-xs">{f.amount_twd != null ? formatCurrency(f.amount_twd, 'TWD') : '—'}</TableCell>
                   <TableCell><Badge variant={f.payment_status === 'paid' ? 'default' : 'secondary'} className="text-xs">{f.payment_status}</Badge></TableCell>
                   <TableCell>
@@ -266,7 +261,7 @@ export function PurchaseFreightSection({
         )}
 
         {/* Add freight form */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-3 border-t">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t">
           <div>
             <Label className="text-xs">類型</Label>
             <Select value={newFreight.freight_type} onValueChange={v => setNewFreight(s => ({ ...s, freight_type: v }))}>
@@ -277,35 +272,6 @@ export function PurchaseFreightSection({
           <div>
             <Label className="text-xs">金額</Label>
             <Input type="number" step="0.01" className="h-8" value={newFreight.amount} onChange={e => setNewFreight(s => ({ ...s, amount: e.target.value }))} placeholder="0.00" />
-          </div>
-          <div>
-            <Label className="text-xs">幣別</Label>
-            <Select
-              value={newFreight.currency}
-              onValueChange={v => setNewFreight(s => ({ ...s, currency: v, exchange_rate: v === 'TWD' ? '1' : s.exchange_rate }))}
-            >
-              <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="TWD">TWD</SelectItem>
-                <SelectItem value="USD">USD</SelectItem>
-                <SelectItem value="JPY">JPY</SelectItem>
-                <SelectItem value="CNY">CNY</SelectItem>
-                <SelectItem value="EUR">EUR</SelectItem>
-                <SelectItem value="HKD">HKD</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs">匯率</Label>
-            <Input
-              type="number"
-              step="0.0001"
-              className="h-8"
-              value={newFreight.exchange_rate}
-              onChange={e => setNewFreight(s => ({ ...s, exchange_rate: e.target.value }))}
-              placeholder="1"
-              disabled={newFreight.currency === 'TWD'}
-            />
           </div>
           <div>
             <Label className="text-xs">備註</Label>
