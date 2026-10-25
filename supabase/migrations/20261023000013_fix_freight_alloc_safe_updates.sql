@@ -37,7 +37,7 @@ BEGIN
 
   v_found := (length(v_def) - length(replace(v_def, v_pat, ''))) / length(v_pat);
 
-  IF v_found = 12 THEN
+  IF v_found = 13 THEN
     RAISE NOTICE '[freight-alloc-safe-updates] 已修復，略過';
     RETURN;
   ELSIF v_found <> 0 THEN
@@ -83,8 +83,8 @@ BEGIN
     END IF;
   END LOOP;
 
-  IF (length(v_new) - length(replace(v_new, v_pat, ''))) / length(v_pat) <> 12 THEN
-    RAISE EXCEPTION '[freight-alloc-safe-updates] 補丁後 WHERE 數量不是 12';
+  IF (length(v_new) - length(replace(v_new, v_pat, ''))) / length(v_pat) <> 13 THEN
+    RAISE EXCEPTION '[freight-alloc-safe-updates] 補丁後 WHERE 數量不是 13';
   END IF;
 
   EXECUTE v_new;

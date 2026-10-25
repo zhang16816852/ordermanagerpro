@@ -165,6 +165,16 @@ export function PurchaseFreightSection({
     return item.variant?.name || item.product?.name || itemId.slice(0, 8);
   };
 
+  /** TWD 強制顯示 2 位小數（供落地單價／分攤金額使用，避免被 formatCurrency(TWD:0) 捨去分） */
+  const formatTWD2 = (v: number | null | undefined) => {
+    if (v == null) return '—';
+    const sign = v < 0 ? '-' : '';
+    return `${sign}NT$${Math.abs(v).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
   const handleAddFreight = () => {
     if (!newFreight.amount) { toast.error('請輸入金額'); return; }
     const rate = Number(newFreight.exchange_rate) || 1;
@@ -337,10 +347,10 @@ export function PurchaseFreightSection({
               {allocResult.changes.map((c: any) => (
                 <TableRow key={c.purchase_order_item_id}>
                   <TableCell className="text-xs">{itemLabel(c.purchase_order_item_id)}</TableCell>
-                  <TableCell className="text-right text-xs">{formatCurrency(c.old_allocated_freight, 'TWD')}</TableCell>
-                  <TableCell className="text-right text-xs">{formatCurrency(c.new_allocated_freight, 'TWD')}</TableCell>
-                  <TableCell className="text-right text-xs">{formatCurrency(c.old_landed_unit_cost, 'TWD')}</TableCell>
-                  <TableCell className="text-right text-xs">{formatCurrency(c.new_landed_unit_cost, 'TWD')}</TableCell>
+                  <TableCell className="text-right text-xs">{formatTWD2(c.old_allocated_freight)}</TableCell>
+                  <TableCell className="text-right text-xs">{formatTWD2(c.new_allocated_freight)}</TableCell>
+                  <TableCell className="text-right text-xs">{formatTWD2(c.old_landed_unit_cost)}</TableCell>
+                  <TableCell className="text-right text-xs">{formatTWD2(c.new_landed_unit_cost)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
