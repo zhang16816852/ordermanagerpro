@@ -53,6 +53,7 @@ export function PurchaseFreightSection({
   const [weightInput, setWeightInput] = useState(freightActualWeight != null ? String(freightActualWeight) : '');
   const [allocResult, setAllocResult] = useState<any>(null);
   const [newFreight, setNewFreight] = useState({ ...EMPTY_NEW_FREIGHT });
+  const [manualWeights, setManualWeights] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setAllocMethod(freightAllocationMethod || 'by_value');
@@ -61,6 +62,15 @@ export function PurchaseFreightSection({
   useEffect(() => {
     setWeightInput(freightActualWeight != null ? String(freightActualWeight) : '');
   }, [freightActualWeight]);
+
+  // 同步 items 的 freight_manual_weight 到本地 state
+  useEffect(() => {
+    const init: Record<string, string> = {};
+    for (const it of items) {
+      init[it.id] = it.freight_manual_weight != null ? String(it.freight_manual_weight) : '';
+    }
+    setManualWeights(init);
+  }, [items]);
 
   const { data: freights = [] } = useQuery({
     queryKey: ['po-freights', purchaseOrderId],
@@ -125,6 +135,27 @@ export function PurchaseFreightSection({
     onSuccess: () => {
       invalidatePurchaseOrder();
       toast.success('已更新均攤方式');
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const saveManualWeightsMut = useMutation({
+    mutationFn: async (weights: Record<string, string>) => {
+      // 逐一寫回 purchase_order_items.freight_manual_weight
+      for (const [itemId, val] of Object.entries(weights)) {
+        const v = val.trim() === '' ? null : Number(val);
+        if (val.trim() !== '' && (Number.isNaN(v!) || v! < 0)) {
+          throw new Error('手動權重必須為非負數');
+        }
+        const { error } = await (supabase as any).from('purchase_order_items')
+          .update({ freight_manual_weight: v })
+          .eq('id', itemId);
+        if (error) throw error;
+      }
+      return true;
+    },
+    onSuccess: () => {
+      invalidatePurchaseOrder();
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -314,15 +345,44 @@ export function PurchaseFreightSection({
               />
             </div>
           )}
+          {allocMethod === 'manual' && (
+            <div className="col-span-full space-y-2 pt-2 border-t">
+              <Label className="text-xs">手動權重（每個品項）</Label>
+              <div className="space-y-1">
+                {items.map((it) => (
+                  <div key={it.id} className="flex items-center gap-2 text-xs">
+                    <span className="flex-1 truncate">{itemLabel(it.id)}</span>
+                    <Input
+                      type="number"
+                      step="0.001"
+                      className="h-7 w-24"
+                      value={manualWeights[it.id] ?? ''}
+                      onChange={e => setManualWeights(s => ({ ...s, [it.id]: e.target.value }))}
+                      placeholder="權重"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex items-end gap-2">
             <Button
               size="sm"
               onClick={() => {
-                updateMethodMut.mutate({ method: allocMethod, actualWeight: allocMethod === 'by_weight' ? (weightInput.trim() === '' ? null : Number(weightInput)) : null, poId: purchaseOrderId }, {
-                  onSuccess: () => allocMut.mutate(true),
-                });
+                const doAllocate = () => {
+                  updateMethodMut.mutate({ method: allocMethod, actualWeight: allocMethod === 'by_weight' ? (weightInput.trim() === '' ? null : Number(weightInput)) : null, poId: purchaseOrderId }, {
+                    onSuccess: () => allocMut.mutate(true),
+                  });
+                };
+                if (allocMethod === 'manual') {
+                  saveManualWeightsMut.mutate(manualWeights, {
+                    onSuccess: () => doAllocate(),
+                  });
+                } else {
+                  doAllocate();
+                }
               }}
-              disabled={allocMut.isPending || updateMethodMut.isPending}
+              disabled={allocMut.isPending || updateMethodMut.isPending || saveManualWeightsMut.isPending}
             >
               儲存並分攤
             </Button>
