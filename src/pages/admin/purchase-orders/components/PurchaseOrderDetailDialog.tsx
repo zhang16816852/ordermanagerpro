@@ -30,6 +30,7 @@ import { PurchaseProductPicker } from './PurchaseProductPicker';
 import { PurchaseFreightSection } from '@/components/purchase/PurchaseFreightSection';
 import { MappedRuleEditDialog } from './mapping/MappedRuleEditDialog';
 import { ImportFromOrdersDialog } from './ImportFromOrdersDialog';
+import { BindSourceOrdersDialog } from './BindSourceOrdersDialog';
 import { ReceiveForm } from './ReceiveForm';
 import { EntryDialog } from '@/pages/admin/accounting/components/EntryDialog';
 import { poPaymentDocLine } from '../batchActions';
@@ -220,6 +221,7 @@ export function PurchaseOrderDetailDialog({
 }: PurchaseOrderDetailDialogProps) {
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [bindItem, setBindItem] = useState<PurchaseOrderItem | null>(null);
   const [excelImportOpen, setExcelImportOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
@@ -265,6 +267,8 @@ export function PurchaseOrderDetailDialog({
       variant_id: i.variant_id || null,
       quantity: i.quantity,
       unit_cost: Number(i.unit_cost) || 0,
+      source_order_ids: i.source_order_ids ?? null,
+      source_quantities: i.source_quantities ?? null,
     }));
 
   /** 本地先樂觀套用、伺服器拒絕時回滾，避免畫面停留在未存下的值（toast 由 mutation 顯示） */
@@ -312,6 +316,30 @@ export function PurchaseOrderDetailDialog({
     setLocalItems(remaining);
     try {
       await onDeleteItem({ purchaseOrderId: order.id, items: toWritePayload(remaining), deletedItemIds: [item.id] });
+    } catch {
+      setLocalItems(prev);
+    }
+  };
+
+  const handleBindSources = async (binds: { orderId: string; quantity: number }[]) => {
+    if (!bindItem || !onUpdateItem) return;
+    const item = bindItem;
+    const existingIds = item.source_order_ids || [];
+    const existingQtys = item.source_quantities || {};
+    const newIds = [...existingIds];
+    const newQtys: Record<string, number> = { ...existingQtys };
+    for (const b of binds) {
+      if (!newIds.includes(b.orderId)) newIds.push(b.orderId);
+      newQtys[b.orderId] = (newQtys[b.orderId] || 0) + b.quantity;
+    }
+    const prev = localItems;
+    const next = localItems.map((i) =>
+      i.id === item.id ? { ...i, source_order_ids: newIds, source_quantities: newQtys } : i,
+    );
+    setLocalItems(next);
+    try {
+      await onUpdateItem({ purchaseOrderId: order.id, items: toWritePayload(next) });
+      setBindItem(null);
     } catch {
       setLocalItems(prev);
     }
@@ -556,6 +584,17 @@ export function PurchaseOrderDetailDialog({
           ) : (
             <span className="text-muted-foreground text-xs">-</span>
           )}
+          {canEdit && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-1 mt-1 self-start"
+              onClick={() => setBindItem(item)}
+              title="綁訂來源訂單"
+            >
+              <Plus className="h-3 w-3 mr-1" /> 綁訂
+            </Button>
+          )}
         </TableCell>
         {canDelete && (
           <TableCell className="text-right">
@@ -715,6 +754,15 @@ export function PurchaseOrderDetailDialog({
               <ImportFromOrdersDialog products={products} isLoading={isLoading} onSubmit={async (items) => { if (await submitNewItems(items)) setImportOpen(false); }} />
             </DialogContent>
           </Dialog>
+
+          <BindSourceOrdersDialog
+            open={!!bindItem}
+            onOpenChange={(open) => { if (!open) setBindItem(null); }}
+            poItem={bindItem}
+            sourceOrderMap={sourceOrderMap}
+            isLoading={isLoading}
+            onSubmit={handleBindSources}
+          />
 
           <Dialog open={excelImportOpen} onOpenChange={setExcelImportOpen}>
             <DialogTrigger asChild>

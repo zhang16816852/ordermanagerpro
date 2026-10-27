@@ -982,6 +982,201 @@ export type Database = {
           },
         ]
       }
+      consolidation_freight_costs: {
+        Row: {
+          accounting_entry_id: string | null
+          amount: number
+          amount_twd: number | null
+          consolidation_shipment_id: string
+          created_at: string
+          created_by: string | null
+          currency_movement_id: string | null
+          freight_type: string
+          id: string
+          note: string | null
+          paid_date: string | null
+          payment_account_id: string | null
+          payment_status: string
+          supplier_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          accounting_entry_id?: string | null
+          amount: number
+          amount_twd?: number | null
+          consolidation_shipment_id: string
+          created_at?: string
+          created_by?: string | null
+          currency_movement_id?: string | null
+          freight_type: string
+          id?: string
+          note?: string | null
+          paid_date?: string | null
+          payment_account_id?: string | null
+          payment_status?: string
+          supplier_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          accounting_entry_id?: string | null
+          amount?: number
+          amount_twd?: number | null
+          consolidation_shipment_id?: string
+          created_at?: string
+          created_by?: string | null
+          currency_movement_id?: string | null
+          freight_type?: string
+          id?: string
+          note?: string | null
+          paid_date?: string | null
+          payment_account_id?: string | null
+          payment_status?: string
+          supplier_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consolidation_freight_costs_accounting_entry_id_fkey"
+            columns: ["accounting_entry_id"]
+            isOneToOne: false
+            referencedRelation: "accounting_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consolidation_freight_costs_consolidation_shipment_id_fkey"
+            columns: ["consolidation_shipment_id"]
+            isOneToOne: false
+            referencedRelation: "consolidation_shipments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consolidation_freight_costs_currency_movement_id_fkey"
+            columns: ["currency_movement_id"]
+            isOneToOne: false
+            referencedRelation: "currency_movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consolidation_freight_costs_payment_account_id_fkey"
+            columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consolidation_freight_costs_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consolidation_shipment_pos: {
+        Row: {
+          allocated_freight: number
+          consolidation_shipment_id: string
+          consolidation_weight: number | null
+          created_at: string
+          id: string
+          purchase_order_id: string
+          status: string
+        }
+        Insert: {
+          allocated_freight?: number
+          consolidation_shipment_id: string
+          consolidation_weight?: number | null
+          created_at?: string
+          id?: string
+          purchase_order_id: string
+          status?: string
+        }
+        Update: {
+          allocated_freight?: number
+          consolidation_shipment_id?: string
+          consolidation_weight?: number | null
+          created_at?: string
+          id?: string
+          purchase_order_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consolidation_shipment_pos_consolidation_shipment_id_fkey"
+            columns: ["consolidation_shipment_id"]
+            isOneToOne: false
+            referencedRelation: "consolidation_shipments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consolidation_shipment_pos_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: true
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consolidation_shipments: {
+        Row: {
+          code: string
+          consolidation_total_weight: number | null
+          created_at: string
+          created_by: string | null
+          customs_clearance_number: string | null
+          date: string
+          freight_allocation_stale: boolean
+          freight_amount: number | null
+          freight_currency: string
+          id: string
+          landed_total_amount: number | null
+          name: string
+          note: string | null
+          shipping_type: string
+          status: string
+          updated_at: string
+          warehouse_name: string | null
+        }
+        Insert: {
+          code: string
+          consolidation_total_weight?: number | null
+          created_at?: string
+          created_by?: string | null
+          customs_clearance_number?: string | null
+          date?: string
+          freight_allocation_stale?: boolean
+          freight_amount?: number | null
+          freight_currency?: string
+          id?: string
+          landed_total_amount?: number | null
+          name: string
+          note?: string | null
+          shipping_type?: string
+          status?: string
+          updated_at?: string
+          warehouse_name?: string | null
+        }
+        Update: {
+          code?: string
+          consolidation_total_weight?: number | null
+          created_at?: string
+          created_by?: string | null
+          customs_clearance_number?: string | null
+          date?: string
+          freight_allocation_stale?: boolean
+          freight_amount?: number | null
+          freight_currency?: string
+          id?: string
+          landed_total_amount?: number | null
+          name?: string
+          note?: string | null
+          shipping_type?: string
+          status?: string
+          updated_at?: string
+          warehouse_name?: string | null
+        }
+        Relationships: []
+      }
       countries: {
         Row: {
           code: string
@@ -3448,7 +3643,9 @@ export type Database = {
           amount_twd: number | null
           created_at: string
           created_by: string | null
+          currency: string
           currency_movement_id: string | null
+          exchange_rate: number
           freight_type: string
           id: string
           note: string | null
@@ -3465,7 +3662,9 @@ export type Database = {
           amount_twd?: number | null
           created_at?: string
           created_by?: string | null
+          currency?: string
           currency_movement_id?: string | null
+          exchange_rate?: number
           freight_type: string
           id?: string
           note?: string | null
@@ -3482,7 +3681,9 @@ export type Database = {
           amount_twd?: number | null
           created_at?: string
           created_by?: string | null
+          currency?: string
           currency_movement_id?: string | null
+          exchange_rate?: number
           freight_type?: string
           id?: string
           note?: string | null
@@ -5715,6 +5916,14 @@ export type Database = {
         Args: { p_invitation_id: string }
         Returns: undefined
       }
+      add_po_to_consolidation: {
+        Args: {
+          p_consolidation_shipment_id: string
+          p_consolidation_weight?: number
+          p_purchase_order_id: string
+        }
+        Returns: Json
+      }
       adjust_inventory:
         | {
             Args: {
@@ -5870,6 +6079,18 @@ export type Database = {
         }
         Returns: undefined
       }
+      create_consolidation_shipment: {
+        Args: {
+          p_created_by?: string
+          p_customs_clearance_number?: string
+          p_date?: string
+          p_name: string
+          p_note?: string
+          p_shipping_type?: string
+          p_warehouse_name?: string
+        }
+        Returns: Json
+      }
       create_currency_inbound: {
         Args: {
           p_account_id: string
@@ -5934,6 +6155,11 @@ export type Database = {
         Args: { p_consignment_order_id: string }
         Returns: Json
       }
+      delete_consolidation_freight_cost: {
+        Args: { p_id: string }
+        Returns: Json
+      }
+      delete_consolidation_shipment: { Args: { p_id: string }; Returns: Json }
       delete_currency_consume: {
         Args: { p_movement_id: string }
         Returns: Json
@@ -6384,6 +6610,13 @@ export type Database = {
         Args: { p_created_by: string; p_pool_ids: string[] }
         Returns: Json
       }
+      remove_po_from_consolidation: {
+        Args: {
+          p_consolidation_shipment_id: string
+          p_purchase_order_id: string
+        }
+        Returns: Json
+      }
       reorder_purchase_order_items: {
         Args: { p_items: Json }
         Returns: undefined
@@ -6569,6 +6802,21 @@ export type Database = {
         Args: { p_order_ids: string[]; p_purchase_order_id: string }
         Returns: Json
       }
+      update_consolidation_shipment: {
+        Args: {
+          p_consolidation_total_weight?: number
+          p_customs_clearance_number?: string
+          p_date?: string
+          p_freight_amount?: number
+          p_id: string
+          p_name?: string
+          p_note?: string
+          p_shipping_type?: string
+          p_status?: string
+          p_warehouse_name?: string
+        }
+        Returns: Json
+      }
       update_order_with_items: {
         Args: {
           p_deleted_item_ids?: string[]
@@ -6599,6 +6847,21 @@ export type Database = {
       upsert_brand_product_prices: {
         Args: { p_brand: string; p_products: Json }
         Returns: undefined
+      }
+      upsert_consolidation_freight_cost: {
+        Args: {
+          p_amount?: number
+          p_consolidation_shipment_id?: string
+          p_created_by?: string
+          p_freight_type?: string
+          p_id?: string
+          p_note?: string
+          p_paid_date?: string
+          p_payment_account_id?: string
+          p_payment_status?: string
+          p_supplier_id?: string
+        }
+        Returns: Json
       }
       upsert_product_variant_options_batch: {
         Args: { p_product_id: string; p_variants: Json }

@@ -210,6 +210,9 @@ export interface PoItemWritePayload {
   variant_id: string | null;
   quantity: number;
   unit_cost: number;
+  /** 來源訂單綁定（條件式覆寫：key 存在才更新；傳 null 清空） */
+  source_order_ids?: string[] | null;
+  source_quantities?: Record<string, number> | null;
 }
 
 /**
