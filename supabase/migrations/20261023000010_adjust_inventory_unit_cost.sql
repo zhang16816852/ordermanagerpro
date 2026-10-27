@@ -56,7 +56,7 @@ BEGIN
              LIMIT 1;
         END IF;
     ELSE
-        SELECT COALESCE(p.wholesale_price, 0)
+        SELECT COALESCE(p.unified_wholesale_price, 0)
           INTO v_unit_cost
           FROM public.products p
          WHERE p.id = v_product_id;

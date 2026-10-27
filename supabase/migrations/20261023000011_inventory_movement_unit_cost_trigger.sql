@@ -63,9 +63,9 @@ BEGIN
      WHERE pv.id = NEW.variant_id;
   END IF;
 
-  -- Priority 5: 商品批發價
+  -- Priority 5: 商品統一批發價（products 無 wholesale_price 欄，僅 unified_wholesale_price）
   IF NEW.unit_cost IS NULL AND NEW.product_id IS NOT NULL THEN
-    SELECT NULLIF(p.wholesale_price, 0) INTO NEW.unit_cost
+    SELECT NULLIF(p.unified_wholesale_price, 0) INTO NEW.unit_cost
       FROM public.products p
      WHERE p.id = NEW.product_id;
   END IF;
