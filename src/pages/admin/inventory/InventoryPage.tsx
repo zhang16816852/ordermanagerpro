@@ -116,7 +116,7 @@ function MovementsDialog({ open, onOpenChange, productId, variantId, name }: { o
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-3xl">
+            <DialogContent className="flex h-[80vh] max-h-[90vh] max-w-3xl flex-col">
                 <DialogHeader>
                     <DialogTitle>庫存明細 - {name}</DialogTitle>
                     <DialogDescription>
@@ -139,7 +139,7 @@ function MovementsDialog({ open, onOpenChange, productId, variantId, name }: { o
                     </select>
                 </div>
 
-                <ScrollArea className="max-h-[60vh]">
+                <ScrollArea className="min-h-0 w-full flex-1">
                     <Table>
                         <TableHeader>
                             <TableRow>
