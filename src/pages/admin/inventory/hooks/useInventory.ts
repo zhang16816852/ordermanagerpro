@@ -196,6 +196,10 @@ export function useInventoryMovements(productId: string | null, variantId: strin
                 warehouseId: m.warehouse_id,
                 createdAt: m.created_at,
                 createdBy: m.created_by,
+                costMatchStatus: m.cost_match_status || 'confirmed',
+                batchId: m.batch_id || null,
+                matchedBatchId: m.matched_batch_id || null,
+                unitCost: m.unit_cost,
             }));
         }
     });

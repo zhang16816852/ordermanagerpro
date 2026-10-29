@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Search, RefreshCw, AlertTriangle, Save, FileText, History, Calculator, Warehouse, PackageSearch } from 'lucide-react';
+import { Search, RefreshCw, AlertTriangle, Save, FileText, History, Calculator, Warehouse, PackageSearch, ShieldCheck } from 'lucide-react';
 import { DataTable } from '@/components/shared/DataTable';
 import { formatCurrency } from '@/lib/formatters';
 import { exportToCSV } from '@/lib/exportUtils';
 import { useInventory, useInventoryMovements } from './hooks/useInventory';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { ColumnDef } from '@tanstack/react-table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
@@ -110,9 +112,11 @@ function MovementsDialog({ open, onOpenChange, productId, variantId, name }: { o
     const { data: movements = [], isLoading } = useInventoryMovements(productId, variantId);
     const [filterType, setFilterType] = useState('');
 
-    const filtered = filterType
-        ? movements.filter(m => m.sourceType === filterType)
-        : movements;
+    const filtered = filterType === 'pending_match'
+        ? movements.filter(m => m.costMatchStatus === 'pending_match')
+        : filterType
+            ? movements.filter(m => m.sourceType === filterType)
+            : movements;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -136,6 +140,7 @@ function MovementsDialog({ open, onOpenChange, productId, variantId, name }: { o
                         <option value="sales_shipment">出貨扣減</option>
                         <option value="sales_note_deletion">銷貨刪除回補</option>
                         <option value="manual_adjustment">手動調整</option>
+                        <option value="pending_match">待配對（懸空）</option>
                     </select>
                 </div>
 
@@ -149,16 +154,17 @@ function MovementsDialog({ open, onOpenChange, productId, variantId, name }: { o
                                 <TableHead className="text-xs">來源</TableHead>
                                 <TableHead className="text-xs">單號</TableHead>
                                 <TableHead className="text-xs">備註</TableHead>
+                                <TableHead className="text-xs">成本配對</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-8">載入中...</TableCell>
+                                    <TableCell colSpan={7} className="text-center text-xs text-muted-foreground py-8">載入中...</TableCell>
                                 </TableRow>
                             ) : filtered.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-8">暫無記錄</TableCell>
+                                    <TableCell colSpan={7} className="text-center text-xs text-muted-foreground py-8">暫無記錄</TableCell>
                                 </TableRow>
                             ) : (
                                 filtered.map((m: any) => (
@@ -185,6 +191,21 @@ function MovementsDialog({ open, onOpenChange, productId, variantId, name }: { o
                                         </TableCell>
                                         <TableCell className="text-xs text-muted-foreground max-w-[120px] truncate">
                                             {m.note || '-'}
+                                        </TableCell>
+                                        <TableCell className="text-xs">
+                                            <Badge variant="outline" className={cn(
+                                                "text-[10px] font-normal",
+                                                m.costMatchStatus === 'confirmed' ? "text-emerald-600 border-emerald-200" :
+                                                m.costMatchStatus === 'pending_match' ? "text-amber-600 border-amber-200" :
+                                                m.costMatchStatus === 'matched' ? "text-blue-600 border-blue-200" :
+                                                "text-muted-foreground"
+                                            )}>
+                                                {m.costMatchStatus === 'confirmed' ? '已確認' :
+                                                 m.costMatchStatus === 'pending_match' ? '待配對' :
+                                                 m.costMatchStatus === 'matched' ? '已配對' :
+                                                 m.costMatchStatus === 'reversed' ? '已回滾' :
+                                                 m.costMatchStatus}
+                                            </Badge>
                                         </TableCell>
                                     </TableRow>
                                 ))
@@ -330,6 +351,32 @@ export default function AdminInventory() {
                             >
                                 <Calculator className="mr-2 h-4 w-4" />
                                 {recalculateInventory.isPending ? '計算中...' : '系統重算'}
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={async () => {
+                                    try {
+                                        const { data, error } = await (supabase.rpc('reconcile_fifo_integrity' as any) as any)({
+                                            p_product_id: null,
+                                            p_variant_id: null,
+                                        });
+                                        if (error) throw error;
+                                        const result = data as any;
+                                        const failed = (result?.checks || []).filter((c: any) => c.status === 'FAIL');
+                                        if (failed.length === 0) {
+                                            toast.success('FIFO 驗算通過，無異常');
+                                        } else {
+                                            toast.error(`FIFO 驗算發現 ${failed.length} 項異常`);
+                                            console.log('Reconcile result:', result);
+                                        }
+                                    } catch (e: any) {
+                                        toast.error(e?.message || '驗算失敗');
+                                    }
+                                }}
+                            >
+                                <ShieldCheck className="mr-2 h-4 w-4" />
+                                FIFO 驗算
                             </Button>
                         </div>
                         <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
