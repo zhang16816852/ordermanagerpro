@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import WarehousesTab from './components/WarehousesTab';
 import BatchesTab from './components/BatchesTab';
+import { ReconcileDialog } from './components/ReconcileDialog';
 
 const SOURCE_TYPE_LABELS: Record<string, string> = {
     purchase_receipt: '採購入庫',
@@ -234,6 +235,7 @@ export default function AdminInventory() {
     } = useInventory();
 
     const [movementsTarget, setMovementsTarget] = useState<{ productId: string; variantId: string | null; name: string } | null>(null);
+const [reconcileOpen, setReconcileOpen] = useState(false);
 
     const columns: ColumnDef<any>[] = [
         {
@@ -355,25 +357,7 @@ export default function AdminInventory() {
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={async () => {
-                                    try {
-                                        const { data, error } = await (supabase.rpc('reconcile_fifo_integrity' as any) as any)({
-                                            p_product_id: null,
-                                            p_variant_id: null,
-                                        });
-                                        if (error) throw error;
-                                        const result = data as any;
-                                        const failed = (result?.checks || []).filter((c: any) => c.status === 'FAIL');
-                                        if (failed.length === 0) {
-                                            toast.success('FIFO 驗算通過，無異常');
-                                        } else {
-                                            toast.error(`FIFO 驗算發現 ${failed.length} 項異常`);
-                                            console.log('Reconcile result:', result);
-                                        }
-                                    } catch (e: any) {
-                                        toast.error(e?.message || '驗算失敗');
-                                    }
-                                }}
+                                onClick={() => setReconcileOpen(true)}
                             >
                                 <ShieldCheck className="mr-2 h-4 w-4" />
                                 FIFO 驗算
@@ -435,6 +419,7 @@ export default function AdminInventory() {
                             name={movementsTarget.name}
                         />
                     )}
+                    <ReconcileDialog open={reconcileOpen} onOpenChange={setReconcileOpen} />
                 </TabsContent>
 
                 <TabsContent value="warehouses" className="mt-6">
