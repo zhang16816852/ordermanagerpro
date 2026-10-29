@@ -7,8 +7,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, ChevronRight, ChevronDown, Save, Loader2 } from 'lucide-react';
+import { Search, ChevronRight, ChevronDown, Save, Loader2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import type { Dispatch, SetStateAction } from 'react';
 import type { ProductWithDetails } from '@/types/product';
 import type { RepRecord, ProfileRecord, CostRow, CostItemInput } from '../repsTypes';
@@ -84,7 +85,56 @@ export function CostSettingsTab({
               <p className="text-sm text-muted-foreground">
                 共 {filteredCostProducts.length} 個產品
               </p>
-              <Button
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    if (!costRepId) { toast.info('請先選擇業務'); return; }
+                    let failCount = 0;
+                    const failures: string[] = [];
+                    for (const p of filteredCostProducts) {
+                      const variants = p.variants || [];
+                      if (variants.length === 0) {
+                        try {
+                          const { data } = await (supabase.rpc('check_rep_cost_guard' as any) as any)({
+                            p_rep_id: costRepId,
+                            p_product_id: p.id,
+                            p_variant_id: null,
+                          });
+                          if (data?.guard === 'FAIL') {
+                            failCount++;
+                            failures.push(`${p.name}: 業務成本 $${data.rep_cost} < 進貨成本 $${data.purchase_cost}`);
+                          }
+                        } catch {}
+                      } else {
+                        for (const v of variants) {
+                          try {
+                            const { data } = await (supabase.rpc('check_rep_cost_guard' as any) as any)({
+                              p_rep_id: costRepId,
+                              p_product_id: p.id,
+                              p_variant_id: v.id,
+                            });
+                            if (data?.guard === 'FAIL') {
+                              failCount++;
+                              failures.push(`${p.name} / ${v.name || v.sku}: 業務成本 $${data.rep_cost} < 進貨成本 $${data.purchase_cost}`);
+                            }
+                          } catch {}
+                        }
+                      }
+                    }
+                    if (failCount === 0) {
+                      toast.success('成本守門通過，無異常');
+                    } else {
+                      toast.error(`發現 ${failCount} 項成本異常`);
+                      console.warn('Cost guard failures:', failures);
+                    }
+                  }}
+                >
+                  <ShieldCheck className="mr-1 h-4 w-4" />
+                  成本守門
+                </Button>
+                <Button
                 size="sm"
                 disabled={savePending}
                 onClick={() => {
@@ -116,6 +166,7 @@ export function CostSettingsTab({
                 {savePending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
                 全部儲存
               </Button>
+              </div>
             </div>
             <div className="max-h-[600px] overflow-auto border rounded-md">
               <Table>
