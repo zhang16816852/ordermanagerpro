@@ -97,7 +97,7 @@ export function CostSettingsTab({
                       const variants = p.variants || [];
                       if (variants.length === 0) {
                         try {
-                          const { data } = await (supabase.rpc('check_rep_cost_guard' as any) as any)({
+                          const { data } = await (supabase as any).rpc('check_rep_cost_guard', {
                             p_rep_id: costRepId,
                             p_product_id: p.id,
                             p_variant_id: null,
@@ -110,7 +110,7 @@ export function CostSettingsTab({
                       } else {
                         for (const v of variants) {
                           try {
-                            const { data } = await (supabase.rpc('check_rep_cost_guard' as any) as any)({
+                            const { data } = await (supabase as any).rpc('check_rep_cost_guard', {
                               p_rep_id: costRepId,
                               p_product_id: p.id,
                               p_variant_id: v.id,

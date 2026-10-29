@@ -34,7 +34,7 @@ export function ReconcileDialog({ open, onOpenChange }: { open: boolean; onOpenC
     const runReconcile = async () => {
         setLoading(true);
         try {
-            const { data, error } = await (supabase.rpc('reconcile_fifo_integrity' as any) as any)({
+            const { data, error } = await (supabase as any).rpc('reconcile_fifo_integrity', {
                 p_product_id: null,
                 p_variant_id: null,
             });
