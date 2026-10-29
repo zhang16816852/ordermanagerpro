@@ -18,6 +18,7 @@ import { ArrowLeft, Search, ChevronRight, ChevronDown, Wallet, Percent, FileText
 import { formatCurrency } from '@/lib/formatters';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 import { useCommissionPayout } from '@/hooks/useCommissionPayout';
 import { useVariantWholesale } from '@/hooks/useVariantWholesale';
 import { EntryDialog } from '@/pages/admin/accounting/components/EntryDialog';
@@ -233,6 +234,31 @@ export default function RepCommissionPage() {
         .order('paid_date', { ascending: false });
       if (error) throw error;
       return (data || []) as PayoutRecord[];
+    },
+    enabled: !!userId,
+  });
+
+  // 佣金差額調整（成本回溯後產生）
+  const { data: adjustments = [] } = useQuery<Array<{
+    id: string;
+    rep_id: string;
+    sales_note_id: string;
+    amount: number;
+    paid_date: string | null;
+    note: string | null;
+    kind: string;
+    collection_status: string | null;
+  }>>({
+    queryKey: ['admin-rep-commission-adjustments', userId],
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from('rep_commission_payouts') as any)
+        .select('id, rep_id, sales_note_id, amount, paid_date, note, kind, collection_status')
+        .eq('rep_id', userId!)
+        .eq('kind', 'adjustment')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []) as any[];
     },
     enabled: !!userId,
   });
@@ -671,6 +697,49 @@ export default function RepCommissionPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* 佣金差額調整（成本回溯後產生） */}
+      {adjustments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">佣金差額調整</CardTitle>
+            <p className="text-xs text-muted-foreground">成本回溯後自動產生的佣金調整記錄</p>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">銷貨單</TableHead>
+                  <TableHead className="text-xs">金額</TableHead>
+                  <TableHead className="text-xs">狀態</TableHead>
+                  <TableHead className="text-xs">說明</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {adjustments.map((a) => (
+                  <TableRow key={a.id}>
+                    <TableCell className="text-xs font-mono">{a.sales_note_id?.slice(0, 8) || '-'}</TableCell>
+                    <TableCell className={cn("text-xs font-mono", a.amount >= 0 ? "text-emerald-600" : "text-rose-600")}>
+                      {a.amount >= 0 ? '+' : ''}{formatCurrency(a.amount)}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      <Badge variant="outline" className={cn(
+                        "text-[10px]",
+                        a.collection_status === 'collected' ? "text-emerald-600 border-emerald-200" : "text-amber-600 border-amber-200"
+                      )}>
+                        {a.collection_status === 'collected' ? '已收取' : '待收取'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
+                      {a.note || '-'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 登記發放 Dialog（統一使用 EntryDialog 的「佣金發放」Tab） */}
       <EntryDialog
