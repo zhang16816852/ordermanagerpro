@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { Search, RefreshCw, AlertTriangle, Save, FileText, History, Calculator, Warehouse, PackageSearch, ShieldCheck } from 'lucide-react';
 import { DataTable } from '@/components/shared/DataTable';
 import { formatCurrency } from '@/lib/formatters';
@@ -274,6 +275,19 @@ const [reconcileOpen, setReconcileOpen] = useState(false);
             cell: ({ row }) => <QuantityCell row={row} updateInventory={updateInventory} />
         },
         {
+            header: "懸空數量",
+            accessorKey: "suspenseQuantity",
+            cell: ({ row }) => (
+                row.original.suspenseQuantity > 0 ? (
+                    <Badge variant="outline" className="text-[10px] font-normal text-amber-600 border-amber-200">
+                        {row.original.suspenseQuantity}
+                    </Badge>
+                ) : (
+                    <span className="text-xs text-muted-foreground">-</span>
+                )
+            )
+        },
+        {
             header: "狀態",
             cell: ({ row }) => (
                 <Badge 
@@ -314,6 +328,25 @@ const [reconcileOpen, setReconcileOpen] = useState(false);
                         監控產品存貨、管理倉庫配置
                     </p>
                 </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Card className="p-3">
+                    <div className="text-xs text-muted-foreground">總品項數</div>
+                    <div className="text-xl font-bold">{inventory.length}</div>
+                </Card>
+                <Card className="p-3">
+                    <div className="text-xs text-muted-foreground">低庫存</div>
+                    <div className="text-xl font-bold text-rose-600">{inventory.filter((i: any) => i.isLowStock).length}</div>
+                </Card>
+                <Card className="p-3">
+                    <div className="text-xs text-muted-foreground">懸空 movement</div>
+                    <div className="text-xl font-bold text-amber-600">{inventory.filter((i: any) => i.suspenseQuantity > 0).length}</div>
+                </Card>
+                <Card className="p-3">
+                    <div className="text-xs text-muted-foreground">懸空總數量</div>
+                    <div className="text-xl font-bold text-amber-600">{inventory.reduce((s: number, i: any) => s + (i.suspenseQuantity || 0), 0)}</div>
+                </Card>
             </div>
 
             <Tabs defaultValue="inventory">

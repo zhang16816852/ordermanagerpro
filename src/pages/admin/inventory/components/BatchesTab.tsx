@@ -24,6 +24,7 @@ interface BatchRow {
         product?: { name: string; code: string } | null;
     };
     purchase_order?: { supplier_order_number: string | null };
+    inventory?: { quantity: number; warehouse_id: string }[];
 }
 
 const TRACKING_LABELS: Record<string, string> = {
@@ -40,8 +41,8 @@ export default function BatchesTab() {
         queryFn: async () => {
             const { data, error } = await (supabase as any)
                 .from('product_batches')
-                .select('id, serial_number, batch_number, tracking_mode, quantity, unit_cost, status, received_at, purchase_order_id, variant:product_variants(id, name, sku, product:products(name, code)), purchase_order:purchase_orders(supplier_order_number)')
-                .order('received_at', { ascending: false })
+                .select('id, serial_number, batch_number, tracking_mode, quantity, unit_cost, status, received_at, purchase_order_id, variant:product_variants(id, name, sku, product:products(name, code)), purchase_order:purchase_orders(supplier_order_number), inventory:product_batch_inventory(quantity, warehouse_id)')
+                .order('received_at', { ascending: true })
                 .limit(500);
             if (error) throw error;
             return (data || []) as BatchRow[];
@@ -83,7 +84,9 @@ export default function BatchesTab() {
                             <TableHead className="text-xs">商品</TableHead>
                             <TableHead className="text-xs">追蹤模式</TableHead>
                             <TableHead className="text-xs">序號 / 批號</TableHead>
-                            <TableHead className="text-xs text-right">數量</TableHead>
+                            <TableHead className="text-xs text-right">進貨數量</TableHead>
+                            <TableHead className="text-xs text-right">剩餘數量</TableHead>
+                            <TableHead className="text-xs text-right">已消耗</TableHead>
                             <TableHead className="text-xs text-right">單位成本</TableHead>
                             <TableHead className="text-xs">進貨日期</TableHead>
                             <TableHead className="text-xs">採購單號</TableHead>
@@ -93,22 +96,27 @@ export default function BatchesTab() {
                     <TableBody>
                         {isLoading ? (
                             <TableRow>
-                                <TableCell colSpan={8} className="text-center text-xs text-muted-foreground py-8">載入中...</TableCell>
+                                <TableCell colSpan={10} className="text-center text-xs text-muted-foreground py-8">載入中...</TableCell>
                             </TableRow>
                         ) : filtered.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={8} className="text-center text-xs text-muted-foreground py-8">
+                                <TableCell colSpan={10} className="text-center text-xs text-muted-foreground py-8">
                                     <PackageSearch className="h-8 w-8 mx-auto mb-1.5 text-muted-foreground/40" />
                                     {search ? '查無符合的批次 / 序號' : '尚未建立任何批次 / 序號'}
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            filtered.map((r) => (
+                            filtered.map((r, idx) => (
                                 <TableRow key={r.id}>
                                     <TableCell>
-                                        <div className="flex flex-col gap-0.5">
-                                            <span className="font-medium text-sm">{r.variant?.name || r.variant?.product?.name || '-'}</span>
-                                            <span className="text-[10px] text-muted-foreground font-mono">{r.variant?.sku || ''}</span>
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 h-4 shrink-0">
+                                                FIFO #{idx + 1}
+                                            </Badge>
+                                            <div className="flex flex-col gap-0.5">
+                                                <span className="font-medium text-sm">{r.variant?.name || r.variant?.product?.name || '-'}</span>
+                                                <span className="text-[10px] text-muted-foreground font-mono">{r.variant?.sku || ''}</span>
+                                            </div>
                                         </div>
                                     </TableCell>
                                     <TableCell>
@@ -120,6 +128,18 @@ export default function BatchesTab() {
                                         {r.serial_number || r.batch_number || '-'}
                                     </TableCell>
                                     <TableCell className="text-xs text-right font-mono tabular-nums">{r.quantity}</TableCell>
+                                    <TableCell className="text-xs text-right font-mono tabular-nums">
+                                        {(() => {
+                                            const remaining = (r.inventory || []).reduce((s: number, i: any) => s + (i.quantity || 0), 0);
+                                            return remaining;
+                                        })()}
+                                    </TableCell>
+                                    <TableCell className="text-xs text-right font-mono tabular-nums">
+                                        {(() => {
+                                            const remaining = (r.inventory || []).reduce((s: number, i: any) => s + (i.quantity || 0), 0);
+                                            return Math.max(0, r.quantity - remaining);
+                                        })()}
+                                    </TableCell>
                                     <TableCell className="text-xs text-right">{formatCurrency(r.unit_cost)}</TableCell>
                                     <TableCell className="text-xs whitespace-nowrap">{formatDate(r.received_at) || '-'}</TableCell>
                                     <TableCell className="text-xs font-mono">

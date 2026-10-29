@@ -31,6 +31,7 @@ export function useInventory() {
                         name,
                         code
                     ),
+                    suspense_quantity,
                     product_variants (
                         name,
                         sku,
@@ -58,6 +59,7 @@ export function useInventory() {
             code: variant?.sku || product?.code || '-',
             specs: variant ? product?.name || '-' : '-',
             quantity: item.quantity,
+            suspenseQuantity: item.suspense_quantity || 0,
             updatedAt: item.updated_at,
             isLowStock: item.quantity <= 5,
             price: variant?.retail_price || 0,
