@@ -40,28 +40,37 @@ export const ITEMS_PER_PAGE: Record<"a4" | "middle-cut", number> = {
 
 /* 每頁筆數採「兩層」：前面無底部框頁用 maxCapacity，最後一頁（含總計+備註框）用 lastCapacity */
 export const CHUNK_CAPACITY: Record<"a4" | "middle-cut", { max: number; last: number }> = {
-  a4: { max: 16, last: 16 },
+  a4: { max: 17, last: 16 },
   "middle-cut": { max: 8, last: 6 },
 };
 
 /**
- * 分頁：前面每頁最多 max 筆、最後一頁最多 last 筆，序號整單連續。
- * 單頁（<= max）直接全放；多頁時前面頁填 max，末頁盡量 <= last。
+ * 分頁：三種情境
+ * 1. 單頁（total <= last）：所有品項 + 統計/備註同一頁 → [total]
+ * 2. 多分頁正常：前面頁填 max、末頁 <= last → [...max, rem]，統計/備註在末頁
+ * 3. 多分頁但「卡備註區」：末頁品項已填滿（rem 在 (last, max]）→ 該頁不再附統計/備註，
+ *    額外拆一頁（0 筆品項）專放統計/備註 → [..., rem, 0]
+ * 序號整單連續。
  */
 function buildPageSizes(total: number, max: number, last: number): number[] {
   if (total <= 0) return [0];
-  if (total <= max) return [total];
+  if (total <= last) return [total]; // 單頁：統計/備註同頁
 
   const sizes: number[] = [];
   let rem = total;
-  while (rem > last) {
+  // 前面頁：每頁 max，但保留足夠給末頁處理
+  while (rem > max) {
     sizes.push(max);
     rem -= max;
   }
-  if (rem > 0) {
+  // rem 現在在 (0, max]
+  if (rem <= last) {
+    // 正常末頁：品項 + 統計/備註同頁
     sizes.push(rem);
-  } else if (rem < 0) {
-    sizes[sizes.length - 1] = max + rem;
+  } else {
+    // 卡備註區：末頁品項已滿，統計/備註額外拆一頁
+    sizes.push(rem);
+    sizes.push(0);
   }
   return sizes;
 }

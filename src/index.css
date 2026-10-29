@@ -522,6 +522,12 @@
     border-bottom: none !important;
   }
 
+  /* 最後一頁不強制分頁，避免打印預覽多出空白頁 */
+  .doc-receipt-web-preview .doc-page:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
   /* 分頁模式模擬紙張的外框/陰影/固定尺寸不洩漏進列印 */
   .doc-receipt-web-preview.doc-receipt-paginated .doc-page {
     width: auto !important;
@@ -534,12 +540,24 @@
   .doc-page {
     page-break-after: always;
   }
+
+  /* 最後一頁不強制分頁，避免打印預覽多出空白頁 */
+  .doc-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
 }
 
 /* html2pdf 擷取時也需要明確分頁點（@media print 不會生效） */
 .is-printing-mode .doc-page {
   page-break-after: always;
   break-after: page;
+}
+
+/* PDF 擷取：最後一頁不強制分頁，避免多出空白頁 */
+.is-printing-mode .doc-page:last-child {
+  page-break-after: auto;
+  break-after: auto;
 }
 
 .doc-page {

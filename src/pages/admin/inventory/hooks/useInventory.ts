@@ -176,7 +176,25 @@ export function useInventoryMovements(productId: string | null, variantId: strin
         queryFn: async () => {
             let query: any = (supabase
                 .from('inventory_movements' as any) as any)
-                .select('*')
+                .select(`
+                    *,
+                    batch:product_batches!batch_id (
+                        id,
+                        purchase_order_id,
+                        purchase_orders:purchase_order_id (
+                            id,
+                            supplier_order_number
+                        )
+                    ),
+                    matched_batch:product_batches!matched_batch_id (
+                        id,
+                        purchase_order_id,
+                        purchase_orders:purchase_order_id (
+                            id,
+                            supplier_order_number
+                        )
+                    )
+                `)
                 .eq('product_id', productId)
                 .order('created_at', { ascending: false });
 
@@ -200,6 +218,8 @@ export function useInventoryMovements(productId: string | null, variantId: strin
                 batchId: m.batch_id || null,
                 matchedBatchId: m.matched_batch_id || null,
                 unitCost: m.unit_cost,
+                purchaseOrderCode: (m.batch?.purchase_orders?.supplier_order_number || m.matched_batch?.purchase_orders?.supplier_order_number) || null,
+                purchaseOrderId: (m.batch?.purchase_order_id || m.matched_batch?.purchase_order_id) || null,
             }));
         }
     });

@@ -156,16 +156,17 @@ function MovementsDialog({ open, onOpenChange, productId, variantId, name }: { o
                                 <TableHead className="text-xs">單號</TableHead>
                                 <TableHead className="text-xs">備註</TableHead>
                                 <TableHead className="text-xs">成本配對</TableHead>
+                                <TableHead className="text-xs">採購單號</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="text-center text-xs text-muted-foreground py-8">載入中...</TableCell>
+                                    <TableCell colSpan={8} className="text-center text-xs text-muted-foreground py-8">載入中...</TableCell>
                                 </TableRow>
                             ) : filtered.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="text-center text-xs text-muted-foreground py-8">暫無記錄</TableCell>
+                                    <TableCell colSpan={8} className="text-center text-xs text-muted-foreground py-8">暫無記錄</TableCell>
                                 </TableRow>
                             ) : (
                                 filtered.map((m: any) => (
@@ -207,6 +208,9 @@ function MovementsDialog({ open, onOpenChange, productId, variantId, name }: { o
                                                  m.costMatchStatus === 'reversed' ? '已回滾' :
                                                  m.costMatchStatus}
                                             </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-xs font-mono">
+                                            {m.purchaseOrderCode || '-'}
                                         </TableCell>
                                     </TableRow>
                                 ))
