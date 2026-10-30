@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Search, Filter, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -49,8 +49,25 @@ function serializeFilters(f: PublicFilters): URLSearchParams {
 export default function ShopPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get("q") ?? "");
+  const [localSearch, setLocalSearch] = useState(searchParams.get("q") ?? "");
   const [filters, setFiltersState] = useState<PublicFilters>(() => parseFilters(searchParams));
   const [sheetOpen, setSheetOpen] = useState(false);
+
+  // URL 的 q 變動時（分享連結/返回），同步輸入框與已 commit 的搜尋字
+  useEffect(() => {
+    const q = searchParams.get("q") ?? "";
+    setSearch(q);
+    setLocalSearch(q);
+  }, [searchParams]);
+
+  const commitSearch = (val: string) => {
+    const v = val.trim();
+    setSearch(v);
+    const sp = serializeFilters(filters);
+    if (v) sp.set("q", v);
+    else sp.delete("q");
+    setSearchParams(sp, { replace: true });
+  };
 
   const setFilters = (next: PublicFilters) => {
     setFiltersState(next);
@@ -85,17 +102,10 @@ export default function ShopPage() {
     });
   }, [products, filters.specFilters]);
 
-  const handleSearch = (val: string) => {
-    setSearch(val);
-    const sp = serializeFilters(filters);
-    if (val.trim()) sp.set("q", val.trim());
-    else sp.delete("q");
-    setSearchParams(sp, { replace: true });
-  };
-
   const clearAll = () => {
     setFilters(DEFAULT_FILTERS);
     setSearch("");
+    setLocalSearch("");
     setSearchParams(new URLSearchParams(), { replace: true });
   };
 
@@ -118,9 +128,16 @@ export default function ShopPage() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sf-muted" />
             <Input
-              value={search}
-              onChange={(e) => handleSearch(e.target.value)}
-              placeholder="搜尋商品名稱、品牌、分類..."
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitSearch(localSearch);
+                }
+              }}
+              onBlur={() => commitSearch(localSearch)}
+              placeholder="搜尋商品名稱、品牌、分類...（按 Enter 搜尋）"
               className="pl-9"
             />
           </div>
