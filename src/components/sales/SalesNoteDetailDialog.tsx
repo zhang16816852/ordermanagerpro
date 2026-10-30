@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from '@/lib/utils';
+import { costMatchLabel, costMatchColor } from '@/lib/costMatchStatus';
 import { Package, Check, CreditCard, Calendar, Store, Info, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
@@ -475,18 +476,12 @@ export function SalesNoteDetailDialog({
                                                     ) : (
                                                         `$${item.unitCost}`
                                                     )}
-                                                    {item.costMatchStatus && item.costMatchStatus !== 'fifo_confirmed' && (
+                                                    {item.costMatchStatus && item.costMatchStatus !== 'fifo_confirmed' && item.costMatchStatus !== 'confirmed' && item.costMatchStatus !== 'estimated' && (
                                                         <Badge variant="outline" className={cn(
                                                             "ml-1 text-[9px]",
-                                                            item.costMatchStatus === 'fifo_pending' ? "text-amber-600 border-amber-200" :
-                                                            item.costMatchStatus === 'fifo_partial' ? "text-blue-600 border-blue-200" :
-                                                            item.costMatchStatus === 'matched' ? "text-blue-600 border-blue-200" :
-                                                            "text-muted-foreground"
+                                                            costMatchColor(item.costMatchStatus)
                                                         )}>
-                                                            {item.costMatchStatus === 'fifo_pending' ? '待配對' :
-                                                             item.costMatchStatus === 'fifo_partial' ? '部分配對' :
-                                                             item.costMatchStatus === 'matched' ? '已配對' :
-                                                             item.costMatchStatus}
+                                                            {costMatchLabel(item.costMatchStatus)}
                                                         </Badge>
                                                     )}
                                                 </TableCell>

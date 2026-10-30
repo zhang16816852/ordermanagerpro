@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { ColumnDef } from '@tanstack/react-table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
+import { costMatchLabel, costMatchColor } from '@/lib/costMatchStatus';
 import { UseMutationResult } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -198,16 +199,9 @@ function MovementsDialog({ open, onOpenChange, productId, variantId, name }: { o
                                         <TableCell className="text-xs">
                                             <Badge variant="outline" className={cn(
                                                 "text-[10px] font-normal",
-                                                m.costMatchStatus === 'confirmed' ? "text-emerald-600 border-emerald-200" :
-                                                m.costMatchStatus === 'pending_match' ? "text-amber-600 border-amber-200" :
-                                                m.costMatchStatus === 'matched' ? "text-blue-600 border-blue-200" :
-                                                "text-muted-foreground"
+                                                costMatchColor(m.costMatchStatus)
                                             )}>
-                                                {m.costMatchStatus === 'confirmed' ? '已確認' :
-                                                 m.costMatchStatus === 'pending_match' ? '待配對' :
-                                                 m.costMatchStatus === 'matched' ? '已配對' :
-                                                 m.costMatchStatus === 'reversed' ? '已回滾' :
-                                                 m.costMatchStatus}
+                                                {costMatchLabel(m.costMatchStatus)}
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-xs font-mono">
