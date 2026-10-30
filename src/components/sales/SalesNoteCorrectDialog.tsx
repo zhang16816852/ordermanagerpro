@@ -26,7 +26,7 @@ export function SalesNoteCorrectDialog({
     const queryClient = useQueryClient();
     const { products } = useProductCache();
 
-    const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
+    const [keepQty, setKeepQty] = useState<Record<string, number>>({});
     const [addedFromPool, setAddedFromPool] = useState<Record<string, number>>({});
     const [addedFromOrder, setAddedFromOrder] = useState<Record<string, number>>({});
     const [newItems, setNewItems] = useState<CorrectNewItem[]>([]);
@@ -34,7 +34,7 @@ export function SalesNoteCorrectDialog({
 
     useEffect(() => {
         if (open) {
-            setRemovingIds(new Set());
+            setKeepQty({});
             setAddedFromPool({});
             setAddedFromOrder({});
             setNewItems([]);
@@ -47,9 +47,12 @@ export function SalesNoteCorrectDialog({
     // ─── 金額計算 ───
     const originalTotal = note ? note.items.reduce((sum, item) => sum + (item.quantity * (item.unitPrice || 0)), 0) : 0;
 
-    const totalRemoved = note ? note.items
-        .filter((item) => removingIds.has(item.id))
-        .reduce((sum, item) => sum + (item.quantity * (item.unitPrice || 0)), 0) : 0;
+    const totalRemoved = note ? note.items.reduce((sum, item) => {
+        const qty = item.quantity || 0;
+        const keep = keepQty[item.id] === undefined ? qty : keepQty[item.id];
+        const remove = Math.max(0, qty - keep);
+        return sum + remove * (item.unitPrice || 0);
+    }, 0) : 0;
 
     const totalAdded = useMemo(() => {
         const poolSum = Object.entries(addedFromPool).reduce((sum, [oiId, qty]) => {
@@ -107,20 +110,22 @@ export function SalesNoteCorrectDialog({
         });
     };
 
-    const toggleRemoving = (id: string) => {
-        setRemovingIds((prev) => {
-            const next = new Set(prev);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-        });
+    const handleKeepQtyChange = (id: string, val: number) => {
+        setKeepQty((prev) => ({ ...prev, [id]: val }));
     };
 
     // ─── Mutation ───
     const correctMutation = useMutation({
         mutationFn: async () => {
             if (!note) throw new Error("無銷貨單資料");
-            const itemsToRemove = Array.from(removingIds);
+            const itemsToRemove = (note?.items || [])
+                .map((it) => {
+                    const qty = it.quantity || 0;
+                    const keep = keepQty[it.id] === undefined ? qty : keepQty[it.id];
+                    const remove = Math.max(0, qty - keep);
+                    return remove > 0 ? { id: it.id, quantity: remove } : null;
+                })
+                .filter(Boolean);
             const itemsToAdd: CorrectAddItem[] = [
                 ...Object.entries(addedFromPool)
                     .map(([order_item_id, quantity]) => ({ order_item_id, quantity })),
@@ -159,8 +164,14 @@ export function SalesNoteCorrectDialog({
         },
     });
 
+    const hasRemovals = (note?.items || []).some((it) => {
+        const qty = it.quantity || 0;
+        const keep = keepQty[it.id] === undefined ? qty : keepQty[it.id];
+        return keep < qty;
+    });
+
     const hasChanges =
-        removingIds.size > 0 ||
+        hasRemovals ||
         Object.values(addedFromPool).some((q) => q > 0) ||
         Object.values(addedFromOrder).some((q) => q > 0) ||
         newItems.length > 0 ||
@@ -189,8 +200,8 @@ export function SalesNoteCorrectDialog({
 
                     <CorrectRemoveTable
                         items={note?.items || []}
-                        removingIds={removingIds}
-                        onToggle={toggleRemoving}
+                        keepQty={keepQty}
+                        onKeepQtyChange={handleKeepQtyChange}
                     />
 
                     <CorrectAddTable
@@ -213,7 +224,7 @@ export function SalesNoteCorrectDialog({
                         originalTotal={originalTotal}
                         correctedTotal={correctedTotal}
                         totalAdded={totalAdded}
-                        hasRemovals={removingIds.size > 0}
+                        hasRemovals={hasRemovals}
                         priceChanges={priceChanges}
                         priceChangeTotal={priceChangeTotal}
                         hasNewItems={newItems.length > 0}
