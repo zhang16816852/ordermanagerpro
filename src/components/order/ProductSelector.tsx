@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Filter } from 'lucide-react';
+import { Filter, RefreshCw } from 'lucide-react';
 import ProductCatalog from '@/components/products/catalog/ProductCatalog';
 import { CatalogSidebar } from '@/components/products/catalog/CatalogSidebar';
 import { ProductWithPricing } from '@/types/product';
@@ -26,6 +26,8 @@ interface ProductSelectorProps {
   selectedBrands: string[];
   onBrandChange: (v: string[]) => void;
   onClearFilters: () => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
   activePanel: PanelState;
   onTogglePanel: () => void;
   catalogSidebarMaxHeight?: number;
@@ -51,6 +53,8 @@ export function ProductSelector({
   selectedBrands,
   onBrandChange,
   onClearFilters,
+  onRefresh,
+  isRefreshing = false,
   activePanel,
   onTogglePanel,
   catalogSidebarMaxHeight = 520,
@@ -69,6 +73,11 @@ export function ProductSelector({
     <div className="flex items-center justify-between">
       <CardTitle className="text-base">商品選擇</CardTitle>
       <div className="flex items-center gap-2">
+        {onRefresh && (
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); onRefresh(); }} aria-label="重新整理商品清單" disabled={isRefreshing}>
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        )}
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); onFilterSheetToggle(); }}>
           <Filter className="h-4 w-4" />
         </Button>

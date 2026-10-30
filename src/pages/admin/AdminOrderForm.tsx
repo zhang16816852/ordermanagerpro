@@ -137,6 +137,8 @@ export default function AdminOrderForm() {
         selectedBrands={c.selectedBrandsParam}
         onBrandChange={c.handleBrandsChange}
         onClearFilters={c.handleClearFilters}
+        onRefresh={c.refreshProducts}
+        isRefreshing={c.isRefreshingProducts}
         activePanel={c.activePanel}
         onTogglePanel={() => c.setActivePanel(c.activePanel === 'products' ? null : 'products')}
         bare={bare}

@@ -79,7 +79,7 @@ export function useAdminOrderFormController() {
   // 建立模式依訂單類型分桶（分頁間草稿互不干擾），編輯模式獨立於建立中草稿
   const draftKey = isEditMode ? `_edit_${orderId}` : (storeId || `_admin_new_${orderType}`);
 
-  const { products: storeProducts, isLoading: productsLoading, templates } = useStoreProductCache(
+  const { products: storeProducts, isLoading: productsLoading, templates, refresh: refreshStoreProducts } = useStoreProductCache(
     orderType !== 'purchase' ? (storeId || null) : null,
     displayBrand || null,
     { includeShipping: true },
@@ -88,7 +88,7 @@ export function useAdminOrderFormController() {
   // 採購商品來源：整個商品目錄（不走 store_products 門市價）
   // 採購需可挑「維修零件」與運費型商品，故不套用 useStoreProductCache 的 item_type／隱藏過濾；
   // 單價一律以批發價（effective_wholesale_price）為預設成本，由供應商 mapping 於選供應商時覆寫。
-  const { products: allCachedProducts, isLoading: allProductsLoading } = useProductCache();
+  const { products: allCachedProducts, isLoading: allProductsLoading, refresh: refreshAllProducts } = useProductCache();
   const purchaseProducts = useMemo<ProductWithPricing[]>(() => {
     if (orderType !== 'purchase') return [];
     return (allCachedProducts || []).map((p: any) => ({
@@ -176,6 +176,7 @@ export function useAdminOrderFormController() {
   ]);
 
   // Product browsing state
+  const [isRefreshingProducts, setIsRefreshingProducts] = useState(false);
   const [activePanel, setActivePanel] = useState<'information' | 'delivery' | 'items' | 'products' | null>(null);
   const [mobileCatalogOpen, setMobileCatalogOpen] = useState(false);
   const [desktopCatalogOpen, setDesktopCatalogOpen] = useState(true);
@@ -302,6 +303,21 @@ export function useAdminOrderFormController() {
     toast.error(`此品項已收貨 ${item.receivedQuantity} 件，不可${action}`);
     return true;
   }, []);
+
+  // 手動重新整理商品清單（反映其他分頁新增/修改的產品，不需整頁 reload）
+  const refreshProducts = useCallback(async () => {
+    setIsRefreshingProducts(true);
+    try {
+      if (orderType === 'purchase') await refreshAllProducts();
+      else await refreshStoreProducts();
+      queryClient.invalidateQueries({ queryKey: ['store_products'] });
+      toast.success('商品清單已更新');
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setIsRefreshingProducts(false);
+    }
+  }, [orderType, refreshAllProducts, refreshStoreProducts, queryClient]);
 
   // Handlers
   const handleQuantityChange = useCallback((index: number, value: number) => {
@@ -718,6 +734,8 @@ export function useAdminOrderFormController() {
     draftKey,
     storeProducts: catalogProducts,
     productsLoading: catalogLoading,
+    refreshProducts,
+    isRefreshingProducts,
     draft,
     allDrafts,
     openDraft,
