@@ -25,7 +25,6 @@ export const siteBrand = {
    */
   nav: [
     { label: "商品目錄", href: "/shop" },
-    { label: "商品分類", href: "#categories" },
     { label: "精選商品", href: "#featured" },
     { label: "關於我們", href: "#about" },
   ],

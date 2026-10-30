@@ -34,6 +34,44 @@ export type PublicProduct = {
   brand_name: string | null;
   retail_price: number | null;
   image_url: string | null;
+  spec_values: Record<string, any> | null;
+};
+
+export type PublicCategoryNode = {
+  id: string;
+  parent_id: string | null;
+  name: string;
+  slug: string | null;
+  sort_order: number | null;
+  product_count: number;
+};
+
+export type PublicBrand = {
+  id: string;
+  name: string;
+  product_count: number;
+};
+
+export type PublicBrandSeries = {
+  brand_id: string;
+  brand_name: string;
+  series_id: string;
+  series_name: string;
+  product_count: number;
+};
+
+export type PublicDeviceModel = {
+  id: string;
+  name: string;
+  brand_id: string | null;
+  product_count: number;
+};
+
+export type PublicSpecOption = {
+  spec_id: string;
+  spec_name: string;
+  spec_type: string;
+  distinct_values: any[];
 };
 
 const STALE_MS = 5 * 60 * 1000;
@@ -54,15 +92,10 @@ export type PublicProductsParams = {
   categoryId?: string;
   productIds?: string[];
   limit?: number;
-  /**
-   * 每個產品只回一列（預設 true）。
-   *
-   * ⚠️ storefront_items 是「產品 × 變體 × 機型」矩陣，同一產品會有多列。
-   *    若不開這個開關，首頁取「前 N 列」會被字母序最前的那個產品整包霸佔
-   *    （實測：手機殼前 8 列只有 1 個產品、單價全是 200），畫面會是一排重複卡片。
-   *    未來 /shop 商品列表要看「同產品不同變體／機型」時才傳 false。
-   */
   distinctProducts?: boolean;
+  search?: string;
+  brandIds?: string[];
+  modelIds?: string[];
 };
 
 export function usePublicProducts({
@@ -70,27 +103,95 @@ export function usePublicProducts({
   productIds,
   limit = 12,
   distinctProducts = true,
+  search,
+  brandIds,
+  modelIds,
 }: PublicProductsParams = {}) {
   return useQuery({
-    // productIds 排序後入 key，避免呼叫端傳入順序不同就重打
     queryKey: [
       "public-products",
       categoryId ?? null,
       productIds?.length ? [...productIds].sort().join(",") : null,
       limit,
       distinctProducts,
+      search ?? null,
+      brandIds?.length ? [...brandIds].sort().join(",") : null,
+      modelIds?.length ? [...modelIds].sort().join(",") : null,
     ],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_public_products", {
-        // ⚠️ typegen 把這幾個參數標成 `?:`（非 `| null`），故用 undefined 而非 null；
-        //    省略時由 RPC 自己的 DEFAULT 接手，兩者行為一致。
         p_category_id: categoryId?.trim() ? categoryId : undefined,
         p_product_ids: productIds?.length ? productIds : undefined,
         p_limit: limit,
         p_distinct_products: distinctProducts,
+        p_search: search?.trim() ? search.trim() : undefined,
+        p_brand_ids: brandIds?.length ? brandIds : undefined,
+        p_model_ids: modelIds?.length ? modelIds : undefined,
       });
       if (error) throw error;
       return (data ?? []) as PublicProduct[];
+    },
+    staleTime: STALE_MS,
+  });
+}
+
+export function usePublicCategoryTree() {
+  return useQuery({
+    queryKey: ["public-category-tree"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.rpc as any)("get_public_category_tree");
+      if (error) throw error;
+      return (data ?? []) as PublicCategoryNode[];
+    },
+    staleTime: STALE_MS,
+  });
+}
+
+export function usePublicBrands() {
+  return useQuery({
+    queryKey: ["public-brands"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.rpc as any)("get_public_brands");
+      if (error) throw error;
+      return (data ?? []) as PublicBrand[];
+    },
+    staleTime: STALE_MS,
+  });
+}
+
+export function usePublicBrandSeries() {
+  return useQuery({
+    queryKey: ["public-brand-series"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.rpc as any)("get_public_brand_series");
+      if (error) throw error;
+      return (data ?? []) as PublicBrandSeries[];
+    },
+    staleTime: STALE_MS,
+  });
+}
+
+export function usePublicDeviceModels() {
+  return useQuery({
+    queryKey: ["public-device-models"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.rpc as any)("get_public_device_models");
+      if (error) throw error;
+      return (data ?? []) as PublicDeviceModel[];
+    },
+    staleTime: STALE_MS,
+  });
+}
+
+export function usePublicSpecOptions(categoryId?: string | null) {
+  return useQuery({
+    queryKey: ["public-spec-options", categoryId ?? null],
+    queryFn: async () => {
+      const { data, error } = await (supabase.rpc as any)("get_public_spec_options", {
+        p_category_id: categoryId ?? undefined,
+      });
+      if (error) throw error;
+      return (data ?? []) as PublicSpecOption[];
     },
     staleTime: STALE_MS,
   });
