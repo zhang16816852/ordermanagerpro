@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { usePublicProducts, type PublicProduct } from "@/storefront/usePublicCatalog";
 import { columnsClass } from "@/storefront/columns";
 import { ProductMedia } from "@/components/storefront/ProductMedia";
@@ -28,6 +29,7 @@ function ProductCard({ item, ratio }: { item: PublicProduct; ratio: "square" | "
   const hasPrice = item.retail_price !== null && item.retail_price > 0;
 
   return (
+    <Link to={`/shop/${item.product_id}`} className="block">
     <article className="group">
       <ProductMedia
         src={item.image_url}
@@ -61,6 +63,7 @@ function ProductCard({ item, ratio }: { item: PublicProduct; ratio: "square" | "
         </div>
       </div>
     </article>
+    </Link>
   );
 }
 

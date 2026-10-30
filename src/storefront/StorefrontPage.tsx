@@ -1,25 +1,46 @@
+import { useQuery } from "@tanstack/react-query";
 import { BlockRenderer } from "./blocks/BlockRenderer";
-import { storefrontBlocks } from "@/config/site";
+import { storefrontBlocks as fallbackBlocks } from "@/config/site";
+import { storefrontPageSchema } from "./blocks/schema";
+import { supabase } from "@/integrations/supabase/client";
 
 /**
  * 公開首頁
  * ------------------------------------------------------------
- * 內容來自 src/config/site.ts（經 zod safeParse）。日後換成後端 JSON 時，
- * 只要換掉 storefrontBlocks 這一個 import，這支元件不用動。
- *
- * 錨點由這裡統一套在 wrapper 上（而非各 block 內部），原因有兩個：
- * 1. 部分 block 在查詢失敗或無資料時會 `return null`（見 CategoryRail），
- *    若把 id 放在 block 內部，nav 的連結就會變成找不到目標的死連結。
- * 2. block 順序可被後台編輯器改動，id 跟著 block 走才不會指錯區塊。
- *
- * scroll-mt-16 = 對應 header 的 h-16，讓錨點定位時不被 sticky header 蓋住。
+ * 內容優先從 DB (storefront_pages, slug='home') 讀取；若 DB 無資料或讀取失敗，
+ * fallback 到 src/config/site.ts 的 defaultBlocks（經 zod safeParse）。
+ * 這樣 admin 編輯後前台重新整理即反映，DB 斷線時也不白畫面。
  */
+function useStorefrontBlocks() {
+  return useQuery({
+    queryKey: ["storefront-page", "home"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("storefront_pages")
+        .select("blocks")
+        .eq("slug", "home")
+        .maybeSingle();
+      if (error) throw error;
+      const raw = data?.blocks;
+      if (Array.isArray(raw) && raw.length > 0) {
+        const parsed = storefrontPageSchema.safeParse({ blocks: raw });
+        if (parsed.success) return parsed.data.blocks;
+      }
+      return null;
+    },
+    staleTime: 60_000,
+  });
+}
+
 export default function StorefrontPage() {
-  const blocks = storefrontBlocks.filter((b) => b.enabled);
+  const { data: dbBlocks } = useStorefrontBlocks();
+  const blocks = (dbBlocks && dbBlocks.length > 0 ? dbBlocks : fallbackBlocks).filter(
+    (b: any) => b.enabled,
+  );
 
   return (
     <main id="main" tabIndex={-1} className="outline-none">
-      {blocks.map((block, i) => (
+      {blocks.map((block: any, i: number) => (
         <div key={`${block.type}-${i}`} id={block.anchor} className={block.anchor ? "scroll-mt-16" : undefined}>
           <BlockRenderer block={block} />
         </div>

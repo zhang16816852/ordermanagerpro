@@ -3,6 +3,8 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import StorefrontPage from "@/storefront/StorefrontPage";
+import ShopPage from "@/pages/shop/ShopPage";
+import ShopProductDetailPage from "@/pages/shop/ShopProductDetailPage";
 
 import { adminRoutes } from "./admin";
 import { storeRoutes } from "./store";
@@ -20,6 +22,24 @@ export function AppRoutes() {
                 element={
                     <PublicLayout>
                         <StorefrontPage />
+                    </PublicLayout>
+                }
+            />
+
+            {/* 公開商品目錄（純目錄，不下單） */}
+            <Route
+                path="/shop"
+                element={
+                    <PublicLayout>
+                        <ShopPage />
+                    </PublicLayout>
+                }
+            />
+            <Route
+                path="/shop/:productId"
+                element={
+                    <PublicLayout>
+                        <ShopProductDetailPage />
                     </PublicLayout>
                 }
             />

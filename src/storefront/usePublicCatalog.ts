@@ -22,6 +22,7 @@ export type PublicCategory = {
 };
 
 export type PublicProduct = {
+  product_id: string;
   item_id: string;
   item_slug: string;
   product_name: string;

@@ -2,6 +2,16 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（公開商品目錄 + 首頁內容管理，2026-10-31）
+
+- **目的**：把公開首頁從「行銷頁」升級為「可用的公開商品目錄」，並讓 admin 後台可編輯首頁內容與商品前台顯示；純目錄模式，不開放下單。
+- **公開路由**：新增 `/shop`（`src/pages/shop/ShopPage.tsx`）與 `/shop/:productId`（`ShopProductDetailPage.tsx`），包 `PublicLayout`，匿名可瀏覽；首頁 `FeaturedProducts` 卡片改為連結到詳情頁；`siteBrand.nav` 新增「商品目錄」入口（支援路由 href）。
+- **資料源**：前台一律走 `get_public_products` RPC；migration `20261031000001` 在回傳加 `product_id` 供詳情頁聚合變體/機型；`usePublicCatalog.PublicProduct` 補 `product_id`。
+- **後台首頁編輯器**：新增 `/admin/storefront`（`src/pages/admin/storefront/StorefrontEditorPage.tsx`）+ nav「首頁內容」；DB 表 `storefront_pages`（slug/blocks jsonb）migration `20261031000002`（admin 全權、anon/authenticated SELECT）；`StorefrontPage` 改讀 DB，失敗/空時 fallback `site.ts` defaultBlocks（zod safeParse）。
+- **商品前台顯示**：沿用 `products.is_hidden`（產品表單 IdentificationFields 已有切換），public RPC 已排除 hidden；admin 後台可切換。
+- **安全收斂**：migration `20261031000003` revoke anon 對 `products`/`product_variants`/`store_products`/`stores` 的 SELECT，公開讀取一律走 RPC；不動 authenticated/RLS。
+- **驗證**：`npm run typecheck` 0 errors、`npm run build` 通過（4010 modules）；migration 已套用遠端（apply_migration success）。
+
 ## 近期變更（跨國採購模組 P1–P6 ＋ 採購單內建運費管理，2026-10-23）
 
 - **範圍**：依 `C:\Users\qaz20\.opencode\plan\cross-border-procurement-plan.md` 實作「跨國採購」模組：運費單據 → 落地成本分攤 → 外幣付款 → 成本回溯重算。**第二批（同日）改為「單張採購單自我完足」**：運費管理移入採購單明細對話框，`/admin/cross-border` 轉型為純「集運倉管理」。

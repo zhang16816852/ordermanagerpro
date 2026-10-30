@@ -105,11 +105,17 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
           </Link>
 
           <nav aria-label="主要" className="hidden items-center gap-8 md:flex">
-            {siteBrand.nav.map((item) => (
-              <a key={item.label} href={item.href} className="sf-link-underline text-[0.9375rem]">
-                {item.label}
-              </a>
-            ))}
+            {siteBrand.nav.map((item) =>
+              item.href.startsWith("/") ? (
+                <Link key={item.label} to={item.href} className="sf-link-underline text-[0.9375rem]">
+                  {item.label}
+                </Link>
+              ) : (
+                <a key={item.label} href={item.href} className="sf-link-underline text-[0.9375rem]">
+                  {item.label}
+                </a>
+              ),
+            )}
             <WorkspaceLink />
           </nav>
 
@@ -128,16 +134,27 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       {menuOpen ? (
         <div className="fixed inset-x-0 bottom-0 top-16 z-30 overflow-y-auto bg-sf-paper md:hidden">
           <nav aria-label="行動版主要" className="sf-container flex flex-col gap-1 py-8">
-            {siteBrand.nav.map((item) => (
-              <a
-                key={item.label}
-                href={item.href}
-                onClick={() => setMenuOpen(false)}
-                className="border-b border-[color:var(--sf-line)] py-4 text-lg text-sf-text"
-              >
-                {item.label}
-              </a>
-            ))}
+            {siteBrand.nav.map((item) =>
+              item.href.startsWith("/") ? (
+                <Link
+                  key={item.label}
+                  to={item.href}
+                  onClick={() => setMenuOpen(false)}
+                  className="border-b border-[color:var(--sf-line)] py-4 text-lg text-sf-text"
+                >
+                  {item.label}
+                </Link>
+              ) : (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  onClick={() => setMenuOpen(false)}
+                  className="border-b border-[color:var(--sf-line)] py-4 text-lg text-sf-text"
+                >
+                  {item.label}
+                </a>
+              ),
+            )}
             <div className="pt-6">
               <WorkspaceLink />
             </div>
@@ -156,11 +173,17 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             </div>
 
             <nav aria-label="頁尾" className="flex flex-col gap-2">
-              {siteBrand.nav.map((item) => (
-                <a key={item.label} href={item.href} className="sf-link-underline text-sm text-sf-muted">
-                  {item.label}
-                </a>
-              ))}
+              {siteBrand.nav.map((item) =>
+                item.href.startsWith("/") ? (
+                  <Link key={item.label} to={item.href} className="sf-link-underline text-sm text-sf-muted">
+                    {item.label}
+                  </Link>
+                ) : (
+                  <a key={item.label} href={item.href} className="sf-link-underline text-sm text-sf-muted">
+                    {item.label}
+                  </a>
+                ),
+              )}
             </nav>
           </div>
 

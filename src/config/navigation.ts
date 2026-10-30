@@ -15,6 +15,7 @@ import {
   PlusCircle,
   Wallet,
   Globe,
+  Layout,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -34,6 +35,7 @@ export const adminNavItems: NavItem[] = [
   { title: '維修管理', href: '/admin/repair-orders', icon: Wrench },
   { title: '維修零件', href: '/admin/repair-parts', icon: Wrench },
   { title: '分類管理', href: '/admin/categories', icon: Layers },
+  { title: '首頁內容', href: '/admin/storefront', icon: Layout },
   { title: '連鎖客戶價格', href: '/admin/brand-pricing', icon: ShoppingCart },
   { title: '所有訂單', href: '/admin/orders', icon: ClipboardList },
   { title: '建立新單據', href: '/admin/orders/checkout', icon: PlusCircle },
