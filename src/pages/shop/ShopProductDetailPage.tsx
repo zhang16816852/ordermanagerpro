@@ -105,6 +105,9 @@ export default function ShopProductDetailPage() {
                             ? v.variant_name
                             : v.model_name || "標準規格"}
                         </div>
+                        {v.variant_sku && (
+                          <div className="truncate text-[0.6875rem] text-sf-muted/70">SKU: {v.variant_sku}</div>
+                        )}
                         {v.model_name && v.variant_name && v.variant_name !== v.product_name && (
                           <div className="truncate text-xs text-sf-muted">{v.model_name}</div>
                         )}

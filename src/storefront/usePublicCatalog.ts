@@ -34,6 +34,9 @@ export type PublicProduct = {
   brand_name: string | null;
   retail_price: number | null;
   image_url: string | null;
+  product_code: string | null;
+  variant_sku: string | null;
+  variant_barcode: string | null;
   spec_values: Record<string, any> | null;
 };
 
