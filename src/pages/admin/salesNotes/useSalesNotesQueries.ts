@@ -84,6 +84,7 @@ export function useSalesNotesQueries({
               variant_id,
               line_type,
               line_note,
+              cost_match_status,
               order:orders(code),
               product:products(name, code),
               product_variant:product_variants(name, sku)

@@ -319,6 +319,7 @@ export function useSalesNotesData({
             costKnown: bizLine ? bizLine.costKnown : line?.costKnown ?? false,
             lineType: item.order_item?.line_type,
             lineNote: item.order_item?.line_note,
+            costMatchStatus: item.order_item?.cost_match_status,
             sortOrder: item.sort_order ?? 0,
           };
         })

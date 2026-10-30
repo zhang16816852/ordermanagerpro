@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Home } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NotificationDropdown } from './NotificationDropdown';
 import type { PageHeaderConfig } from './PageHeaderContext';
@@ -53,6 +53,9 @@ export function DesktopHeader({ isExpanded, onToggleCollapse, pageHeader }: Desk
       </div>
       <div className="flex items-center gap-4">
         {showActions && pageHeader?.actions}
+        <Button variant="ghost" size="icon" onClick={() => navigate("/")} aria-label="返回首頁" className="h-8 w-8 shrink-0">
+          <Home className="h-4 w-4" />
+        </Button>
         <NotificationDropdown />
       </div>
     </header>

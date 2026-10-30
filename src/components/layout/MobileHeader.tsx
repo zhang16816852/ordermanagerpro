@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Home } from 'lucide-react';
 import { NotificationDropdown } from './NotificationDropdown';
 import { MobileSidebar } from './MobileSidebar';
 import type { NavItem } from '@/config/navigation';
@@ -46,6 +46,9 @@ export function MobileHeader({ navItems, sidebarOpen, onSidebarOpenChange, pageH
         )
       )}
       {pageHeader?.actions && <div className="shrink-0">{pageHeader.actions}</div>}
+      <Button variant="ghost" size="icon" onClick={() => navigate("/")} aria-label="返回首頁" className="h-8 w-8 shrink-0">
+        <Home className="h-4 w-4" />
+      </Button>
       <NotificationDropdown />
     </header>
   );

@@ -25,6 +25,7 @@ export interface SalesNoteItemOrderItem {
   variant_id: string | null;
   line_type: "sale" | "exchange" | "return" | null;
   line_note: string | null;
+  cost_match_status: string | null;
   order?: { code: string | null } | null;
   product?: { name: string | null; code: string | null } | null;
   product_variant?: { name: string | null; sku: string | null } | null;

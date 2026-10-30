@@ -150,6 +150,7 @@ export default function StoreSalesNotes() {
               unit_cost,
               line_type,
               line_note,
+              cost_match_status,
               product:products (name, code),
               product_variant:product_variants (name)
             )
@@ -434,6 +435,7 @@ export default function StoreSalesNotes() {
             unitPrice: (item as any).order_items?.unit_price,
             unitCost: bizLine ? bizLine.unitCost : line?.cost ?? null,
             costKnown: bizLine ? bizLine.costKnown : line?.costKnown ?? false,
+            costMatchStatus: (item as any).order_items?.cost_match_status,
             lineType: (item as any).order_items?.line_type,
             lineNote: (item as any).order_items?.line_note,
             sortOrder: (item as any).sort_order ?? 0,

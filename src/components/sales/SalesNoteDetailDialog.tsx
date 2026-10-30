@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { cn } from '@/lib/utils';
 import { Package, Check, CreditCard, Calendar, Store, Info, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { zhTW } from "date-fns/locale";
@@ -36,6 +37,8 @@ export interface SalesNoteItem {
     unitCost?: number | null;
     /** 該品項成本是否已知（false 時毛利不可計算） */
     costKnown?: boolean;
+    /** FIFO 成本配對狀態 */
+    costMatchStatus?: string | null;
     sortOrder?: number;
     returnedQuantity?: number;
     lineType?: "sale" | "exchange" | "return" | null;
@@ -471,6 +474,20 @@ export function SalesNoteDetailDialog({
                                                         <span className="text-amber-600" title="查無對照廠商或有效採購單，無法計算毛利">成本未知</span>
                                                     ) : (
                                                         `$${item.unitCost}`
+                                                    )}
+                                                    {item.costMatchStatus && item.costMatchStatus !== 'fifo_confirmed' && (
+                                                        <Badge variant="outline" className={cn(
+                                                            "ml-1 text-[9px]",
+                                                            item.costMatchStatus === 'fifo_pending' ? "text-amber-600 border-amber-200" :
+                                                            item.costMatchStatus === 'fifo_partial' ? "text-blue-600 border-blue-200" :
+                                                            item.costMatchStatus === 'matched' ? "text-blue-600 border-blue-200" :
+                                                            "text-muted-foreground"
+                                                        )}>
+                                                            {item.costMatchStatus === 'fifo_pending' ? '待配對' :
+                                                             item.costMatchStatus === 'fifo_partial' ? '部分配對' :
+                                                             item.costMatchStatus === 'matched' ? '已配對' :
+                                                             item.costMatchStatus}
+                                                        </Badge>
                                                     )}
                                                 </TableCell>
                                             )}
