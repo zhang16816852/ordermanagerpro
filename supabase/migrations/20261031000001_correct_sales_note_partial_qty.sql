@@ -282,8 +282,7 @@ BEGIN
         DELETE FROM public.sales_note_items WHERE id = v_sni.id;
       ELSE
         UPDATE public.sales_note_items
-        SET quantity = quantity - v_remove_qty,
-            updated_at = NOW()
+        SET quantity = quantity - v_remove_qty
         WHERE id = v_sni.id;
       END IF;
 
@@ -532,7 +531,7 @@ BEGIN
       'store_id', (SELECT store_id FROM public.sales_notes WHERE id = p_sales_note_id)
     )
   );
-    PERFORM public.notify_admins(p_sales_note_id, NULL, '/admin/sales-notes');
+    PERFORM public.notify_admins('銷貨單已修正', '銷貨單 ' || (SELECT code FROM public.sales_notes WHERE id = p_sales_note_id) || ' 已修正', '/admin/sales-notes', (SELECT store_id FROM public.sales_notes WHERE id = p_sales_note_id));
 
   -- 對稱升降級：全數已出貨（含 return 豁免）→ shipped；
   -- 已無任何已出貨/部分出貨 item 且訂單仍為 shipped → 降回 processing（與 delete_sales_note 一致）
