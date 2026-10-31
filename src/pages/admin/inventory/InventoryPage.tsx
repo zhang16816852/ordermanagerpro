@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import WarehousesTab from './components/WarehousesTab';
 import BatchesTab from './components/BatchesTab';
 import { ReconcileDialog } from './components/ReconcileDialog';
+import { StocktakeDialog } from './components/StocktakeDialog';
 
 const SOURCE_TYPE_LABELS: Record<string, string> = {
     purchase_receipt: '採購入庫',
@@ -83,12 +84,33 @@ function QuantityCell({ row, updateInventory }: { row: any; updateInventory: Use
                             <span className="font-mono tabular-nums font-bold text-lg">{val}</span>
                         </div>
                         <div className="space-y-1.5">
-                            <Label htmlFor="adjust-note" className="text-xs text-muted-foreground">調整原因（選填）</Label>
+                            <Label htmlFor="adjust-reason" className="text-xs text-muted-foreground">調整原因</Label>
+                            <select
+                                id="adjust-reason"
+                                defaultValue=""
+                                onChange={(e) => {
+                                    const v = e.target.value;
+                                    if (v && v !== 'other') setAdjustNote(v);
+                                    else if (v === 'other') setAdjustNote('');
+                                }}
+                                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                            >
+                                <option value="">請選擇原因...</option>
+                                <option value="盤點差異">盤點差異</option>
+                                <option value="破損報廢">破損報廢</option>
+                                <option value="遺失">遺失</option>
+                                <option value="退貨補正">退貨補正</option>
+                                <option value="系統校正">系統校正</option>
+                                <option value="other">其他（手動輸入）</option>
+                            </select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="adjust-note" className="text-xs text-muted-foreground">補充說明（選填）</Label>
                             <Input
                                 id="adjust-note"
                                 value={adjustNote}
                                 onChange={(e) => setAdjustNote(e.target.value)}
-                                placeholder="例：盤點差異、破損報廢..."
+                                placeholder="可輸入更詳細的調整原因..."
                                 className="text-sm"
                             />
                         </div>
@@ -226,6 +248,13 @@ export default function AdminInventory() {
         setSearch,
         lowStockOnly,
         setLowStockOnly,
+        warehouseFilter,
+        setWarehouseFilter,
+        stockStatusFilter,
+        setStockStatusFilter,
+        itemTypeFilter,
+        setItemTypeFilter,
+        warehouses,
         pageIndex,
         pageSize,
         setPageIndex,
@@ -234,7 +263,17 @@ export default function AdminInventory() {
     } = useInventory();
 
     const [movementsTarget, setMovementsTarget] = useState<{ productId: string; variantId: string | null; name: string } | null>(null);
-const [reconcileOpen, setReconcileOpen] = useState(false);
+    const [reconcileOpen, setReconcileOpen] = useState(false);
+    const [stocktakeOpen, setStocktakeOpen] = useState(false);
+
+    const stocktakeItems = useMemo(() => inventory.map((i: any) => ({
+        id: i.id,
+        name: i.name,
+        code: i.code,
+        quantity: i.quantity,
+        warehouseName: i.warehouseName,
+        warehouseCode: i.warehouseCode,
+    })), [inventory]);
 
     const columns: ColumnDef<any>[] = [
         {
@@ -393,6 +432,14 @@ const [reconcileOpen, setReconcileOpen] = useState(false);
                                 <ShieldCheck className="mr-2 h-4 w-4" />
                                 FIFO 驗算
                             </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setStocktakeOpen(true)}
+                            >
+                                <PackageSearch className="mr-2 h-4 w-4" />
+                                系統盤點
+                            </Button>
                         </div>
                         <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
                             <RefreshCw className="mr-2 h-4 w-4" />
@@ -411,7 +458,7 @@ const [reconcileOpen, setReconcileOpen] = useState(false);
                             />
                         </div>
 
-                        <div className="flex items-center gap-4 w-full md:w-auto">
+                        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                             <div className="flex items-center space-x-2">
                                 <Checkbox 
                                     id="low-stock" 
@@ -422,12 +469,47 @@ const [reconcileOpen, setReconcileOpen] = useState(false);
                                     htmlFor="low-stock" 
                                     className="text-sm font-medium leading-none cursor-pointer flex items-center gap-1"
                                 >
-                                    僅顯示低庫存項目
+                                    僅顯示低庫存
                                     <Badge variant="secondary" className="text-[9px] h-4 px-1">
                                         ≤ 5
                                     </Badge>
                                 </label>
                             </div>
+
+                            <select
+                                value={warehouseFilter}
+                                onChange={(e) => setWarehouseFilter(e.target.value)}
+                                className="h-9 rounded-md border border-input bg-background px-3 text-xs"
+                            >
+                                <option value="all">全部倉庫</option>
+                                {warehouses.map(w => (
+                                    <option key={w.code} value={w.code}>{w.name}（{w.code}）</option>
+                                ))}
+                            </select>
+
+                            <select
+                                value={stockStatusFilter}
+                                onChange={(e) => setStockStatusFilter(e.target.value)}
+                                className="h-9 rounded-md border border-input bg-background px-3 text-xs"
+                            >
+                                <option value="all">全部狀態</option>
+                                <option value="negative">負數（異常）</option>
+                                <option value="zero">零庫存</option>
+                                <option value="low">低庫存（1-5）</option>
+                                <option value="normal">充足（&gt;5）</option>
+                            </select>
+
+                            <select
+                                value={itemTypeFilter}
+                                onChange={(e) => setItemTypeFilter(e.target.value)}
+                                className="h-9 rounded-md border border-input bg-background px-3 text-xs"
+                            >
+                                <option value="all">全部類型</option>
+                                <option value="product">一般商品</option>
+                                <option value="packaging">包裝材料</option>
+                                <option value="repair_part">維修零件</option>
+                                <option value="shipping">運費（不應出現）</option>
+                            </select>
                         </div>
                     </div>
 
@@ -451,6 +533,14 @@ const [reconcileOpen, setReconcileOpen] = useState(false);
                         />
                     )}
                     <ReconcileDialog open={reconcileOpen} onOpenChange={setReconcileOpen} />
+                    <StocktakeDialog
+                        open={stocktakeOpen}
+                        onOpenChange={setStocktakeOpen}
+                        items={stocktakeItems}
+                        warehouses={warehouses}
+                        updateInventory={updateInventory}
+                        isPending={updateInventory.isPending}
+                    />
                 </TabsContent>
 
                 <TabsContent value="warehouses" className="mt-6">

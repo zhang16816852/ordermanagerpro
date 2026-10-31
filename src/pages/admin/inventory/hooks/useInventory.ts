@@ -13,6 +13,9 @@ export function useInventory() {
     const [searchParams, setSearchParams] = useSearchParams();
     const [search, setSearch] = useState(searchParams.get('search') || '');
     const [lowStockOnly, setLowStockOnly] = useState(searchParams.get('lowStock') === 'true');
+    const [warehouseFilter, setWarehouseFilter] = useState(searchParams.get('wh') || 'all');
+    const [stockStatusFilter, setStockStatusFilter] = useState(searchParams.get('status') || 'all');
+    const [itemTypeFilter, setItemTypeFilter] = useState(searchParams.get('type') || 'all');
     const { user } = useAuth();
 
     const { data: inventory = [], isLoading } = useQuery({
@@ -29,7 +32,8 @@ export function useInventory() {
                     warehouse_id,
                     products (
                         name,
-                        code
+                        code,
+                        item_type
                     ),
                     suspense_quantity,
                     product_variants (
@@ -68,20 +72,33 @@ export function useInventory() {
             warehouseId: item.warehouse_id,
             warehouseCode: wh?.code || 'own',
             warehouseName: wh?.name || '自有倉庫',
+            itemType: product?.item_type || 'product',
             original: item
         };
     });
 
     const filteredData = formattedData
         .filter(item => {
-            const matchesSearch = 
-                item.name.toLowerCase().includes(search.toLowerCase()) || 
+            const matchesSearch =
+                item.name.toLowerCase().includes(search.toLowerCase()) ||
                 item.code.toLowerCase().includes(search.toLowerCase());
-             
-            if (lowStockOnly) {
-                return matchesSearch && item.isLowStock;
+
+            if (!matchesSearch) return false;
+
+            if (lowStockOnly && !item.isLowStock) return false;
+
+            if (warehouseFilter !== 'all' && item.warehouseCode !== warehouseFilter) return false;
+
+            if (itemTypeFilter !== 'all' && item.itemType !== itemTypeFilter) return false;
+
+            if (stockStatusFilter !== 'all') {
+                if (stockStatusFilter === 'negative' && !(item.quantity < 0)) return false;
+                if (stockStatusFilter === 'zero' && item.quantity !== 0) return false;
+                if (stockStatusFilter === 'low' && !(item.quantity > 0 && item.quantity <= 5)) return false;
+                if (stockStatusFilter === 'normal' && !(item.quantity > 5)) return false;
             }
-            return matchesSearch;
+
+            return true;
         })
         .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
 
@@ -157,6 +174,43 @@ export function useInventory() {
         }, { replace: true });
     };
 
+    const updateWarehouseFilter = (value: string) => {
+        setWarehouseFilter(value);
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            if (value && value !== 'all') next.set('wh', value);
+            else next.delete('wh');
+            next.delete('page');
+            return next;
+        }, { replace: true });
+    };
+
+    const updateStockStatusFilter = (value: string) => {
+        setStockStatusFilter(value);
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            if (value && value !== 'all') next.set('status', value);
+            else next.delete('status');
+            next.delete('page');
+            return next;
+        }, { replace: true });
+    };
+
+    const updateItemTypeFilter = (value: string) => {
+        setItemTypeFilter(value);
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            if (value && value !== 'all') next.set('type', value);
+            else next.delete('type');
+            next.delete('page');
+            return next;
+        }, { replace: true });
+    };
+
+    const warehouses: { code: string; name: string }[] = Array.from(
+        new Map(formattedData.map(i => [i.warehouseCode, i.warehouseName])).entries()
+    ).map(([code, name]) => ({ code: code as string, name: name as string }));
+
     return {
         inventory: filteredData,
         isLoading,
@@ -164,6 +218,13 @@ export function useInventory() {
         setSearch: updateSearch,
         lowStockOnly,
         setLowStockOnly: updateLowStockOnly,
+        warehouseFilter,
+        setWarehouseFilter: updateWarehouseFilter,
+        stockStatusFilter,
+        setStockStatusFilter: updateStockStatusFilter,
+        itemTypeFilter,
+        setItemTypeFilter: updateItemTypeFilter,
+        warehouses,
         pageIndex,
         pageSize: PAGE_SIZE,
         totalPages,
