@@ -572,6 +572,7 @@ export default function AdminRepairOrderForm() {
 
       <div className="lg:hidden space-y-3">
         {customerCard}
+        {statusCard}
         {blocks.map((b, i) => (
           <DeviceBlockSection
             key={b.key}
