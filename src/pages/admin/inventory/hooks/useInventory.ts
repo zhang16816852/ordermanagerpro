@@ -72,16 +72,18 @@ export function useInventory() {
         };
     });
 
-    const filteredData = formattedData.filter(item => {
-        const matchesSearch = 
-            item.name.toLowerCase().includes(search.toLowerCase()) || 
-            item.code.toLowerCase().includes(search.toLowerCase());
-        
-        if (lowStockOnly) {
-            return matchesSearch && item.isLowStock;
-        }
-        return matchesSearch;
-    });
+    const filteredData = formattedData
+        .filter(item => {
+            const matchesSearch = 
+                item.name.toLowerCase().includes(search.toLowerCase()) || 
+                item.code.toLowerCase().includes(search.toLowerCase());
+             
+            if (lowStockOnly) {
+                return matchesSearch && item.isLowStock;
+            }
+            return matchesSearch;
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
 
     const totalPages = Math.max(1, Math.ceil(filteredData.length / PAGE_SIZE));
     const pageParam = parseInt(searchParams.get('page') || '1', 10);
