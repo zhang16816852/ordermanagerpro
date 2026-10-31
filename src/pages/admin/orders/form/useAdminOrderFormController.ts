@@ -37,7 +37,7 @@ export function useAdminOrderFormController() {
   const isPurchaseEdit = isEditMode && /^\/admin\/purchase-orders\/[^/]+\/edit\/?$/.test(location.pathname);
 
   // Unified order type
-  const [orderType, setOrderType] = useState<'sales' | 'purchase' | 'consignment_receive' | 'consignment_send'>(
+  const [orderType, setOrderType] = useState<'sales' | 'purchase' | 'purchase_return' | 'consignment_receive' | 'consignment_send'>(
     isPurchaseEdit ? 'purchase' : ((searchParams.get('type') as any) || 'sales')
   );
   const [supplierId, setSupplierId] = useState('');
@@ -80,7 +80,7 @@ export function useAdminOrderFormController() {
   const draftKey = isEditMode ? `_edit_${orderId}` : (storeId || `_admin_new_${orderType}`);
 
   const { products: storeProducts, isLoading: productsLoading, templates, refresh: refreshStoreProducts } = useStoreProductCache(
-    orderType !== 'purchase' ? (storeId || null) : null,
+    (orderType === 'purchase' || orderType === 'purchase_return') ? null : (storeId || null),
     displayBrand || null,
     { includeShipping: true },
   );
@@ -90,7 +90,7 @@ export function useAdminOrderFormController() {
   // 單價一律以批發價（effective_wholesale_price）為預設成本，由供應商 mapping 於選供應商時覆寫。
   const { products: allCachedProducts, isLoading: allProductsLoading, refresh: refreshAllProducts } = useProductCache();
   const purchaseProducts = useMemo<ProductWithPricing[]>(() => {
-    if (orderType !== 'purchase') return [];
+    if (orderType !== 'purchase' && orderType !== 'purchase_return') return [];
     return (allCachedProducts || []).map((p: any) => ({
       ...p,
       wholesale_price: p.wholesale_price ?? 0,
@@ -107,8 +107,10 @@ export function useAdminOrderFormController() {
   }, [orderType, allCachedProducts]);
 
   // 採購走整個商品目錄，其餘類型走門市商品（useStoreProductCache）
-  const catalogProducts = orderType === 'purchase' ? purchaseProducts : storeProducts;
-  const catalogLoading = orderType === 'purchase' ? allProductsLoading : productsLoading;
+  const isPurchase = orderType === 'purchase' || orderType === 'purchase_return';
+  const isPurchaseReturn = orderType === 'purchase_return';
+  const catalogProducts = isPurchase ? purchaseProducts : storeProducts;
+  const catalogLoading = isPurchase ? allProductsLoading : productsLoading;
 
   const draft = useStoreDraft(draftKey);
   const allDrafts = useOrderDraftStore((s) => s.drafts);
@@ -308,7 +310,7 @@ export function useAdminOrderFormController() {
   const refreshProducts = useCallback(async () => {
     setIsRefreshingProducts(true);
     try {
-      if (orderType === 'purchase') await refreshAllProducts();
+      if (isPurchase) await refreshAllProducts();
       else await refreshStoreProducts();
       queryClient.invalidateQueries({ queryKey: ['store_products'] });
       toast.success('商品清單已更新');
@@ -474,6 +476,7 @@ export function useAdminOrderFormController() {
     toggleConsignmentModeMutation,
     directShipMutation,
     createPurchaseOrderMutation,
+    createPurchaseReturnMutation,
     createConsignmentReceiveMutation,
     createConsignmentSendMutation,
     previewPoQuantities,
@@ -514,6 +517,8 @@ export function useAdminOrderFormController() {
   const handleOrderTypeChange = useCallback((next: string) => {
     if (isPurchaseEdit) return;
     setOrderType(next as typeof orderType);
+    if (next === 'purchase_return') setPurchasePurpose('purchase_return');
+    if (next === 'purchase') setPurchasePurpose('general');
     setSearchParams(
       (prev) => {
         const p = new URLSearchParams(prev);
@@ -534,7 +539,7 @@ export function useAdminOrderFormController() {
   }, [isEditMode, toggleConsignmentModeMutation]);
 
   const navigateBack = useCallback(() => {
-    if (orderType === 'purchase') navigate('/admin/purchase-orders');
+    if (isPurchase) navigate('/admin/purchase-orders');
     else if (orderType === 'consignment_receive' || orderType === 'consignment_send') navigate('/admin/consignment');
     else navigate(listReturnTo(window.location.search));
   }, [orderType, navigate]);
@@ -697,6 +702,8 @@ export function useAdminOrderFormController() {
     user,
     orderType,
     setOrderType,
+    isPurchaseReturn,
+    isPurchase: orderType === 'purchase' || orderType === 'purchase_return',
     handleOrderTypeChange,
     supplierId,
     setSupplierId,
@@ -807,6 +814,7 @@ export function useAdminOrderFormController() {
     toggleConsignmentModeMutation,
     directShipMutation,
     createPurchaseOrderMutation,
+    createPurchaseReturnMutation,
     createConsignmentReceiveMutation,
     createConsignmentSendMutation,
     isSubmitting,

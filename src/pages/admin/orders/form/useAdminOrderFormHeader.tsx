@@ -20,7 +20,7 @@ export const statusLabels: Record<string, { label: string; className: string }> 
 
 interface UseAdminOrderFormHeaderParams {
   isEditMode: boolean;
-  orderType: 'sales' | 'purchase' | 'consignment_receive' | 'consignment_send';
+  orderType: 'sales' | 'purchase' | 'purchase_return' | 'consignment_receive' | 'consignment_send';
   /** 採購編輯（/admin/purchase-orders/:id/edit）：標題/返回/狀態列皆改採購語意 */
   isPurchaseEdit?: boolean;
   orderIdVal?: string;
@@ -61,6 +61,7 @@ export function useAdminOrderFormHeader(params: UseAdminOrderFormHeaderParams) {
       ? (isPurchaseEdit ? '編輯採購單' : '編輯訂單')
       : (orderType === 'sales' ? '建立銷售訂單' :
         orderType === 'purchase' ? '建立採購單' :
+        orderType === 'purchase_return' ? '建立採購退貨單' :
           orderType === 'consignment_receive' ? '建立寄賣收貨單' :
             '建立寄賣出貨單'
       );
@@ -68,14 +69,15 @@ export function useAdminOrderFormHeader(params: UseAdminOrderFormHeaderParams) {
 
     const typeBadgeElem = !isEditMode || isPurchaseEdit ? (
       <Badge variant="outline" className={
-        orderType === 'purchase' ? 'border-blue-500 text-blue-500' :
+        orderType === 'purchase' || orderType === 'purchase_return' ? 'border-blue-500 text-blue-500' :
           orderType === 'consignment_receive' ? 'border-purple-500 text-purple-500' :
             orderType === 'consignment_send' ? 'border-orange-500 text-orange-500' :
               ''
       }>
         {orderType === 'sales' ? '銷售' :
           orderType === 'purchase' ? '採購' :
-            orderType === 'consignment_receive' ? '寄賣收貨' : '寄賣出貨'}
+            orderType === 'purchase_return' ? '採購退貨' :
+              orderType === 'consignment_receive' ? '寄賣收貨' : '寄賣出貨'}
       </Badge>
     ) : null;
 
@@ -93,7 +95,8 @@ export function useAdminOrderFormHeader(params: UseAdminOrderFormHeaderParams) {
             {isEditMode ? (orderCodeVal || orderIdVal) : (
               orderType === 'sales' ? (displayStoreName ? `(${displayStoreName})` : '') :
                 orderType === 'purchase' ? '(採購)' :
-                  orderType === 'consignment_receive' ? '(寄賣收貨)' : '(寄賣出貨)'
+                  orderType === 'purchase_return' ? '(採購退貨)' :
+                    orderType === 'consignment_receive' ? '(寄賣收貨)' : '(寄賣出貨)'
             )}
           </span>
         </div>

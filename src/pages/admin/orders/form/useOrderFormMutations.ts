@@ -341,9 +341,13 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         throw err;
       }
 
-      // 配送類型：RPC 不動 delivery 欄位，另以一般 update 寫入
+      // 配送類型與出貨時間：RPC 不動這些欄位，另以一般 update 寫入
       const deliveryTypeVal = getDeliveryType();
-      const dw = (supabase.from('orders') as any).update({ delivery_type: deliveryTypeVal || null }).eq('id', orderId);
+      const updatePayload: Record<string, any> = { delivery_type: deliveryTypeVal || null };
+      if (shippedAt) {
+        updatePayload.shipped_at = new Date(shippedAt).toISOString();
+      }
+      const dw = (supabase.from('orders') as any).update(updatePayload).eq('id', orderId);
       const snapResult = await dw;
       if (snapResult.error) throw snapResult.error;
 
@@ -728,6 +732,45 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     },
   });
 
+  // --- Purchase Return mutation ---
+  const createPurchaseReturnMutation = useMutation({
+    mutationFn: async () => {
+      const currentItems = itemsRef.current;
+      const currentNotes = notesRef.current;
+      if (currentItems.length === 0) throw new Error('請至少新增一項產品');
+      if (!supplierId) throw new Error('請選擇供應商');
+
+      const payload = buildPoItemsPayload(currentItems).map(({ id: _id, source_order_ids: _s, source_quantities: _q, ...rest }) => ({
+        product_id: rest.product_id,
+        variant_id: rest.variant_id,
+        quantity: rest.quantity,
+        unit_cost: rest.unit_cost,
+      }));
+
+      const { data, error } = await (supabase.rpc as any)('create_purchase_return_with_items', {
+        p_supplier_id: supplierId,
+        p_items: payload,
+        p_order_date: purchaseOrderDate || null,
+        p_notes: currentNotes,
+        p_created_by: user?.id ?? null,
+      });
+      if (error) throw error;
+      const result = data as { ok?: boolean; reason?: string; purchase_order_id?: string } | null;
+      if (result && result.ok === false) throwGuard(result.reason || '建立採購退貨單失敗');
+      return result;
+    },
+    onSuccess: () => {
+      toast.success('採購退貨單已建立');
+      draft.clearDraft();
+      queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      navigate('/admin/purchase-orders');
+    },
+    onError: (error: any) => {
+      if (error?.reason) toast.error(`建立採購退貨單失敗：${error.reason}`);
+      else toast.error(getErrorMessage(error, '建立採購退貨單失敗'));
+    },
+  });
+
   // --- Consignment Order mutations ---
   const createConsignmentReceiveMutation = useMutation({
     mutationFn: async () => {
@@ -814,7 +857,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     onError: (error: Error) => toast.error(getErrorMessage(error, '建立寄賣出貨單失敗')),
   });
 
-  const isSubmitting = updateOrderMutation.isPending || createPendingMutation.isPending || isPendingMode2 || directShipMutation.isPending || createPurchaseOrderMutation.isPending || createConsignmentReceiveMutation.isPending || createConsignmentSendMutation.isPending;
+  const isSubmitting = updateOrderMutation.isPending || createPendingMutation.isPending || isPendingMode2 || directShipMutation.isPending || createPurchaseOrderMutation.isPending || createPurchaseReturnMutation.isPending || createConsignmentReceiveMutation.isPending || createConsignmentSendMutation.isPending;
 
   return {
     updateOrderMutation,
@@ -824,6 +867,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
     toggleConsignmentModeMutation,
     directShipMutation,
     createPurchaseOrderMutation,
+    createPurchaseReturnMutation,
     createConsignmentReceiveMutation,
     createConsignmentSendMutation,
     previewPoQuantities,

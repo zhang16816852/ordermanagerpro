@@ -56,6 +56,7 @@ export function OrderItemsPanel({
           <div className="flex items-center gap-2">
             <CardTitle className="text-base">{isEditMode ? '訂單項目' : (
               orderType === 'purchase' ? '採購品項' :
+              orderType === 'purchase_return' ? '退貨品項' :
               orderType === 'consignment_receive' ? '寄賣收貨品項' :
               orderType === 'consignment_send' ? '寄賣出貨品項' : '訂單項目'
             )}</CardTitle>

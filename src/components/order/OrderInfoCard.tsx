@@ -27,7 +27,7 @@ import {
   type PurchaseOrderStatus,
 } from '@/pages/admin/purchase-orders/types';
 
-export type OrderTypeValue = 'sales' | 'purchase' | 'consignment_receive' | 'consignment_send';
+export type OrderTypeValue = 'sales' | 'purchase' | 'purchase_return' | 'consignment_receive' | 'consignment_send';
 
 interface OrderInfoCardProps {
   orderType: OrderTypeValue;
@@ -125,7 +125,11 @@ export function OrderInfoCard({
 }: OrderInfoCardProps) {
   const [warehouseExpanded, setWarehouseExpanded] = useState(false);
 
+  const isPurchase = orderType === 'purchase' || orderType === 'purchase_return';
+  const isPurchaseReturn = orderType === 'purchase_return';
+
   const cardTitle = isEditMode ? '訂單資訊' : (
+    isPurchaseReturn ? '採購退貨資訊' :
     orderType === 'purchase' ? '採購資訊' :
     orderType === 'consignment_receive' ? '寄賣收貨資訊' :
     orderType === 'consignment_send' ? '寄賣出貨資訊' : '訂單資訊'
@@ -188,16 +192,29 @@ export function OrderInfoCard({
                   <span>{order?.source_type === 'frontend' ? '前台' : order?.source_type === 'consignment' ? '寄賣' : '後台'}</span>
                 </div>
               </div>
-              {orderType === 'purchase' && (
-                <div className="space-y-2">
-                  <Label className="text-sm">廠商單號（選填）</Label>
-                  <Input
-                    value={supplierOrderNumber || ''}
-                    onChange={(e) => onSupplierOrderNumberChange(e.target.value)}
-                    placeholder="輸入廠商單號"
-                    disabled={!!purchaseStatusLocked}
-                  />
-                </div>
+              {isPurchase && (
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-sm">廠商單號（選填）</Label>
+                    <Input
+                      value={supplierOrderNumber || ''}
+                      onChange={(e) => onSupplierOrderNumberChange(e.target.value)}
+                      placeholder="輸入廠商單號"
+                      disabled={!!purchaseStatusLocked}
+                    />
+                  </div>
+                  {onPurchaseOrderDateChange && (
+                    <div className="space-y-2">
+                      <Label className="text-sm">單據日期</Label>
+                      <Input
+                        type="date"
+                        value={purchaseOrderDate}
+                        onChange={(e) => onPurchaseOrderDateChange(e.target.value)}
+                        disabled={!!purchaseStatusLocked}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           ) : (
@@ -228,7 +245,7 @@ export function OrderInfoCard({
                 )
               )}
 
-              {orderType === 'purchase' && (
+              {isPurchase && (
                 <>
                   <div className="space-y-2">
                     <Label>供應商</Label>
@@ -245,7 +262,7 @@ export function OrderInfoCard({
                     )}
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    {isEditMode && onPurchaseOrderDateChange && (
+                    {onPurchaseOrderDateChange && (
                       <div className="space-y-2">
                         <Label>單據日期</Label>
                         <Input
@@ -255,16 +272,18 @@ export function OrderInfoCard({
                         />
                       </div>
                     )}
-                    <div className="space-y-2">
-                      <Label>預計到貨日（選填）</Label>
-                      <Input type="date" value={expectedDate} onChange={(e) => onExpectedDateChange(e.target.value)} />
-                    </div>
+                    {!isPurchaseReturn && (
+                      <div className="space-y-2">
+                        <Label>預計到貨日（選填）</Label>
+                        <Input type="date" value={expectedDate} onChange={(e) => onExpectedDateChange(e.target.value)} />
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <Label>廠商單號（選填）</Label>
                       <Input value={supplierOrderNumber} onChange={(e) => onSupplierOrderNumberChange(e.target.value)} placeholder="廠商端訂單編號" />
                     </div>
                   </div>
-                  {isEditMode && onPurchaseStatusChange && (
+                  {isEditMode && onPurchaseStatusChange && !isPurchaseReturn && (
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="po-status">狀態</Label>

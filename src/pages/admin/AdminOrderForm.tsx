@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, AlertTriangle, FolderOpen, Send, Truck, ShoppingBag, PackageCheck, X, Package, Save } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, FolderOpen, Send, Truck, ShoppingBag, PackageCheck, X, Package, Save, Undo2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { OrderInfoCard } from '@/components/order/OrderInfoCard';
 import { OrderItemsPanel } from '@/components/order/OrderItemsPanel';
@@ -83,7 +83,7 @@ export default function AdminOrderForm() {
       supplierOrderNumber={c.supplierOrderNumber}
       onSupplierOrderNumberChange={c.setSupplierOrderNumber}
       purchaseOrderDate={c.purchaseOrderDate}
-      onPurchaseOrderDateChange={c.isPurchaseEdit ? c.setPurchaseOrderDate : undefined}
+      onPurchaseOrderDateChange={c.isPurchase ? c.setPurchaseOrderDate : undefined}
       purchaseStatus={c.purchaseStatus}
       onPurchaseStatusChange={c.isPurchaseEdit ? c.setPurchaseStatus : undefined}
       purchaseStatusLocked={c.purchaseStatusLocked}
@@ -162,7 +162,7 @@ export default function AdminOrderForm() {
     <OrderItemsPanel
       isEditMode={c.isEditMode}
       orderType={c.orderType}
-      items={c.items}
+      items={c.isPurchaseReturn ? c.items.map((it) => ({ ...it, lineType: 'return' as const })) : c.items}
       products={c.storeProducts}
       onUpdateQuantity={c.handleQuantityChange}
       onUpdatePrice={c.handlePriceChange}
@@ -191,6 +191,9 @@ export default function AdminOrderForm() {
                 </TabsTrigger>
                 <TabsTrigger value="purchase" className="gap-1.5">
                   <Truck className="h-4 w-4" />採購單
+                </TabsTrigger>
+                <TabsTrigger value="purchase_return" className="gap-1.5">
+                  <Undo2 className="h-4 w-4" />採購退貨
                 </TabsTrigger>
                 <TabsTrigger value="consignment_receive" className="gap-1.5">
                   <PackageCheck className="h-4 w-4" />寄賣收貨
@@ -373,6 +376,10 @@ export default function AdminOrderForm() {
         ) : c.orderType === 'purchase' ? (
           <Button onClick={() => c.createPurchaseOrderMutation.mutate()} disabled={c.isSubmitting || c.items.length === 0 || !c.supplierId}>
             {c.createPurchaseOrderMutation.isPending ? '建立中…' : '建立採購單'}
+          </Button>
+        ) : c.orderType === 'purchase_return' ? (
+          <Button onClick={() => c.createPurchaseReturnMutation.mutate()} disabled={c.isSubmitting || c.items.length === 0 || !c.supplierId}>
+            {c.createPurchaseReturnMutation.isPending ? '建立中…' : '建立採購退貨單'}
           </Button>
         ) : c.orderType === 'consignment_receive' ? (
           <Button onClick={() => c.createConsignmentReceiveMutation.mutate()} disabled={c.isSubmitting || c.items.length === 0 || !c.supplierId}>
