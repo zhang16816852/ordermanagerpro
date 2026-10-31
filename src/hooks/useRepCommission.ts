@@ -60,9 +60,6 @@ export function useRepCommission() {
     unitCost?: number;
     lineType?: string;
   }) {
-    if (item.lineType === 'return') {
-      return { unitCost: 0, unitProfit: 0, profit: 0, commission: 0 };
-    }
     const snapshotCost = Number(item.unitCost) || 0;
     const unitCost = snapshotCost > 0 ? snapshotCost : getItemCost(item.productId, item.variantId);
     const unitProfit = (Number(item.unitPrice) || 0) - unitCost;
@@ -72,7 +69,7 @@ export function useRepCommission() {
       unitCost,
       unitProfit,
       profit,
-      commission: Math.max(0, profit) * rate,
+      commission: profit * rate,
     };
   }
 
