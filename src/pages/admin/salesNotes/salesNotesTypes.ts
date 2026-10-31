@@ -23,7 +23,7 @@ export interface SalesNoteItemOrderItem {
   sort_order: number | null;
   product_id: string;
   variant_id: string | null;
-  line_type: "sale" | "exchange" | "return" | null;
+  line_type: "sale" | "exchange" | "return" | "defective" | null;
   line_note: string | null;
   cost_match_status: string | null;
   order?: { code: string | null } | null;

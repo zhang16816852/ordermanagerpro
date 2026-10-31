@@ -41,7 +41,7 @@ export function orderPoBindBadge(
   let over = false;
   for (const item of items) {
     if (item.status === 'cancelled' || item.status === 'discontinued' || item.status === 'out_of_stock') continue;
-    if (item.line_type === 'return' || item.is_repair) continue;
+    if (item.line_type === 'return' || item.line_type === 'defective' || item.is_repair) continue;
     pending += Math.max(0, item.quantity - item.shipped_quantity);
     const bind = binds.get(item.id);
     if (!bind) continue;

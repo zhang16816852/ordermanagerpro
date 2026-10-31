@@ -66,7 +66,7 @@ export function ImportFromOrdersDialog({
       orders?.forEach((order: any) => {
         order.order_items?.forEach((item: any) => {
           if (item.quantity > item.shipped_quantity) {
-            if (item.line_type === 'return') return;
+            if (item.line_type === 'return' || item.line_type === 'defective') return;
             if (item.line_type === 'exchange' && item.is_repair) return;
             // 已被採購單綁定，不可重複匯入
             if (item.source_order_ids && item.source_order_ids.length > 0) return;

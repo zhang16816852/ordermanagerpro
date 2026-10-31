@@ -13,7 +13,7 @@ export interface ShippingPoolItem {
     quantity: number;
     shipped_quantity: number;
     unit_price: number;
-    line_type?: 'sale' | 'exchange' | 'return';
+    line_type?: 'sale' | 'exchange' | 'return' | 'defective';
     product: { name: string; sku: string };
     product_variant?: { name: string } | null;
   };

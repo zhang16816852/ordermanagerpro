@@ -63,7 +63,7 @@ export function BindSourceOrdersDialog({
           if (item.product_id !== poItem!.product_id) return;
           if ((item.variant_id || null) !== (poItem!.variant_id || null)) return;
           if (item.quantity <= (item.shipped_quantity || 0)) return;
-          if (item.line_type === 'return') return;
+          if (item.line_type === 'return' || item.line_type === 'defective') return;
           if (item.line_type === 'exchange' && item.is_repair) return;
           out.push({
             _id: item.id,

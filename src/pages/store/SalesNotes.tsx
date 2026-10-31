@@ -333,7 +333,7 @@ export default function StoreSalesNotes() {
         productId: oi?.product_id,
         variantId: oi?.variant_id ?? null,
         // 退貨列以負數傳入，營業額與成本同為負自然對沖
-        quantity: oi?.line_type === 'return' ? -(item.quantity || 0) : item.quantity || 0,
+        quantity: (oi?.line_type === 'return' || oi?.line_type === 'defective') ? -(item.quantity || 0) : item.quantity || 0,
         unitPrice: oi?.unit_price || 0,
         snapshotCost: oi?.unit_cost ?? null,
         lineType: oi?.line_type ?? null,

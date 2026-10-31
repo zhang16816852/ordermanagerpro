@@ -49,9 +49,9 @@ const toReceiptItems = (items: SharedSalesData['items']) =>
       (s): s is string => !!s,
     );
     return {
-      name: `${item.line_type === 'return' ? '[退貨] ' : ''}${item.product_name}`,
+      name: `${item.line_type === 'return' ? '[退貨] ' : ''}${item.line_type === 'defective' ? '[瑕疵] ' : ''}${item.product_name}`,
       variant: item.variant_name,
-      quantity: item.line_type === 'return' ? -Math.abs(item.quantity) : item.quantity,
+      quantity: (item.line_type === 'return' || item.line_type === 'defective') ? -Math.abs(item.quantity) : item.quantity,
       unit_price: item.unit_price,
       note: noteParts.join('・') || undefined,
     };

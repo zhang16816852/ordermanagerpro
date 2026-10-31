@@ -138,7 +138,7 @@ export function ShipDialog({
           </div>
           {selectedGroups.map(group => {
             const groupTotal = group.items.reduce((sum, item) => {
-              const isReturn = item.order_item?.line_type === 'return';
+              const isReturn = (item.order_item?.line_type === 'return' || item.order_item?.line_type === 'defective');
               return sum + (isReturn ? -1 : 1) * item.quantity * (item.order_item?.unit_price || 0);
             }, 0);
             const delivery = deliveryMap[group.storeId];
@@ -177,19 +177,19 @@ export function ShipDialog({
                         <TableRow key={item.id}>
                           <TableCell className="text-sm">
                             {getDisplayName(item)}
-                            {item.order_item?.line_type === 'return' && (
+                            {(item.order_item?.line_type === 'return' || item.order_item?.line_type === 'defective') && (
                               <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0 font-normal">退貨入庫</Badge>
                             )}
                             {isConsignment && <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0 font-normal">寄賣</Badge>}
                           </TableCell>
                           <TableCell className="text-right">
-                            {item.order_item?.line_type === 'return'
+                            {(item.order_item?.line_type === 'return' || item.order_item?.line_type === 'defective')
                               ? <span className="text-red-600">-{item.quantity}</span>
                               : item.quantity}
                           </TableCell>
                           <TableCell className="text-right">{formatCurrency(item.order_item?.unit_price)}</TableCell>
-                          <TableCell className={`text-right font-medium ${item.order_item?.line_type === 'return' ? 'text-red-600' : ''}`}>
-                            {formatCurrency((item.order_item?.line_type === 'return' ? -1 : 1) * item.quantity * (item.order_item?.unit_price || 0))}
+                          <TableCell className={`text-right font-medium ${(item.order_item?.line_type === 'return' || item.order_item?.line_type === 'defective') ? 'text-red-600' : ''}`}>
+                            {formatCurrency(((item.order_item?.line_type === 'return' || item.order_item?.line_type === 'defective') ? -1 : 1) * item.quantity * (item.order_item?.unit_price || 0))}
                           </TableCell>
                           <TableCell className="text-center">
                             {isConsignment ? (

@@ -81,7 +81,7 @@ export default function StoreOrderList() {
   // 獲取所有商品項目（用於商品視圖）
   const allItems = orders?.flatMap(order =>
     order.order_items
-      .filter(item => item.line_type !== 'return')
+      .filter(item => item.line_type !== 'return' && item.line_type !== 'defective')
       .filter(item => {
         if (!productFilter) return true;
         const searchLower = productFilter.toLowerCase();
@@ -112,7 +112,7 @@ export default function StoreOrderList() {
   });
 
   const getOrderShipmentStatus = (items: OrderItem[]) => {
-    const activeItems = items.filter(i => i.line_type !== 'return');
+    const activeItems = items.filter(i => i.line_type !== 'return' && i.line_type !== 'defective');
     if (activeItems.length === 0) return 'shipped';
     const allShipped = activeItems.every((i) => i.status === 'shipped');
     const someShipped = activeItems.some((i) => i.shipped_quantity > 0);
@@ -123,8 +123,8 @@ export default function StoreOrderList() {
 
   const getOrderTotal = (items: OrderItem[], shippingFee?: number | null) => {
     const itemTotal = items.reduce((sum, item) => {
-      const isReturn = item.line_type === 'return';
-      return sum + (isReturn ? -1 : 1) * item.quantity * item.unit_price;
+      const isReturnOrDefective = item.line_type === 'return' || item.line_type === 'defective';
+      return sum + (isReturnOrDefective ? -1 : 1) * item.quantity * item.unit_price;
     }, 0);
     return itemTotal + (shippingFee || 0);
   };

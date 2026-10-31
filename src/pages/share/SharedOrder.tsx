@@ -34,17 +34,18 @@ interface SharedOrderData {
   }[];
 }
 
-const LINE_TYPE_NOTE: Record<string, string> = { return: '退貨', exchange: '換貨' };
+const LINE_TYPE_NOTE: Record<string, string> = { return: '退貨', exchange: '換貨', defective: '瑕疵' };
 
 const toReceiptItems = (items: SharedOrderData['items']) =>
   items.map((item) => {
     const isRepair = item.line_type === 'exchange' && (item as any).is_repair;
+    const isDefective = item.line_type === 'defective';
     const note = isRepair ? '送修' : LINE_TYPE_NOTE[item.line_type ?? 'sale'];
     const noteParts = [note, item.line_note].filter((s): s is string => !!s);
     return {
-      name: `${item.line_type === 'return' ? '[退貨] ' : ''}${item.product_name}`,
+      name: `${item.line_type === 'return' ? '[退貨] ' : ''}${isDefective ? '[瑕疵] ' : ''}${item.product_name}`,
       variant: item.variant_name,
-      quantity: item.line_type === 'return' ? -Math.abs(item.quantity) : item.quantity,
+      quantity: (item.line_type === 'return' || isDefective) ? -Math.abs(item.quantity) : item.quantity,
       unit_price: item.unit_price,
       note: noteParts.join('・') || undefined,
     };
