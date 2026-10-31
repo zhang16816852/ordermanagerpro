@@ -371,7 +371,9 @@ export function useAdminOrderFormController() {
       const next = [...prev];
       next[index] = {
         ...next[index],
-        lineType: (lineType === 'repair' || lineType === 'exchange') ? 'exchange' : (lineType === 'sale' ? 'sale' : 'return'),
+        lineType: (lineType === 'repair' || lineType === 'exchange') ? 'exchange'
+          : lineType === 'defective' ? 'defective'
+          : lineType === 'sale' ? 'sale' : 'return',
         returnStatus: (lineType === 'exchange' || lineType === 'sale' || lineType === 'repair') ? null : 'pending',
         isRepair: lineType === 'repair',
         unitPrice: (lineType === 'exchange' || lineType === 'repair') ? 0 : next[index].unitPrice,

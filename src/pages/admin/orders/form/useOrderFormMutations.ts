@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
-import { OrderItemRow, isReturnLine } from '@/components/order/orderItemsTypes';
+import { OrderItemRow, isReturnLine, isDefectiveLine } from '@/components/order/orderItemsTypes';
 import type {
   PoUpdateItemsArgs,
   PoWriteResult,
@@ -84,11 +84,12 @@ export interface OrderFormMutationParams {
  */
 const lineTypeFields = (item: OrderItemRow) => {
   const isReturn = isReturnLine(item);
+  const isDefective = isDefectiveLine(item);
   const isRepair = (item.lineType || 'sale') === 'exchange' && !!item.isRepair;
   return {
     line_type: item.lineType || 'sale',
     line_note: item.lineNote || null,
-    return_status: isReturn ? item.returnStatus || 'pending' : null,
+    return_status: (isReturn || isDefective) ? item.returnStatus || 'pending' : null,
     is_repair: isRepair,
   };
 };

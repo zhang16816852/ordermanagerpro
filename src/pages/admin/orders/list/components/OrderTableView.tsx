@@ -73,7 +73,7 @@ export function OrderTableView({
 
   const getOrderTotal = (items: OrderItem[], shippingFee?: number | null) => {
     const itemTotal = items.reduce((sum, item) => {
-      const isReturn = item.line_type === 'return';
+      const isReturn = item.line_type === 'return' || item.line_type === 'defective';
       return sum + (isReturn ? -1 : 1) * item.quantity * item.unit_price;
     }, 0);
     return itemTotal + (shippingFee || 0);

@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Store, RotateCcw } from 'lucide-react';
 import { Order } from '@/types/order';
 import { DeliveryType } from '@/components/shipping/DeliveryMethodPicker';
-import { isReturnLine } from './orderListUtils';
+import { isReturnLine, isDefectiveLine } from './orderListUtils';
 import {
   DirectShipDialog as SharedDirectShipDialog,
   DirectShipDelivery, DirectShipOrderContext, DirectShipItemLine,
@@ -46,7 +46,7 @@ export function ConvertToConsignmentDialog({
           {orders.filter(o => selectedOrderIds.has(o.id)).map(order => (
             <div key={order.id} className="flex items-center justify-between px-3 py-2">
               <div className="text-sm font-medium">{order.code} - {order.stores?.name || '未知店家'}</div>
-              <div className="text-xs text-muted-foreground">{order.order_items.filter(i => !isReturnLine(i) && i.status !== 'cancelled' && i.status !== 'discontinued' && (i.quantity - i.shipped_quantity) > 0).length} 個品項待轉寄賣（未出貨）</div>
+              <div className="text-xs text-muted-foreground">{order.order_items.filter(i => !isReturnLine(i) && !isDefectiveLine(i) && i.status !== 'cancelled' && i.status !== 'discontinued' && (i.quantity - i.shipped_quantity) > 0).length} 個品項待轉寄賣（未出貨）</div>
             </div>
           ))}
         </div>

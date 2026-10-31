@@ -6,7 +6,7 @@ export const getDisplayProductName = (productName: string = '', variantName?: st
 };
 
 export const getOrderShipmentStatus = (items: OrderItem[]) => {
-  const activeItems = items.filter((i) => i.line_type !== 'return');
+  const activeItems = items.filter((i) => i.line_type !== 'return' && i.line_type !== 'defective');
   if (activeItems.length === 0) return 'shipped';
   const allProcessed = activeItems.every((i) =>
     i.status === 'shipped' || i.status === 'cancelled' || i.status === 'discontinued' || i.status === 'out_of_stock'
@@ -19,13 +19,18 @@ export const getOrderShipmentStatus = (items: OrderItem[]) => {
 
 export const getOrderTotal = (items: OrderItem[], shippingFee?: number | null) => {
   const itemTotal = items.reduce((sum, item) => {
-    const isReturn = item.line_type === 'return';
-    return sum + (isReturn ? -1 : 1) * item.quantity * item.unit_price;
+    const isReturnOrDefective = item.line_type === 'return' || item.line_type === 'defective';
+    return sum + (isReturnOrDefective ? -1 : 1) * item.quantity * item.unit_price;
   }, 0);
   return itemTotal + (shippingFee || 0);
 };
 
 export const isReturnLine = (item: OrderItem) => item.line_type === 'return';
+
+export const isDefectiveLine = (item: OrderItem) => item.line_type === 'defective';
+
+export const isReturnOrDefectiveLine = (item: OrderItem) =>
+  item.line_type === 'return' || item.line_type === 'defective';
 
 export const isRepairLine = (item: OrderItem) =>
   item.line_type === 'exchange' && (item as any).is_repair === true;
