@@ -78,7 +78,7 @@ export function OrderReturnProcessDialog({ open, onOpenChange, order }: OrderRet
   const returnLines = useMemo(() => {
     if (!order) return [];
     return [...order.order_items]
-      .filter((i) => i.line_type === 'return' && i.return_status === 'pending')
+      .filter((i) => (i.line_type === 'return' || i.line_type === 'defective') && i.return_status === 'pending')
       .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
   }, [order]);
 

@@ -48,12 +48,12 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, on
     );
 
     const hasPendingReturns = (order?.order_items ?? []).some(
-        (item) => item.line_type === 'return' && item.return_status === 'pending'
+        (item) => (item.line_type === 'return' || item.line_type === 'defective') && item.return_status === 'pending'
     );
 
     // 撤銷退貨適用於「任何」退貨列（含已退庫存的誤標），故不限定 pending
     const hasAnyReturns = (order?.order_items ?? []).some(
-        (item) => item.line_type === 'return'
+        (item) => item.line_type === 'return' || item.line_type === 'defective'
     );
 
     // 業務身分：維持既有（業務利潤／估佣）；非業務身分：有業務門市看業務利潤，無業務門市看毛利
@@ -62,7 +62,7 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, on
 
     const detailProfitInput = useMemo<DocProfitInputItem[]>(() =>
         (order?.order_items ?? []).map((item) => {
-            const isReturn = item.line_type === 'return';
+            const isReturn = item.line_type === 'return' || item.line_type === 'defective';
             return {
                 key: `${order?.id ?? 'order'}:${item.id}`,
                 productId: item.product_id,
@@ -207,7 +207,7 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, on
     const getTotalAmount = () =>
         order.order_items.reduce(
             (sum, item) =>
-                sum + (item.line_type === 'return' ? -1 : 1) * item.quantity * item.unit_price,
+                sum + (item.line_type === 'return' || item.line_type === 'defective' ? -1 : 1) * item.quantity * item.unit_price,
             (order.shipping_fee ?? 0)
         );
 

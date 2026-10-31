@@ -17,7 +17,7 @@ export interface OrderItemRow {
     shippingPayment?: string | null;
     tempKey?: string;
     parentTempKey?: string;
-    lineType?: 'sale' | 'exchange' | 'return';
+    lineType?: 'sale' | 'exchange' | 'return' | 'defective';
     lineNote?: string;
     returnStatus?: 'pending' | 'stock' | 'exchange' | 'repaired' | null;
     isRepair?: boolean;
@@ -35,22 +35,29 @@ export const DEFAULT_LINE_TYPE: 'sale' | 'exchange' | 'return' = 'sale';
 export const isReturnLine = (item: Pick<OrderItemRow, 'lineType'>): boolean =>
   (item.lineType ?? DEFAULT_LINE_TYPE) === 'return';
 
+export const isDefectiveLine = (item: Pick<OrderItemRow, 'lineType'>): boolean =>
+  (item.lineType ?? DEFAULT_LINE_TYPE) === 'defective';
+
+export const isReturnOrDefectiveLine = (item: Pick<OrderItemRow, 'lineType'>): boolean =>
+  isReturnLine(item) || isDefectiveLine(item);
+
 export const isRepairLine = (item: Pick<OrderItemRow, 'lineType' | 'isRepair'>): boolean =>
   (item.lineType ?? DEFAULT_LINE_TYPE) === 'exchange' && !!item.isRepair;
 
 export const displayQty = (item: Pick<OrderItemRow, 'lineType' | 'quantity'>): number =>
-  isReturnLine(item) ? -(Number(item.quantity) || 0) : Number(item.quantity) || 0;
+  isReturnLine(item) || isDefectiveLine(item) ? -(Number(item.quantity) || 0) : Number(item.quantity) || 0;
 
 export const lineAmount = (item: Pick<OrderItemRow, 'lineType' | 'quantity' | 'unitPrice'>): number =>
   displayQty(item) * (Number(item.unitPrice) || 0);
 
-export const LINE_TYPE_LABELS: Record<'sale' | 'exchange' | 'return', string> = {
+export const LINE_TYPE_LABELS: Record<'sale' | 'exchange' | 'return' | 'defective', string> = {
   sale: '一般',
   exchange: '換貨',
   return: '退貨',
+  defective: '瑕疵',
 };
 
-export type LineTypeOption = 'sale' | 'exchange' | 'return' | 'repair';
+export type LineTypeOption = 'sale' | 'exchange' | 'return' | 'defective' | 'repair';
 
 export const RETURN_STATUS_LABELS: Record<string, string> = {
   pending: '待處理',

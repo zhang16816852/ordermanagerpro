@@ -32,7 +32,7 @@ export interface PoolItem {
         quantity: number;
         shipped_quantity: number;
         unit_price: number;
-        line_type?: 'sale' | 'exchange' | 'return' | null;
+        line_type?: 'sale' | 'exchange' | 'return' | 'defective' | null;
         order: { code: string | null; consignment_mode: boolean } | null;
         product: { name: string; code: string } | null;
         product_variant: { name: string; sku: string } | null;
@@ -49,7 +49,7 @@ export interface OrderItemCandidate {
     unit_price: number;
     available: number;
     code: string;
-    line_type?: 'sale' | 'exchange' | 'return' | null;
+    line_type?: 'sale' | 'exchange' | 'return' | 'defective' | null;
     product: { name: string; code: string } | null;
     product_variant: { name: string; sku: string } | null;
 }

@@ -4,7 +4,7 @@ type Tables<T extends keyof Database['public']['Tables']> = Database['public']['
 
 export type OrderStatus = 'pending' | 'processing' | 'shipped';
 export type OrderItemStatus = 'waiting' | 'partial' | 'shipped' | 'out_of_stock' | 'discontinued' | 'cancelled';
-export type OrderLineType = 'sale' | 'exchange' | 'return';
+export type OrderLineType = 'sale' | 'exchange' | 'return' | 'defective';
 export type ReturnStatus = 'pending' | 'stock' | 'exchange' | 'repaired';
 export type OrderSourceType = 'frontend' | 'admin_proxy' | 'consignment';
 

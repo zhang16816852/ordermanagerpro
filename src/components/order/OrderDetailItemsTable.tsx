@@ -159,7 +159,7 @@ export function OrderDetailItemsTable({ items, costByItem, poBindByItem }: Order
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        {(item.line_type ?? 'sale') === 'return' ? -item.quantity : item.quantity}
+                                        {(item.line_type === 'return' || item.line_type === 'defective') ? -item.quantity : item.quantity}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         {item.shipped_quantity}

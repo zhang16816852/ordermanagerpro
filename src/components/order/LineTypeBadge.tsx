@@ -5,12 +5,14 @@ export const LINE_TYPE_OPTION_LABELS: Record<LineTypeOption, string> = {
     sale: '一般',
     exchange: '換貨',
     return: '退貨',
+    defective: '瑕疵',
     repair: '送修',
 };
 
 export function lineTypeOf(row: Pick<OrderItemRow, 'lineType' | 'isRepair'>): LineTypeOption {
     if (row.lineType === 'exchange') return row.isRepair ? 'repair' : 'exchange';
     if (row.lineType === 'return') return 'return';
+    if (row.lineType === 'defective') return 'defective';
     return 'sale';
 }
 
@@ -27,10 +29,15 @@ export function LineTypeBadge({ row }: { row: Pick<OrderItemRow, 'lineType' | 'i
         : row.returnStatus === 'exchange' ? '已換貨'
         : row.returnStatus === 'repaired' ? '已送修歸還'
         : null;
+    const colorClass = lt === 'repair'
+        ? 'bg-violet-50 text-violet-700 border-violet-200'
+        : lt === 'defective'
+        ? 'bg-red-50 text-red-700 border-red-200'
+        : 'bg-orange-50 text-orange-700 border-orange-200';
+    const label = lt === 'repair' ? '送修' : lt === 'defective' ? '瑕疵' : '退貨';
     return (
-        <Badge variant="outline"
-            className={`ml-2 ${lt === 'repair' ? 'bg-violet-50 text-violet-700 border-violet-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
-            {lt === 'repair' ? '送修' : '退貨'}{statusLabel ? `・${statusLabel}` : ''}
+        <Badge variant="outline" className={`ml-2 ${colorClass}`}>
+            {label}{statusLabel ? `・${statusLabel}` : ''}
         </Badge>
     );
 }

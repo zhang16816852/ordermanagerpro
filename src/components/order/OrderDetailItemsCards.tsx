@@ -155,7 +155,7 @@ export function OrderDetailItemsCards({ items, costByItem, poBindByItem }: Order
 
                             <div>
                                 <span className="text-muted-foreground">數量：</span>
-                                {(item.line_type ?? 'sale') === 'return' ? -item.quantity : item.quantity}
+                                {(item.line_type === 'return' || item.line_type === 'defective') ? -item.quantity : item.quantity}
                             </div>
 
                             <div>

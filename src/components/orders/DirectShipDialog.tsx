@@ -40,7 +40,7 @@ export interface DirectShipItemLine {
   variantId?: string | null;
   name: string;
   quantity: number;
-  lineType?: 'sale' | 'exchange' | 'return';
+  lineType?: 'sale' | 'exchange' | 'return' | 'defective';
   isRepair?: boolean;
 }
 

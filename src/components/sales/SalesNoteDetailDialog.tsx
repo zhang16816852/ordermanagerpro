@@ -42,7 +42,7 @@ export interface SalesNoteItem {
     costMatchStatus?: string | null;
     sortOrder?: number;
     returnedQuantity?: number;
-    lineType?: "sale" | "exchange" | "return" | null;
+    lineType?: "sale" | "exchange" | "return" | "defective" | null;
     lineNote?: string | null;
     isRepair?: boolean;
 }
