@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OrderItemsTable } from '@/components/order/OrderItemsTable';
-import { OrderItemRow, LineTypeOption, OrderItemsTableProps } from '@/components/order/orderItemsTypes';
+import { OrderItemRow, LineTypeOption, OrderItemsTableProps, displayQty } from '@/components/order/orderItemsTypes';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { ProductWithPricing } from '@/types/product';
 
@@ -46,6 +46,8 @@ export function OrderItemsPanel({
 }: OrderItemsPanelProps) {
   const isExpanded = activePanel === 'items';
 
+  const totalQty = items.reduce((sum, item) => sum + displayQty(item), 0);
+
   return (
     <Card className={`h-full flex flex-col ${className || ''}`}>
       <CardHeader
@@ -61,6 +63,7 @@ export function OrderItemsPanel({
               orderType === 'consignment_send' ? '寄賣出貨品項' : '訂單項目'
             )}</CardTitle>
             <Badge variant="secondary">{items.length} 項</Badge>
+            <Badge variant="outline">總數 {totalQty} 件</Badge>
           </div>
           <div className="flex items-center gap-1 text-muted-foreground">
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
