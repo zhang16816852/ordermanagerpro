@@ -342,12 +342,11 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         throw err;
       }
 
-      // 配送類型與出貨時間：RPC 不動這些欄位，另以一般 update 寫入
+      // 配送類型：RPC 不動此欄位，另以一般 update 寫入
+      // ⚠️ orders 表無 shipped_at 欄位（出貨時間屬 sales_notes，由 direct_ship_order RPC 的
+      //    p_shipped_at 寫入），此處不可寫入 shipped_at，否則 PostgREST 回 PGRST204。
       const deliveryTypeVal = getDeliveryType();
       const updatePayload: Record<string, any> = { delivery_type: deliveryTypeVal || null };
-      if (shippedAt) {
-        updatePayload.shipped_at = new Date(shippedAt).toISOString();
-      }
       const dw = (supabase.from('orders') as any).update(updatePayload).eq('id', orderId);
       const snapResult = await dw;
       if (snapResult.error) throw snapResult.error;
