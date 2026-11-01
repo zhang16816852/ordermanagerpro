@@ -244,22 +244,24 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
 
   // Fetch source order codes + store names for display
   const allSourceOrderIds = [...new Set(orderItems.flatMap(item => item.source_order_ids || []))];
-  const { data: sourceOrderData = { codes: {}, stores: {} } } = useQuery<any>({
+  const { data: sourceOrderData = { codes: {}, stores: {}, dates: {} } } = useQuery<any>({
     queryKey: ['source-order-codes', allSourceOrderIds],
     queryFn: async () => {
-      if (allSourceOrderIds.length === 0) return { codes: {}, stores: {} };
+      if (allSourceOrderIds.length === 0) return { codes: {}, stores: {}, dates: {} };
       const { data, error } = await (supabase as any)
         .from('orders')
-        .select('id, code, store:stores(name)')
+        .select('id, code, created_at, store:stores(name)')
         .in('id', allSourceOrderIds);
       if (error) throw error;
       const codes: Record<string, string> = {};
       const stores: Record<string, string> = {};
+      const dates: Record<string, string> = {};
       (data || []).forEach((o: any) => {
         codes[o.id] = o.code || o.id.slice(0, 8);
         stores[o.id] = o.store?.name || '';
+        dates[o.id] = o.created_at ? new Date(o.created_at).toLocaleDateString('zh-TW') : '';
       });
-      return { codes, stores };
+      return { codes, stores, dates };
     },
     enabled: allSourceOrderIds.length > 0,
   });
@@ -269,6 +271,9 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
   const sourceOrderStoreMap: Record<string, string> = allSourceOrderIds.length === 0
     ? {}
     : (sourceOrderData?.stores || {});
+  const sourceOrderDateMap: Record<string, string> = allSourceOrderIds.length === 0
+    ? {}
+    : (sourceOrderData?.dates || {});
 
   // Mutations
   // 表頭更新一律走交易化 RPC（20260930000005）：內含狀態合法性、收貨鎖定、
@@ -844,6 +849,7 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
     itemsLoading,
     sourceOrderMap,
     sourceOrderStoreMap,
+    sourceOrderDateMap,
     supplierMappingMap,
     accounts,
     categories,

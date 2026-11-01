@@ -46,11 +46,11 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 
-function SortableRow({ item, children }: { item: PurchaseOrderItem; children: React.ReactNode }) {
+function SortableRow({ item, children, fullyBound }: { item: PurchaseOrderItem; children: React.ReactNode; fullyBound?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.45 : 1 };
   return (
-    <TableRow ref={setNodeRef} style={style} {...attributes}>
+    <TableRow ref={setNodeRef} style={style} {...attributes} className={fullyBound ? 'bg-green-50/50 [&>td]:font-semibold [&>td]:border-green-500 [&>td]:border-y-2 [&>td:first-child]:border-l-2 [&>td:last-child]:border-r-2' : ''}>
       <TableCell {...listeners} className="cursor-grab active:cursor-grabbing w-8 text-center text-muted-foreground hover:text-foreground">
         <GripVertical className="h-4 w-4 mx-auto" />
       </TableCell>
@@ -170,6 +170,7 @@ interface PurchaseOrderDetailDialogProps {
   paidAmount?: number;
   sourceOrderMap: Record<string, string>;
   sourceOrderStoreMap?: Record<string, string>;
+  sourceOrderDateMap?: Record<string, string>;
   supplierMappingMap: Record<string, { id?: string; supplier_id?: string; vendor_product_id: string; vendor_product_name: string; vendor_unit_cost?: number | null; is_primary?: boolean }>;
   canEditVendorMapping?: boolean;
   onSaveVendorMapping?: (payload: {
@@ -206,6 +207,7 @@ export function PurchaseOrderDetailDialog({
   paidAmount,
   sourceOrderMap,
   sourceOrderStoreMap = {},
+  sourceOrderDateMap = {},
   supplierMappingMap,
   canEditVendorMapping = false,
   onSaveVendorMapping,
@@ -267,7 +269,9 @@ export function PurchaseOrderDetailDialog({
       variant_id: i.variant_id || null,
       quantity: i.quantity,
       unit_cost: Number(i.unit_cost) || 0,
-      source_order_ids: i.source_order_ids ?? null,
+      source_order_ids: (i.source_order_ids || []).filter((id) => !!id && id !== order.id).length > 0
+        ? (i.source_order_ids || []).filter((id) => !!id && id !== order.id)
+        : null,
       source_quantities: i.source_quantities ?? null,
     }));
 
@@ -324,13 +328,14 @@ export function PurchaseOrderDetailDialog({
   const handleBindSources = async (binds: { orderId: string; quantity: number }[]) => {
     if (!bindItem || !onUpdateItem) return;
     const item = bindItem;
-    const existingIds = item.source_order_ids || [];
-    const existingQtys = item.source_quantities || {};
-    const newIds = [...existingIds];
-    const newQtys: Record<string, number> = { ...existingQtys };
+    // binds 為最終狀態：quantity > 0 保留/新增，quantity = 0 移除
+    const newIds: string[] = [];
+    const newQtys: Record<string, number> = {};
     for (const b of binds) {
-      if (!newIds.includes(b.orderId)) newIds.push(b.orderId);
-      newQtys[b.orderId] = (newQtys[b.orderId] || 0) + b.quantity;
+      if (b.quantity > 0) {
+        newIds.push(b.orderId);
+        newQtys[b.orderId] = b.quantity;
+      }
     }
     const prev = localItems;
     const next = localItems.map((i) =>
@@ -751,7 +756,7 @@ export function PurchaseOrderDetailDialog({
                   從現有的銷售訂單中選取待採購的需求，自動填入採購清單。
                 </DialogDescription>
               </DialogHeader>
-              <ImportFromOrdersDialog products={products} isLoading={isLoading} onSubmit={async (items) => { if (await submitNewItems(items)) setImportOpen(false); }} />
+              <ImportFromOrdersDialog products={products} supplierId={order.supplier_id || undefined} isLoading={isLoading} onSubmit={async (items) => { if (await submitNewItems(items)) setImportOpen(false); }} />
             </DialogContent>
           </Dialog>
 
@@ -760,6 +765,8 @@ export function PurchaseOrderDetailDialog({
             onOpenChange={(open) => { if (!open) setBindItem(null); }}
             poItem={bindItem}
             sourceOrderMap={sourceOrderMap}
+            sourceOrderStoreMap={sourceOrderStoreMap}
+            sourceOrderDateMap={sourceOrderDateMap}
             isLoading={isLoading}
             onSubmit={handleBindSources}
           />
@@ -872,11 +879,15 @@ export function PurchaseOrderDetailDialog({
                 </TableHeader>
                 <SortableContext items={visibleItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
                   <TableBody>
-                    {visibleItems.map((item) => (
-                      <SortableRow key={item.id} item={item}>
-                        {renderItemCells(item)}
-                      </SortableRow>
-                    ))}
+                    {visibleItems.map((item) => {
+                      const boundTotal = Object.values(item.source_quantities || {}).reduce((s, v) => s + Number(v || 0), 0);
+                      const fullyBound = boundTotal > 0 && boundTotal === item.quantity;
+                      return (
+                        <SortableRow key={item.id} item={item} fullyBound={fullyBound}>
+                          {renderItemCells(item)}
+                        </SortableRow>
+                      );
+                    })}
                     {visibleItems.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={colSpan} className="text-center py-8 text-muted-foreground italic">
@@ -904,11 +915,18 @@ export function PurchaseOrderDetailDialog({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {visibleItems.map((item) => (
-                  <TableRow key={item.id}>
-                    {renderItemCells(item)}
-                  </TableRow>
-                ))}
+                {visibleItems.map((item) => {
+                  const boundTotal = Object.values(item.source_quantities || {}).reduce((s, v) => s + Number(v || 0), 0);
+                  const fullyBound = boundTotal > 0 && boundTotal === item.quantity;
+                  return (
+                    <TableRow
+                      key={item.id}
+                      className={fullyBound ? 'bg-green-50/50 [&>td]:font-semibold [&>td]:border-green-500 [&>td]:border-y-2 [&>td:first-child]:border-l-2 [&>td:last-child]:border-r-2' : ''}
+                    >
+                      {renderItemCells(item)}
+                    </TableRow>
+                  );
+                })}
                 {visibleItems.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={colSpan} className="text-center py-8 text-muted-foreground italic">

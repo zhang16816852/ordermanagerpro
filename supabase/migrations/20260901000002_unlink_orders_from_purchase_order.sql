@@ -133,7 +133,7 @@ BEGIN
     END IF;
 
     -- 剩餘來源為空 ＋ 無收貨 → 直接刪列（避免留下空白採購項目）
-    IF cardinality(v_new_source_ids) = 0 AND v_item.received_quantity = 0 THEN
+    IF v_new_qty <= 0 AND v_item.received_quantity = 0 THEN
       DELETE FROM public.purchase_order_items WHERE id = v_item.id;
       v_removed_item_count := v_removed_item_count + 1;
       CONTINUE;

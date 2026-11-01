@@ -142,6 +142,7 @@ export default function AdminPurchaseOrders() {
     itemsLoading,
     sourceOrderMap,
     sourceOrderStoreMap,
+    sourceOrderDateMap,
     supplierMappingMap,
     accounts,
     categories,
@@ -499,6 +500,7 @@ export default function AdminPurchaseOrders() {
               paidAmount={canSeePayments ? paidAmountMap[viewingOrder.id] : undefined}
               sourceOrderMap={sourceOrderMap}
               sourceOrderStoreMap={sourceOrderStoreMap}
+              sourceOrderDateMap={sourceOrderDateMap}
               supplierMappingMap={supplierMappingMap}
               canEditVendorMapping={canSeePayments}
               onSaveVendorMapping={(p) => saveVendorMappingMutation.mutateAsync(p)}
@@ -515,7 +517,7 @@ export default function AdminPurchaseOrders() {
               onUpdateItem={(data) => updateItemMutation.mutateAsync(data)}
               onDeleteItem={(data) => deleteItemMutation.mutateAsync(data)}
               onUnlinkOrder={(orderId) => {
-                if (window.confirm(`確定要解除與此訂單（${sourceOrderMap[orderId] || orderId.slice(0, 8)}）的採購關聯嗎？\n未收貨的數量將從採購單中扣除，並可重新進行採購。`)) {
+                if (window.confirm(`確定要解除與此訂單（${sourceOrderMap[orderId] || orderId.slice(0, 8)}）的採購關聯嗎？\n未收貨的數量將從採購單中扣除，並可重新進行採購。\n\n注意：若此品項僅由此訂單供應且尚未收貨，該品項將一併從採購單移除。`)) {
                   unlinkOrdersFromPurchaseMutation.mutate({ purchaseOrderId: viewingOrder.id, orderIds: [orderId] });
                 }
               }}
