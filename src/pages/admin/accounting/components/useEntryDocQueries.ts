@@ -30,7 +30,7 @@ export function useEntryDocQueries({ isList, isRepair, isConsume, docTab }: UseE
         .select(`
           id, code, created_at, status,
           store:stores(name),
-          sales_note_items(quantity, order_item:order_items(unit_price))
+          sales_note_items(quantity, order_item:order_items(unit_price, line_type))
         `)
         .in('status', ['shipped', 'received'])
         .neq('payment_status', 'paid')
@@ -42,9 +42,12 @@ export function useEntryDocQueries({ isList, isRepair, isConsume, docTab }: UseE
         code: n.code || n.id.slice(0, 8),
         name: n.store?.name || '未知店家',
         date: n.created_at,
-        amount: (n.sales_note_items || []).reduce(
-          (s: number, i: any) => s + (i.quantity * (i.order_item?.unit_price || 0)), 0
-        ),
+        amount: (n.sales_note_items || []).reduce((s: number, i: any) => {
+          const q = (i.order_item?.line_type === 'return' || i.order_item?.line_type === 'defective')
+            ? -Math.abs(i.quantity || 0)
+            : (i.quantity || 0);
+          return s + (q * (i.order_item?.unit_price || 0));
+        }, 0),
       }));
     },
     enabled: isList && docTab === 'sales_note',

@@ -212,7 +212,12 @@ export default function AdminSalesNotes() {
           created_at: note.created_at,
           totalAmount:
             (note.sales_note_items || []).reduce(
-              (sum, item) => sum + (item.quantity * (item.order_item?.unit_price || 0)),
+              (sum, item) => {
+                const q = (item.order_item?.line_type === 'return' || item.order_item?.line_type === 'defective')
+                  ? -Math.abs(item.quantity || 0)
+                  : (item.quantity || 0);
+                return sum + (q * (item.order_item?.unit_price || 0));
+              },
               0
             ) + (note.shipping_fee || 0),
         })),

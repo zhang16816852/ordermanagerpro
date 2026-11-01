@@ -45,7 +45,10 @@ export function SalesNoteCorrectDialog({
     const { otherNoteRefs, poolItems, orderCandidates } = useSalesNoteCorrectQueries(note, open);
 
     // ─── 金額計算 ───
-    const originalTotal = note ? note.items.reduce((sum, item) => sum + (item.quantity * (item.unitPrice || 0)), 0) : 0;
+    const originalTotal = note ? note.items.reduce((sum, item) => {
+      const q = (item.lineType === 'return' || item.lineType === 'defective') ? -Math.abs(item.quantity || 0) : (item.quantity || 0);
+      return sum + (q * (item.unitPrice || 0));
+    }, 0) : 0;
 
     const totalRemoved = note ? note.items.reduce((sum, item) => {
         const qty = item.quantity || 0;

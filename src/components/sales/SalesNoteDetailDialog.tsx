@@ -122,7 +122,10 @@ export function SalesNoteDetailDialog({
         });
     }, [note?.items]);
 
-    const totalAmount = note ? note.items.reduce((sum, item) => sum + (item.quantity * (item.unitPrice || 0)), (note.shipping_fee ?? 0)) : 0;
+    const totalAmount = note ? note.items.reduce((sum, item) => {
+      const qty = (item.lineType === 'return' || item.lineType === 'defective') ? -Math.abs(item.quantity || 0) : (item.quantity || 0);
+      return sum + (qty * (item.unitPrice || 0));
+    }, (note.shipping_fee ?? 0)) : 0;
 
     // --- Queries for EntryDialog ---
     const { data: accounts = [] } = useQuery({

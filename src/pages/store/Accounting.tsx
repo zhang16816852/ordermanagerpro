@@ -76,13 +76,21 @@ export default function StoreAccounting() {
   const calculateNoteTotal = (note: any) => {
     return note.sales_note_items.reduce((sum: number, item: any) => {
       const price = item.order_item?.unit_price || 0;
-      return sum + item.quantity * price;
+      const q = (item.order_item?.line_type === 'return' || item.order_item?.line_type === 'defective')
+        ? -Math.abs(item.quantity || 0)
+        : (item.quantity || 0);
+      return sum + q * price;
     }, 0);
   };
 
   const totalAmount = salesNotes?.reduce((sum, note) => sum + calculateNoteTotal(note), 0) || 0;
   const totalItems = salesNotes?.reduce((sum, note) => 
-    sum + note.sales_note_items.reduce((itemSum: number, item: any) => itemSum + item.quantity, 0), 0) || 0;
+    sum + note.sales_note_items.reduce((itemSum: number, item: any) => {
+      const q = (item.order_item?.line_type === 'return' || item.order_item?.line_type === 'defective')
+        ? -Math.abs(item.quantity || 0)
+        : (item.quantity || 0);
+      return itemSum + q;
+    }, 0), 0) || 0;
   const totalNotes = salesNotes?.length || 0;
 
   if (!storeId) {

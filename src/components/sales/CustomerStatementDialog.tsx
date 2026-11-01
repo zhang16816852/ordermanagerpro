@@ -50,7 +50,7 @@ interface PreviewNote {
   shipping_fee?: number | null;
   delivery_method_title?: string | null;
   sales_note_items?:
-    | { quantity?: number | null; order_item?: { unit_price?: number | null } | null }[]
+    | { quantity?: number | null; order_item?: { unit_price?: number | null; line_type?: string | null } | null }[]
     | null;
 }
 
@@ -60,15 +60,22 @@ const formatDay = (d: Date | undefined) => (d ? format(d, "yyyy/MM/dd") : "");
 
 const previewNoteTotal = (note: PreviewNote) => {
   const items = note.sales_note_items || [];
-  const subtotal = items.reduce(
-    (s, i) => s + (i.quantity || 0) * Number(i.order_item?.unit_price || 0),
-    0
-  );
+  const subtotal = items.reduce((s, i) => {
+    const q = (i.order_item?.line_type === 'return' || i.order_item?.line_type === 'defective')
+      ? -Math.abs(i.quantity || 0)
+      : (i.quantity || 0);
+    return s + (q * Number(i.order_item?.unit_price || 0));
+  }, 0);
   return subtotal + Number(note.shipping_fee || 0);
 };
 
 const previewNoteQty = (note: PreviewNote) =>
-  (note.sales_note_items || []).reduce((s, i) => s + (i.quantity || 0), 0);
+  (note.sales_note_items || []).reduce((s, i) => {
+    const q = (i.order_item?.line_type === 'return' || i.order_item?.line_type === 'defective')
+      ? -Math.abs(i.quantity || 0)
+      : (i.quantity || 0);
+    return s + q;
+  }, 0);
 
 export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatementDialogProps) {
   const { user } = useAuth();
@@ -128,7 +135,7 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
           `
           id, code, status, payment_status, shipped_at,
           shipping_fee, delivery_method_title,
-          sales_note_items(quantity, order_item:order_items(unit_price))
+          sales_note_items(quantity, order_item:order_items(unit_price, line_type))
         `
         )
         .eq("store_id", storeId)

@@ -135,8 +135,12 @@ export function useSalesNotesData({
   const unreceivedCount = visibleNotes.filter(n => n.payment_status !== "paid").length;
   const receivedCount = visibleNotes.filter(n => n.payment_status === "paid").length;
   const totalAmount = visibleNotes.reduce((sum, note) =>
-    sum + (note.sales_note_items || []).reduce((s, item) =>
-      s + (item.quantity * (item.order_item?.unit_price || 0)), 0
+    sum + (note.sales_note_items || []).reduce((s, item) => {
+      const q = (item.order_item?.line_type === 'return' || item.order_item?.line_type === 'defective')
+        ? -Math.abs(item.quantity || 0)
+        : (item.quantity || 0);
+      return s + (q * (item.order_item?.unit_price || 0));
+    }, 0
     ), 0
   );
 
@@ -241,8 +245,18 @@ export function useSalesNotesData({
     payment_status: note.payment_status ?? undefined,
     access_token: note.access_token,
     itemCount: note.sales_note_items?.length || 0,
-    totalQty: (note.sales_note_items || []).reduce((s, i) => s + (i.quantity || 0), 0),
-    amount: (note.sales_note_items || []).reduce((s, i) => s + (i.quantity || 0) * (i.order_item?.unit_price || 0), 0),
+    totalQty: (note.sales_note_items || []).reduce((s, i) => {
+      const q = (i.order_item?.line_type === 'return' || i.order_item?.line_type === 'defective')
+        ? -Math.abs(i.quantity || 0)
+        : (i.quantity || 0);
+      return s + q;
+    }, 0),
+    amount: (note.sales_note_items || []).reduce((s, i) => {
+      const q = (i.order_item?.line_type === 'return' || i.order_item?.line_type === 'defective')
+        ? -Math.abs(i.quantity || 0)
+        : (i.quantity || 0);
+      return s + (q * (i.order_item?.unit_price || 0));
+    }, 0),
     hasReturned: (note.sales_note_items || []).some((i) => (i.returned_quantity || 0) > 0),
     created_at: note.created_at,
     shipped_at: note.shipped_at,
