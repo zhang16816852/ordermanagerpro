@@ -31,6 +31,7 @@ interface StatementNote {
   shipping_fee?: number | null;
   delivery_method_title?: string | null;
   access_token?: string | null;
+  store_id?: string | null;
   items: StatementItem[];
 }
 
@@ -42,16 +43,17 @@ interface SharedStatementData {
     date_to: string;
     created_at: string;
   };
-  store: {
+  stores: {
     id: string;
     name: string;
     code?: string | null;
+    brand?: string | null;
     recipient?: string | null;
     phone?: string | null;
     city?: string | null;
     district?: string | null;
     address?: string | null;
-  };
+  }[];
   notes: StatementNote[];
 }
 
@@ -203,7 +205,25 @@ export default function SharedCustomerStatement() {
     );
   }
 
-  const { statement, store, notes } = data;
+  const { statement, stores, notes } = data;
+  const storeList = (stores || []) as SharedStatementData["stores"];
+  const store = storeList[0] || null;
+  const storeNames = storeList.map((s) => s.name).filter(Boolean).join("、");
+
+  // 依店家分組（保留 stores 陣列順序）
+  const notesByStore = storeList.map((s) => ({
+    store: s,
+    notes: (notes || []).filter((n) => n.store_id === s.id),
+  }));
+  // 若有 note 的 store_id 不在 storeList（相容舊資料），歸到第一個店家或獨立群組
+  const knownIds = new Set(storeList.map((s) => s.id));
+  const orphanNotes = (notes || []).filter((n) => !knownIds.has(n.store_id || ""));
+  if (orphanNotes.length > 0) {
+    notesByStore.push({
+      store: storeList[0] || { id: "unknown", name: "未知店家", code: null },
+      notes: orphanNotes,
+    });
+  }
   const sortedNotes = [...(notes || [])];
   const totalNotes = sortedNotes.length;
   const totalItems = sortedNotes.reduce((s, n) => s + (n.items || []).length, 0);
@@ -222,7 +242,7 @@ export default function SharedCustomerStatement() {
             {statement.title}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {store.name}（{store.code || "-"}）・
+            {storeNames || store?.name || "-"}・
             {format(new Date(statement.date_from), "yyyy/MM/dd")} ~{" "}
             {format(new Date(statement.date_to), "yyyy/MM/dd")}
           </p>
@@ -254,15 +274,58 @@ export default function SharedCustomerStatement() {
           此區間內沒有銷售紀錄。點擊下方各單可展開查看明細。
         </div>
       ) : (
-        <div className="space-y-2">
-          {sortedNotes.map((note) => (
-            <StatementNoteRow key={note.id} note={note} />
-          ))}
+        <div className="space-y-6">
+          {notesByStore.map(({ store: st, notes: storeNotes }) => {
+            if (!storeNotes || storeNotes.length === 0) return null;
+            const storeItems = storeNotes.reduce((s, n) => s + (n.items || []).length, 0);
+            const storeQty = storeNotes.reduce(
+              (s, n) => s + (n.items || []).reduce((x, i) => x + itemQty(i), 0),
+              0
+            );
+            const storeAmount = storeNotes.reduce((s, n) => s + noteTotal(n), 0);
+            return (
+              <section key={st.id} className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2 border-b pb-2">
+                  <h2 className="text-base font-semibold">{st.name}</h2>
+                  {st.code && (
+                    <span className="text-xs text-muted-foreground">（{st.code}）</span>
+                  )}
+                  {st.brand && (
+                    <Badge variant="secondary" className="text-xs">
+                      {st.brand}
+                    </Badge>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {storeNotes.map((note) => (
+                    <StatementNoteRow key={note.id} note={note} />
+                  ))}
+                </div>
+                <div className="rounded-md bg-muted/40 px-3 py-2 text-sm flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <span>
+                    共 <strong>{storeNotes.length}</strong> 張單
+                  </span>
+                  <span className="text-muted-foreground">|</span>
+                  <span>
+                    品項 <strong>{storeItems}</strong> 項
+                  </span>
+                  <span className="text-muted-foreground">|</span>
+                  <span>
+                    總件數 <strong>{storeQty}</strong> 件
+                  </span>
+                  <span className="text-muted-foreground">|</span>
+                  <span>
+                    總金額 <strong>{formatCurrency(storeAmount)}</strong>
+                  </span>
+                </div>
+              </section>
+            );
+          })}
         </div>
       )}
 
       <div className="text-center text-xs text-muted-foreground pt-2">
-        此對帳單由 {store.name} 提供・可點開個別單據查看明細・價格僅供對帳參考
+        此對帳單由 {storeNames || store?.name || "-"} 提供・可點開個別單據查看明細・價格僅供對帳參考
       </div>
     </div>
   );

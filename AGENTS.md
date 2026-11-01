@@ -2,6 +2,13 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（客戶對帳單支援多店家（同品牌），2026-11-03）
+
+- **目的**：客戶對帳單（`/share/statement/:id`）由單店家擴充為可涵蓋多店家，但限制所選店家必須屬於**同一品牌**。
+- **後端**：migration `20261103000001_customer_statement_multi_store.sql`（已套用遠端）——新增 join table `customer_statement_share_stores`（statement_id/store_id，PK，ON DELETE CASCADE，RLS 僅 admin）；`customer_statement_shares` 新增 `brand` 快照欄位、`store_id` 改 nullable（相容舊資料）；backfill 舊 `store_id` → join table + brand。新 RPC `create_customer_statement_share(p_title, p_store_ids uuid[], p_date_from, p_date_to, p_created_by)`（SECURITY DEFINER，僅 admin）單一交易寫入＋品牌守門（品牌不一致回 `{ok:false, reason}`）；重發 `get_shared_customer_statement` 由 join table 取 store_ids（fallback 舊 `store_id`）、品牌不一致回 NULL、回傳 `stores` 陣列（取代單一 `store`），篩選 `sn.store_id = ANY(store_ids)`。
+- **前端**：`useCustomerStatements.ts`（`CustomerStatement` 改 `stores?: CustomerStatementStore[]`；create 改呼叫 RPC 並傳 `storeIds`；列表查詢 join table 平坦化 stores）；`CustomerStatementDialog.tsx`（`StorePicker` 改 `multiple`、選取後僅可續選同品牌店家、可清除重選品牌；預覽改 `.in('store_id', storeIds)`；標題自動產生**優先品牌名**＋日期；列表/建立結果顯示多店家名稱）；`SharedCustomerStatement.tsx`（`store` → `stores` 陣列，**以店家分區顯示**，每區顯示店名＋各自小計（張數/品項/件數/金額），頂部保留全部合計）。
+- **驗證**：`npm run typecheck` 0 errors、`npm run lint`（本批 3 檔 0 問題）、`npm run build` 通過（48.07s）；migration 已套用遠端。
+
 ## 近期變更（公開商品目錄 + 首頁內容管理，2026-10-31）
 
 - **目的**：把公開首頁從「行銷頁」升級為「可用的公開商品目錄」，並讓 admin 後台可編輯首頁內容與商品前台顯示；純目錄模式，不開放下單。

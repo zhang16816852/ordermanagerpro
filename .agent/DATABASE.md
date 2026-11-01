@@ -62,7 +62,8 @@
 | `sales_notes` | 銷貨單 | store_id、code、status(`sales_note_status`)、shipped_at、received_at、created_by、access_token、payment_status(text：`unpaid`/`paid`，收款狀態，與 status 收貨狀態分離) |
 | `sales_note_items` | 銷貨單明細 | sales_note_id、order_item_id（FK NOT NULL，錨定來源訂單品項）、quantity、returned_quantity、inventory_source_type（self/supplier_consignment/store_consignment，逐項記錄庫存來源）、sort_order（品項顯示順序） |
 | `shipping_pool` | 出貨池（待出貨累積） | order_item_id、quantity、store_id、created_by |
-| `customer_statement_shares` | 客戶對帳單分享（2026-09-24） | title、store_id、date_from、date_to、access_token（隨機永久 token，同 orders）、created_by；RLS 僅 admin；瀏覽者經 RPC 免登入讀取 |
+| `customer_statement_shares` | 客戶對帳單分享（2026-09-24，2026-11-03 擴充多店家） | title、brand（快照）、date_from、date_to、access_token（隨機永久 token，同 orders）、created_by；store_id 已改 nullable（相容舊資料）；實際店家清單由 `customer_statement_share_stores` join table 維護；RLS 僅 admin；瀏覽者經 RPC 免登入讀取 |
+| `customer_statement_share_stores` | 對帳單↔店家 join table（2026-11-03） | statement_id、store_id；PK(statement_id, store_id)；ON DELETE CASCADE；RLS 僅 admin |
 
 ### 供應商 / 採購
 | 表 | 說明 | 關鍵欄位 |
@@ -217,7 +218,7 @@
 - `sales_notes`／`consignment_orders`：分享驗證為 **OR 條件**——`access_token = p_token::UUID` **或** `share_token_for_code(code) = p_token::UUID`（`get_shared_sales_note_details`／`get_shared_consignment_details`）；`orders` 維持隨機永久 token 不變。
 - `share_token_for_code(code)`（SECURITY DEFINER）＝ `extensions.hmac(code::bytea, (SELECT value FROM app_secrets WHERE key='share_token_v1')::bytea, 'sha256')` 取 hex 前 16 bytes 組 UUID 8-4-4-4-12。同 code 同 token、決定性。⚠️ hmac 在 `extensions` schema，search_path=public 下必須 `extensions.hmac` 否則 42883。
 - `app_secrets` 表：RLS 僅 admin（policy `app_secrets_admin_all`），seed `share_token_v1 = encode(gen_random_bytes(32),'hex')`。
-- **客戶對帳單分享（2026-09-24）**：`get_shared_customer_statement(p_statement_id text, p_token text)`（SECURITY DEFINER，`REVOKE ... FROM PUBLIC, anon`、`GRANT EXECUTE ... TO anon, authenticated`）——驗證 `customer_statement_shares.id`＋隨機 `access_token`（**不支援決定性 token**）、非法 uuid 回 NULL（EXCEPTION `invalid_text_representation`）；回傳 `{statement, store, notes[]}`，日期區間基準＝出貨日 `shipped_at`（`>= date_from` 且 `< date_to + 1 day`），notes 依 `shipped_at, code, id` 升冪、items 依 `COALESCE(sni.sort_order,0), oi.sort_order, oi.created_at`；每單含 `access_token` 供深層連結 `/share/sale/{code}?token=`。前端分享頁 `/share/statement/:statementId`（`SharedCustomerStatement.tsx`）。
+- **客戶對帳單分享（2026-09-24，2026-11-03 擴充多店家）**：`create_customer_statement_share(p_title, p_store_ids uuid[], p_date_from, p_date_to, p_created_by)`（SECURITY DEFINER，僅 admin）——驗證所有店家存在且同品牌，單一交易寫主表＋join table，回傳 `{ok, statement{..., stores[]}}`。`get_shared_customer_statement(p_statement_id text, p_token text)`（SECURITY DEFINER，`REVOKE ... FROM PUBLIC, anon`、`GRANT EXECUTE ... TO anon, authenticated`）——驗證 `customer_statement_shares.id`＋隨機 `access_token`（**不支援決定性 token**）、非法 uuid 回 NULL（EXCEPTION `invalid_text_representation`）；取 store_ids 由 `customer_statement_share_stores` join table（fallback 舊 `store_id`），品牌不一致回 NULL；回傳 `{statement, stores[], notes[]}`，日期區間基準＝出貨日 `shipped_at`（`>= date_from` 且 `< date_to + 1 day`），notes 依 `shipped_at, code, id` 升冪、items 依 `COALESCE(sni.sort_order,0), oi.sort_order, oi.created_at`；每單含 `access_token` 供深層連結 `/share/sale/{code}?token=`。前端分享頁 `/share/statement/:statementId`（`SharedCustomerStatement.tsx`）。
 
 ## 6. 庫存系統邏輯（最新重構，warehouse 路線）
 

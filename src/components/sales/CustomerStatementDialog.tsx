@@ -85,14 +85,14 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
   const { data: stores = [] } = useQuery({
     queryKey: ["admin-stores"],
     queryFn: async () => {
-      const { data, error } = await (supabase.from("stores") as any).select("id, name, code");
+      const { data, error } = await (supabase.from("stores") as any).select("id, name, code, brand");
       if (error) throw error;
       return data;
     },
   });
 
   const [view, setView] = useState<"list" | "create" | "created">("list");
-  const [storeId, setStoreId] = useState("");
+  const [storeIds, setStoreIds] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [title, setTitle] = useState("");
   const [titleEdited, setTitleEdited] = useState(false);
@@ -108,10 +108,20 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
     code: s.code,
   }));
 
-  const selectedStore = useMemo(
-    () => storeOptions.find((s) => s.id === storeId) || null,
-    [storeOptions, storeId]
+  const selectedStores = useMemo(
+    () => storeOptions.filter((s) => storeIds.includes(s.id)),
+    [storeOptions, storeIds]
   );
+  const selectedBrand = useMemo(
+    () => (selectedStores.length ? selectedStores[0].brand || null : null),
+    [selectedStores]
+  );
+  // 同品牌限制：選取後只允許同品牌店家
+  const availableStores = useMemo(() => {
+    if (selectedStores.length === 0) return storeOptions;
+    return storeOptions.filter((s) => (s.brand || null) === (selectedBrand || null));
+  }, [storeOptions, selectedStores, selectedBrand]);
+  const selectedStore = selectedStores[0] || null;
 
   const previewFrom = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : "";
   const previewTo = dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : "";
@@ -126,8 +136,8 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
     isFetching: isPreviewFetching,
     isError: isPreviewError,
   } = useQuery<PreviewNote[]>({
-    queryKey: ["customer-statement-preview", storeId, previewFrom, previewTo],
-    enabled: view === "create" && !!storeId && !!previewFrom && !!previewTo,
+    queryKey: ["customer-statement-preview", storeIds.join(","), previewFrom, previewTo],
+    enabled: view === "create" && storeIds.length > 0 && !!previewFrom && !!previewTo,
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("sales_notes")
@@ -138,7 +148,7 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
           sales_note_items(quantity, order_item:order_items(unit_price, line_type))
         `
         )
-        .eq("store_id", storeId)
+        .in("store_id", storeIds)
         .not("shipped_at", "is", null)
         .gte("shipped_at", `${previewFrom}T00:00:00Z`)
         .lt("shipped_at", `${previewToExclusive}T00:00:00Z`)
@@ -175,12 +185,19 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
     if (view !== "create" || titleEdited) return;
     const from = formatDay(dateRange?.from);
     const to = formatDay(dateRange?.to);
-    const prefix = selectedStore?.name || "客戶";
+    let prefix = "客戶";
+    if (selectedBrand) {
+      prefix = selectedBrand;
+    } else if (selectedStores.length === 1) {
+      prefix = selectedStores[0].name || "客戶";
+    } else if (selectedStores.length > 1) {
+      prefix = `${selectedStores[0].name}等${selectedStores.length}家`;
+    }
     setTitle(to ? `${prefix}對帳單 ${from} ~ ${to}` : `${prefix}對帳單 ${from}`);
-  }, [view, selectedStore, dateRange, titleEdited]);
+  }, [view, selectedStores, selectedBrand, dateRange, titleEdited]);
 
   const resetCreate = () => {
-    setStoreId("");
+    setStoreIds([]);
     setDateRange(undefined);
     setTitle("");
     setTitleEdited(false);
@@ -208,8 +225,8 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
       toast.error("無法取得使用者");
       return;
     }
-    if (!storeId) {
-      toast.error("請選擇客戶（店家）");
+    if (storeIds.length === 0) {
+      toast.error("請至少選擇一家店家");
       return;
     }
     if (!dateRange?.from || !dateRange?.to) {
@@ -218,8 +235,8 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
     }
     createStatementMutation.mutate(
       {
-        title: title.trim() || (selectedStore?.name || "客戶") + "對帳單",
-        storeId,
+        title: title.trim() || (selectedBrand || (selectedStores.length === 1 ? (selectedStores[0].name || "客戶") : "客戶")) + "對帳單",
+        storeIds,
         dateFrom: format(dateRange.from, "yyyy-MM-dd"),
         dateTo: format(dateRange.to, "yyyy-MM-dd"),
         createdBy: user.id,
@@ -345,7 +362,10 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
                       )}
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
                         <Badge variant="secondary" className="text-xs">
-                          {stmt.store?.name || "未知店家"}
+                          {(stmt.stores || (stmt.store ? [stmt.store] : []))
+                            .map((s: any) => s?.name)
+                            .filter(Boolean)
+                            .join("、") || "未知店家"}
                         </Badge>
                         <span>
                           {format(new Date(stmt.date_from), "yyyy/MM/dd")} ~{" "}
@@ -399,13 +419,31 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
             <div className="space-y-2">
               <Label>客戶（店家）</Label>
               <StorePicker
-                stores={storeOptions}
-                value={storeId}
-                onChange={(v) => setStoreId(v as string)}
-                placeholder="選擇客戶（店家）..."
+                stores={availableStores}
+                value={storeIds}
+                onChange={(v) => setStoreIds(Array.isArray(v) ? v : v ? [v] : [])}
+                multiple
+                placeholder="選擇客戶（店家，同品牌）..."
                 searchPlaceholder="搜尋店家..."
                 disabled={stores.length === 0}
               />
+              {selectedStores.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  已選 {selectedStores.length} 家
+                  {selectedBrand ? `（品牌：${selectedBrand}）` : "（未分類品牌）"}
+                  ，僅可續選同品牌店家
+                  {selectedStores.length > 1 && (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 ml-2"
+                      onClick={() => setStoreIds([])}
+                    >
+                      清除重選品牌
+                    </Button>
+                  )}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -457,7 +495,7 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
                 )}
               </div>
 
-              {!storeId || !previewFrom || !previewTo ? (
+              {storeIds.length === 0 || !previewFrom || !previewTo ? (
                 <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
                   請先選擇客戶與日期區間，即可預覽會納入的銷貨單。
                 </p>
@@ -569,8 +607,10 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
               </div>
               <div className="text-xs text-muted-foreground space-y-1">
                 <div>
-                  客戶：{createdStatement.store?.name || "未知店家"}（
-                  {createdStatement.store?.code || "-"}）
+                  客戶：{(createdStatement.stores || createdStatement.store ? [createdStatement.store] : [])
+                    .filter(Boolean)
+                    .map((s: any) => `${s.name}（${s.code || "-"}）`)
+                    .join("、") || "未知店家"}
                 </div>
                 <div>
                   日期：{format(new Date(createdStatement.date_from), "yyyy/MM/dd")} ~{" "}

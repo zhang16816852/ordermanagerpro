@@ -1,20 +1,25 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+export interface CustomerStatementStore {
+  id: string;
+  name: string;
+  code?: string | null;
+  brand?: string | null;
+}
+
 export interface CustomerStatement {
   id: string;
   title: string;
-  store_id: string;
+  brand?: string | null;
+  store_id?: string | null;
   date_from: string;
   date_to: string;
   access_token: string;
   created_by: string;
   created_at: string;
-  store?: {
-    id: string;
-    name: string;
-    code?: string | null;
-  } | null;
+  store?: CustomerStatementStore | null;
+  stores?: CustomerStatementStore[] | null;
 }
 
 export function statementShareLink(stmt: { id: string; access_token: string }): string {
@@ -31,11 +36,20 @@ export function useCustomerStatements() {
         .from("customer_statement_shares")
         .select(`
           *,
-          store:stores(name, code)
+          stores:customer_statement_share_stores(store:stores(id, name, code, brand))
         `)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as CustomerStatement[];
+      return (data || []).map((row: any) => {
+        const flatStores = (row.stores || [])
+          .map((s: any) => s?.store)
+          .filter(Boolean);
+        return {
+          ...row,
+          stores: flatStores.length ? flatStores : row.store ? [row.store] : null,
+          store: flatStores[0] || row.store || null,
+        } as CustomerStatement;
+      });
     },
   });
 
@@ -45,24 +59,38 @@ export function useCustomerStatements() {
   const createStatementMutation = useMutation({
     mutationFn: async (input: {
       title: string;
-      storeId: string;
+      storeIds: string[];
       dateFrom: string;
       dateTo: string;
       createdBy: string;
     }) => {
-      const { data, error } = await (supabase as any)
-        .from("customer_statement_shares")
-        .insert({
-          title: input.title,
-          store_id: input.storeId,
-          date_from: input.dateFrom,
-          date_to: input.dateTo,
-          created_by: input.createdBy,
-        })
-        .select(`*, store:stores(name, code)`)
-        .single();
+      const { data, error } = await (supabase as any).rpc(
+        "create_customer_statement_share",
+        {
+          p_title: input.title,
+          p_store_ids: input.storeIds,
+          p_date_from: input.dateFrom,
+          p_date_to: input.dateTo,
+          p_created_by: input.createdBy,
+        }
+      );
       if (error) throw error;
-      return data as CustomerStatement;
+      if (!data || data.ok === false) {
+        throw new Error(data?.reason || "建立對帳單失敗");
+      }
+      const stmt = data.statement;
+      return {
+        id: stmt.id,
+        title: stmt.title,
+        brand: stmt.brand,
+        date_from: stmt.date_from,
+        date_to: stmt.date_to,
+        access_token: stmt.access_token,
+        created_by: stmt.created_by,
+        created_at: stmt.created_at,
+        stores: (stmt.stores || []) as CustomerStatementStore[],
+        store: (stmt.stores || [])[0] || null,
+      } as CustomerStatement;
     },
     onSuccess: invalidate,
   });
