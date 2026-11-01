@@ -35,53 +35,57 @@ export function useDeviceModelGroups() {
     },
   });
 
-  // 2. 建立群組
+  // 2. 建立群組（原子化 RPC，自動處理軟刪除碰撞）
   const createGroupMutation = useMutation({
     mutationFn: async (values: Partial<DeviceModelGroup>) => {
       const clean = values.name ? values.name.replace(/\s+/g, ' ').trim() : values.name;
-      const { data, error } = await (supabase
-        .from('device_model_groups') as any)
-        .insert([{ ...values, name: clean } as any])
-        .select()
-        .single();
+      const { data, error } = await (supabase.rpc as any)('create_device_model_group', {
+        p_name: clean,
+        p_description: values.description ?? null,
+      });
       if (error) throw error;
+      if (data && data.ok === false) throw new Error(data.reason || '建立失敗');
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['device_model_groups'] });
-      toast.success('群組建立成功');
+      if (data?.mode === 'revived') toast.success('已復活並更新原群組');
+      else toast.success('群組建立成功');
     },
     onError: (err: any) => toast.error(`建立失敗: ${getErrorMessage(err)}`),
   });
 
-  // 3. 更新群組
+  // 3. 更新群組（原子化 RPC，自動處理軟刪除碰撞）
   const updateGroupMutation = useMutation({
     mutationFn: async ({ id, values }: { id: string; values: Partial<DeviceModelGroup> }) => {
       const clean = values.name ? values.name.replace(/\s+/g, ' ').trim() : values.name;
-      const { error } = await (supabase
-        .from('device_model_groups') as any)
-        .update({ ...values, name: clean })
-        .eq('id', id);
+      const { data, error } = await (supabase.rpc as any)('rename_device_model_group', {
+        p_id: id,
+        p_new_name: clean,
+      });
       if (error) throw error;
+      if (data && data.ok === false) throw new Error(data.reason || '更新失敗');
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['device_model_groups'] });
-      toast.success('群組已更新');
+      if (data?.merged?.length) toast.success(`群組已更新（已合併 ${data.merged.length} 筆引用）`);
+      else toast.success('群組已更新');
     },
   });
 
-  // 4. 軟刪除群組
+  // 4. 刪除群組（原子化 RPC：無引用硬刪，有引用軟刪）
   const deleteGroupMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await (supabase
-        .from('device_model_groups') as any)
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id);
+      const { data, error } = await (supabase.rpc as any)('delete_device_model_group', { p_id: id });
       if (error) throw error;
+      if (data && data.ok === false) throw new Error(data.reason || '刪除失敗');
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['device_model_groups'] });
-      toast.success('群組已刪除');
+      if (data?.mode === 'hard') toast.success('群組已永久刪除');
+      else toast.success(`群組已刪除（仍有 ${data?.ref_count ?? 0} 筆引用，保留歷史）`);
     },
   });
 
