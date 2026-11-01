@@ -312,6 +312,12 @@ export function useProductImportValidator(
                 row.variant_id = variant.id;
                 row.variant_spec_values = variant.spec_values;
 
+                // 變體轉移：匯入目標產品與 DB 原產品不同 → 視為異動，確保 upsert 執行
+                if (variant.product_id && (!product || variant.product_id !== product.id)) {
+                    row._oldProductId = variant.product_id;
+                    if (!diff.includes('產品歸屬')) diff.push('產品歸屬');
+                }
+
                 if (variant.name !== row.variant_name) diff.push('變體名稱');
                 if (Number(variant.wholesale_price) !== Number(row.variant_wholesale_price)) diff.push('變體批發價');
                 if (Number(variant.retail_price) !== Number(row.variant_retail_price)) diff.push('變體零售價');

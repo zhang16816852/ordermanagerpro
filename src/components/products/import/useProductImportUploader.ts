@@ -179,6 +179,7 @@ export function useProductImportUploader(
                             name: row.variant_name || row.product_name,
                             diff: (row.diff || []) as string[],
                             variant_id: row.variant_id,
+                            _oldProductId: row._oldProductId,
                         };
                         if (has('wholesale_price') || has('variant_wholesale_price')) data.wholesale_price = row.variant_wholesale_price;
                         if (has('retail_price') || has('variant_retail_price')) data.retail_price = row.variant_retail_price;
@@ -191,7 +192,7 @@ export function useProductImportUploader(
                     const matchedRow = rowData.find(r => r.variant_id);
                     const id = matchedRow?.variant_id || crypto.randomUUID();
 
-                    const { diff, variant_id, ...rest } = rowData[0];
+                    const { diff, variant_id, _oldProductId, ...rest } = rowData[0];
                     const merged = { ...rest, id };
 
                     for (const [diffStr, fieldKey] of Object.entries(DIFF_MAP)) {
@@ -207,6 +208,30 @@ export function useProductImportUploader(
                 if (variantsToInsert.length > 0) {
                     const { error: vErr } = await (supabase.from('product_variants') as any).upsert(variantsToInsert, { onConflict: 'id' });
                     if (vErr) throw vErr;
+                }
+
+                // 變體轉移同步：將附屬資料 (庫存帳/門市價格/供應商對照/庫存異動) 原子化歸到新產品
+                const transferredGroups = new Map<string, string[]>();
+                chunk.forEach(row => {
+                    if (!row.is_variant || !row.variant_id || !row._oldProductId) return;
+                    const newPid = productIdMap.get(row.product_code);
+                    if (!newPid || row._oldProductId === newPid) return;
+                    const arr = transferredGroups.get(row._oldProductId) || [];
+                    if (!arr.includes(row.variant_id)) arr.push(row.variant_id);
+                    transferredGroups.set(row._oldProductId, arr);
+                });
+                for (const [oldPid, vIds] of transferredGroups) {
+                    const newPid = productIdMap.get(
+                        chunk.find(r => r.is_variant && r.variant_id && vIds.includes(r.variant_id))?.product_code || ''
+                    );
+                    if (!newPid) continue;
+                    const { error: syncErr } = await (supabase.rpc as any)('sync_variant_product_transfer', {
+                        p_old_product_id: oldPid,
+                        p_new_product_id: newPid,
+                        p_variant_ids: vIds,
+                        p_sync_movements: true,
+                    });
+                    if (syncErr) throw syncErr;
                 }
 
                 const parseModelString = (modelStr: string | undefined) => {
