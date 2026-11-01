@@ -41,7 +41,7 @@ interface SharedSalesData {
 }
 
 /** 單據層類型對應的預設備註（品項備註 line_note 為空時使用） */
-const LINE_TYPE_NOTE: Record<string, string> = { return: '退貨', exchange: '換貨' };
+const LINE_TYPE_NOTE: Record<string, string> = { return: '退貨處理', exchange: '換貨', defective: '退貨處理' };
 
 const toReceiptItems = (items: SharedSalesData['items']) =>
   items.map((item) => {

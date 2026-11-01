@@ -34,7 +34,7 @@ interface SharedOrderData {
   }[];
 }
 
-const LINE_TYPE_NOTE: Record<string, string> = { return: '退貨', exchange: '換貨', defective: '瑕疵' };
+const LINE_TYPE_NOTE: Record<string, string> = { return: '退貨處理', exchange: '換貨', defective: '退貨處理' };
 
 const toReceiptItems = (items: SharedOrderData['items']) =>
   items.map((item) => {
