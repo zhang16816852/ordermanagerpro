@@ -18,6 +18,7 @@ interface StatementItem {
   quantity: number;
   unit_price: number | null;
   sort_order?: number;
+  line_type?: string | null;
 }
 
 interface StatementNote {
@@ -54,8 +55,15 @@ interface SharedStatementData {
   notes: StatementNote[];
 }
 
-const itemName = (item: StatementItem) => item.variant_name || item.product_name;
-const itemAmount = (item: StatementItem) => (item.quantity || 0) * (item.unit_price || 0);
+const itemName = (item: StatementItem) => {
+  const prefix = item.line_type === 'return' ? '[退貨] ' : item.line_type === 'defective' ? '[瑕疵] ' : '';
+  return `${prefix}${item.variant_name || item.product_name}`;
+};
+const itemQty = (item: StatementItem) =>
+  (item.line_type === 'return' || item.line_type === 'defective')
+    ? -Math.abs(item.quantity || 0)
+    : (item.quantity || 0);
+const itemAmount = (item: StatementItem) => itemQty(item) * (item.unit_price || 0);
 
 function noteSubtotal(note: StatementNote) {
   return (note.items || []).reduce((s, i) => s + itemAmount(i), 0);
@@ -79,7 +87,7 @@ function StatementNoteRow({ note }: { note: StatementNote }) {
   const items = [...(note.items || [])].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
   const subtotal = noteSubtotal(note);
   const showShipping = (note.shipping_fee || 0) > 0;
-  const noteQty = items.reduce((s, i) => s + (i.quantity || 0), 0);
+  const noteQty = items.reduce((s, i) => s + itemQty(i), 0);
 
   return (
     <Collapsible open={expanded} onOpenChange={setExpanded} className="rounded-lg border">
@@ -122,7 +130,7 @@ function StatementNoteRow({ note }: { note: StatementNote }) {
                     <tr key={idx} className="border-b last:border-0">
                       <td className="py-2 pr-2 text-muted-foreground">{idx + 1}</td>
                       <td className="py-2 px-2">{itemName(item)}</td>
-                      <td className="py-2 px-2 text-right">{item.quantity}</td>
+                      <td className="py-2 px-2 text-right">{itemQty(item)}</td>
                       <td className="py-2 px-2 text-right">{formatCurrency(item.unit_price || 0)}</td>
                       <td className="py-2 pl-2 text-right font-medium">{formatCurrency(itemAmount(item))}</td>
                     </tr>
@@ -200,7 +208,7 @@ export default function SharedCustomerStatement() {
   const totalNotes = sortedNotes.length;
   const totalItems = sortedNotes.reduce((s, n) => s + (n.items || []).length, 0);
   const totalQty = sortedNotes.reduce(
-    (s, n) => s + (n.items || []).reduce((x, i) => x + (i.quantity || 0), 0),
+    (s, n) => s + (n.items || []).reduce((x, i) => x + itemQty(i), 0),
     0
   );
   const totalAmount = sortedNotes.reduce((s, n) => s + noteTotal(n), 0);
