@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, PackageCheck, CreditCard, Download, FileSpreadsheet, X, GripVertical, ArrowUpDown, ArrowUp, ArrowDown, Trash2, Search, Pencil } from 'lucide-react';
+import { Plus, PackageCheck, CreditCard, Download, FileSpreadsheet, X, GripVertical, ArrowUpDown, ArrowUp, ArrowDown, Trash2, Search, Pencil, Link2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
 import { toast } from 'sonner';
 import { PurchaseOrder, PurchaseOrderItem, ProductWithPrice, type PoItemWritePayload, type PoUpdateItemPayload } from '../types';
@@ -31,6 +31,7 @@ import { PurchaseFreightSection } from '@/components/purchase/PurchaseFreightSec
 import { MappedRuleEditDialog } from './mapping/MappedRuleEditDialog';
 import { ImportFromOrdersDialog } from './ImportFromOrdersDialog';
 import { BindSourceOrdersDialog } from './BindSourceOrdersDialog';
+import { BatchBindSourceOrdersDialog } from './BatchBindSourceOrdersDialog';
 import { ReceiveForm } from './ReceiveForm';
 import { EntryDialog } from '@/pages/admin/accounting/components/EntryDialog';
 import { poPaymentDocLine } from '../batchActions';
@@ -224,6 +225,7 @@ export function PurchaseOrderDetailDialog({
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [bindItem, setBindItem] = useState<PurchaseOrderItem | null>(null);
+  const [batchBindOpen, setBatchBindOpen] = useState(false);
   const [excelImportOpen, setExcelImportOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
@@ -345,6 +347,19 @@ export function PurchaseOrderDetailDialog({
     try {
       await onUpdateItem({ purchaseOrderId: order.id, items: toWritePayload(next) });
       setBindItem(null);
+    } catch {
+      setLocalItems(prev);
+    }
+  };
+
+  const handleBatchBindSources = async (newItems: PurchaseOrderItem[]) => {
+    if (!onUpdateItem) return;
+    // 整單樂觀更新：失敗時整單回撤，避免半套狀態
+    const prev = localItems;
+    setLocalItems(newItems);
+    try {
+      await onUpdateItem({ purchaseOrderId: order.id, items: toWritePayload(newItems) });
+      setBatchBindOpen(false);
     } catch {
       setLocalItems(prev);
     }
@@ -745,6 +760,11 @@ export function PurchaseOrderDetailDialog({
             </DialogContent>
           </Dialog>
 
+          {canEdit && (
+            <Button size="sm" variant="outline" onClick={() => setBatchBindOpen(true)}>
+              <Link2 className="h-4 w-4 mr-1" /> 批次綁定來源訂單
+            </Button>
+          )}
           <Dialog open={importOpen} onOpenChange={setImportOpen}>
             <DialogTrigger asChild>
               <Button size="sm" variant="outline"><Download className="h-4 w-4 mr-1" />匯入銷售需求</Button>
@@ -769,6 +789,17 @@ export function PurchaseOrderDetailDialog({
             sourceOrderDateMap={sourceOrderDateMap}
             isLoading={isLoading}
             onSubmit={handleBindSources}
+          />
+
+          <BatchBindSourceOrdersDialog
+            open={batchBindOpen}
+            onOpenChange={setBatchBindOpen}
+            items={localItems}
+            sourceOrderMap={sourceOrderMap}
+            sourceOrderStoreMap={sourceOrderStoreMap}
+            sourceOrderDateMap={sourceOrderDateMap}
+            isLoading={isLoading}
+            onSubmit={handleBatchBindSources}
           />
 
           <Dialog open={excelImportOpen} onOpenChange={setExcelImportOpen}>

@@ -25,7 +25,7 @@ interface PurchaseProductPickerProps {
   purchaseOrderId: string;
   supplierId?: string | null;
   isLoading?: boolean;
-  onSubmit: (items: PurchasePickerItem[]) => void;
+  onSubmit: (items: PurchasePickerItem[]) => Promise<boolean | void>;
 }
 
 const mappingKey = (productId: string, variantId?: string | null) =>
@@ -146,9 +146,9 @@ export function PurchaseProductPicker({
     setSelectedSpecs({});
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (stagedItems.length === 0) return;
-    onSubmit(
+    const ok = await onSubmit(
       stagedItems.map((item) => ({
         product_id: item.productId,
         variant_id: item.variantId ?? null,
@@ -156,8 +156,11 @@ export function PurchaseProductPicker({
         unit_cost: costOf(item),
       }))
     );
-    clearDraft();
-    setCostOverrides({});
+    // 整單傳入失敗時不清除草稿，保留使用者輸入以便重試
+    if (ok !== false) {
+      clearDraft();
+      setCostOverrides({});
+    }
   };
 
   return (

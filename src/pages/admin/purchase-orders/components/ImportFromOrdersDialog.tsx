@@ -20,7 +20,7 @@ import { ProductWithPrice } from '../types';
 interface ImportFromOrdersDialogProps {
   products: ProductWithPrice[];
   supplierId?: string;
-  onSubmit: (items: { product_id: string; variant_id: string | null; quantity: number; unit_cost: number }[]) => void;
+  onSubmit: (items: { product_id: string; variant_id: string | null; quantity: number; unit_cost: number }[]) => Promise<boolean | void>;
   isLoading: boolean;
 }
 
@@ -180,7 +180,7 @@ export function ImportFromOrdersDialog({
     setSelectedItems(next);
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     const itemsToImport = pendingItems
       .filter((item: any) => selectedItems.has(item._id))
       .map((item: any) => ({
@@ -191,7 +191,11 @@ export function ImportFromOrdersDialog({
         source_order_ids: [item.order_id],
         source_quantities: { [item.order_id]: item.quantity },
       }));
-    onSubmit(itemsToImport);
+    // 整單傳入；失敗時不關閉對話框，保留勾選供重試
+    const ok = await onSubmit(itemsToImport);
+    if (ok !== false) {
+      setSelectedItems(new Set());
+    }
   };
 
   return (
