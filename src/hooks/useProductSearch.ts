@@ -53,6 +53,11 @@ export function useProductSearch({
           const allVariantModelAliases = (p.variants || []).flatMap((v: any) => v.effective_model_aliases || []);
           const brandName = ((p as any).primary_brand_name || (p.brand_ids || []).map((id: string) => brandMap[id]).filter(Boolean).join(', ')) || '';
 
+          // 條碼採「完全相同」比對，避免片段誤搜；其餘欄位採片段包含比對
+          const barcodeTexts = (p.variants || [])
+            .map((v: any) => v.barcode)
+            .filter(Boolean)
+            .map((v: string) => v.toLowerCase().trim());
           const productTexts = [
             p.name,
             p.code,
@@ -64,12 +69,14 @@ export function useProductSearch({
             ...allVariantModelAliases,
             ...(p.variants || []).map((v: any) => v.name),
             ...(p.variants || []).map((v: any) => v.sku),
-            ...(p.variants || []).map((v: any) => v.barcode),
           ]
             .filter(Boolean)
             .map((v: string) => v.toLowerCase());
 
-          return keywords.every(kw => productTexts.some(text => text.includes(kw)));
+          return keywords.every(kw => {
+            const k = kw.toLowerCase().trim();
+            return productTexts.some(text => text.includes(k)) || barcodeTexts.includes(k);
+          });
         });
       }
     }

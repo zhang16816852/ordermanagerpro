@@ -137,20 +137,24 @@ export default function ProductCatalog({
 
       const matchedVariants =
         product.variants?.filter((variant) => {
-          const variantTexts = [
-            variant.name,
-            variant.sku,
-            variant.barcode,
-            ...(variant.option_values?.map((ov: any) => ov.label || ov.value) || []),
-            ...((variant as any).effective_model_names || []),
-            ...((variant as any).effective_model_aliases || [])
-          ]
-            .filter(Boolean)
-            .map((v) => v!.toLowerCase());
+           // 條碼採「完全相同」比對，避免片段誤搜
+           const variantBarcodes = [variant.barcode]
+             .filter(Boolean)
+             .map((v) => v!.toLowerCase().trim());
+           const variantTexts = [
+             variant.name,
+             variant.sku,
+             ...(variant.option_values?.map((ov: any) => ov.label || ov.value) || []),
+             ...((variant as any).effective_model_names || []),
+             ...((variant as any).effective_model_aliases || [])
+           ]
+             .filter(Boolean)
+             .map((v) => v!.toLowerCase());
 
-          return keywords.every((keyword) =>
-            variantTexts.some((text) => text.includes(keyword))
-          );
+           return keywords.every((keyword) => {
+             const k = keyword.toLowerCase().trim();
+             return variantTexts.some((text) => text.includes(k)) || variantBarcodes.includes(k);
+           });
         }) ?? [];
 
       // If product matches or not in variants view, keep all variants
