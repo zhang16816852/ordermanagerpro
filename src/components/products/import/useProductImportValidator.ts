@@ -319,8 +319,8 @@ export function useProductImportValidator(
                 }
 
                 if (variant.name !== row.variant_name) diff.push('變體名稱');
-                if (Number(variant.wholesale_price) !== Number(row.variant_wholesale_price)) diff.push('變體批發價');
-                if (Number(variant.retail_price) !== Number(row.variant_retail_price)) diff.push('變體零售價');
+                if (Number(variant.wholesale_price) !== Number(row.variant_wholesale_price ?? variant.wholesale_price)) diff.push('變體批發價');
+                if (Number(variant.retail_price) !== Number(row.variant_retail_price ?? variant.retail_price)) diff.push('變體零售價');
                 if (variant.status !== row.variant_status) diff.push('變體狀態');
                 if (variant.barcode !== row.barcode) diff.push('變體條碼');
             }

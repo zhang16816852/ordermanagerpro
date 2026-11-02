@@ -118,9 +118,9 @@ export function useProductImportParser(
                     ? String(row['變體名稱'] || row.variant_name || '').trim()
                     : (has_variant_sku ? '' : String(row.name || row.product_name || '').trim()),
                 variant_wholesale_price: (has('wholesale_price') || has('variant_wholesale_price'))
-                    ? (parseFloat(row.variant_wholesale_price || row.wholesale_price) || undefined) : undefined,
+                    ? (() => { const raw = row.variant_wholesale_price ?? row.wholesale_price; if (raw === null || raw === undefined || String(raw).trim() === '') return 0; const n = parseFloat(raw); return isNaN(n) ? 0 : n; })() : undefined,
                 variant_retail_price: (has('retail_price') || has('variant_retail_price'))
-                    ? (parseFloat(row.variant_retail_price || row.retail_price) || undefined) : undefined,
+                    ? (() => { const raw = row.variant_retail_price ?? row.retail_price; if (raw === null || raw === undefined || String(raw).trim() === '') return 0; const n = parseFloat(raw); return isNaN(n) ? 0 : n; })() : undefined,
                 variant_status: has('status') ? parseStatus(row.variant_status || row.status) : undefined as any,
                 barcode: has('barcode') ? normalizeBarcode(row.barcode) : '',
                 variant_sort_order: (has('variant_sort_order') || row['變體排序'] !== undefined || row.variant_sort_order !== undefined)

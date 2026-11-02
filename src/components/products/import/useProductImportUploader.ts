@@ -181,8 +181,8 @@ export function useProductImportUploader(
                             variant_id: row.variant_id,
                             _oldProductId: row._oldProductId,
                         };
-                        if (has('wholesale_price') || has('variant_wholesale_price')) data.wholesale_price = row.variant_wholesale_price;
-                        if (has('retail_price') || has('variant_retail_price')) data.retail_price = row.variant_retail_price;
+                        if (has('wholesale_price') || has('variant_wholesale_price')) data.wholesale_price = row.variant_wholesale_price ?? 0;
+                        if (has('retail_price') || has('variant_retail_price')) data.retail_price = row.variant_retail_price ?? 0;
                         if (has('status')) data.status = row.variant_status || 'active';
                         if (has('barcode')) data.barcode = row.barcode || null;
                         if (has('variant_sort_order') && row.variant_sort_order !== undefined) data.sort_order = Math.floor(Number(row.variant_sort_order)) || 0;
