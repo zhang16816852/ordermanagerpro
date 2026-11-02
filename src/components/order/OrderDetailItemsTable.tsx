@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import {
     Table,
     TableBody,
@@ -115,9 +115,8 @@ export function OrderDetailItemsTable({ items, costByItem, poBindByItem }: Order
                         const hasPo = bind && bind.status !== 'none';
                         const isExpanded = expandedItems.has(item.id);
                         return (
-                            <>
+                            <Fragment key={item.id}>
                                 <TableRow
-                                    key={item.id}
                                     className={hasPo ? 'bg-amber-50/60 border-l-2 border-l-amber-500 cursor-pointer hover:bg-amber-50' : ''}
                                     onClick={() => {
                                         if (hasPo) {
@@ -202,7 +201,7 @@ export function OrderDetailItemsTable({ items, costByItem, poBindByItem }: Order
                                         </TableCell>
                                     </TableRow>
                                 )}
-                            </>
+                            </Fragment>
                         );
                     })}
                 </TableBody>
