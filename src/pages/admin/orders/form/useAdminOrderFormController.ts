@@ -133,6 +133,7 @@ export function useAdminOrderFormController() {
   const [poSyncSaving, setPoSyncSaving] = useState(false);
   const poSyncIntentRef = useRef<null | 'save' | 'directShip'>(null);
   const poSyncDeliveryRef = useRef<DirectShipDelivery | null>(null);
+  const poSyncItemQuantitiesRef = useRef<Record<string, number> | null>(null);
   // 訂單層只存配送類型（delivery/logistics/pickup），方法/包裹細節於出貨 RPC 內產生
   const [deliveryType, setDeliveryType] = useState<DeliveryType | null>(null);
 
@@ -568,7 +569,7 @@ export function useAdminOrderFormController() {
   }, [previewPoQuantities, items, pendingDeletedIds, updateOrderMutation]);
 
   // 轉銷貨單／寄賣出貨：同上，確認後先套用再出貨
-  const runDirectShip = useCallback(async (delivery: DirectShipDelivery) => {
+  const runDirectShip = useCallback(async (delivery: DirectShipDelivery, itemQuantities?: Record<string, number>) => {
     try {
       const res = await previewPoQuantities(items, pendingDeletedIds);
       if (res.ok === false) {
@@ -578,11 +579,12 @@ export function useAdminOrderFormController() {
       if (res.changes.length > 0) {
         poSyncIntentRef.current = 'directShip';
         poSyncDeliveryRef.current = delivery;
+        poSyncItemQuantitiesRef.current = itemQuantities || null;
         setPoSyncChanges(res.changes);
         setPoSyncDialogOpen(true);
         return;
       }
-      directShipMutation.mutate(delivery);
+      directShipMutation.mutate({ delivery, itemQuantities });
     } catch (error) {
       toast.error(getErrorMessage(error));
     }
@@ -603,7 +605,7 @@ export function useAdminOrderFormController() {
       queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
       setPoSyncDialogOpen(false);
       if (intent === 'save') updateOrderMutation.mutate();
-      else if (intent === 'directShip' && delivery) directShipMutation.mutate(delivery);
+      else if (intent === 'directShip' && delivery) directShipMutation.mutate({ delivery, itemQuantities: poSyncItemQuantitiesRef.current || undefined });
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {

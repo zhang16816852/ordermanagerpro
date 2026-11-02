@@ -75,7 +75,7 @@ interface DirectShipDialogProps {
   getItemWarehouse: (itemId: string) => string;
   onItemWarehouseChange: (itemId: string, warehouseId: string) => void;
   isPending: boolean;
-  onConfirm: (delivery: DirectShipDelivery) => void;
+  onConfirm: (delivery: DirectShipDelivery, itemQuantities?: Record<string, number>) => void;
 }
 
 export function DirectShipDialog({
@@ -147,7 +147,7 @@ export function DirectShipDialog({
       getItemWarehouse={getItemWarehouse}
       onItemWarehouseChange={onItemWarehouseChange}
       isPending={isPending}
-      onConfirm={(delivery) => onConfirm(delivery)}
+      onConfirm={(delivery, _orderIds, itemQuantities) => onConfirm(delivery, itemQuantities)}
     />
   );
 }

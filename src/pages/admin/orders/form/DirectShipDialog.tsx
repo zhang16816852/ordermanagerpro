@@ -20,7 +20,7 @@ interface DirectShipDialogProps {
   itemSources: Record<string, string>;
   onItemSourceChange: (id: string, src: string) => void;
   isPending: boolean;
-  onConfirm: (delivery: DirectShipDelivery) => void;
+  onConfirm: (delivery: DirectShipDelivery, itemQuantities?: Record<string, number>) => void;
   // 建立模式補料：order 為 null 時，由 controller 帶入店家預設方式與目前選擇的配送類型
   defaultDeliveryMethodId?: string | null;
   deliveryType?: string | null;
@@ -96,7 +96,7 @@ export function DirectShipDialog({
       itemSources={itemSources}
       onItemSourceChange={onItemSourceChange}
       isPending={isPending}
-      onConfirm={(delivery) => onConfirm(delivery)}
+      onConfirm={(delivery, _orderIds, itemQuantities) => onConfirm(delivery, itemQuantities)}
     />
   );
 }

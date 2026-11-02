@@ -10,7 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Send, Store } from 'lucide-react';
+import { Send, Store, Trash2 } from 'lucide-react';
 import { WarehouseSelector } from "@/components/WarehouseSelector";
 import { DeliveryType, useDeliveryMethods, deliveryTypeOfMethod } from '@/components/shipping/DeliveryMethodPicker';
 import {
@@ -73,7 +73,7 @@ interface DirectShipDialogProps {
   itemSources?: Record<string, string>;
   onItemSourceChange?: (itemId: string, src: string) => void;
   isPending: boolean;
-  onConfirm: (delivery: DirectShipDelivery, orderIds: string[]) => void;
+  onConfirm: (delivery: DirectShipDelivery, orderIds: string[], itemQuantities?: Record<string, number>) => void;
 }
 
 const isLogistics = (t: DeliveryType | null) => t === 'logistics';
@@ -109,6 +109,9 @@ export function DirectShipDialog({
     address: '',
   });
   const [syncToStore, setSyncToStore] = useState(false);
+  // 部分出貨：每品項本次出貨數量（key = order_item id）與移除集合
+  const [shipQty, setShipQty] = useState<Record<string, number>>({});
+  const [removedItems, setRemovedItems] = useState<Set<string>>(new Set());
 
   const allConsignment = orders.length > 0 && orders.every((o) => o.consignmentMode);
   const orderIds = orders.map((o) => o.id);
@@ -120,6 +123,8 @@ export function DirectShipDialog({
   firstRef.current = first;
   const methodsRef = useRef(deliveryMethods);
   methodsRef.current = deliveryMethods;
+  const ordersRef = useRef(orders);
+  ordersRef.current = orders;
 
   useEffect(() => {
     if (!open) return;
@@ -154,7 +159,16 @@ export function DirectShipDialog({
       address: addr?.address || '',
     });
     setSyncToStore(false);
-  }, [open]);
+    // 初始化部分出貨數量：預設為剩餘量
+    const initQty: Record<string, number> = {};
+    for (const o of ordersRef.current) {
+      for (const it of o.items || []) {
+        initQty[it.id] = it.quantity;
+      }
+    }
+    setShipQty(initQty);
+    setRemovedItems(new Set());
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 地址與店家目前地址不同時自動勾選「同步至店鋪」（僅地址異動觸發；相同時不主動取消）
   useEffect(() => {
@@ -188,6 +202,14 @@ export function DirectShipDialog({
   };
 
   const handleConfirm = () => {
+    const itemQuantities: Record<string, number> = {};
+    for (const o of orders) {
+      for (const it of o.items || []) {
+        if (removedItems.has(it.id)) continue;
+        const q = shipQty[it.id];
+        if (typeof q === 'number' && q > 0) itemQuantities[it.id] = q;
+      }
+    }
     onConfirm({
       deliveryType: delivery.deliveryType,
       deliveryMethodId: isLogistics(delivery.deliveryType) ? delivery.deliveryMethodId : null,
@@ -198,7 +220,7 @@ export function DirectShipDialog({
       syncToStore: isLogistics(delivery.deliveryType) && syncToStore,
       shippingFee: isLogistics(delivery.deliveryType) ? (delivery.shippingFee ?? null) : null,
       shippingCost: isLogistics(delivery.deliveryType) ? (delivery.shippingCost ?? null) : null,
-    }, orderIds);
+    }, orderIds, itemQuantities);
   };
 
   const showItemRows = (order: DirectShipOrderContext) =>
@@ -264,7 +286,7 @@ export function DirectShipDialog({
                     )}
                     {showItemRows(order) ? (
                       <div className="divide-y">
-                        {order.items.map((item) => (
+                        {order.items.filter((item) => !removedItems.has(item.id)).map((item) => (
                           <div key={item.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                             <div className="flex-1 min-w-0">
                               <div className="truncate">
@@ -282,8 +304,32 @@ export function DirectShipDialog({
                               <div className="text-xs text-muted-foreground">
                                 {item.lineType === 'return'
                                   ? <span className="text-red-600">-{item.quantity}件（退貨入庫）</span>
-                                  : `${item.quantity}件`}
+                                  : `剩餘 ${item.quantity} 件`}
                               </div>
+                            </div>
+                            {/* 本次出貨數量（可修改） */}
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min={1}
+                                max={item.quantity}
+                                value={shipQty[item.id] ?? item.quantity}
+                                onChange={(e) => {
+                                  const v = parseInt(e.target.value, 10);
+                                  setShipQty((prev) => ({ ...prev, [item.id]: isNaN(v) ? 0 : v }));
+                                }}
+                                className="h-8 w-16 text-xs"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() => setRemovedItems((prev) => new Set(prev).add(item.id))}
+                                aria-label="移除品項"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
                             <WarehouseSelector
                               value={getItemWarehouse(item.id)}
@@ -307,6 +353,9 @@ export function DirectShipDialog({
                             )}
                           </div>
                         ))}
+                        {order.items.length > 0 && order.items.every((it) => removedItems.has(it.id)) && (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">所有品項已移除</div>
+                        )}
                       </div>
                     ) : (
                       <div className="px-3 py-3 text-sm text-muted-foreground">
@@ -379,7 +428,7 @@ export function DirectShipDialog({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={isPending || (isLogistics(delivery.deliveryType) && !delivery.deliveryMethodId)}
+            disabled={isPending || (isLogistics(delivery.deliveryType) && !delivery.deliveryMethodId) || Object.keys(shipQty).every((k) => removedItems.has(k))}
           >
             {isPending ? '處理中…' : (allConsignment ? '確認寄賣出貨' : '確認轉銷貨單')}
           </Button>

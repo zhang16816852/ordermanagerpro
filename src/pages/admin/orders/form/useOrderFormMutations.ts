@@ -583,7 +583,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
 
   // Direct ship: turn pending/processing order into sales note (direct_ship_order 兩種狀態皆允許)
   const directShipMutation = useMutation({
-    mutationFn: async (delivery?: DirectShipDelivery) => {
+    mutationFn: async ({ delivery, itemQuantities }: { delivery?: DirectShipDelivery; itemQuantities?: Record<string, number> } = {}) => {
       if (!user || !orderId) throw new Error('訂單不存在');
       const currentItems = itemsRef.current;
       const currentNotes = notesRef.current;
@@ -646,6 +646,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         p_tracking_company: loader?.trackingCompany || undefined,
         p_tracking_number: loader?.trackingNumber || undefined,
         p_tracking_url: loader?.trackingUrl || undefined,
+        p_item_quantities: itemQuantities && Object.keys(itemQuantities).length > 0 ? itemQuantities : undefined,
       });
       if (error) throw error;
 

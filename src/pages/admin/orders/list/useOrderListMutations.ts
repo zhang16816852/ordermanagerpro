@@ -22,7 +22,7 @@ export interface UseOrderListMutationsParams {
 }
 
 export interface UseOrderListMutationsResult {
-  directShipMutation: ReturnType<typeof useMutation<any, any, { orderIds: string[]; notes: string; delivery?: DirectShipDelivery }>>;
+  directShipMutation: ReturnType<typeof useMutation<any, any, { orderIds: string[]; notes: string; delivery?: DirectShipDelivery; itemQuantities?: Record<string, number> }>>;
   deleteOrderMutation: ReturnType<typeof useMutation<any, any, string[]>>;
   convertToConsignmentMutation: ReturnType<typeof useMutation<any, any, string[]>>;
   unlinkOrdersMutation: ReturnType<typeof useMutation<any, any, string[]>>;
@@ -37,8 +37,8 @@ export function useOrderListMutations(params: UseOrderListMutationsParams): UseO
 
   const directShipMutation = useMutation({
     mutationFn: async ({
-      orderIds, notes, delivery,
-    }: { orderIds: string[]; notes: string; delivery?: DirectShipDelivery }) => {
+      orderIds, notes, delivery, itemQuantities,
+    }: { orderIds: string[]; notes: string; delivery?: DirectShipDelivery; itemQuantities?: Record<string, number> }) => {
       if (!user) throw new Error('未登入');
       const shellSyncToStore = delivery?.deliveryType === 'logistics' && delivery?.syncToStore && !!delivery?.shippingAddress;
       const syncAddress = delivery?.shippingAddress || null;
@@ -76,6 +76,7 @@ export function useOrderListMutations(params: UseOrderListMutationsParams): UseO
         p_tracking_url: delivery?.deliveryType === 'logistics' ? delivery.trackingUrl || undefined : undefined,
         p_shipping_fee: delivery?.deliveryType === 'logistics' ? delivery.shippingFee ?? undefined : undefined,
         p_shipping_cost: delivery?.deliveryType === 'logistics' ? delivery.shippingCost ?? undefined : undefined,
+        p_item_quantities: itemQuantities && Object.keys(itemQuantities).length > 0 ? itemQuantities : undefined,
       });
       if (error) throw error;
       // 勾選「同步至店鋪」：出貨後將配送地址回寫店家（僅地址欄位，不含配送類型/方式）

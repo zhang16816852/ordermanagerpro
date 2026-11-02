@@ -368,7 +368,7 @@ export default function AdminOrderList() {
         getItemWarehouse={getItemWarehouse}
         onItemWarehouseChange={(itemId, w) => setItemWarehouses(prev => ({ ...prev, [itemId]: w }))}
         isPending={directShipMutation.isPending}
-        onConfirm={(delivery) => directShipMutation.mutate({ orderIds: Array.from(selectedOrderIds), notes: directShipNotes, delivery })}
+        onConfirm={(delivery, itemQuantities) => directShipMutation.mutate({ orderIds: Array.from(selectedOrderIds), notes: directShipNotes, delivery, itemQuantities })}
       />
 
       {/* Reverse Consignment Shipment Dialog */}

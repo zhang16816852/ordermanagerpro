@@ -423,7 +423,7 @@ export default function AdminOrderForm() {
         itemSources={c.itemSources}
         onItemSourceChange={(id, src) => c.setItemSources((prev) => ({ ...prev, [id]: src }))}
         isPending={c.directShipMutation.isPending}
-        onConfirm={(delivery) => c.runDirectShip(delivery)}
+        onConfirm={(delivery, itemQuantities) => c.runDirectShip(delivery, itemQuantities)}
       />
 
       <PoSyncConfirmDialog
