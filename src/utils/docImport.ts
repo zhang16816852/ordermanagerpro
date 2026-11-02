@@ -12,6 +12,7 @@ export interface ImportItemRow {
   sku?: string;
   name?: string;
   vendor_product_id?: string;
+  vendor_product_name?: string;
   quantity?: number;
   unit_price?: number;
   unit_cost?: number;
@@ -73,6 +74,7 @@ const HEADER_ALIASES: Record<string, string[]> = {
   purpose: ['purpose', '類型', '採購類型', '用途'],
   receive: ['receive', '立即收貨', '收貨', '已收貨'],
   vendor_product_id: ['vendor_product_id', '廠商料號', '供應商料號', '廠商產品編號', '供應商商品編號'],
+  vendor_product_name: ['vendor_product_name', '廠商品名', '供應商品名', '廠商商品名稱', '廠商品名稱', '廠商品名'],
   serials: ['serials', 'serial', '序號', '序號清單', '序號列表'],
   batch_number: ['batch_number', '批號', '批次號', 'batch'],
   batch_unit_cost: ['batch_unit_cost', '批號成本', '批次成本'],
@@ -237,7 +239,7 @@ function parseSheetRows(rawRows: unknown[][], sheetName: string): ParseSheetResu
   const headerRow = rawRows.findIndex((row, idx) =>
     Array.isArray(row) && row.some((cell, cellIdx) => {
       const normalized = normalizeHeader(toTrimmed(cell));
-      return normalized === 'store_code' || normalized === 'sku' || normalized === 'name';
+      return !!normalized;
     })
   );
 
@@ -268,7 +270,8 @@ function parseSheetRows(rawRows: unknown[][], sheetName: string): ParseSheetResu
       hasValue = true;
       row[field] = toTrimmed(cell);
     });
-    if (hasValue) rows.push(row);
+    // 嚴格跳過空列：所有可辨識欄位皆為空（或整列只有 sourceRow）時視為不存在
+    if (hasValue && Object.keys(row).length > 1) rows.push(row);
   }
 
   if (rows.length === 0) {
@@ -370,8 +373,9 @@ export function rowsToImportGroups(kind: DocImportKind, rows: DocImportRow[]): I
       sku: toTrimmed(row.sku) || undefined,
       name: toTrimmed(row.name) || undefined,
       vendor_product_id: toTrimmed(row.vendor_product_id) || undefined,
+      vendor_product_name: toTrimmed(row.vendor_product_name) || undefined,
     };
-    if (!item.sku && !item.name && !item.vendor_product_id) itemErrors.push('缺少「SKU」、「品名」或「廠商料號」');
+    if (!item.sku && !item.name && !item.vendor_product_id && !item.vendor_product_name) itemErrors.push('缺少「SKU」、「品名」、「廠商料號」或「廠商品名」');
     item.quantity = validateQuantity(row.quantity, itemErrors);
     item.unit_price = toNonNegativeNumber(row.unit_price);
     item.unit_cost = toNonNegativeNumber(row.unit_cost);
@@ -461,6 +465,7 @@ export function importGroupPayload(kind: DocImportKind, groups: ImportGroup[]): 
         sku: item.sku,
         name: item.name,
         vendor_product_id: item.vendor_product_id,
+        vendor_product_name: item.vendor_product_name,
         quantity: item.quantity,
         unit_cost: item.unit_cost,
         serials: item.serials ?? [],
@@ -485,19 +490,19 @@ export function downloadImportTemplate(kind: DocImportKind): void {
     orders: ['店家代碼', '訂單編號', '訂單日期', '狀態', '備註', 'SKU', '品名', '數量', '單價', '成本'],
     sales: ['店家代碼', '訂單編號', '銷貨單編號', '出貨日期', '備註', 'SKU', '品名', '數量', '單價', '成本'],
     consignment: ['方向', '店家代碼', '供應商', '寄賣單編號', '訂單編號', '出貨日期', '狀態', '備註', 'SKU', '品名', '數量', '單價', '成本'],
-    purchase: ['廠商單號', '採購日期', '預計到貨日', '狀態', '類型', '立即收貨', '備註', 'SKU', '品名', '廠商料號', '數量', '成本', '序號', '批號', '批號成本'],
+    purchase: ['廠商單號', '採購日期', '預計到貨日', '狀態', '類型', '立即收貨', '備註', 'SKU', '品名', '廠商品名', '廠商料號', '數量', '成本', '序號', '批號', '批號成本'],
   };
   const example: Record<string, string[]> = {
     orders: ['ttshop001', 'OD26090100001', '2026-09-01', 'processing', '範例備註', 'GLA_AP-HC-IP13-MINI', '範例商品', '2', '1200', '600'],
     sales: ['ttshop001', 'OD26090100001', 'SL2609ttshop0010001', '2026-09-02', '範例備註', 'GLA_AP-HC-IP13-MINI', '範例商品', '1', '1200', '600'],
     consignment: ['寄出', 'ttshop001', '', 'CS2609ttshop0010001', '', '2026-09-02', 'active', '範例備註', 'GLA_AP-HC-IP13-MINI', '範例商品', '3', '1000', '500'],
-    purchase: ['PO-20260901-01', '2026-09-01', '2026-09-10', 'ordered', 'general', '是', '範例備註', 'GLA_AP-HC-IP13-MINI', '範例商品', '', '2', '600', '', '', ''],
+    purchase: ['PO-20260901-01', '2026-09-01', '2026-09-10', 'ordered', 'general', '是', '範例備註', 'GLA_AP-HC-IP13-MINI', '範例商品', '範例商品（廠商）', '', '2', '600', '', '', ''],
   };
   const wideColumns: Record<DocImportKind, number[]> = {
     orders: [5, 6],
     sales: [5, 6],
     consignment: [5, 6],
-    purchase: [8, 9, 12],
+    purchase: [8, 9, 10, 13],
   };
 
   const doExport = async () => {

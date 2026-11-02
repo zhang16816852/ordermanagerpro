@@ -37,6 +37,7 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import { formatCurrency } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { ImportVariantPicker } from './ImportVariantPicker';
+import { PurchaseImportSidebar } from './PurchaseImportSidebar';
 import { useEnsureVariantMappingMutation } from '../hooks/useSupplierMappings';
 import {
   buildImportMatchIndex, resolveImportItem, toManualTarget,
@@ -153,6 +154,7 @@ function ImportDateCell({
 interface ImportItemsEditorProps {
   groupLabel: string;
   items: ImportItemRow[];
+  catalogProducts?: ImportCatalogProduct[];
   /** 使用者是否已就地修改（決定「還原檔案值」是否可用） */
   dirty: boolean;
   onPatch: (itemIndex: number, patch: Partial<ImportItemRow>) => void;
@@ -173,12 +175,12 @@ interface ImportItemsEditorProps {
  * 每列另顯示與後端一致的比對結果，未匹配者可按「指定商品」挑內部變體（會寫入供應商對照）。
  */
 function ImportItemsEditor({
-  groupLabel, items, dirty, onPatch, onRemove, onAdd, onReset,
+  groupLabel, items, catalogProducts, dirty, onPatch, onRemove, onAdd, onReset,
   matchIndex, matchOf, savingCode, onAssign, onClearAssignment,
 }: ImportItemsEditorProps) {
   return (
-    <div className="rounded-md border bg-muted/20 p-2">
-      <div className="flex items-center justify-between gap-2 mb-1.5">
+    <div className="rounded-md border bg-muted/20 p-2 max-h-[40vh] max-w-full overflow-auto" style={{ overflowX: 'auto', overflowY: 'auto' }}>
+      <div className="flex items-center justify-between gap-2 mb-1.5 sticky top-0 bg-muted/20 z-10 py-1">
         <span className="text-xs font-medium text-muted-foreground">{groupLabel}</span>
         <div className="flex items-center gap-1">
           {dirty && (
@@ -192,13 +194,16 @@ function ImportItemsEditor({
         </div>
       </div>
 
-      <table className="w-full text-xs">
+      <div className="overflow-x-auto" style={{ overflowX: 'auto' }}>
+      <table className="min-w-[900px] text-xs" style={{ tableLayout: 'auto' }}>
         <thead>
           <tr className="border-b">
             <th className="text-left px-1.5 py-1 font-medium w-8">#</th>
-            <th className="text-left px-1.5 py-1 font-medium">品名</th>
-            <th className="text-left px-1.5 py-1 font-medium">廠商料號</th>
             <th className="text-left px-1.5 py-1 font-medium">SKU</th>
+            <th className="text-left px-1.5 py-1 font-medium">品名</th>
+            <th className="text-left px-1.5 py-1 font-medium">廠商品名</th>
+            <th className="text-left px-1.5 py-1 font-medium">廠商料號</th>
+
             <th className="text-left px-1.5 py-1 font-medium w-20">數量</th>
             <th className="text-left px-1.5 py-1 font-medium w-24">單價</th>
             <th className="text-right px-1.5 py-1 font-medium w-24">小計</th>
@@ -210,14 +215,31 @@ function ImportItemsEditor({
           {items.map((item, i) => {
             const errs = itemErrors(item, i);
             const match = matchOf(item);
-            const code = item.vendor_product_id?.trim() ?? '';
+            const code = item.vendor_product_id?.trim()
+              || item.vendor_product_name?.trim()
+              || item.name?.trim()
+              || '';
             const isUnmatched = match?.status === 'unmatched';
             return (
               <tr key={i} className={cn(errs.length ? 'bg-destructive/5' : '', isUnmatched && 'bg-amber-50/60')}>
                 <td className="px-1.5 py-1 align-top text-muted-foreground">{i + 1}</td>
                 <td className="px-1.5 py-1 align-top">
                   <Input
-                    value={item.name ?? ''}
+                    value={item.sku || (() => {
+                      if (!match?.status || match.status !== 'matched' || !catalogProducts) return '';
+                      const prod = catalogProducts.find((p) => p.id === match.productId);
+                      const variant = match.variantId ? prod?.variants?.find((v) => v.id === match.variantId) : null;
+                      return variant?.sku || (match.variantId ? '' : (prod?.code || ''));
+                    })() || ''}
+                    placeholder="SKU"
+                    aria-label={`${groupLabel} 第 ${i + 1} 個品項 SKU`}
+                    className="h-7 text-xs"
+                    onChange={(e) => onPatch(i, { sku: e.target.value })}
+                  />
+                </td>
+                <td className="px-1.5 py-1 align-top">
+                  <Input
+                    value={item.name || match?.label || ''}
                     placeholder="品名"
                     aria-label={`${groupLabel} 第 ${i + 1} 個品項 品名`}
                     className="h-7 text-xs"
@@ -226,22 +248,23 @@ function ImportItemsEditor({
                 </td>
                 <td className="px-1.5 py-1 align-top">
                   <Input
-                    value={item.vendor_product_id ?? ''}
+                    value={item.vendor_product_name ?? ''}
+                    placeholder="廠商品名"
+                    aria-label={`${groupLabel} 第 ${i + 1} 個品項 廠商品名`}
+                    className="h-7 text-xs"
+                    onChange={(e) => onPatch(i, { vendor_product_name: e.target.value })}
+                  />
+                </td>
+                <td className="px-1.5 py-1 align-top">
+                  <Input
+                    value={item.vendor_product_id || match?.vendorCode || ''}
                     placeholder="廠商料號"
                     aria-label={`${groupLabel} 第 ${i + 1} 個品項 廠商料號`}
                     className="h-7 text-xs"
                     onChange={(e) => onPatch(i, { vendor_product_id: e.target.value })}
                   />
                 </td>
-                <td className="px-1.5 py-1 align-top">
-                  <Input
-                    value={item.sku ?? ''}
-                    placeholder="SKU"
-                    aria-label={`${groupLabel} 第 ${i + 1} 個品項 SKU`}
-                    className="h-7 text-xs"
-                    onChange={(e) => onPatch(i, { sku: e.target.value })}
-                  />
-                </td>
+
                 <td className="px-1.5 py-1 align-top">
                   <Input
                     type="number"
@@ -285,7 +308,7 @@ function ImportItemsEditor({
                         size="sm"
                         className="h-6 px-2 text-xs"
                         disabled={!code || savingCode === code}
-                        title={code ? undefined : '請先填寫廠商料號，才能建立商品對照'}
+                        title={code ? undefined : '請先填寫品名／廠商品名，才能建立商品對照'}
                         aria-label={`為${groupLabel}第 ${i + 1} 個品項（${itemLabel(item)}）指定內部商品`}
                         onClick={() => onAssign(item)}
                       >
@@ -345,7 +368,7 @@ function ImportItemsEditor({
         </tbody>
         <tfoot>
           <tr className="border-t">
-            <td colSpan={7} className="px-1.5 py-1 text-right font-medium">合計</td>
+            <td colSpan={8} className="px-1.5 py-1 text-right font-medium">合計</td>
             <td className="px-1.5 py-1 text-right tabular-nums font-medium">
               {formatCurrency(groupAmount(items))}
             </td>
@@ -354,6 +377,7 @@ function ImportItemsEditor({
           </tr>
         </tfoot>
       </table>
+      </div>
 
       {items.some((it, i) => itemErrors(it, i).length > 0) && (
         <ul className="mt-1.5 space-y-0.5 text-destructive">
@@ -436,8 +460,8 @@ function groupAmount(items: ImportItemRow[]): number {
  */
 function itemErrors(item: ImportItemRow, rowIndex: number): string[] {
   const errs: string[] = [];
-  const label = item.vendor_product_id?.trim() || item.sku?.trim() || item.name?.trim();
-  if (!label) errs.push(`第 ${rowIndex + 1} 個品項未填 SKU／廠商料號／品名，無法對應商品`);
+  const label = item.vendor_product_id?.trim() || item.vendor_product_name?.trim() || item.sku?.trim() || item.name?.trim();
+  if (!label) errs.push(`第 ${rowIndex + 1} 個品項未填 SKU／品名／廠商料號／廠商品名，無法對應商品`);
   const qty = item.quantity;
   if (qty === undefined || qty === null || !Number.isFinite(qty)) {
     errs.push(`「${label ?? rowIndex + 1}」缺少數量`);
@@ -466,6 +490,11 @@ export function PurchaseDocImportDialog({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [view, setView] = useState<View>('setup');
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const stored = window.localStorage.getItem('po-import-sidebar-open');
+    return stored === null ? true : stored === '1';
+  });
   const [activeTab, setActiveTab] = useState<'upload' | 'paste'>('upload');
   const [pastedText, setPastedText] = useState('');
   const [parseResult, setParseResult] = useState<ImportParseResult | null>(null);
@@ -654,6 +683,19 @@ export function PurchaseDocImportDialog({
     return Array.from(set);
   }, [groups, itemsOf]);
 
+  /** 品名集合（廠商料號缺漏時，以品名／廠商品名比對 mapping） */
+  const importNames = useMemo(() => {
+    const set = new Set<string>();
+    for (const g of groups) {
+      for (const it of itemsOf(g)) {
+        if (it.vendor_product_id?.trim()) continue;
+        const name = it.name?.trim() || it.vendor_product_name?.trim();
+        if (name) set.add(name);
+      }
+    }
+    return Array.from(set);
+  }, [groups, itemsOf]);
+
   // 匯入預覽的商品比對，鏡像伺服端 `_po_resolve_item`：
   //   1. 廠商料號 → supplier_product_mappings（主對照優先；同料號多筆且無主對照 → 歧義）
   //   2. SKU → product_variants.sku
@@ -663,24 +705,27 @@ export function PurchaseDocImportDialog({
   //   全不命中時伺服端會 RAISE 讓整張單中止，故前端改以「未比對」提示 + 手動指定變體處理。
   const { data: importMappings = [] as ImportMappingRow[], isLoading: mappingsLoading } = useQuery({
     queryKey: ['po-import-mappings', supplierId],
-    enabled: !!supplierId && importCodes.length > 0,
+    enabled: !!supplierId && (importCodes.length > 0 || importNames.length > 0),
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('supplier_product_mappings')
         .select(`
-          id, vendor_product_id, internal_product_id, internal_variant_id,
+          id, vendor_product_id, vendor_product_name, internal_product_id, internal_variant_id,
           is_primary, updated_at, created_at,
           internal_product:products(id, name),
           internal_variant:product_variants(id, name, sku)
         `)
         .eq('supplier_id', supplierId);
       if (error) throw error;
-      const wanted = new Set(importCodes);
+      const wantedCodes = new Set(importCodes);
+      const wantedNames = new Set(importNames);
       return ((data || []) as any[])
-        .filter((row) => wanted.has(row.vendor_product_id?.trim() ?? ''))
+        .filter((row) => wantedCodes.has(row.vendor_product_id?.trim() ?? '')
+          || wantedNames.has(row.vendor_product_name?.trim() ?? ''))
         .map((row) => ({
           id: row.id as string,
           vendor_product_id: row.vendor_product_id,
+          vendor_product_name: row.vendor_product_name,
           internal_product_id: row.internal_product_id,
           internal_variant_id: row.internal_variant_id,
           is_primary: row.is_primary,
@@ -739,6 +784,39 @@ export function PurchaseDocImportDialog({
     (item: ImportItemRow): ImportMatchResult | null => resolveImportItem(item, matchIndex),
     [matchIndex],
   );
+
+  // 比對成功後，自動回填空欄位（僅填空值，不覆蓋使用者手動輸入）：
+  //   品名 ← 內部商品名；SKU ← 內部變體 SKU；廠商料號 ← 對照列的廠商料號
+  useEffect(() => {
+    if (!matchIndex) return;
+    setItemEdits((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const g of groups) {
+        const base = next[g.index] ?? g.items;
+        let groupChanged = false;
+        const newItems = base.map((it) => {
+          const m = resolveImportItem(it, matchIndex);
+          if (m?.status !== 'matched') return it;
+          const patch: Partial<ImportItemRow> = {};
+          if (!it.name?.trim() && m.label) patch.name = m.label;
+          if (!it.vendor_product_id?.trim() && m.vendorCode) patch.vendor_product_id = m.vendorCode;
+          if (!it.sku?.trim() && (m.variantId || m.productId)) {
+            const prod = catalogProducts.find((p) => p.id === m.productId);
+            const variant = m.variantId ? prod?.variants?.find((v) => v.id === m.variantId) : null;
+            const sku = variant?.sku || (m.variantId ? null : prod?.code);
+            if (sku) patch.sku = sku;
+          }
+          if (Object.keys(patch).length === 0) return it;
+          groupChanged = true;
+          changed = true;
+          return { ...it, ...patch };
+        });
+        if (groupChanged) next[g.index] = newItems;
+      }
+      return changed ? next : prev;
+    });
+  }, [matchIndex, groups, catalogProducts]);
 
   /** 該群組內未比對到商品的品項；資料未載完時一律回空，避免誤判 */
   const unmatchedItemsOf = useCallback(
@@ -885,7 +963,11 @@ export function PurchaseDocImportDialog({
   }, [unmatchedItems]);
 
   const openPicker = (item: ImportItemRow) => {
-    setPickerFor({ code: item.vendor_product_id?.trim() ?? '', itemName: item.name?.trim() ?? '' });
+    const code = item.vendor_product_id?.trim()
+      || item.vendor_product_name?.trim()
+      || item.name?.trim()
+      || '';
+    setPickerFor({ code, itemName: item.name?.trim() || item.vendor_product_name?.trim() || '' });
   };
 
   const handlePickVariant = async (target: { productId: string; variantId: string; label: string }) => {
@@ -902,7 +984,7 @@ export function PurchaseDocImportDialog({
       await ensureMappingMutation.mutateAsync({
         supplier_id: supplierId as string,
         vendor_product_id: code,
-        vendor_product_name: firstItem?.name ?? pickerFor?.itemName ?? null,
+        vendor_product_name: firstItem?.vendor_product_name ?? firstItem?.name ?? pickerFor?.itemName ?? code,
         internal_product_id: target.productId,
         internal_variant_id: target.variantId,
       });
@@ -921,7 +1003,9 @@ export function PurchaseDocImportDialog({
   };
 
   const clearManualTarget = (item: ImportItemRow) => {
-    const code = item.vendor_product_id?.trim();
+    const code = item.vendor_product_id?.trim()
+      || item.vendor_product_name?.trim()
+      || item.name?.trim();
     if (!code) return;
     setManualTargets(prev => {
       const next = { ...prev };
@@ -1080,56 +1164,56 @@ export function PurchaseDocImportDialog({
   });
 
   interface ResultRow {
-  index: number;
-  status: 'created' | 'skipped';
-  label: string;
-  badges: string[];
-  reason?: string;
-  footNote?: string;
-  amount?: number;
-  createdItems: { name: string; quantity: number }[];
-  skippedItems: { name: string; quantity: number }[];
-}
+    index: number;
+    status: 'created' | 'skipped';
+    label: string;
+    badges: string[];
+    reason?: string;
+    footNote?: string;
+    amount?: number;
+    createdItems: { name: string; quantity: number }[];
+    skippedItems: { name: string; quantity: number }[];
+  }
 
-/**
- * 採購與退貨兩支 RPC 的回傳欄位不同（退貨用 supplier_return_number / created_items，
- * 採購用 supplier_order_number / created_items + skipped_items），此處先正規化成同一顯示模型。
- */
-const resultRows: ResultRow[] = useMemo(() => {
-  const rows = (result?.results ?? []) as Array<Record<string, unknown>>;
-  return rows.map((raw) => {
-    const status = (raw.status === 'created' ? 'created' : 'skipped') as 'created' | 'skipped';
-    const created = (raw.created_items as Array<{ name?: string; quantity?: number }>) ?? [];
-    const skipped = (raw.skipped_items as Array<{ name?: string; quantity?: number }>) ?? [];
-    const badges: string[] = [];
-    if (raw.received) badges.push('已收貨入庫');
-    if (isReturns && created.length > 0) {
-      badges.push(`${created.length} 項／${created.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0)} 件`);
-    }
-    return {
-      index: Number(raw.index ?? 0),
-      status,
-      label: String((isReturns ? raw.supplier_return_number : raw.supplier_order_number) ?? ''),
-      badges,
-      reason: raw.reason ? String(raw.reason) : undefined,
-      footNote: isReturns && raw.purchase_order_id
-        ? `對應採購單：${String(raw.purchase_order_id).slice(0, 8)}`
-        : undefined,
-      amount: isReturns && status === 'created' ? Number(raw.total_amount ?? 0) : undefined,
-      createdItems: created.map(i => ({ name: String(i.name ?? ''), quantity: Number(i.quantity ?? 0) })),
-      skippedItems: skipped.map(i => ({ name: String(i.name ?? ''), quantity: Number(i.quantity ?? 0) })),
-    };
-  });
-}, [result, isReturns]);
+  /**
+   * 採購與退貨兩支 RPC 的回傳欄位不同（退貨用 supplier_return_number / created_items，
+   * 採購用 supplier_order_number / created_items + skipped_items），此處先正規化成同一顯示模型。
+   */
+  const resultRows: ResultRow[] = useMemo(() => {
+    const rows = (result?.results ?? []) as Array<Record<string, unknown>>;
+    return rows.map((raw) => {
+      const status = (raw.status === 'created' ? 'created' : 'skipped') as 'created' | 'skipped';
+      const created = (raw.created_items as Array<{ name?: string; quantity?: number }>) ?? [];
+      const skipped = (raw.skipped_items as Array<{ name?: string; quantity?: number }>) ?? [];
+      const badges: string[] = [];
+      if (raw.received) badges.push('已收貨入庫');
+      if (isReturns && created.length > 0) {
+        badges.push(`${created.length} 項／${created.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0)} 件`);
+      }
+      return {
+        index: Number(raw.index ?? 0),
+        status,
+        label: String((isReturns ? raw.supplier_return_number : raw.supplier_order_number) ?? ''),
+        badges,
+        reason: raw.reason ? String(raw.reason) : undefined,
+        footNote: isReturns && raw.purchase_order_id
+          ? `對應採購單：${String(raw.purchase_order_id).slice(0, 8)}`
+          : undefined,
+        amount: isReturns && status === 'created' ? Number(raw.total_amount ?? 0) : undefined,
+        createdItems: created.map(i => ({ name: String(i.name ?? ''), quantity: Number(i.quantity ?? 0) })),
+        skippedItems: skipped.map(i => ({ name: String(i.name ?? ''), quantity: Number(i.quantity ?? 0) })),
+      };
+    });
+  }, [result, isReturns]);
 
-const resultErrorRows = useMemo(() => {
-  const errs = (result?.errors ?? []) as Array<Record<string, unknown>>;
-  return errs.map(e => ({
-    index: Number(e.index ?? 0),
-    reason: String(e.reason ?? ''),
-    label: String((isReturns ? e.supplier_return_number : e.supplier_order_number) ?? ''),
-  }));
-}, [result, isReturns]);
+  const resultErrorRows = useMemo(() => {
+    const errs = (result?.errors ?? []) as Array<Record<string, unknown>>;
+    return errs.map(e => ({
+      index: Number(e.index ?? 0),
+      reason: String(e.reason ?? ''),
+      label: String((isReturns ? e.supplier_return_number : e.supplier_order_number) ?? ''),
+    }));
+  }, [result, isReturns]);
 
   // 勾選「產生沖帳分錄」時必須指定入帳帳戶（會計分類可留空，由伺服端使用預設的「供應商退貨沖帳」）
   const missingCostGroups = isReturns
@@ -1142,7 +1226,7 @@ const resultErrorRows = useMemo(() => {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-5xl max-h-[88vh] flex flex-col">
+      <DialogContent className="max-w-7xl max-h-[88vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileUp className="h-5 w-5" />
@@ -1311,368 +1395,298 @@ const resultErrorRows = useMemo(() => {
             </DialogFooter>
           </div>
         ) : view === 'preview' ? (
-          <div className="flex-1 min-h-0 flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground shrink-0">
-              <Badge variant="outline">{fileName || '貼上內容'}</Badge>
-              <span>共 <strong>{groups.length}</strong> 張</span>
-              <span>・</span>
-              <span>品項 <strong>{totalItems}</strong> 列（{totalQuantity} 件）</span>
-              <span>・</span>
-              <span>
-                總金額 <strong className="text-foreground">{formatCurrency(groupAmountAll)}</strong>
-              </span>
-              {selectedGroups.length !== groups.length && (
-                <Badge variant="secondary">
-                  將匯入 {selectedGroups.length} 張／{formatCurrency(selectedAmount)}
-                </Badge>
-              )}
-              {errorGroups.length > 0 && (
-                <Badge variant="destructive">需修正 {errorGroups.length} 張</Badge>
-              )}
-            {unmatchedCodes.length > 0 && (
-              <div className="rounded-lg border border-amber-500/40 bg-amber-50 p-2 text-xs space-y-1 shrink-0 max-h-32 overflow-y-auto">
-                <div className="font-medium text-amber-800">
-                  以下品項在供應商商品對照與商品目錄中都找不到對應商品，請先手動指定內部變體（指定後會永久存成該料號的主對照），否則伺服端會整張中止：
-                </div>
-                <ul className="space-y-0.5 text-amber-800">
-                  {unmatchedCodes.map((u) => (
-                    <li key={u.code || `#${u.name}`} className="flex flex-wrap items-center gap-1">
-                      <span className="font-medium">
-                        {u.code || `（無廠商料號）${u.name || '（未命名品項）'}`}
-                      </span>
-                      {u.name && u.code && <span className="text-muted-foreground">・{u.name}</span>}
-                      {u.count > 1 && <span>（共 {u.count} 列）</span>}
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-muted-foreground">
-                  點「品項」欄展開後，按該品項的「指定商品」挑選內部變體即可。
-                </p>
+          <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-3">
+            <div className="flex-1 min-w-0 flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground shrink-0">
+                <Badge variant="outline">{fileName || '貼上內容'}</Badge>
+                <span>共 <strong>{groups.length}</strong> 張</span>
+                <span>・</span>
+                <span>品項 <strong>{totalItems}</strong> 列（{totalQuantity} 件）</span>
+                <span>・</span>
+                <span>
+                  總金額 <strong className="text-foreground">{formatCurrency(groupAmountAll)}</strong>
+                </span>
+                {selectedGroups.length !== groups.length && (
+                  <Badge variant="secondary">
+                    將匯入 {selectedGroups.length} 張／{formatCurrency(selectedAmount)}
+                  </Badge>
+                )}
+                {errorGroups.length > 0 && (
+                  <Badge variant="destructive">需修正 {errorGroups.length} 張</Badge>
+                )}
               </div>
-            )}
 
-            {ambiguousGroups.length > 0 && (
-                <Badge variant="outline" className="border-amber-500 text-amber-700">
-                  料號歧義 {ambiguousCodeCount} 個料號／{ambiguousGroups.length} 張
-                </Badge>
-              )}
-              {missingCostGroups.length > 0 && (
-                <Badge variant="outline" className="border-amber-500 text-amber-700">
-                  成本未知 {missingCostGroups.length} 張
-                </Badge>
-              )}
-            </div>
-
-            {missingCostGroups.length > 0 && (
-              <div className="rounded-lg border border-amber-500/40 bg-amber-50 p-2 text-xs text-amber-800 shrink-0">
-                <div className="font-medium">
-                  下列退貨單未填「原採購單」且檔案未填成本：伺服端會再查供應商商品對照成本，若仍查不到則退貨額為 0 元，且不會產生沖帳分錄（仍會退庫存）。
-                </div>
-                <div className="mt-1">
-                  {missingCostGroups.map(g => (
-                    <span key={g.index} className="mr-3 inline-block">
-                      第 {g.index + 1} 張（{g.supplier_order_number || '未填單號'}）
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {parseResult?.errors.length ? (
-              <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive space-y-1 shrink-0">
-                {parseResult.errors.map((e, i) => <div key={i}>{e}</div>)}
-              </div>
-            ) : null}
-
-            <ScrollArea className="flex-1 min-h-0 rounded-lg border">
-              {groups.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground">
-                  <Inbox className="h-8 w-8" />
-                  <p className="text-sm">沒有解析到任何資料列</p>
-                </div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-background z-10">
-                    <tr className="border-b">
-                      <th className="text-left px-3 py-2 font-medium w-10">匯入</th>
-                      <th className="text-left px-3 py-2 font-medium">{isReturns ? '退貨單號' : '廠商單號'}</th>
-                      {isReturns && <th className="text-left px-3 py-2 font-medium">原採購單</th>}
-                      {!isReturns && (
-                        <>
-                          <th className="text-left px-3 py-2 font-medium">採購日期</th>
-                          <th className="text-left px-3 py-2 font-medium">預計到貨</th>
-                        </>
-                      )}
-                      {!isReturns && (
-                        <>
-                          <th className="text-left px-3 py-2 font-medium">狀態</th>
-                          <th className="text-left px-3 py-2 font-medium">類型</th>
-                          <th className="text-left px-3 py-2 font-medium">立即收貨</th>
-                        </>
-                      )}
-                      <th className="text-left px-3 py-2 font-medium">品項</th>
-                      <th className="text-right px-3 py-2 font-medium">金額</th>
-                      <th className="text-left px-3 py-2 font-medium">檢查</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {groups.map((g) => {
-                      const edit = editOf(g);
-                      const errs = groupErrors(g);
-                      const ambiguousCodes = groupAmbiguousCodes(g);
-                      const unmatchedCount = unmatchedItemsOf(g).length;
-                      const isExcluded = !!excluded[g.index];
-                      const existingCount = g.supplier_order_number
-                        ? existingPoCount.get(g.supplier_order_number) || 0
-                        : 0;
-                      const gItems = itemsOf(g);
-                      const gQty = gItems.reduce((s, i) => s + (i.quantity || 0), 0);
-                      const isExpanded = !!expanded[g.index];
-                      return (
-                        <Fragment key={g.index}>
-                        <tr className={cn(
-                          errs.length ? 'bg-destructive/5' : '',
-                          isExpanded && 'bg-muted/30',
-                        )}>
-                          <td className="px-3 py-2">
-                            <Checkbox
-                              aria-label={`匯入第 ${g.index + 1} 張${isReturns ? '退貨單' : '採購單'}`}
-                              checked={!isExcluded && errs.length === 0}
-                              disabled={errs.length > 0}
-                              onCheckedChange={(v) => setExcluded((prev) => ({ ...prev, [g.index]: v !== true }))}
-                            />
-                          </td>
-                          <td className="px-3 py-2 font-medium">
-                            {g.supplier_order_number || <span className="text-muted-foreground">未填（不判重）</span>}
-                            {existingCount > 0 && (
-                              <Badge variant="outline" className="ml-2">已存在 {existingCount} 張</Badge>
-                            )}
-                          </td>
-                          {isReturns ? (
-                            <td className="px-3 py-2">
-                              {(g as ReturnImportGroup).source_purchase_order_ref
-                                ? ((g as ReturnImportGroup).source_purchase_order_id
-                                  ? (
-                                    <span className="flex items-center gap-1 text-emerald-700 text-xs">
-                                      <CheckCircle2 className="h-3.5 w-3.5" />
-                                      {(g as ReturnImportGroup).source_purchase_order_ref}
-                                    </span>
-                                  )
-                                  : (
-                                    <span className="flex items-start gap-1 text-destructive text-xs">
-                                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                      找不到「{(g as ReturnImportGroup).source_purchase_order_ref}」
-                                    </span>
-                                  ))
-                                : <span className="text-muted-foreground">未填（獨立退貨）</span>}
-                            </td>
-                          ) : null}
-                          {!isReturns && (
-                            <>
-                              <td className="px-3 py-2">
-                                <ImportDateCell
-                                  value={edit.orderDate ?? g.order_date}
-                                  invalid={dateIssueField(g, 'order_date') !== undefined}
-                                  raw={dateIssueField(g, 'order_date')?.raw}
-                                  placeholder="今天"
-                                  ariaLabel={`第 ${g.index + 1} 張採購日期`}
-                                  onChange={(v) => patchEdit(g.index, { orderDate: v })}
-                                  onReset={edit.orderDate ? () => patchEdit(g.index, { orderDate: undefined }) : undefined}
-                                />
-                              </td>
-                              <td className="px-3 py-2">
-                                <ImportDateCell
-                                  value={edit.expectedDate ?? g.expected_date}
-                                  invalid={dateIssueField(g, 'expected_date') !== undefined}
-                                  raw={dateIssueField(g, 'expected_date')?.raw}
-                                  placeholder="未填"
-                                  ariaLabel={`第 ${g.index + 1} 張預計到貨日`}
-                                  onChange={(v) => patchEdit(g.index, { expectedDate: v })}
-                                  onReset={edit.expectedDate ? () => patchEdit(g.index, { expectedDate: undefined }) : undefined}
-                                />
-                              </td>
-                            </>
-                          )}
-                          {!isReturns && (
-                            <>
-                          <td className="px-3 py-2">
-                            <Select
-                              value={edit.status}
-                              onValueChange={(v) => patchEdit(g.index, { status: v })}
-                            >
-                              <SelectTrigger className="h-8 w-32" aria-label="狀態">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {STATUS_OPTIONS.map((o) => (
-                                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="px-3 py-2">
-                            <Select
-                              value={edit.purpose}
-                              onValueChange={(v) => patchEdit(g.index, { purpose: v })}
-                            >
-                              <SelectTrigger className="h-8 w-28" aria-label="類型">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {PURPOSE_OPTIONS.map((o) => (
-                                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="px-3 py-2">
-                            <Checkbox
-                              aria-label={`第 ${g.index + 1} 張立即收貨`}
-                              checked={edit.receive}
-                              onCheckedChange={(v) => patchEdit(g.index, { receive: v === true })}
-                            />
-                          </td>
-                            </>
-                          )}
-                          <td className="px-3 py-2">
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1 hover:underline"
-                              aria-expanded={isExpanded}
-                              aria-label={`${isExpanded ? '收合' : '展開'}第 ${g.index + 1} 張${isReturns ? '退貨單' : '採購單'}的品項`}
-                              onClick={() => setExpanded((prev) => ({ ...prev, [g.index]: !prev[g.index] }))}
-                            >
-                              {isExpanded
-                                ? <ChevronDown className="h-3.5 w-3.5" />
-                                : <ChevronRight className="h-3.5 w-3.5" />}
-                              {gItems.length} 列（{gQty} 件）
-                            </button>
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
-                            {isReturns && (g as ReturnImportGroup).missingCostWithoutSource ? (
-                              <span className="text-amber-700">預估 {formatCurrency(0)}</span>
-                            ) : (
-                              formatCurrency(groupAmount(gItems))
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            {errs.length ? (
-                              <span className="flex items-start gap-1 text-destructive text-xs">
-                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                {unmatchedCount > 0 ? `未匹配 ${unmatchedCount} 個品項` : errs[0]}
-                                {unmatchedCount === 0 && errs.length > 1 && <span className="text-muted-foreground">等 {errs.length} 項</span>}
-                              </span>
-                            ) : isReturns && (g as ReturnImportGroup).missingCostWithoutSource ? (
-                              <span
-                                className="flex items-start gap-1 text-amber-700 text-xs"
-                                title="未填原採購單且檔案未提供成本：伺服端會再查供應商商品對照成本，查不到則退貨額為 0 元，且不會產生沖帳分錄"
-                              >
-                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                成本未知（可能 0 元且不沖帳）
-                              </span>
-                            ) : ambiguousCodes.length > 0 ? (
-                              <span
-                                className="flex items-start gap-1 text-amber-700 text-xs"
-                                title={`料號歧義：${ambiguousCodes.join('、')}（將依最近更新的對照匯入）`}
-                              >
-                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                料號歧義 {ambiguousCodes.length} 個
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1 text-emerald-600 text-xs">
-                                <CheckCircle2 className="h-3.5 w-3.5" /> 就緒
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                        {isExpanded && (
-                          <tr>
-                            <td colSpan={isReturns ? 6 : 10} className="px-3 pb-3">
-                              <ImportItemsEditor
-                                groupLabel={`第 ${g.index + 1} 張（${g.supplier_order_number || '未填單號'}）`}
-                                items={gItems}
-                                dirty={itemEdits[g.index] !== undefined}
-                                onPatch={(i, patch) => patchItem(g.index, i, patch)}
-                                onRemove={(i) => removeItem(g.index, i)}
-                                onAdd={() => addItem(g.index)}
-                                onReset={() => resetItems(g.index)}
-                                matchIndex={matchIndex}
-                                matchOf={matchOf}
-                                savingCode={savingCode}
-                                onAssign={openPicker}
-                                onClearAssignment={clearManualTarget}
-                              />
-                            </td>
-                          </tr>
+              <ScrollArea className="flex-1 min-h-0 rounded-lg border">
+                {groups.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground">
+                    <Inbox className="h-8 w-8" />
+                    <p className="text-sm">沒有解析到任何資料列</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-background z-10">
+                      <tr className="border-b">
+                        <th className="text-left px-3 py-2 font-medium w-10">匯入</th>
+                        <th className="text-left px-3 py-2 font-medium">{isReturns ? '退貨單號' : '廠商單號'}</th>
+                        {isReturns && <th className="text-left px-3 py-2 font-medium">原採購單</th>}
+                        {!isReturns && (
+                          <>
+                            <th className="text-left px-3 py-2 font-medium">採購日期</th>
+                            <th className="text-left px-3 py-2 font-medium">預計到貨</th>
+                          </>
                         )}
-                        </Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </ScrollArea>
+                        {!isReturns && (
+                          <>
+                            <th className="text-left px-3 py-2 font-medium">狀態</th>
+                            <th className="text-left px-3 py-2 font-medium">類型</th>
+                            <th className="text-left px-3 py-2 font-medium">立即收貨</th>
+                          </>
+                        )}
+                        <th className="text-left px-3 py-2 font-medium">品項</th>
+                        <th className="text-right px-3 py-2 font-medium">金額</th>
+                        <th className="text-left px-3 py-2 font-medium">檢查</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {groups.map((g) => {
+                        const edit = editOf(g);
+                        const errs = groupErrors(g);
+                        const ambiguousCodes = groupAmbiguousCodes(g);
+                        const unmatchedCount = unmatchedItemsOf(g).length;
+                        const isExcluded = !!excluded[g.index];
+                        const existingCount = g.supplier_order_number
+                          ? existingPoCount.get(g.supplier_order_number) || 0
+                          : 0;
+                        const gItems = itemsOf(g);
+                        const gQty = gItems.reduce((s, i) => s + (i.quantity || 0), 0);
+                        const isExpanded = !!expanded[g.index];
+                        return (
+                          <Fragment key={g.index}>
+                            <tr className={cn(
+                              errs.length ? 'bg-destructive/5' : '',
+                              isExpanded && 'bg-muted/30',
+                            )}>
+                              <td className="px-3 py-2">
+                                <Checkbox
+                                  aria-label={`匯入第 ${g.index + 1} 張${isReturns ? '退貨單' : '採購單'}`}
+                                  checked={!isExcluded && errs.length === 0}
+                                  disabled={errs.length > 0}
+                                  onCheckedChange={(v) => setExcluded((prev) => ({ ...prev, [g.index]: v !== true }))}
+                                />
+                              </td>
+                              <td className="px-3 py-2 font-medium">
+                                {g.supplier_order_number || <span className="text-muted-foreground">未填（不判重）</span>}
+                                {existingCount > 0 && (
+                                  <Badge variant="outline" className="ml-2">已存在 {existingCount} 張</Badge>
+                                )}
+                              </td>
+                              {isReturns ? (
+                                <td className="px-3 py-2">
+                                  {(g as ReturnImportGroup).source_purchase_order_ref
+                                    ? ((g as ReturnImportGroup).source_purchase_order_id
+                                      ? (
+                                        <span className="flex items-center gap-1 text-emerald-700 text-xs">
+                                          <CheckCircle2 className="h-3.5 w-3.5" />
+                                          {(g as ReturnImportGroup).source_purchase_order_ref}
+                                        </span>
+                                      )
+                                      : (
+                                        <span className="flex items-start gap-1 text-destructive text-xs">
+                                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                          找不到「{(g as ReturnImportGroup).source_purchase_order_ref}」
+                                        </span>
+                                      ))
+                                    : <span className="text-muted-foreground">未填（獨立退貨）</span>}
+                                </td>
+                              ) : null}
+                              {!isReturns && (
+                                <>
+                                  <td className="px-3 py-2">
+                                    <ImportDateCell
+                                      value={edit.orderDate ?? g.order_date}
+                                      invalid={dateIssueField(g, 'order_date') !== undefined}
+                                      raw={dateIssueField(g, 'order_date')?.raw}
+                                      placeholder="今天"
+                                      ariaLabel={`第 ${g.index + 1} 張採購日期`}
+                                      onChange={(v) => patchEdit(g.index, { orderDate: v })}
+                                      onReset={edit.orderDate ? () => patchEdit(g.index, { orderDate: undefined }) : undefined}
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <ImportDateCell
+                                      value={edit.expectedDate ?? g.expected_date}
+                                      invalid={dateIssueField(g, 'expected_date') !== undefined}
+                                      raw={dateIssueField(g, 'expected_date')?.raw}
+                                      placeholder="未填"
+                                      ariaLabel={`第 ${g.index + 1} 張預計到貨日`}
+                                      onChange={(v) => patchEdit(g.index, { expectedDate: v })}
+                                      onReset={edit.expectedDate ? () => patchEdit(g.index, { expectedDate: undefined }) : undefined}
+                                    />
+                                  </td>
+                                </>
+                              )}
+                              {!isReturns && (
+                                <>
+                                  <td className="px-3 py-2">
+                                    <Select
+                                      value={edit.status}
+                                      onValueChange={(v) => patchEdit(g.index, { status: v })}
+                                    >
+                                      <SelectTrigger className="h-8 w-32" aria-label="狀態">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {STATUS_OPTIONS.map((o) => (
+                                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <Select
+                                      value={edit.purpose}
+                                      onValueChange={(v) => patchEdit(g.index, { purpose: v })}
+                                    >
+                                      <SelectTrigger className="h-8 w-28" aria-label="類型">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {PURPOSE_OPTIONS.map((o) => (
+                                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <Checkbox
+                                      aria-label={`第 ${g.index + 1} 張立即收貨`}
+                                      checked={edit.receive}
+                                      onCheckedChange={(v) => patchEdit(g.index, { receive: v === true })}
+                                    />
+                                  </td>
+                                </>
+                              )}
+                              <td className="px-3 py-2">
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-1 hover:underline"
+                                  aria-expanded={isExpanded}
+                                  aria-label={`${isExpanded ? '收合' : '展開'}第 ${g.index + 1} 張${isReturns ? '退貨單' : '採購單'}的品項`}
+                                  onClick={() => setExpanded((prev) => ({ ...prev, [g.index]: !prev[g.index] }))}
+                                >
+                                  {isExpanded
+                                    ? <ChevronDown className="h-3.5 w-3.5" />
+                                    : <ChevronRight className="h-3.5 w-3.5" />}
+                                  {gItems.length} 列（{gQty} 件）
+                                </button>
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                                {isReturns && (g as ReturnImportGroup).missingCostWithoutSource ? (
+                                  <span className="text-amber-700">預估 {formatCurrency(0)}</span>
+                                ) : (
+                                  formatCurrency(groupAmount(gItems))
+                                )}
+                              </td>
+                              <td className="px-3 py-2">
+                                {errs.length ? (
+                                  <span className="flex items-start gap-1 text-destructive text-xs">
+                                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                    {unmatchedCount > 0 ? `未匹配 ${unmatchedCount} 個品項` : errs[0]}
+                                    {unmatchedCount === 0 && errs.length > 1 && <span className="text-muted-foreground">等 {errs.length} 項</span>}
+                                  </span>
+                                ) : isReturns && (g as ReturnImportGroup).missingCostWithoutSource ? (
+                                  <span
+                                    className="flex items-start gap-1 text-amber-700 text-xs"
+                                    title="未填原採購單且檔案未提供成本：伺服端會再查供應商商品對照成本，查不到則退貨額為 0 元，且不會產生沖帳分錄"
+                                  >
+                                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                    成本未知（可能 0 元且不沖帳）
+                                  </span>
+                                ) : ambiguousCodes.length > 0 ? (
+                                  <span
+                                    className="flex items-start gap-1 text-amber-700 text-xs"
+                                    title={`料號歧義：${ambiguousCodes.join('、')}（將依最近更新的對照匯入）`}
+                                  >
+                                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                    料號歧義 {ambiguousCodes.length} 個
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-1 text-emerald-600 text-xs">
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> 就緒
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                            {isExpanded && (
+                              <tr>
+                                <td colSpan={isReturns ? 6 : 11} className="px-3 pb-3">
+                                  <div className="overflow-x-auto">
+                                    <ImportItemsEditor
+                                      groupLabel={`第 ${g.index + 1} 張（${g.supplier_order_number || '未填單號'}）`}
+                                      items={gItems}
+                                      catalogProducts={catalogProducts}
+                                      dirty={itemEdits[g.index] !== undefined}
+                                      onPatch={(i, patch) => patchItem(g.index, i, patch)}
+                                      onRemove={(i) => removeItem(g.index, i)}
+                                      onAdd={() => addItem(g.index)}
+                                      onReset={() => resetItems(g.index)}
+                                      matchIndex={matchIndex}
+                                      matchOf={matchOf}
+                                      savingCode={savingCode}
+                                      onAssign={openPicker}
+                                      onClearAssignment={clearManualTarget}
+                                    />
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </ScrollArea>
 
-            {errorGroups.length > 0 && (
-              <div className="rounded-lg border p-2 text-xs space-y-1 shrink-0 max-h-32 overflow-y-auto">
-                {errorGroups.map((g) => (
-                  <div key={g.index}>
-                    <span className="font-medium">第 {g.index + 1} 張（{g.supplier_order_number || '未填單號'}）：</span>
-                    {groupErrors(g).join('；')}
-                  </div>
-                ))}
+              <div className="text-xs text-muted-foreground shrink-0">
+                {isReturns
+                  ? '點「品項」欄可展開並直接修正，或新增、刪除品項。'
+                  : '點「品項」欄可展開並直接修正，或新增、刪除品項。'}
               </div>
-            )}
 
-            {ambiguousGroups.length > 0 && (
-              <div className="rounded-lg border border-amber-500/40 bg-amber-50 p-2 text-xs space-y-1 shrink-0 max-h-32 overflow-y-auto">
-                <div className="font-medium text-amber-800">
-                  以下料號在同一供應商有多筆商品對照、且未設定主對照，將依「最近更新的對照」匯入（不影響匯入，但請先確認商品是否正確）：
-                </div>
-                {ambiguousGroups.map((g) => (
-                  <div key={g.index} className="text-amber-800">
-                    <span className="font-medium">第 {g.index + 1} 張（{g.supplier_order_number || '未填單號'}）：</span>
-                    {groupAmbiguousCodes(g).join('、')}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="text-xs text-muted-foreground shrink-0">
-              {isReturns ? (
-                <>
-                  點「品項」欄可展開並直接修正品名／廠商料號／SKU／數量／成本，或新增、刪除品項，修正後會即時重算該張金額與檢核結果。
-                  退貨品項會以負數建立並扣減庫存；成本優先序為「檔案成本 → 供應商商品對照成本 → 原採購單品項單價」，三者皆取不到時退貨額為 0 元。
-                  退貨單號重複會由伺服器略過（不會重複退庫存），並於結果畫面列出「略過」明細。
-                </>
-              ) : (
-                <>
-                  點「品項」欄可展開並直接修正品名／廠商料號／SKU／數量／單價，或新增、刪除品項，修正後會即時重算該張金額與檢核結果。
-                  逐品項判重（供應商＋廠商單號＋商品／變體）由伺服器執行，重複品項不會重複建立，將於結果畫面列出「略過」明細。
-                  序號／批號數量不符會在伺服端整張回退。
-                  廠商料號若對應多筆商品且未設主對照，將以最近更新的對照匯入（可於「供應商商品對照」設定主對照）。
-                </>
-              )}
+              <DialogFooter className="shrink-0">
+                <Button variant="outline" onClick={() => { setView('setup'); setParseResult(null); }}>
+                  重新選擇
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => (isReturns ? downloadReturnTemplate() : downloadImportTemplate('purchase'))}
+                >
+                  <FileDown className="h-4 w-4 mr-1.5" /> 範本
+                </Button>
+                <Button onClick={() => mutation.mutate()} disabled={!canSubmit}>
+                  {mutation.isPending
+                    ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> 建立中…</>
+                    : isReturns
+                      ? `確認建立 ${selectedGroups.length} 張退貨單`
+                      : `確認建立 ${selectedGroups.length} 張／${formatCurrency(selectedAmount)}`}
+                </Button>
+              </DialogFooter>
             </div>
-
-            <DialogFooter className="shrink-0">
-              <Button variant="outline" onClick={() => { setView('setup'); setParseResult(null); }}>
-                重新選擇
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => (isReturns ? downloadReturnTemplate() : downloadImportTemplate('purchase'))}
-              >
-                <FileDown className="h-4 w-4 mr-1.5" /> 範本
-              </Button>
-              <Button onClick={() => mutation.mutate()} disabled={!canSubmit}>
-                {mutation.isPending
-                  ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> 建立中…</>
-                  : isReturns
-                    ? `確認建立 ${selectedGroups.length} 張退貨單`
-                    : `確認建立 ${selectedGroups.length} 張／${formatCurrency(selectedAmount)}`}
-              </Button>
-            </DialogFooter>
+            {/* 側邊欄：查找說明 / 警示 / 圖例（獨立元件，可收合） */}
+            <PurchaseImportSidebar
+              isReturns={isReturns}
+              unmatchedCodes={unmatchedCodes}
+              ambiguousGroups={ambiguousGroups}
+              ambiguousCodeCount={ambiguousCodeCount}
+              groupAmbiguousCodes={groupAmbiguousCodes}
+              missingCostGroups={missingCostGroups}
+              errorGroups={errorGroups}
+              groupErrors={groupErrors}
+              parseResult={parseResult}
+              open={sidebarOpen}
+              onOpenChange={setSidebarOpen}
+            />
           </div>
         ) : (
           <div className="flex-1 min-h-0 flex flex-col gap-2">

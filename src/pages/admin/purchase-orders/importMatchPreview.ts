@@ -10,6 +10,8 @@
  *     1. btrim(vendor_product_id) 完全相同（case-sensitive）→ supplier_product_mappings
  *        ORDER BY is_primary DESC, updated_at DESC NULLS LAST, created_at DESC, id LIMIT 1
  *        label = COALESCE(pv.name, p.name)；ambiguous = count > 1 且無主對照
+ *     1b. 廠商料號缺漏且品名有值時：btrim(vendor_product_name) 完全相同 → supplier_product_mappings
+ *         （排序與 ambiguous 定義同上）
  *     2. 否則 import_resolve_item(sku, name)：
  *        a. product_variants.sku = sku   → 變體層級
  *        b. products.code = sku OR products.name = sku → 產品層級
@@ -28,12 +30,15 @@ export interface MatchableItem {
   sku?: string;
   name?: string;
   vendor_product_id?: string;
+  vendor_product_name?: string;
 }
 
 /** `supplier_product_mappings` 匯入預覽所需的欄位（不含成本以外的額外欄位） */
 export interface ImportMappingRow {
   id: string;
   vendor_product_id?: string | null;
+  /** 廠商品名（後端 _po_resolve_item 在廠商料號缺漏時以此比對） */
+  vendor_product_name?: string | null;
   internal_product_id?: string | null;
   internal_variant_id?: string | null;
   is_primary?: boolean | null;
@@ -78,6 +83,8 @@ export interface ImportMatchResult extends ImportMatchTarget {
   /** 與 `_po_resolve_item` 的 ambiguous 定義一致：同料號多筆對照且無主對照 */
   ambiguous: boolean;
   candidateCount: number;
+  /** 對照列的廠商料號（供預覽自動回填廠商料號；mapping 命中時有值） */
+  vendorCode?: string | null;
 }
 
 /** 手動指定（指定後即寫入 supplier_product_mappings，故優先於既有對照） */
@@ -88,6 +95,8 @@ export interface ManualTarget extends ImportMatchTarget {
 export interface ImportMatchIndex {
   /** 廠商料號 → 對照列（已依後端排序，主對照優先） */
   mappingsByCode: Map<string, ImportMappingRow[]>;
+  /** 廠商品名 → 對照列（後端 _po_resolve_item 在廠商料號缺漏時以此比對） */
+  mappingsByName: Map<string, ImportMappingRow[]>;
   /** 廠商料號 → 使用者本次手動指定的目標 */
   manualByCode: Map<string, ManualTarget>;
   variantBySku: Map<string, ImportMatchTarget>;
@@ -145,14 +154,23 @@ export function buildImportMatchIndex(
   manualByCode: Map<string, ManualTarget> = new Map(),
 ): ImportMatchIndex {
   const mappingsByCode = new Map<string, ImportMappingRow[]>();
+  const mappingsByName = new Map<string, ImportMappingRow[]>();
   for (const row of mappings) {
     const code = trimmed(row.vendor_product_id);
-    if (!code) continue;
-    const bucket = mappingsByCode.get(code);
-    if (bucket) bucket.push(row);
-    else mappingsByCode.set(code, [row]);
+    if (code) {
+      const bucket = mappingsByCode.get(code);
+      if (bucket) bucket.push(row);
+      else mappingsByCode.set(code, [row]);
+    }
+    const vname = trimmed(row.vendor_product_name);
+    if (vname) {
+      const bucket = mappingsByName.get(vname);
+      if (bucket) bucket.push(row);
+      else mappingsByName.set(vname, [row]);
+    }
   }
   for (const bucket of mappingsByCode.values()) bucket.sort(compareMappings);
+  for (const bucket of mappingsByName.values()) bucket.sort(compareMappings);
 
   const variantBySku = new Map<string, ImportMatchTarget>();
   const productByCodeOrName = new Map<string, ImportMatchTarget>();
@@ -182,6 +200,7 @@ export function buildImportMatchIndex(
 
   return {
     mappingsByCode,
+    mappingsByName,
     manualByCode,
     variantBySku,
     productByCodeOrName,
@@ -204,6 +223,7 @@ function matchFromTarget(
     isProductLevel: !target.variantId,
     ambiguous: false,
     candidateCount: 0,
+    vendorCode: null,
     ...extra,
   };
 }
@@ -219,14 +239,17 @@ export function resolveImportItem(
   if (!item || !index) return null;
 
   const code = trimmed(item.vendor_product_id);
+  const name = trimmed(item.name) || trimmed(item.vendor_product_name);
+  // 手動指定的 key：廠商料號優先，缺漏時以廠商品名／品名作為 key（後端 trigger 只禁止空白料號）
+  const manualKey = code || name;
 
   // 使用者手動指定（已寫入對照表）→ 伺服端同樣會走 mapping 路徑命中
-  if (code) {
-    const manual = index.manualByCode.get(code);
-    if (manual) return matchFromTarget(manual, 'manual');
+  if (manualKey) {
+    const manual = index.manualByCode.get(manualKey);
+    if (manual) return matchFromTarget(manual, 'manual', { vendorCode: manualKey });
   }
 
-  // 1. 供應商對照
+  // 1. 供應商對照（廠商料號）
   if (code) {
     const rows = index.mappingsByCode.get(code);
     if (rows && rows.length > 0) {
@@ -242,6 +265,30 @@ export function resolveImportItem(
           isProductLevel: !row.internal_variant_id,
           ambiguous: rows.length > 1 && !rows.some((r) => r.is_primary === true),
           candidateCount: rows.length,
+          vendorCode: row.vendor_product_id ?? code,
+        },
+      );
+    }
+  }
+
+  // 1b. 供應商對照（廠商品名）— 僅當廠商料號缺漏時嘗試
+  //     後端 _po_resolve_item 在廠商料號缺漏、但品名有值時以此比對 mapping。
+  if (!code && name) {
+    const rows = index.mappingsByName.get(name);
+    if (rows && rows.length > 0) {
+      const row = rows[0];
+      return matchFromTarget(
+        {
+          productId: row.internal_product_id,
+          variantId: row.internal_variant_id,
+          label: labelOf(row.internal_label, name),
+        },
+        'mapping',
+        {
+          isProductLevel: !row.internal_variant_id,
+          ambiguous: rows.length > 1 && !rows.some((r) => r.is_primary === true),
+          candidateCount: rows.length,
+          vendorCode: row.vendor_product_id?.trim() || null,
         },
       );
     }
@@ -256,7 +303,6 @@ export function resolveImportItem(
     if (product) return matchFromTarget(product, 'product_code_or_name');
   }
 
-  const name = trimmed(item.name);
   if (name) {
     const variant = index.variantByName.get(name);
     if (variant) return matchFromTarget(variant, 'variant_name');
