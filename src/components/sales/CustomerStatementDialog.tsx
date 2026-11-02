@@ -15,9 +15,16 @@ import { Badge } from "@/components/ui/badge";
 import { StorePicker } from "@/components/ui/StorePicker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
-import { addDays, format } from "date-fns";
+import { addDays, format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, subQuarters, startOfYear, endOfYear, isFirstDayOfMonth, isLastDayOfMonth, isSameMonth } from "date-fns";
 import { zhTW } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/errorMessages";
@@ -94,6 +101,7 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
   const [view, setView] = useState<"list" | "create" | "created">("list");
   const [storeIds, setStoreIds] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [title, setTitle] = useState("");
   const [titleEdited, setTitleEdited] = useState(false);
   const [createdStatement, setCreatedStatement] = useState<CustomerStatement | null>(null);
@@ -122,6 +130,18 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
     return storeOptions.filter((s) => (s.brand || null) === (selectedBrand || null));
   }, [storeOptions, selectedStores, selectedBrand]);
   const selectedStore = selectedStores[0] || null;
+
+  // 近 24 個月的下拉選項（供「快速選整月」使用）
+  const monthOptions = useMemo(() => {
+    const now = new Date();
+    return Array.from({ length: 24 }, (_, i) => {
+      const d = subMonths(now, i);
+      return { value: format(d, "yyyy-MM"), label: format(d, "yyyy年MM月") };
+    });
+  }, []);
+
+  const setMonthRange = (d: Date) =>
+    setDateRange({ from: startOfMonth(d), to: endOfMonth(d) });
 
   const previewFrom = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : "";
   const previewTo = dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : "";
@@ -180,6 +200,11 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
     }
   }, [view, open]);
 
+  // 快速選月後，把 Calendar 視圖自動移到該月份，避免選取範圍落在畫面外
+  useEffect(() => {
+    if (dateRange?.from) setCalendarMonth(dateRange.from);
+  }, [dateRange?.from]);
+
   // 店家/日期變更且使用者尚未手動改標題時，自動重組預設標題
   useEffect(() => {
     if (view !== "create" || titleEdited) return;
@@ -193,7 +218,18 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
     } else if (selectedStores.length > 1) {
       prefix = `${selectedStores[0].name}等${selectedStores.length}家`;
     }
-    setTitle(to ? `${prefix}對帳單 ${from} ~ ${to}` : `${prefix}對帳單 ${from}`);
+    // 整月區間時簡化為「yyyy/MM月 對帳單」
+    const isFullMonth =
+      !!dateRange?.from &&
+      !!dateRange?.to &&
+      isFirstDayOfMonth(dateRange.from) &&
+      isLastDayOfMonth(dateRange.to) &&
+      isSameMonth(dateRange.from, dateRange.to);
+    if (isFullMonth && dateRange?.from) {
+      setTitle(`${prefix} ${format(dateRange.from, "yyyy/MM")}月 對帳單`);
+    } else {
+      setTitle(to ? `${prefix} ${from} ~ ${to}  對帳單` : `${prefix} ${from}  對帳單`);
+    }
   }, [view, selectedStores, selectedBrand, dateRange, titleEdited]);
 
   const resetCreate = () => {
@@ -470,8 +506,87 @@ export function CustomerStatementDialog({ open, onOpenChange }: CustomerStatemen
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
+                  <div className="flex flex-wrap items-center gap-1 border-b p-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => setMonthRange(new Date())}
+                    >
+                      本月
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => setMonthRange(subMonths(new Date(), 1))}
+                    >
+                      上月
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={() =>
+                        setDateRange({
+                          from: startOfQuarter(new Date()),
+                          to: endOfQuarter(new Date()),
+                        })
+                      }
+                    >
+                      本季
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => {
+                        const q = subQuarters(new Date(), 1);
+                        setDateRange({ from: startOfQuarter(q), to: endOfQuarter(q) });
+                      }}
+                    >
+                      上季
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={() =>
+                        setDateRange({
+                          from: startOfYear(new Date()),
+                          to: endOfYear(new Date()),
+                        })
+                      }
+                    >
+                      今年
+                    </Button>
+                    <Select
+                      onValueChange={(v) => {
+                        const [y, m] = v.split("-").map(Number);
+                        setMonthRange(new Date(y, m - 1, 1));
+                      }}
+                    >
+                      <SelectTrigger className="h-7 w-[110px] text-xs">
+                        <SelectValue placeholder="選月份" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {monthOptions.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <Calendar
                     mode="range"
+                    month={calendarMonth}
+                    onMonthChange={setCalendarMonth}
                     selected={dateRange}
                     onSelect={(range) => {
                       const resolved =
