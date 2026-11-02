@@ -1,8 +1,14 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { getRouteTitle } from '@/utils/routeTitles';
 
 export interface PageHeaderConfig {
   title?: ReactNode;
+  /**
+   * 純文字標題，用於同步到瀏覽器分頁標題（document.title）。
+   * title 可為 JSX（UI 顯示用），documentTitle 才寫入 document.title。
+   */
+  documentTitle?: string;
   back?: string;
   onBack?: () => void;
   actions?: ReactNode;
@@ -34,6 +40,15 @@ export function PageHeaderProvider({ children }: { children: ReactNode }) {
     setPrevPath(pathname);
     setPageHeader(null);
   }
+
+  useEffect(() => {
+    const title =
+      pageHeader?.documentTitle ??
+      (typeof pageHeader?.title === 'string' ? (pageHeader.title as string) : null) ??
+      getRouteTitle(pathname) ??
+      'ordermanager';
+    document.title = title;
+  }, [pageHeader, pathname]);
 
   return (
     <PageHeaderContext.Provider value={{ pageHeader, setPageHeader }}>

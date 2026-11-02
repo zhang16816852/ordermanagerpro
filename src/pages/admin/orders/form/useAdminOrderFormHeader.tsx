@@ -88,6 +88,7 @@ export function useAdminOrderFormHeader(params: UseAdminOrderFormHeaderParams) {
       : null;
 
     setPageHeader({
+      documentTitle: titleText,
       title: (
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-sm font-bold tracking-tight truncate">{titleText}</span>

@@ -10,7 +10,7 @@ import { Loader2, AlertCircle, ReceiptText, ChevronDown, Package } from "lucide-
 import { formatCurrency } from "@/lib/formatters";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface StatementItem {
   product_name: string;
@@ -184,6 +184,14 @@ export default function SharedCustomerStatement() {
     },
     retry: false,
   });
+
+  useEffect(() => {
+    if (data?.statement) {
+      document.title = `${data.statement.title || statementId || ''} 客戶對帳單分享`.trim();
+    } else if (error) {
+      document.title = '找不到對帳單';
+    }
+  }, [data, error, statementId]);
 
   if (isLoading) {
     return (

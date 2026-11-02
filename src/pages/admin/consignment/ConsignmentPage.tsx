@@ -42,7 +42,7 @@ export default function AdminConsignment() {
 
   // 手機版把頁面標題交給 sticky MobileHeader 顯示（桌機仍用頁面內的大標，故 mobileOnly）
   useLayoutEffect(() => {
-    setPageHeader({ title: '寄賣管理', mobileOnly: true });
+    setPageHeader({ title: '寄賣管理', mobileOnly: true, documentTitle: '寄賣管理' });
     return () => setPageHeader(null);
   }, [setPageHeader]);
 

@@ -21,7 +21,7 @@ export default function AdminSalesNotes() {
 
   // 「銷售單管理」標題交由共用 Header 呈現（桌面/手機皆適用），省下頁面內大標題空間
   useLayoutEffect(() => {
-    setPageHeader({ title: "銷售單管理" });
+    setPageHeader({ title: "銷售單管理", documentTitle: "銷售單管理" });
     return () => setPageHeader(null);
   }, [setPageHeader]);
 

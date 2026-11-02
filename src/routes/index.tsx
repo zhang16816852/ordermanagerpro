@@ -2,6 +2,7 @@ import { Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PublicLayout } from "@/components/layout/PublicLayout";
+import { DocumentTitleSync } from "@/components/layout/DocumentTitleSync";
 import StorefrontPage from "@/storefront/StorefrontPage";
 import ShopPage from "@/pages/shop/ShopPage";
 import ShopProductDetailPage from "@/pages/shop/ShopProductDetailPage";
@@ -15,7 +16,9 @@ import MarketDetailPage from "@/pages/market/detail";
 
 export function AppRoutes() {
     return (
-        <Routes>
+        <>
+            <DocumentTitleSync />
+            <Routes>
             {/* 公開首頁：所有訪客（含未登入）都看得到，不做 redirect */}
             <Route
                 path="/"
@@ -106,5 +109,6 @@ export function AppRoutes() {
                 />
             ))}
         </Routes>
+        </>
     );
 }

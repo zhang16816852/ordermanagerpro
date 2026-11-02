@@ -8,7 +8,7 @@ import { Loader2, AlertCircle, Truck } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { SharedReceiptExport } from "./SharedReceiptExport";
 import { receiptTrackingNumbers } from "./receiptTracking";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface SharedConsignmentData {
   consignment: {
@@ -65,6 +65,15 @@ export default function SharedConsignment() {
     },
     retry: false
   });
+
+  useEffect(() => {
+    if (data?.consignment) {
+      const placeName = data.consignment.store_name || data.consignment.supplier_name || '';
+      document.title = `${placeName} ${data.consignment.code || consignmentId || ''} 寄賣單分享`.trim();
+    } else if (error) {
+      document.title = '找不到寄賣單';
+    }
+  }, [data, error, consignmentId]);
 
   if (isLoading) {
     return (

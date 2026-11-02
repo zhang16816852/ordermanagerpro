@@ -7,7 +7,7 @@ import { Loader2, AlertCircle, Package } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { SharedReceiptExport } from "./SharedReceiptExport";
 import { receiptTrackingNumbers } from "./receiptTracking";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface SharedOrderData {
   order: {
@@ -77,6 +77,14 @@ export default function SharedOrder() {
     },
     retry: false
   });
+
+  useEffect(() => {
+    if (data?.order) {
+      document.title = `${data.order.store_name || ''} ${data.order.code || orderId || ''} 訂單分享`.trim();
+    } else if (error) {
+      document.title = '找不到訂單';
+    }
+  }, [data, error, orderId]);
 
   if (isLoading) {
     return (

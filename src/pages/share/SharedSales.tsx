@@ -10,7 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { getErrorMessage } from '@/lib/errorMessages';
 import { format } from "date-fns";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SharedReceiptExport } from "./SharedReceiptExport";
 import { receiptTrackingNumbers } from "./receiptTracking";
 
@@ -84,6 +84,14 @@ export default function SharedSales() {
     },
     retry: false
   });
+
+  useEffect(() => {
+    if (data?.sales_note) {
+      document.title = `${data.sales_note.store_name || ''} ${data.sales_note.code || salesNoteId || ''} 銷貨單分享`.trim();
+    } else if (error) {
+      document.title = '找不到銷貨單';
+    }
+  }, [data, error, salesNoteId]);
 
   const confirmReceiveMutation = useMutation({
     mutationFn: async () => {
