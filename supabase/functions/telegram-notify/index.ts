@@ -58,10 +58,16 @@ async function resolveBot(supabase: any, eventType: string, envToken: string, en
     .eq('is_active', true)
     .order('is_default', { ascending: false })
 
-  const match = (bots ?? []).find((b: any) => {
+  // 優先挑「明確列出該事件」的 bot；若無，才 fallback 到通用 bot（event_types 為空）
+  const specific = (bots ?? []).find((b: any) => {
     const types = b.event_types ?? []
-    return types.length === 0 || types.includes(eventType)
-  }) ?? null
+    return types.length > 0 && types.includes(eventType)
+  })
+  const universal = (bots ?? []).find((b: any) => {
+    const types = b.event_types ?? []
+    return types.length === 0
+  })
+  const match = specific ?? universal ?? null
 
   return {
     id: match?.id ?? null,
@@ -306,6 +312,148 @@ serve(async (req: Request) => {
         chat_id: targetChat,
         message_id: targetMsgId,
         text: `⚠️ <s>銷貨單 ${escapeHtml(code)}</s> 已作廢`,
+        parse_mode: 'HTML',
+      })
+
+      if (!editRes.ok) {
+        return await markFailed(
+          `收回失敗：delete=${delRes.description ?? 'unknown'} / edit=${editRes.description ?? 'unknown'}`,
+        )
+      }
+
+      await markSent(bot, targetChat, targetMsgId)
+      return json({ ok: true, action: 'marked_void' })
+    }
+
+    if (outbox.event_type === 'customer_statement_created' || outbox.event_type === 'customer_statement_updated') {
+      if (!bot.token || !bot.chatId) {
+        return await markFailed('缺少 bot token 或 chat_id（DB 或環境變數）')
+      }
+
+      const isUpdate = outbox.event_type === 'customer_statement_updated'
+      const statementId = outbox.ref_id
+      const { data: stmtRow } = await supabase
+        .from('customer_statement_shares')
+        .select('id, title, access_token')
+        .eq('id', statementId)
+        .maybeSingle()
+
+      if (!stmtRow) {
+        return await markFailed('customer_statement 不存在')
+      }
+
+      const { data: shared } = await supabase.rpc('get_shared_customer_statement', {
+        p_statement_id: String(statementId),
+        p_token: String(stmtRow.access_token),
+      })
+
+      const notes = (shared?.notes ?? []) as any[]
+      const totalAmount = notes.reduce((s: number, n: any) => {
+        const items = n.items ?? []
+        const subtotal = items.reduce((ss: number, i: any) => {
+          const q = (i.line_type === 'return' || i.line_type === 'defective')
+            ? -Math.abs(i.quantity || 0) : (i.quantity || 0)
+          return ss + q * Number(i.unit_price || 0)
+        }, 0)
+        return s + subtotal + Number(n.shipping_fee || 0)
+      }, 0)
+
+      const title = stmtRow.title ?? String(statementId)
+      const shareLink = stmtRow.access_token
+        ? `${appOrigin}/share/statement/${statementId}?token=${stmtRow.access_token}`
+        : `${appOrigin}/admin/sales-notes`
+
+      const text = `📋 ${escapeHtml(title)}\n總單數：${notes.length} 張\n總金額：${formatMoney(totalAmount)}\n\n<a href="${escapeHtml(shareLink)}">查看對帳單</a>`
+
+      // 更新事件：先嘗試編輯原訊息；找不到原訊息則發送新訊息
+      if (isUpdate) {
+        const { data: sent } = await supabase
+          .from('notification_outbox')
+          .select('chat_id, message_id')
+          .eq('ref_type', 'customer_statement')
+          .eq('ref_id', statementId)
+          .not('message_id', 'is', null)
+          .order('processed_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (sent?.message_id) {
+          const targetChat = sent.chat_id ?? bot.chatId
+          const editRes = await tgCall('editMessageText', bot.token, {
+            chat_id: targetChat,
+            message_id: sent.message_id,
+            text,
+            parse_mode: 'HTML',
+            disable_web_page_preview: true,
+          })
+
+          const notModified = /not modified/i.test(editRes.description ?? '')
+          if (editRes.ok || notModified) {
+            await markSent(bot, targetChat, sent.message_id)
+            return json({ ok: true, action: 'edited' })
+          }
+          // 編輯失敗 → fallback 發送新訊息
+        }
+      }
+
+      const res = await tgCall('sendMessage', bot.token, {
+        chat_id: bot.chatId,
+        text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      })
+
+      if (!res.ok) {
+        return await markFailed(`sendMessage 失敗：${res.description ?? 'unknown'}`)
+      }
+
+      await markSent(bot, bot.chatId, res.result?.message_id ?? null)
+      return json({ ok: true, message_id: res.result?.message_id ?? null })
+    }
+
+    if (outbox.event_type === 'customer_statement_recalled') {
+      if (!bot.token) {
+        return await markFailed('缺少 bot token（DB 或環境變數）')
+      }
+
+      const statementId = outbox.ref_id
+      const code = outbox.payload?.title ?? String(statementId)
+
+      // 找出原本該對帳單已送出的訊息
+      const { data: sent } = await supabase
+        .from('notification_outbox')
+        .select('chat_id, message_id')
+        .eq('ref_type', 'customer_statement')
+        .eq('ref_id', statementId)
+        .not('message_id', 'is', null)
+        .order('processed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      // 沒有對應訊息可收回 → 視為完成
+      if (!sent?.message_id) {
+        await markSent(bot, bot.chatId, null)
+        return json({ ok: true, skipped: 'no_message' })
+      }
+
+      const targetChat = sent.chat_id ?? bot.chatId
+      const targetMsgId = sent.message_id
+
+      // 先嘗試刪除；超過 48h 無法刪除時改為標記作廢
+      const delRes = await tgCall('deleteMessage', bot.token, {
+        chat_id: targetChat,
+        message_id: targetMsgId,
+      })
+
+      if (delRes.ok) {
+        await markSent(bot, targetChat, targetMsgId)
+        return json({ ok: true, action: 'deleted' })
+      }
+
+      const editRes = await tgCall('editMessageText', bot.token, {
+        chat_id: targetChat,
+        message_id: targetMsgId,
+        text: `⚠️ <s>${escapeHtml(code)}</s> 已作廢`,
         parse_mode: 'HTML',
       })
 

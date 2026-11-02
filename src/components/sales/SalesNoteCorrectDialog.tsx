@@ -10,8 +10,7 @@ import { getErrorMessage } from "@/lib/errorMessages";
 import { useProductCache } from "@/hooks/useProductCache";
 import type { SalesNoteCorrectDialogProps, CorrectAddItem, CorrectNewItem, PriceChange } from "./salesNoteCorrectTypes";
 import { useSalesNoteCorrectQueries } from "./useSalesNoteCorrectQueries";
-import { CorrectPriceTable } from "./CorrectPriceTable";
-import { CorrectRemoveTable } from "./CorrectRemoveTable";
+import { CorrectItemsTable } from "./CorrectItemsTable";
 import { CorrectAddTable } from "./CorrectAddTable";
 import { CorrectNewItemSection } from "./CorrectNewItemSection";
 import { CorrectSummary } from "./CorrectSummary";
@@ -194,17 +193,13 @@ export function SalesNoteCorrectDialog({
                 </DialogHeader>
 
                 <div className="space-y-5">
-                    <CorrectPriceTable
-                        items={note?.items || []}
-                        priceEdits={priceEdits}
-                        onPriceEdit={handlePriceEdit}
-                        otherNoteRefs={otherNoteRefs}
-                    />
-
-                    <CorrectRemoveTable
+                    <CorrectItemsTable
                         items={note?.items || []}
                         keepQty={keepQty}
                         onKeepQtyChange={handleKeepQtyChange}
+                        priceEdits={priceEdits}
+                        onPriceEdit={handlePriceEdit}
+                        otherNoteRefs={otherNoteRefs}
                     />
 
                     <CorrectAddTable
