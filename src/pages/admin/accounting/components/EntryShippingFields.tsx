@@ -48,9 +48,10 @@ export function EntryShippingFields({ ctl }: { ctl: EntryFormController }) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>物流公司（採購商）</Label>
-          <Select value={shippingSupplierId} onValueChange={v => { setShippingSupplierId(v); setSelectedShipItemIds([]); }}>
+          <Select value={shippingSupplierId || '__all__'} onValueChange={v => { setShippingSupplierId(v === '__all__' ? '' : v); setSelectedShipItemIds([]); }}>
             <SelectTrigger><SelectValue placeholder="選擇物流公司" /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="__all__">全部物流公司</SelectItem>
               {shippingSuppliers.map(s => (
                 <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
               ))}
@@ -101,6 +102,7 @@ export function EntryShippingFields({ ctl }: { ctl: EntryFormController }) {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[40px]"></TableHead>
+                  <TableHead>物流公司</TableHead>
                   <TableHead>單據</TableHead>
                   <TableHead>配送方式</TableHead>
                   <TableHead>出貨時間</TableHead>
@@ -111,7 +113,7 @@ export function EntryShippingFields({ ctl }: { ctl: EntryFormController }) {
               <TableBody>
                 {shipSettleItems.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-4">
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-4">
                       無可結算的月結運費包裹
                     </TableCell>
                   </TableRow>
@@ -128,6 +130,7 @@ export function EntryShippingFields({ ctl }: { ctl: EntryFormController }) {
                           onCheckedChange={() => toggleShipItem(item.id)}
                         />
                       </TableCell>
+                      <TableCell className="text-sm">{item.supplierName || '—'}</TableCell>
                       <TableCell className="font-mono text-xs">{item.docCode}</TableCell>
                       <TableCell className="text-sm">{item.methodTitle}</TableCell>
                       <TableCell className="text-xs">{item.shippedAt ? new Date(item.shippedAt).toLocaleDateString() : '—'}</TableCell>

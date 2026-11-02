@@ -5,8 +5,7 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 
 export interface ShippingSettlementSubmission {
-  supplierId: string;
-  shipmentIds: string[];
+  groups: { supplierId: string; shipmentIds: string[] }[];
   periodStart: string;
   periodEnd: string;
   paidDate: string;
@@ -33,24 +32,31 @@ export function useShippingSettlement() {
 
   const settleMutation = useMutation({
     mutationFn: async (payload: ShippingSettlementSubmission) => {
-      const { data, error } = await (supabase as any).rpc('register_shipping_settlement', {
-        p_supplier_id: payload.supplierId,
-        p_shipment_ids: payload.shipmentIds,
-        p_period_start: payload.periodStart,
-        p_period_end: payload.periodEnd,
-        p_paid_date: payload.paidDate,
-        p_account_id: payload.accountId,
-        p_category_id: payload.categoryId || null,
-        p_description: payload.description || null,
-        p_note: payload.note || null,
-        p_created_by: user?.id,
-      });
-      if (error) throw error;
-      return data as { period_id: string; entry_id: string; total_amount: number; shipment_count: number };
+      const results: { period_id: string; entry_id: string; total_amount: number; shipment_count: number }[] = [];
+      for (const group of payload.groups) {
+        if (!group.shipmentIds || group.shipmentIds.length === 0) continue;
+        const { data, error } = await (supabase as any).rpc('register_shipping_settlement', {
+          p_supplier_id: group.supplierId,
+          p_shipment_ids: group.shipmentIds,
+          p_period_start: payload.periodStart,
+          p_period_end: payload.periodEnd,
+          p_paid_date: payload.paidDate,
+          p_account_id: payload.accountId,
+          p_category_id: payload.categoryId || null,
+          p_description: payload.description || null,
+          p_note: payload.note || null,
+          p_created_by: user?.id,
+        });
+        if (error) throw error;
+        results.push(data as { period_id: string; entry_id: string; total_amount: number; shipment_count: number });
+      }
+      return results;
     },
     onSuccess: (data) => {
       invalidate();
-      toast.success(`已結算運費 ${data?.shipment_count ?? 0} 包（總計 $${data?.total_amount ?? 0}）`);
+      const totalShipments = (data || []).reduce((s, d) => s + (d?.shipment_count ?? 0), 0);
+      const totalAmount = (data || []).reduce((s, d) => s + (d?.total_amount ?? 0), 0);
+      toast.success(`已結算運費 ${totalShipments} 包（總計 $${totalAmount}）`);
     },
     onError: (error: unknown) => {
       toast.error(getErrorMessage(error));

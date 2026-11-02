@@ -134,13 +134,39 @@ export default function DeliveryMethodsPage({ embedded = false }: { embedded?: b
   });
 
   const grouped = useMemo(() => {
-    return TYPE_GROUPS.map(g => ({
-      ...g,
-      items: methods
+    const result: Array<{ type: string; label: string; hint: string; items: DeliveryMethodOption[]; supplierName?: string }> = [];
+    for (const g of TYPE_GROUPS) {
+      const items = methods
         .filter(m => m.type === g.type)
-        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
-    })).filter(g => g.items.length > 0);
-  }, [methods]);
+        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      if (items.length === 0) continue;
+
+      if (g.type === 'logistics') {
+        // 依物流公司（供應商）分組
+        const bySupplier = new Map<string, DeliveryMethodOption[]>();
+        for (const m of items) {
+          const key = m.supplier_id || '__none__';
+          if (!bySupplier.has(key)) bySupplier.set(key, []);
+          bySupplier.get(key)!.push(m);
+        }
+        for (const [supplierId, supplierItems] of bySupplier) {
+          const supplierName = supplierId === '__none__'
+            ? '未綁定供應商'
+            : (logisticsSuppliers.find(s => s.id === supplierId)?.name || '未知供應商');
+          result.push({
+            type: g.type,
+            label: `${g.label} — ${supplierName}`,
+            hint: g.hint,
+            items: supplierItems,
+            supplierName,
+          });
+        }
+      } else {
+        result.push({ ...g, items });
+      }
+    }
+    return result;
+  }, [methods, logisticsSuppliers]);
 
   const openCreate = (type: string) => {
     const maxSort = methods.filter(m => m.type === type).reduce((s, m) => Math.max(s, m.sort_order || 0), 0);

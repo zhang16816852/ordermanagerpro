@@ -28,11 +28,10 @@ export function useEntryShippingQueries({ isShipping, shippingSupplierId }: UseE
   });
 
   const { data: shipSettleItems = [] } = useQuery<ShipItem[]>({
-    queryKey: ['shipping-settle-items', shippingSupplierId],
+    queryKey: ['shipping-settle-items', shippingSupplierId || 'all'],
     queryFn: async () => {
-      if (!shippingSupplierId) return [];
       const { data, error } = await (supabase as any).rpc('list_settleable_shipments', {
-        p_supplier_id: shippingSupplierId,
+        p_supplier_id: shippingSupplierId || null,
       });
       if (error) throw error;
       return ((data as any[]) || []).map((s: any) => ({
@@ -46,9 +45,11 @@ export function useEntryShippingQueries({ isShipping, shippingSupplierId }: UseE
         cost: Number(s.cost) || 0,
         fee: Number(s.fee) || 0,
         amount: Number(s.cost) || 0,
+        supplierId: s.supplier_id || undefined,
+        supplierName: s.supplier_name || undefined,
       }));
     },
-    enabled: isShipping && !!shippingSupplierId,
+    enabled: isShipping,
   });
 
   return { shippingSuppliers, shipSettleItems };

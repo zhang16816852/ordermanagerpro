@@ -77,8 +77,7 @@ export interface BatchPayoutSubmission {
 }
 
 export interface ShippingSettlementSubmission {
-  supplierId: string;
-  shipmentIds: string[];
+  groups: { supplierId: string; shipmentIds: string[] }[];
   periodStart: string;
   periodEnd: string;
   paidDate: string;
@@ -131,4 +130,6 @@ export interface ShipItem {
   cost: number;
   fee?: number;
   amount: number;
+  supplierId?: string;
+  supplierName?: string;
 }

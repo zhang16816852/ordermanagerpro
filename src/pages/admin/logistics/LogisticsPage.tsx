@@ -4,14 +4,18 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Truck } from 'lucide-react';
 import DeliveryMethodsPage from '@/pages/admin/DeliveryMethodsPage';
 import ShippingSettlementsPage from '@/pages/admin/shipping-settlements/ShippingSettlementsPage';
+import ShippingPackagesTab from '@/pages/admin/logistics/ShippingPackagesTab';
 
-type LogisticsTab = 'delivery-methods' | 'shipping-settlements';
+type LogisticsTab = 'delivery-methods' | 'shipping-settlements' | 'shipping-packages';
 
 // 物流管理統一頁：配送方式＋運費月結，tab 以 ?tab= url 路由（預設配送方式）
 export default function LogisticsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const rawTab = searchParams.get('tab');
   const activeTab: LogisticsTab =
-    searchParams.get('tab') === 'shipping-settlements' ? 'shipping-settlements' : 'delivery-methods';
+    rawTab === 'shipping-settlements' ? 'shipping-settlements'
+    : rawTab === 'shipping-packages' ? 'shipping-packages'
+    : 'delivery-methods';
 
   const handleTabChange = (v: string) => {
     setSearchParams(
@@ -35,10 +39,14 @@ export default function LogisticsPage() {
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
         <TabsList>
           <TabsTrigger value="delivery-methods">配送方式</TabsTrigger>
+          <TabsTrigger value="shipping-packages">包裹列表</TabsTrigger>
           <TabsTrigger value="shipping-settlements">運費月結</TabsTrigger>
         </TabsList>
         <TabsContent value="delivery-methods" className="space-y-4">
           <DeliveryMethodsPage embedded />
+        </TabsContent>
+        <TabsContent value="shipping-packages" className="space-y-4">
+          <ShippingPackagesTab embedded />
         </TabsContent>
         <TabsContent value="shipping-settlements" className="space-y-4">
           <ShippingSettlementsPage embedded />

@@ -419,7 +419,7 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
     : isPayout
       ? !!(payoutRepId && accountId && selectedPayoutNoteIds.length > 0 && selectedPayoutTotal > 0)
       : isShipping
-        ? !!(shippingSupplierId && shippingPeriodStart && shippingPeriodEnd && accountId && selectedShipItemIds.length > 0 && selectedShipTotal > 0)
+        ? !!(shippingPeriodStart && shippingPeriodEnd && accountId && selectedShipItemIds.length > 0 && selectedShipTotal > 0)
         : isRepair
           ? !!(accountId && (parseFloat(amount) || 0) > 0)
           : entry
@@ -452,9 +452,21 @@ export function useEntryFormController(props: EntryFormProps): EntryFormControll
         });
       }
     } else if (isShipping && onShippingSettleSubmit) {
+      // 依供應商分組，跨供應商勾選時自動分批結算
+      const selectedItems = shipSettleItems.filter(i => selectedShipItemIds.includes(i.id));
+      const groupsMap = new Map<string, string[]>();
+      for (const item of selectedItems) {
+        const sid = item.supplierId || shippingSupplierId;
+        if (!sid) continue;
+        if (!groupsMap.has(sid)) groupsMap.set(sid, []);
+        groupsMap.get(sid)!.push(item.id);
+      }
+      const groups = Array.from(groupsMap.entries()).map(([supplierId, shipmentIds]) => ({
+        supplierId,
+        shipmentIds,
+      }));
       onShippingSettleSubmit({
-        supplierId: shippingSupplierId,
-        shipmentIds: selectedShipItemIds,
+        groups,
         periodStart: shippingPeriodStart,
         periodEnd: shippingPeriodEnd,
         paidDate: transactionDate,
