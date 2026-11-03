@@ -242,11 +242,35 @@ export function useOrderFormStateSync(params: OrderFormStateSyncParams) {
           .filter((code: any) => typeof code === 'string' && code.length > 0) as string[];
         const nextRecorded = recorded > 0 ? recorded : undefined;
         const nextCodes = codes.length > 0 ? codes : undefined;
-        if (item.poRecordedQuantity === nextRecorded && item.poRecordedCodes?.join(',') === nextCodes?.join(',')) {
+        // 顯式保留 PO 來源綁定，避免 update_order_with_items 的條件式覆寫誤清
+        const nextSourceOrderIds = recorded > 0
+          ? [...new Set(matches.flatMap((row: any) => row.source_order_ids || []))]
+          : undefined;
+        const nextSourceQuantities = recorded > 0
+          ? matches.reduce((acc: Record<string, number>, row: any) => {
+              const sq = row.source_quantities || {};
+              for (const [k, v] of Object.entries(sq)) {
+                acc[k] = (acc[k] || 0) + Number(v || 0);
+              }
+              return acc;
+            }, {})
+          : undefined;
+        if (
+          item.poRecordedQuantity === nextRecorded &&
+          item.poRecordedCodes?.join(',') === nextCodes?.join(',') &&
+          JSON.stringify(item.sourceOrderIds ?? null) === JSON.stringify(nextSourceOrderIds ?? null) &&
+          JSON.stringify(item.sourceQuantities ?? null) === JSON.stringify(nextSourceQuantities ?? null)
+        ) {
           return item;
         }
         changed = true;
-        return { ...item, poRecordedQuantity: nextRecorded, poRecordedCodes: nextCodes };
+        return {
+          ...item,
+          poRecordedQuantity: nextRecorded,
+          poRecordedCodes: nextCodes,
+          sourceOrderIds: nextSourceOrderIds ?? null,
+          sourceQuantities: nextSourceQuantities ?? null,
+        };
       });
       return changed ? next : prev;
     });

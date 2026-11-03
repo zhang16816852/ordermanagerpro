@@ -550,45 +550,64 @@ export function useAdminOrderFormController() {
   // 儲存變更：先 dry-run 採購單數量同步，僅在有變動時彈出確認
   const runSave = useCallback(async () => {
     try {
-      const res = await previewPoQuantities(items, pendingDeletedIds);
-      if (res.ok === false) {
-        if (res.reason) toast.error(res.reason);
-        return;
-      }
-      if (res.changes.length > 0) {
-        poSyncIntentRef.current = 'save';
-        poSyncDeliveryRef.current = null;
-        setPoSyncChanges(res.changes);
-        setPoSyncDialogOpen(true);
-        return;
+      const hasQtyChange = (order?.order_items || []).some((oi: any) => {
+        const cur = items.find((i) => i.id === oi.id);
+        if (!cur) return true;
+        return Number(cur.quantity) !== Number(oi.quantity);
+      }) || items.some((i) => i.isNew);
+      const needsSync = hasQtyChange || (pendingDeletedIds?.length ?? 0) > 0;
+      let res: { changes: any[]; ok: boolean; reason?: string } = { changes: [], ok: true };
+      if (needsSync) {
+        res = await previewPoQuantities(items, pendingDeletedIds);
+        if (res.ok === false) {
+          if (res.reason) toast.error(res.reason);
+          return;
+        }
+        if (res.changes.length > 0) {
+          poSyncIntentRef.current = 'save';
+          poSyncDeliveryRef.current = null;
+          setPoSyncChanges(res.changes);
+          setPoSyncDialogOpen(true);
+          return;
+        }
       }
       updateOrderMutation.mutate();
     } catch (error) {
       toast.error(getErrorMessage(error));
     }
-  }, [previewPoQuantities, items, pendingDeletedIds, updateOrderMutation]);
+  }, [previewPoQuantities, items, pendingDeletedIds, updateOrderMutation, order]);
 
   // 轉銷貨單／寄賣出貨：同上，確認後先套用再出貨
   const runDirectShip = useCallback(async (delivery: DirectShipDelivery, itemQuantities?: Record<string, number>) => {
     try {
-      const res = await previewPoQuantities(items, pendingDeletedIds);
-      if (res.ok === false) {
-        if (res.reason) toast.error(res.reason);
-        return;
-      }
-      if (res.changes.length > 0) {
-        poSyncIntentRef.current = 'directShip';
-        poSyncDeliveryRef.current = delivery;
-        poSyncItemQuantitiesRef.current = itemQuantities || null;
-        setPoSyncChanges(res.changes);
-        setPoSyncDialogOpen(true);
-        return;
+      // 純出貨（數量未變且無待刪除品項）時跳過 sync，避免誤觸發 PO 綁定移除
+      const hasQtyChange = (order?.order_items || []).some((oi: any) => {
+        const cur = items.find((i) => i.id === oi.id);
+        if (!cur) return true; // 品項被移除 → 需 sync
+        return Number(cur.quantity) !== Number(oi.quantity);
+      }) || items.some((i) => i.isNew);
+      const needsSync = hasQtyChange || (pendingDeletedIds?.length ?? 0) > 0;
+      let res: { changes: any[]; ok: boolean; reason?: string } = { changes: [], ok: true };
+      if (needsSync) {
+        res = await previewPoQuantities(items, pendingDeletedIds);
+        if (res.ok === false) {
+          if (res.reason) toast.error(res.reason);
+          return;
+        }
+        if (res.changes.length > 0) {
+          poSyncIntentRef.current = 'directShip';
+          poSyncDeliveryRef.current = delivery;
+          poSyncItemQuantitiesRef.current = itemQuantities || null;
+          setPoSyncChanges(res.changes);
+          setPoSyncDialogOpen(true);
+          return;
+        }
       }
       directShipMutation.mutate({ delivery, itemQuantities });
     } catch (error) {
       toast.error(getErrorMessage(error));
     }
-  }, [previewPoQuantities, items, pendingDeletedIds, directShipMutation]);
+  }, [previewPoQuantities, items, pendingDeletedIds, directShipMutation, order]);
 
   const confirmPoSync = useCallback(async (overrides?: Record<string, number>) => {
     const intent = poSyncIntentRef.current;

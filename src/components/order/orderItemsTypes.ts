@@ -28,6 +28,10 @@ export interface OrderItemRow {
     poRecordedQuantity?: number;
     /** 採購單採購此品項的單號（提示用） */
     poRecordedCodes?: string[];
+    /** 來源採購單品項的 source_order_ids（用於出貨/pre-save 時顯式保留綁定，避免條件式覆寫誤清） */
+    sourceOrderIds?: string[] | null;
+    /** 來源採購單品項的 source_quantities（用於出貨/pre-save 時顯式保留綁定） */
+    sourceQuantities?: Record<string, number> | null;
 }
 
 export const DEFAULT_LINE_TYPE: 'sale' | 'exchange' | 'return' = 'sale';

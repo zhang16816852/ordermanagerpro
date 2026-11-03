@@ -142,6 +142,9 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       temp_key: item.isNew ? (item.tempKey ?? `temp-${Date.now().toString(36)}-${index}`) : undefined,
       parent_temp_key: item.parentTempKey ?? undefined,
       sort_order: index + 1,
+      // 顯式攜帶 PO 來源綁定，避免 update_order_with_items 條件式覆寫誤清
+      source_order_ids: item.sourceOrderIds ?? undefined,
+      source_quantities: item.sourceQuantities ?? undefined,
       ...lineTypeFields(item),
     })), []);
 
