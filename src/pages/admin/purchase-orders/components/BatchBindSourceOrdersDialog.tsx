@@ -128,43 +128,60 @@ export function BatchBindSourceOrdersDialog({
     return out;
   }, [data, items]);
 
-  // 初始化綁定狀態 + 自動建議（僅首次開啟時）
+  // 自動建議核心：依「店家 → 日期 → 可綁量」排序，店家優先、同店家內日期由舊到新、再由小到大填滿剩餘
+  const buildSuggest = (item: PurchaseOrderItem, candList: CandidateItem[]) => {
+    const existingIds = item.source_order_ids || [];
+    const existingQtysBase = item.source_quantities || {};
+    const initExisting: Record<string, number> = {};
+    for (const id of existingIds) initExisting[id] = Number(existingQtysBase[id] || 0);
+
+    const existingTotal = Object.values(initExisting).reduce((s, v) => s + (v || 0), 0);
+    let remaining = Math.max(0, item.quantity - existingTotal);
+    const candidates = candList.filter((c) => !existingIds.includes(c.order_id));
+    // 店家優先 → 日期由舊到新 → 可綁量由小到大
+    const sorted = [...candidates].sort((a, b) => {
+      if (a.store_name !== b.store_name) return a.store_name.localeCompare(b.store_name, 'zh-Hant');
+      const da = new Date(a.order_date).getTime();
+      const db = new Date(b.order_date).getTime();
+      if (da !== db) return da - db;
+      return a.quantity - b.quantity;
+    });
+    const selected = new Set<string>();
+    const quantities: Record<string, number> = {};
+    for (const c of sorted) {
+      if (remaining <= 0) break;
+      const take = Math.min(c.quantity, remaining);
+      if (take > 0) {
+        selected.add(c._id);
+        quantities[c._id] = take;
+        remaining -= take;
+      }
+    }
+    return { selected, quantities, existingQtys: initExisting };
+  };
+
+  // 初始化綁定狀態 + 自動建議（僅首次開啟時，跑在全部候選上）
   useEffect(() => {
     if (!open || !data) return;
     const init: Record<string, ItemBindState> = {};
     for (const item of items) {
-      const existingIds = item.source_order_ids || [];
-      const existingQtysBase = item.source_quantities || {};
-      const initExisting: Record<string, number> = {};
-      for (const id of existingIds) initExisting[id] = Number(existingQtysBase[id] || 0);
-
-      // 自動建議：對尚未綁定的 candidate，依可綁量由小到大填滿剩餘可綁量
-      const existingTotal = Object.values(initExisting).reduce((s, v) => s + (v || 0), 0);
-      let remaining = Math.max(0, item.quantity - existingTotal);
-      const candidates = (candidatesByItem[item.id] || []).filter((c) => !existingIds.includes(c.order_id));
-      // 依可綁量由小到大排序，避免單一 candidate 占滿全部
-      const sorted = [...candidates].sort((a, b) => a.quantity - b.quantity);
-      const selected = new Set<string>();
-      const quantities: Record<string, number> = {};
-      for (const c of sorted) {
-        if (remaining <= 0) break;
-        const take = Math.min(c.quantity, remaining);
-        if (take > 0) {
-          selected.add(c._id);
-          quantities[c._id] = take;
-          remaining -= take;
-        }
-      }
-
-      init[item.id] = {
-        selected,
-        quantities,
-        existingQtys: initExisting,
-      };
+      init[item.id] = buildSuggest(item, candidatesByItem[item.id] || []);
     }
     setBindState(init);
     setExpanded(new Set(items.map((i) => i.id)));
   }, [open, data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 依目前篩選條件重新自動建議（會覆蓋手動勾選）
+  const handleResuggest = () => {
+    if (!window.confirm('重新自動建議會覆蓋目前的手動勾選，確定繼續？')) return;
+    setBindState((prev) => {
+      const next = { ...prev };
+      for (const item of items) {
+        next[item.id] = buildSuggest(item, filteredCandidates(item.id));
+      }
+      return next;
+    });
+  };
 
   // 關閉時重置篩選條件，避免下次開啟殘留
   useEffect(() => {
@@ -403,6 +420,16 @@ export function BatchBindSourceOrdersDialog({
               <Filter className="h-3.5 w-3.5" /> 清除篩選
             </Button>
           )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5 ml-auto"
+            onClick={handleResuggest}
+            disabled={isLoading}
+          >
+            <Link2 className="h-3.5 w-3.5" /> 依篩選重新建議
+          </Button>
         </div>
 
         {dataLoading ? (
