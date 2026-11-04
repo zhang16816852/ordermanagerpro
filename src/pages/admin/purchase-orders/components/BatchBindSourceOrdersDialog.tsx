@@ -7,7 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Search, X, Link2 } from 'lucide-react';
+import { Search, X, Link2, CalendarIcon, Filter } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { format } from 'date-fns';
+import { zhTW } from 'date-fns/locale';
 import { toast } from 'sonner';
 import type { PurchaseOrderItem } from '../types';
 
@@ -26,6 +31,7 @@ interface CandidateItem {
   _id: string;
   order_id: string;
   order_code: string;
+  store_id: string;
   store_name: string;
   order_date: string;
   order_status: string;
@@ -49,6 +55,9 @@ export function BatchBindSourceOrdersDialog({
   isLoading,
 }: BatchBindSourceOrdersDialogProps) {
   const [query, setQuery] = useState('');
+  const [storeFilter, setStoreFilter] = useState<string>('__all__');
+  const [dateFrom, setDateFrom] = useState<Date | undefined>();
+  const [dateTo, setDateTo] = useState<Date | undefined>();
   const [expanded, setExpanded] = useState<Set<string>>(new Set(items.map((i) => i.id)));
   const [bindState, setBindState] = useState<Record<string, ItemBindState>>({});
 
@@ -106,6 +115,7 @@ export function BatchBindSourceOrdersDialog({
             _id: oi.id,
             order_id: order.id,
             order_code: order.code,
+            store_id: order.store_id || order.stores?.id || '',
             store_name: order.stores?.name || '未指定店家',
             order_date: order.created_at,
             order_status: order.status || 'pending',
@@ -155,6 +165,28 @@ export function BatchBindSourceOrdersDialog({
     setBindState(init);
     setExpanded(new Set(items.map((i) => i.id)));
   }, [open, data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 關閉時重置篩選條件，避免下次開啟殘留
+  useEffect(() => {
+    if (!open) {
+      setQuery('');
+      setStoreFilter('__all__');
+      setDateFrom(undefined);
+      setDateTo(undefined);
+    }
+  }, [open]);
+
+  // 店家篩選選項（從候選訂單去重）
+  const storeOptions = useMemo<[string, string][]>(() => {
+    if (!data) return [];
+    const map = new Map<string, string>();
+    for (const o of data.orders || []) {
+      const id = o.store_id || o.stores?.id;
+      if (!id) continue;
+      if (!map.has(id)) map.set(id, o.stores?.name || '未指定店家');
+    }
+    return [...map.entries()];
+  }, [data]);
 
   const keywords = useMemo(() => query.trim().toLowerCase().split(/\s+/).filter(Boolean), [query]);
 
@@ -276,10 +308,23 @@ export function BatchBindSourceOrdersDialog({
 
   const filteredCandidates = (itemId: string) => {
     const cands = candidatesByItem[itemId] || [];
-    if (keywords.length === 0) return cands;
     return cands.filter((c) => {
-      const haystack = [c.order_code, c.store_name, sourceOrderMap[c.order_id]].filter(Boolean).join(' ').toLowerCase();
-      return keywords.every((kw) => haystack.includes(kw));
+      if (storeFilter && storeFilter !== '__all__' && c.store_id !== storeFilter) return false;
+      if (dateFrom) {
+        const d = new Date(c.order_date);
+        const start = new Date(dateFrom); start.setHours(0, 0, 0, 0);
+        if (d < start) return false;
+      }
+      if (dateTo) {
+        const d = new Date(c.order_date);
+        const end = new Date(dateTo); end.setHours(23, 59, 59, 999);
+        if (d > end) return false;
+      }
+      if (keywords.length > 0) {
+        const haystack = [c.order_code, c.store_name, sourceOrderMap[c.order_id]].filter(Boolean).join(' ').toLowerCase();
+        if (!keywords.every((kw) => haystack.includes(kw))) return false;
+      }
+      return true;
     });
   };
 
@@ -308,6 +353,55 @@ export function BatchBindSourceOrdersDialog({
             <button type="button" onClick={() => setQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:bg-muted">
               <X className="h-4 w-4" />
             </button>
+          )}
+        </div>
+
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Select value={storeFilter} onValueChange={setStoreFilter}>
+            <SelectTrigger className="h-9 w-[180px]">
+              <SelectValue placeholder="全部店家" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">全部店家</SelectItem>
+              {storeOptions.map(([id, name]) => (
+                <SelectItem key={id} value={id}>{name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 gap-1.5">
+                <CalendarIcon className="h-4 w-4" />
+                {dateFrom ? format(dateFrom, 'yyyy/MM/dd', { locale: zhTW }) : '起日'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={dateFrom} onSelect={setDateFrom} locale={zhTW} />
+            </PopoverContent>
+          </Popover>
+          <span className="text-xs text-muted-foreground">~</span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 gap-1.5">
+                <CalendarIcon className="h-4 w-4" />
+                {dateTo ? format(dateTo, 'yyyy/MM/dd', { locale: zhTW }) : '迄日'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={dateTo} onSelect={setDateTo} locale={zhTW} />
+            </PopoverContent>
+          </Popover>
+
+          {(storeFilter !== '__all__' || dateFrom || dateTo) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 gap-1"
+              onClick={() => { setStoreFilter('__all__'); setDateFrom(undefined); setDateTo(undefined); }}
+            >
+              <Filter className="h-3.5 w-3.5" /> 清除篩選
+            </Button>
           )}
         </div>
 
@@ -387,6 +481,7 @@ export function BatchBindSourceOrdersDialog({
                               <TableHead className="w-10"></TableHead>
                               <TableHead>訂單號</TableHead>
                               <TableHead>店家</TableHead>
+                              <TableHead>日期</TableHead>
                               <TableHead>狀態</TableHead>
                               <TableHead className="text-right">可綁</TableHead>
                               <TableHead className="text-right">綁定量</TableHead>
@@ -403,6 +498,7 @@ export function BatchBindSourceOrdersDialog({
                                 </TableCell>
                                 <TableCell className="font-mono text-xs">{c.order_code}</TableCell>
                                 <TableCell className="text-sm">{c.store_name}</TableCell>
+                                <TableCell className="text-xs tabular-nums">{format(new Date(c.order_date), 'yyyy/MM/dd', { locale: zhTW })}</TableCell>
                                 <TableCell className="text-xs">
                                   <span className={
                                     c.order_status === 'shipped' ? 'text-blue-600' :

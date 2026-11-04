@@ -60,23 +60,21 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
   const { data: poLinkItems = [] } = useQuery({
     queryKey: ['purchase-order-links'],
     queryFn: async () => {
-      const { data, error } = await (supabase
-        .from('purchase_order_items') as any)
-        .select('source_order_ids, source_quantities, purchase_order_id, product_id, variant_id, quantity, received_quantity, purchase_orders(status, purpose)');
+      // 改走 RPC：避免 PostgREST max-rows（預設 1000）截斷 purchase_order_items（全表 1590+ 筆）
+      const { data, error } = await (supabase.rpc as any)('get_purchase_order_link_items');
       if (error) throw error;
-      return (data || []) as {
-        source_order_ids: string[] | null;
-        source_quantities: Record<string, number> | null;
-        purchase_order_id: string;
-        purchase_orders?:
-          | { status: string | null; purpose: string | null }
-          | { status: string | null; purpose: string | null }[]
-          | null;
-        product_id: string | null;
-        variant_id: string | null;
-        quantity: number;
-        received_quantity: number;
-      }[];
+      return ((data || []) as any[]).map((r: any) => ({
+        source_order_ids: (r.source_order_ids as string[] | null) ?? null,
+        source_quantities: (r.source_quantities as Record<string, number> | null) ?? null,
+        purchase_order_id: r.purchase_order_id as string,
+        purchase_orders: r.purchase_orders
+          ? { status: r.purchase_orders.status ?? null, purpose: r.purchase_orders.purpose ?? null }
+          : null,
+        product_id: (r.product_id as string | null) ?? null,
+        variant_id: (r.variant_id as string | null) ?? null,
+        quantity: (r.quantity as number) ?? 0,
+        received_quantity: (r.received_quantity as number) ?? 0,
+      }));
     },
   });
 
