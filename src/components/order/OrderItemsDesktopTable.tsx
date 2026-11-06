@@ -187,7 +187,7 @@ export function OrderItemsDesktopTable({
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                {showPriceInput && ((item.lineType ?? 'sale') === 'sale' || (item.lineType ?? 'sale') === 'exchange') ? (
+                                                {showPriceInput && ((item.lineType ?? 'sale') === 'sale' || (item.lineType ?? 'sale') === 'exchange' || (item.lineType ?? 'sale') === 'return') ? (
                                                     <Input
                                                         type="number"
                                                         value={item.unitPrice}
@@ -298,7 +298,7 @@ export function OrderItemsDesktopTable({
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                {showPriceInput && ((item.lineType ?? 'sale') === 'sale' || (item.lineType ?? 'sale') === 'exchange') ? (
+                                                {showPriceInput && ((item.lineType ?? 'sale') === 'sale' || (item.lineType ?? 'sale') === 'exchange' || (item.lineType ?? 'sale') === 'return') ? (
                                                     <Input
                                                         type="number"
                                                         value={item.unitPrice}

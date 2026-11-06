@@ -211,6 +211,8 @@ export function useAdminOrderFormController() {
       let changed = false;
       const next = prev.map((item) => {
         if (priceSyncMap[item.id]) return item;
+        // 退貨/換貨/送修/瑕疵列的單價不隨門市商品價格同步（退貨為退款單價、其餘固定 0）
+        if ((item.lineType ?? 'sale') !== 'sale') return item;
         const product = storeProducts.find((p) => p.id === item.productId);
         if (!product) return item;
         const variant = item.variantId
@@ -234,6 +236,8 @@ export function useAdminOrderFormController() {
       let changed = false;
       const next = prev.map((item) => {
         if (priceSyncMap[item.id]) return item;
+        // 退貨/換貨/送修/瑕疵列的單價不隨供應商對照價格同步
+        if ((item.lineType ?? 'sale') !== 'sale') return item;
         const mapping = supplierMappings.find(
           (m) => m.internal_product_id === item.productId &&
             (m.internal_variant_id || null) === (item.variantId || null)
@@ -351,8 +355,8 @@ export function useAdminOrderFormController() {
     const item = itemsRef.current[index];
     const itemId = item?.id;
     if (guardPurchaseCancelled('修改單價')) return;
-    // 換貨/退貨/送修列不寫入價格表（換貨固定單價 0）
-    if (item && (item.lineType ?? 'sale') !== 'sale') return;
+    // 換貨/送修列固定單價 0，不允許修改；退貨列的單價代表退款單價，允許修改
+    if (item && (item.lineType ?? 'sale') === 'exchange') return;
     setItems((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], unitPrice: Math.max(0, value) };
