@@ -191,6 +191,8 @@ interface PurchaseOrderDetailDialogProps {
   onUnlinkOrder: (orderId: string) => void;
   /** 導向統一採購編輯頁（/admin/purchase-orders/:id/edit） */
   onEditOrder?: () => void;
+  /** 快速更新採購單表頭（例如廠商單號），不需進入編輯頁 */
+  onUpdateOrder?: (id: string, data: Partial<PurchaseOrder>) => Promise<unknown>;
   /** 品項數量／進貨價更新：items 為整單品項（已帶 id），由伺服端依序重編 sort_order 並重算總額 */
   onUpdateItem?: (data: { purchaseOrderId: string; items: PoItemWritePayload[] }) => Promise<unknown>;
   /** 刪除品項：items 為刪除後的整單品項，deletedItemIds 為要移除的品項 */
@@ -217,6 +219,7 @@ export function PurchaseOrderDetailDialog({
   onMakePayment,
   onUnlinkOrder,
   onEditOrder,
+  onUpdateOrder,
   onUpdateItem,
   onDeleteItem,
   onReorder,
@@ -243,6 +246,15 @@ export function PurchaseOrderDetailDialog({
 
   const [vendorEditOpen, setVendorEditOpen] = useState(false);
   const [vendorEditRule, setVendorEditRule] = useState<any>(null);
+
+  // 廠商單號快速編輯
+  const [editingSupplierOrderNo, setEditingSupplierOrderNo] = useState(false);
+  const [supplierOrderNoDraft, setSupplierOrderNoDraft] = useState('');
+  const [savingSupplierOrderNo, setSavingSupplierOrderNo] = useState(false);
+
+  // 快速複製（廠商代碼,數量）
+  const [quickCopyOpen, setQuickCopyOpen] = useState(false);
+  const [quickCopyConnector, setQuickCopyConnector] = useState('');
 
   // 廠商代碼/名稱行內編輯
   const [editingVendorKey, setEditingVendorKey] = useState<string | null>(null);
@@ -397,6 +409,15 @@ export function PurchaseOrderDetailDialog({
   );
 
   const getMappingKey = (item: PurchaseOrderItem) => `${item.product_id}_${item.variant_id || 'null'}`;
+
+  const quickCopyLines = localItems.map((item) => {
+    const mapping = supplierMappingMap[getMappingKey(item)];
+    const code = mapping?.vendor_product_id || '';
+    return `${code},${item.quantity}`;
+  });
+  const quickCopyText = quickCopyConnector
+    ? quickCopyLines.map((l) => `${l}${quickCopyConnector}`).join('')
+    : quickCopyLines.join('\n');
 
   const visibleItems = useMemo(() => {
     if (!isFiltering) return localItems;
@@ -703,6 +724,29 @@ export function PurchaseOrderDetailDialog({
     xlsx.writeFile(wb, `採購單_${order.id.slice(0, 8)}_${Date.now()}.xlsx`);
   };
 
+  const handleQuickCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(quickCopyText);
+      toast.success('已複製到剪貼簿');
+    } catch {
+      toast.error('複製失敗，請手動選取');
+    }
+  };
+
+  const handleSaveSupplierOrderNo = async () => {
+    if (!onUpdateOrder) return;
+    setSavingSupplierOrderNo(true);
+    try {
+      await onUpdateOrder(order.id, { supplier_order_number: supplierOrderNoDraft.trim() });
+      setEditingSupplierOrderNo(false);
+      toast.success('廠商單號已更新');
+    } catch (e: any) {
+      toast.error(e?.message || '更新失敗');
+    } finally {
+      setSavingSupplierOrderNo(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'draft': return <Badge variant="secondary">草稿</Badge>;
@@ -725,9 +769,45 @@ export function PurchaseOrderDetailDialog({
             {getStatusBadge(order.status)}
           </div>
           <p className="text-sm text-muted-foreground">供應商: {order.supplier?.name || '未指定'}</p>
-          {order.supplier_order_number && (
-            <p className="text-sm text-muted-foreground">廠商單號: {order.supplier_order_number}</p>
-          )}
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>廠商單號:</span>
+            {editingSupplierOrderNo ? (
+              <>
+                <Input
+                  className="h-7 w-40"
+                  value={supplierOrderNoDraft}
+                  onChange={(e) => setSupplierOrderNoDraft(e.target.value)}
+                  placeholder="（選填）"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveSupplierOrderNo();
+                    if (e.key === 'Escape') setEditingSupplierOrderNo(false);
+                  }}
+                />
+                <Button size="sm" variant="outline" className="h-7" onClick={handleSaveSupplierOrderNo} disabled={savingSupplierOrderNo}>
+                  {savingSupplierOrderNo ? '儲存中…' : '儲存'}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditingSupplierOrderNo(false)} disabled={savingSupplierOrderNo}>
+                  取消
+                </Button>
+              </>
+            ) : (
+              <>
+                <span className="font-medium text-foreground">{order.supplier_order_number || '（未填）'}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2"
+                  onClick={() => {
+                    setSupplierOrderNoDraft(order.supplier_order_number || '');
+                    setEditingSupplierOrderNo(true);
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5 mr-1" />{order.supplier_order_number ? '編輯' : '新增'}
+                </Button>
+              </>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground">日期: {order.order_date}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -736,6 +816,9 @@ export function PurchaseOrderDetailDialog({
           </Button>
           <Button size="sm" variant="outline" onClick={handleExportCSV}>
             <Download className="h-4 w-4 mr-1" />匯出 CSV
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setQuickCopyOpen(true)}>
+            <Download className="h-4 w-4 mr-1" />快速複製
           </Button>
           <Button size="sm" variant="outline" onClick={handleExportExcel}>
             <FileSpreadsheet className="h-4 w-4 mr-1" />匯出 Excel
@@ -1166,6 +1249,32 @@ export function PurchaseOrderDetailDialog({
           }
         }}
       />
+      <Dialog open={quickCopyOpen} onOpenChange={setQuickCopyOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>快速複製（廠商代碼,數量）</DialogTitle>
+            <DialogDescription>每行格式：廠商代碼,數量；可直接複製貼上。可設定行尾連接符，填入後將每行尾巴加上該符號並連接成一行。</DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2">
+            <label className="text-sm whitespace-nowrap">行尾連接符：</label>
+            <Input
+              className="h-8"
+              value={quickCopyConnector}
+              onChange={(e) => setQuickCopyConnector(e.target.value)}
+              placeholder="例如 , 或 ;（留空則分行）"
+            />
+          </div>
+          <textarea
+            readOnly
+            className="w-full h-48 rounded-md border bg-muted/30 p-2 font-mono text-sm"
+            value={quickCopyText}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setQuickCopyOpen(false)}>關閉</Button>
+            <Button onClick={handleQuickCopy}>複製</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
