@@ -255,6 +255,7 @@ export function PurchaseOrderDetailDialog({
   // 快速複製（廠商代碼,數量）
   const [quickCopyOpen, setQuickCopyOpen] = useState(false);
   const [quickCopyConnector, setQuickCopyConnector] = useState('');
+  const [quickCopyView, setQuickCopyView] = useState<'items' | 'byStore'>('items');
 
   // 廠商代碼/名稱行內編輯
   const [editingVendorKey, setEditingVendorKey] = useState<string | null>(null);
@@ -410,11 +411,17 @@ export function PurchaseOrderDetailDialog({
 
   const getMappingKey = (item: PurchaseOrderItem) => `${item.product_id}_${item.variant_id || 'null'}`;
 
-  const quickCopyLines = localItems.map((item) => {
-    const mapping = supplierMappingMap[getMappingKey(item)];
-    const code = mapping?.vendor_product_id || '';
-    return `${code},${item.quantity}`;
-  });
+  const quickCopyLines = quickCopyView === 'byStore'
+    ? buildByStoreRows(localItems, sourceOrderStoreMap).map((r) => {
+        const mapping = supplierMappingMap[getMappingKey(r.item)];
+        const code = mapping?.vendor_product_id || '';
+        return `${code},${r.quantity}`;
+      })
+    : localItems.map((item) => {
+        const mapping = supplierMappingMap[getMappingKey(item)];
+        const code = mapping?.vendor_product_id || '';
+        return `${code},${item.quantity}`;
+      });
   const quickCopyText = quickCopyConnector
     ? quickCopyLines.map((l) => `${l}${quickCopyConnector}`).join('')
     : quickCopyLines.join('\n');
@@ -1258,6 +1265,10 @@ export function PurchaseOrderDetailDialog({
             <DialogTitle>快速複製（廠商代碼,數量）</DialogTitle>
             <DialogDescription>每行格式：廠商代碼,數量；可直接複製貼上。可設定行尾連接符，填入後將每行尾巴加上該符號並連接成一行。</DialogDescription>
           </DialogHeader>
+          <div className="inline-flex rounded-md border p-0.5">
+            <Button size="sm" variant={quickCopyView === 'items' ? 'default' : 'ghost'} className="h-7 px-2" onClick={() => setQuickCopyView('items')}>品項</Button>
+            <Button size="sm" variant={quickCopyView === 'byStore' ? 'default' : 'ghost'} className="h-7 px-2" onClick={() => setQuickCopyView('byStore')}>依店家</Button>
+          </div>
           <div className="flex items-center gap-2">
             <label className="text-sm whitespace-nowrap">行尾連接符：</label>
             <Input
