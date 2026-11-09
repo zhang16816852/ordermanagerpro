@@ -809,6 +809,9 @@ export function PurchaseOrderDetailDialog({
             )}
           </div>
           <p className="text-sm text-muted-foreground">日期: {order.order_date}</p>
+          <p className="text-sm text-muted-foreground">
+            品項/總數: <strong>{localItems.length}</strong> 項 / <strong>{localItems.reduce((s, i) => s + (Number(i.quantity) || 0), 0)}</strong> 件
+          </p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <Button size="sm" variant="outline" onClick={onEditOrder}>
