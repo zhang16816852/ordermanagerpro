@@ -28,6 +28,8 @@ import { toast } from 'sonner';
 import { PurchaseOrder, PurchaseOrderItem, ProductWithPrice, type PoItemWritePayload, type PoUpdateItemPayload } from '../types';
 import { PurchaseProductPicker } from './PurchaseProductPicker';
 import { PurchaseFreightSection } from '@/components/purchase/PurchaseFreightSection';
+import { PurchaseOrderDetailQuickCopyDialog } from './PurchaseOrderDetailQuickCopyDialog';
+import { PurchaseOrderDetailItemsView } from './PurchaseOrderDetailItemsView';
 import { MappedRuleEditDialog } from './mapping/MappedRuleEditDialog';
 import { ImportFromOrdersDialog } from './ImportFromOrdersDialog';
 import { BindSourceOrdersDialog } from './BindSourceOrdersDialog';
@@ -254,8 +256,6 @@ export function PurchaseOrderDetailDialog({
 
   // 快速複製（廠商代碼,數量）
   const [quickCopyOpen, setQuickCopyOpen] = useState(false);
-  const [quickCopyConnector, setQuickCopyConnector] = useState('');
-  const [quickCopyView, setQuickCopyView] = useState<'items' | 'byStore'>('items');
 
   // 廠商代碼/名稱行內編輯
   const [editingVendorKey, setEditingVendorKey] = useState<string | null>(null);
@@ -410,21 +410,6 @@ export function PurchaseOrderDetailDialog({
   );
 
   const getMappingKey = (item: PurchaseOrderItem) => `${item.product_id}_${item.variant_id || 'null'}`;
-
-  const quickCopyLines = quickCopyView === 'byStore'
-    ? buildByStoreRows(localItems, sourceOrderStoreMap).map((r) => {
-        const mapping = supplierMappingMap[getMappingKey(r.item)];
-        const code = mapping?.vendor_product_id || '';
-        return `${code},${r.quantity}`;
-      })
-    : localItems.map((item) => {
-        const mapping = supplierMappingMap[getMappingKey(item)];
-        const code = mapping?.vendor_product_id || '';
-        return `${code},${item.quantity}`;
-      });
-  const quickCopyText = quickCopyConnector
-    ? quickCopyLines.map((l) => `${l}${quickCopyConnector}`).join('')
-    : quickCopyLines.join('\n');
 
   const visibleItems = useMemo(() => {
     if (!isFiltering) return localItems;
@@ -731,15 +716,6 @@ export function PurchaseOrderDetailDialog({
     xlsx.writeFile(wb, `採購單_${order.id.slice(0, 8)}_${Date.now()}.xlsx`);
   };
 
-  const handleQuickCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(quickCopyText);
-      toast.success('已複製到剪貼簿');
-    } catch {
-      toast.error('複製失敗，請手動選取');
-    }
-  };
-
   const handleSaveSupplierOrderNo = async () => {
     if (!onUpdateOrder) return;
     setSavingSupplierOrderNo(true);
@@ -927,200 +903,24 @@ export function PurchaseOrderDetailDialog({
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className="inline-flex rounded-md border p-0.5">
-          <Button
-            size="sm"
-            variant={itemView === 'items' ? 'default' : 'ghost'}
-            className="h-7 px-2"
-            onClick={() => setItemView('items')}
-          >
-            品項
-          </Button>
-          <Button
-            size="sm"
-            variant={itemView === 'byStore' ? 'default' : 'ghost'}
-            className="h-7 px-2"
-            onClick={() => setItemView('byStore')}
-          >
-            依店家
-          </Button>
-        </div>
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜尋品項（名稱 / SKU / 廠商 / 來源訂單）"
-            className="pl-8"
-            aria-label="搜尋品項"
-          />
-        </div>
-        {isFiltering && (
-          <span className="text-xs text-muted-foreground">
-            共 {visibleItems.length} 項符合
-          </span>
-        )}
-      </div>
-
-      {itemView === 'items' ? (
-        <div className="border rounded-md">
-          {canReorder ? (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {canReorder && <TableHead className="w-8"></TableHead>}
-                    {canReorder ? (
-                      <TableHead className="min-w-[220px]">
-                        <button
-                          type="button"
-                          onClick={handleNameHeaderClick}
-                          className="inline-flex items-center gap-1 font-medium text-muted-foreground hover:text-foreground cursor-pointer"
-                        >
-                          產品（SKU / 名稱）
-                          {nameSort === 'asc' ? (
-                            <ArrowUp className="h-3.5 w-3.5" />
-                          ) : nameSort === 'desc' ? (
-                            <ArrowDown className="h-3.5 w-3.5" />
-                          ) : (
-                            <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
-                          )}
-                        </button>
-                      </TableHead>
-                    ) : (
-                      <TableHead className="min-w-[220px]">產品（SKU / 名稱）</TableHead>
-                    )}
-                    <TableHead className="min-w-[200px]">廠商（代碼 / 名稱）</TableHead>
-
-                    <TableHead className="text-right">數量</TableHead>
-                    <TableHead className="text-right">已收</TableHead>
-                    <TableHead className="text-right">進貨價</TableHead>
-                    <TableHead className="text-right">總額</TableHead>
-                                        <TableHead>來源訂單</TableHead>
-                    {canDelete && <TableHead className="w-12 text-right">操作</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <SortableContext items={visibleItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
-                  <TableBody>
-                    {visibleItems.map((item) => {
-                      const boundTotal = Object.values(item.source_quantities || {}).reduce((s, v) => s + Number(v || 0), 0);
-                      const fullyBound = boundTotal > 0 && boundTotal === item.quantity;
-                      return (
-                        <SortableRow key={item.id} item={item} fullyBound={fullyBound}>
-                          {renderItemCells(item)}
-                        </SortableRow>
-                      );
-                    })}
-                    {visibleItems.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={colSpan} className="text-center py-8 text-muted-foreground italic">
-                          {isFiltering ? '查無符合的品項' : '目前無任何品項'}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </SortableContext>
-              </Table>
-            </DndContext>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[220px]">產品（SKU / 名稱）</TableHead>
-                  <TableHead className="min-w-[200px]">廠商（代碼 / 名稱）</TableHead>
-
-                  <TableHead className="text-right">數量</TableHead>
-                  <TableHead className="text-right">已收</TableHead>
-                  <TableHead className="text-right">進貨價</TableHead>
-                  <TableHead className="text-right">總額</TableHead>
-                  <TableHead>來源訂單</TableHead>
-                  {canDelete && <TableHead className="w-12 text-right">操作</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visibleItems.map((item) => {
-                  const boundTotal = Object.values(item.source_quantities || {}).reduce((s, v) => s + Number(v || 0), 0);
-                  const fullyBound = boundTotal > 0 && boundTotal === item.quantity;
-                  return (
-                    <TableRow
-                      key={item.id}
-                      className={fullyBound ? 'bg-green-50/50 [&>td]:font-semibold [&>td]:border-green-500 [&>td]:border-y-2 [&>td:first-child]:border-l-2 [&>td:last-child]:border-r-2' : ''}
-                    >
-                      {renderItemCells(item)}
-                    </TableRow>
-                  );
-                })}
-                {visibleItems.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={colSpan} className="text-center py-8 text-muted-foreground italic">
-                      {isFiltering ? '查無符合的品項' : '目前無任何品項'}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </div>
-      ) : (
-        <div className="border rounded-md p-4 space-y-4">
-          {(() => {
-            // 依店家分組：同一品項若來自多個店家，依來源訂單數量拆成多列
-            const rows = buildByStoreRows(visibleItems, sourceOrderStoreMap);
-            const groups: Record<string, ByStoreRow[]> = {};
-            for (const r of rows) {
-              (groups[r.store] ||= []).push(r);
-            }
-            const storeNames = Object.keys(groups).sort((a, b) => a.localeCompare(b, 'zh-Hant-TW'));
-            if (storeNames.length === 0) {
-              return <p className="text-center py-8 text-muted-foreground italic">目前無任何品項</p>;
-            }
-            return storeNames.map((store) => (
-              <div key={store} className="space-y-2">
-                <h4 className="text-sm font-semibold text-primary">{store}（{groups[store].length} 項）</h4>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="min-w-[220px]">產品（SKU / 名稱）</TableHead>
-                      <TableHead className="min-w-[200px]">廠商（代碼 / 名稱）</TableHead>
-                      <TableHead className="text-right">數量</TableHead>
-                      <TableHead className="text-right">已收</TableHead>
-                      <TableHead className="text-right">進貨價</TableHead>
-                      <TableHead className="text-right">總額</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {groups[store].map((r, idx) => {
-                      const item = r.item;
-                      const mapping = supplierMappingMap[getMappingKey(item)];
-                      return (
-                        <TableRow key={`${item.id}-${store}-${idx}`}>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="font-mono text-xs text-muted-foreground">{item.variant?.sku || item.product?.code}</span>
-                              <span className="text-sm">{item.variant?.name || item.product?.name}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="font-mono text-xs text-muted-foreground">{mapping?.vendor_product_id || '-'}</span>
-                              <span className="text-sm">{mapping?.vendor_product_name || '-'}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">{r.quantity}</TableCell>
-                          <TableCell className="text-right">{r.received}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(item.unit_cost)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(r.quantity * item.unit_cost)}</TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            ));
-          })()}
-        </div>
-      )}
+      <PurchaseOrderDetailItemsView
+        itemView={itemView}
+        onItemViewChange={setItemView}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        visibleItems={visibleItems}
+        isFiltering={isFiltering}
+        canReorder={canReorder}
+        canDelete={canDelete}
+        colSpan={colSpan}
+        sensors={sensors}
+        nameSort={nameSort}
+        renderItemCells={renderItemCells}
+        handleDragEnd={handleDragEnd}
+        handleNameHeaderClick={handleNameHeaderClick}
+        sourceOrderStoreMap={sourceOrderStoreMap}
+        supplierMappingMap={supplierMappingMap}
+      />
 
       <PurchaseFreightSection
         purchaseOrderId={order.id}
@@ -1259,36 +1059,13 @@ export function PurchaseOrderDetailDialog({
           }
         }}
       />
-      <Dialog open={quickCopyOpen} onOpenChange={setQuickCopyOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>快速複製（廠商代碼,數量）</DialogTitle>
-            <DialogDescription>每行格式：廠商代碼,數量；可直接複製貼上。可設定行尾連接符，填入後將每行尾巴加上該符號並連接成一行。</DialogDescription>
-          </DialogHeader>
-          <div className="inline-flex rounded-md border p-0.5">
-            <Button size="sm" variant={quickCopyView === 'items' ? 'default' : 'ghost'} className="h-7 px-2" onClick={() => setQuickCopyView('items')}>品項</Button>
-            <Button size="sm" variant={quickCopyView === 'byStore' ? 'default' : 'ghost'} className="h-7 px-2" onClick={() => setQuickCopyView('byStore')}>依店家</Button>
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-sm whitespace-nowrap">行尾連接符：</label>
-            <Input
-              className="h-8"
-              value={quickCopyConnector}
-              onChange={(e) => setQuickCopyConnector(e.target.value)}
-              placeholder="例如 , 或 ;（留空則分行）"
-            />
-          </div>
-          <textarea
-            readOnly
-            className="w-full h-48 rounded-md border bg-muted/30 p-2 font-mono text-sm"
-            value={quickCopyText}
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setQuickCopyOpen(false)}>關閉</Button>
-            <Button onClick={handleQuickCopy}>複製</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <PurchaseOrderDetailQuickCopyDialog
+        open={quickCopyOpen}
+        onOpenChange={setQuickCopyOpen}
+        localItems={localItems}
+        sourceOrderStoreMap={sourceOrderStoreMap}
+        supplierMappingMap={supplierMappingMap}
+      />
     </div>
   );
 }
