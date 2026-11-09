@@ -44,9 +44,12 @@ import { fetchOptionSuggestions } from './form/variantBatchCreatorUtils';
 import {
     createOptionGroup,
     createOptionValue,
+    buildVariantNameAndSku,
     type OptionGroupInput,
     type OptionGroupSuggestion,
 } from '@/utils/variantGeneration';
+import { useQuery } from '@tanstack/react-query';
+import { fetchAllRows } from '@/lib/utils';
 
 type Product = Tables<'products'>;
 type ProductVariant = Tables<'product_variants'>;
@@ -72,8 +75,27 @@ export function VariantEditDialog({
     const [selectedValueIds, setSelectedValueIds] = useState<Record<string, string>>({});
     const [suggestions, setSuggestions] = useState<OptionGroupSuggestion[]>([]);
     const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+    const [namePrefix, setNamePrefix] = useState(product?.default_variant_name_prefix ?? '');
+    const [skuPrefix, setSkuPrefix] = useState(product?.default_variant_sku_prefix ?? '');
     const originalNamesRef = useRef<Record<string, string>>({});
     const isUnified = !!product?.unified_pricing;
+
+    // 解析已選型號/群組名稱（供名稱/SKU 預覽納入型號名）
+    const { data: allModels = [] } = useQuery({
+        queryKey: ['device_models_active'],
+        queryFn: async () => fetchAllRows<any>('device_models', '*', { eq: [['is_active', true]] }),
+        enabled: open,
+    });
+    const { data: allGroups = [] } = useQuery({
+        queryKey: ['device_model_groups'],
+        queryFn: async () => {
+            const { data, error } = await (supabase.from('device_model_groups') as any)
+                .select('*').is('deleted_at', null).order('name');
+            if (error) throw error;
+            return (data || []) as any[];
+        },
+        enabled: open,
+    });
 
     const form = useForm({
         defaultValues: {
@@ -160,6 +182,8 @@ export function VariantEditDialog({
 
         const init = async () => {
             useSpecStore.getState().fetchSpecs();
+            setNamePrefix(product?.default_variant_name_prefix ?? '');
+            setSkuPrefix(product?.default_variant_sku_prefix ?? '');
             await loadOptionData();
             fetchSuggestionsForProduct();
 
@@ -265,6 +289,43 @@ export function VariantEditDialog({
             return changed ? next : prev;
         });
     }, [optionGroups]);
+
+    // 名稱 / SKU 產生範例（與 VariantBatchCreator 同規則，共用 buildVariantNameAndSku）
+    const selectedModelIds = (form.watch('selectedModelIds') || []) as string[];
+    const selectedGroupIds = (form.watch('selectedGroupIds') || []) as string[];
+    const selectedModelNames = [
+        ...selectedModelIds.map(id => String((allModels as any[]).find(m => m.id === id)?.name ?? '')).filter(n => n.trim() !== ''),
+        ...selectedGroupIds.map(id => String((allGroups as any[]).find(g => g.id === id)?.name ?? '')).filter(n => n.trim() !== ''),
+    ];
+
+    const selectedOptionValues = optionGroups
+        .map(g => {
+            const selId = selectedValueIds[g.id];
+            if (!selId) return null;
+            const v = g.values.find(x => x.id === selId);
+            if (!v || !v.label.trim()) return null;
+            return { value: v };
+        })
+        .filter(Boolean) as { value: { label: string; value: string } }[];
+
+    const previewLabels = selectedOptionValues.map(x => x.value.label.trim());
+    const previewSkuParts = selectedOptionValues.map(x => (x.value.value.trim() || x.value.label.trim()));
+
+    const built = buildVariantNameAndSku({
+        optionLabels: previewLabels,
+        optionSkuParts: previewSkuParts,
+        modelNames: selectedModelNames,
+        namePrefix,
+        skuPrefix,
+        codePrefix: product?.code ?? undefined,
+    });
+    const previewSku = built?.sku ?? '';
+    const previewName = built?.name ?? '';
+
+    const applyGenerated = () => {
+        if (previewSku) form.setValue('sku', previewSku);
+        if (previewName) form.setValue('name', previewName);
+    };
 
     const syncVariantOptions = async (variantId: string) => {
         const options: { name: string; display: string; label: string; value: string }[] = [];
@@ -460,6 +521,54 @@ export function VariantEditDialog({
                             />
                         </div>
 
+                        {/* 名稱 / SKU 產生範例（與 VariantBatchCreator 同規則） */}
+                        <div className="space-y-3 border-t pt-4">
+                            <Label className="text-sm font-medium">名稱 / SKU 產生範例</Label>
+                            <p className="text-xs text-muted-foreground">
+                                設定抬頭後，系統會依「已選選項值」自動組合名稱與 SKU；可點「套用」寫入上方欄位。留空抬頭則不加前綴。
+                            </p>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label htmlFor="ved-namePrefix">名稱抬頭（前置）</Label>
+                                    <Input
+                                        id="ved-namePrefix"
+                                        value={namePrefix}
+                                        onChange={e => setNamePrefix(e.target.value)}
+                                        placeholder="例：CITYBOSS-（留空不加）"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="ved-skuPrefix">SKU 抬頭（前置）</Label>
+                                    <Input
+                                        id="ved-skuPrefix"
+                                        value={skuPrefix}
+                                        onChange={e => setSkuPrefix(e.target.value)}
+                                        placeholder="例：CB-（留空用產品代碼）"
+                                    />
+                                </div>
+                            </div>
+                            {(previewName || previewSku) && (
+                                <div className="rounded-md bg-muted/50 px-3 py-2 text-xs space-y-1">
+                                    {previewName && (
+                                        <div>名稱範例：<span className="font-medium">{previewName}</span></div>
+                                    )}
+                                    {previewSku && (
+                                        <div>SKU 範例：<span className="font-mono font-medium">{previewSku}</span></div>
+                                    )}
+                                </div>
+                            )}
+                            <div className="flex justify-end">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={!previewName && !previewSku}
+                                    onClick={applyGenerated}
+                                >
+                                    套用產生的名稱 / SKU
+                                </Button>
+                            </div>
+                        </div>
                         <div className="space-y-2">
                             <Label className="text-sm font-medium">選項群組與本變體選值</Label>
                             <p className="text-xs text-muted-foreground">
@@ -476,6 +585,7 @@ export function VariantEditDialog({
                                 onSelectValue={handleSelectValue}
                             />
                         </div>
+
 
                         <div className="grid gap-4 sm:grid-cols-2">
                             <FormField

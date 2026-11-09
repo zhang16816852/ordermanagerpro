@@ -170,14 +170,24 @@ export function generateVariantCombos(input: {
 
   if (activeGroups.length === 0) {
     if (input.modelItems.length === 0) return [];
-    return input.modelItems.map((item, idx) => ({
-      sku: `${codePrefix}-${item.name}`.toUpperCase().replace(SPACE_RE, '-'),
-      name: namePrefix ? `${namePrefix}_${item.name}` : item.name,
-      sort_order: idx,
-      optionValueIds: [],
-      _modelGroupId: item.id,
-      _modelGroupType: item.type,
-    }));
+    return input.modelItems.map((item, idx) => {
+      const built = buildVariantNameAndSku({
+        optionLabels: [],
+        optionSkuParts: [],
+        modelNames: [item.name],
+        namePrefix,
+        skuPrefix: input.skuPrefix,
+        codePrefix,
+      });
+      return {
+        sku: built?.sku ?? `${codePrefix}-${item.name}`.toUpperCase().replace(SPACE_RE, '-'),
+        name: built?.name ?? (namePrefix ? `${namePrefix}_${item.name}` : item.name),
+        sort_order: idx,
+        optionValueIds: [],
+        _modelGroupId: item.id,
+        _modelGroupType: item.type,
+      };
+    });
   }
 
   const valueLists = activeGroups.map(g =>
@@ -198,15 +208,19 @@ export function generateVariantCombos(input: {
         return null;
       }).filter((v): v is OptionValueInput => !!v);
 
-      const skuParts = [codePrefix, ...valueObjs.map(skuPartOf)];
-      if (modelItem) skuParts.push(modelItem.name);
-      const sku = skuParts.join('-').toUpperCase().replace(SPACE_RE, '-');
-
       const nameLabels = valueObjs.map(v => v.label.trim()).filter(Boolean);
-      const baseName = modelItem
+      const built = buildVariantNameAndSku({
+        optionLabels: nameLabels,
+        optionSkuParts: valueObjs.map(skuPartOf),
+        modelNames: modelItem ? [modelItem.name] : [],
+        namePrefix,
+        skuPrefix: input.skuPrefix,
+        codePrefix,
+      });
+      const sku = built?.sku ?? [codePrefix, ...valueObjs.map(skuPartOf), ...(modelItem ? [modelItem.name] : [])].join('-').toUpperCase().replace(SPACE_RE, '-');
+      const name = built?.name ?? (modelItem
         ? `${modelItem.name}${nameLabels.length > 0 ? '_' + nameLabels.join('-') : ''}`
-        : nameLabels.join('-');
-      const name = namePrefix ? `${namePrefix}_${baseName}` : baseName;
+        : nameLabels.join('-'));
 
       combos.push({
         sku,
@@ -219,6 +233,47 @@ export function generateVariantCombos(input: {
     }
   }
   return combos;
+}
+
+// 共用：單一變體的名稱 / SKU 組合公式（單一真值來源）
+// VariantBatchCreator（generateVariantCombos 內部）與 VariantEditDialog 預覽皆呼叫此函式，
+// 確保兩邊公式一致，未來改動只需改此處。
+export interface BuildVariantNameAndSkuInput {
+  optionLabels: string[];
+  optionSkuParts: string[];
+  modelNames?: string[];
+  namePrefix?: string;
+  skuPrefix?: string;
+  codePrefix?: string;
+}
+export function buildVariantNameAndSku(input: BuildVariantNameAndSkuInput): { name: string; sku: string } | null {
+  const optionLabels = (input.optionLabels || []).filter(Boolean);
+  const optionSkuParts = (input.optionSkuParts || []).filter(Boolean);
+  const modelNames = (input.modelNames || []).filter(Boolean);
+  const hasContent = optionLabels.length > 0 || modelNames.length > 0;
+  if (!hasContent) return null;
+
+  const codePrefixTrimmed = (input.skuPrefix?.trim() || input.codePrefix?.trim() || '').trim();
+  const namePrefixTrimmed = (input.namePrefix || '').trim();
+
+  const modelNameSegment = modelNames.length === 1
+    ? modelNames[0]
+    : modelNames.length > 1
+      ? modelNames.join('、')
+      : '';
+
+  // SKU：[codePrefix, ...optionSkuParts, ...modelNames].join('-').toUpperCase()
+  const skuParts = [codePrefixTrimmed, ...optionSkuParts, ...modelNames];
+  const sku = skuParts.filter(Boolean).join('-').toUpperCase().replace(SPACE_RE, '-');
+
+  // 名稱：baseName = modelName ? `${modelName}${labels? '_' + labels : ''}` : labels.join('-')
+  const baseName = modelNameSegment
+    ? `${modelNameSegment}${optionLabels.length > 0 ? '_' + optionLabels.join('-') : ''}`
+    : optionLabels.join('-');
+  const name = namePrefixTrimmed ? `${namePrefixTrimmed}_${baseName}` : baseName;
+
+  if (!name && !sku) return null;
+  return { name, sku };
 }
 
 // 價格解析：逐值→預設（unified 時用統一價）
