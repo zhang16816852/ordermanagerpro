@@ -50,7 +50,7 @@ export function EntryDocListFields({ ctl }: { ctl: EntryFormController }) {
   const filteredDocList = useMemo(() => {
     const q = docSearch.trim().toLowerCase();
     if (!q) return currentDocList;
-    return currentDocList.filter(item => `${item.code} ${item.name} ${item.supplierName || ''} ${item.customerName || ''} ${item.deviceModelName || ''}`.toLowerCase().includes(q));
+    return currentDocList.filter(item => `${item.code} ${item.name} ${item.supplierName || ''} ${item.customerName || ''} ${item.deviceModelName || ''} ${item.storeName || ''}`.toLowerCase().includes(q));
   }, [currentDocList, docSearch]);
 
   return (

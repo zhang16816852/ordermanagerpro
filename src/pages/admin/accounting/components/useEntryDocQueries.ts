@@ -12,6 +12,7 @@ export interface DocCandidate {
   supplierName?: string;
   customerName?: string;
   deviceModelName?: string;
+  storeName?: string;
 }
 
 interface UseEntryDocQueriesOptions {
@@ -81,7 +82,7 @@ export function useEntryDocQueries({ isList, isRepair, isConsume, docTab }: UseE
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('repair_orders')
-        .select('id, code, created_at, status, customer_name, total_price, reported_issue, device_model:device_model_id(name)')
+        .select('id, code, created_at, status, customer_name, total_price, reported_issue, store:store_id(name), device_model:device_model_id(name)')
         .neq('status', 'cancelled')
         .order('created_at', { ascending: false })
         .limit(100);
@@ -89,11 +90,12 @@ export function useEntryDocQueries({ isList, isRepair, isConsume, docTab }: UseE
       return (data || []).map((ro: any) => ({
         id: ro.id,
         code: ro.code || ro.id.slice(0, 8),
-        name: `${ro.code || '維修單'}${ro.customer_name ? ` - ${ro.customer_name}` : ''}${ro.device_model?.name ? ` (${ro.device_model.name})` : ''}`,
+        name: `${ro.code || '維修單'}${ro.customer_name ? ` - ${ro.customer_name}` : ''}${ro.device_model?.name ? ` (${ro.device_model.name})` : ''}${ro.store?.name ? ` ・ ${ro.store.name}` : ''}`,
         date: ro.created_at,
         amount: Number(ro.total_price) || 0,
         customerName: ro.customer_name || '',
         deviceModelName: ro.device_model?.name || '',
+        storeName: ro.store?.name || '',
       }));
     },
     enabled: (isList && docTab === 'repair_order') || isRepair,
