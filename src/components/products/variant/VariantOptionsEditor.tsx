@@ -435,7 +435,7 @@ interface OptionValueTableProps {
 function OptionValueTable({ values, onUpdate, onRemove, onAdd, onBulkPaste }: OptionValueTableProps) {
   return (
     <div className="space-y-2">
-      <div className="border rounded-lg overflow-hidden">
+      <div className="border rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted">
             <tr>

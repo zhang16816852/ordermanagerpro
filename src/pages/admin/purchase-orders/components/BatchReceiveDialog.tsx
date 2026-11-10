@@ -155,7 +155,7 @@ export function BatchReceiveDialog({
               </div>
 
               {receivableRows.length > 0 && (
-                <div className="max-h-64 overflow-y-auto rounded-md border">
+                <div className="max-h-64 overflow-x-auto overflow-y-auto rounded-md border">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/40 sticky top-0">
                       <tr>

@@ -78,7 +78,7 @@ export function SeriesCell({ row, index, onUpdate, allSeries }: SeriesCellProps)
                     )}
                 </div>
             </PopoverTrigger>
-            <PopoverContent className="p-0 w-[240px]" align="start" onWheel={(e) => e.stopPropagation()}>
+            <PopoverContent className="p-0 w-[240px] max-w-[90vw]" align="start" onWheel={(e) => e.stopPropagation()}>
                 {isAdding ? (
                     <div className="p-3 space-y-3 bg-background">
                         <div className="flex items-center justify-between border-b pb-2">

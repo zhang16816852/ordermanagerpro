@@ -16,6 +16,7 @@ import {
   Wallet,
   Globe,
   Layout,
+  Send,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -49,6 +50,7 @@ export const adminNavItems: NavItem[] = [
   { title: '媒合市場', href: '/market', icon: ShoppingBag },
   { title: 'Table 式下單', href: '/admin/order-grid-templates', icon: Layers },
   { title: '操作日誌', href: '/admin/audit-logs', icon: HistoryIcon },
+  { title: 'Telegram Bot', href: '/admin/notification-bots', icon: Send },
 ];
 
 export const baseStoreNavItems: NavItem[] = [

@@ -102,7 +102,7 @@ export function DeviceModelCell({
                     {renderBadges()}
                 </div>
             </PopoverTrigger>
-            <PopoverContent className="p-0 w-[260px]" align="start" onWheel={(e) => e.stopPropagation()}>
+            <PopoverContent className="p-0 w-[260px] max-w-[90vw]" align="start" onWheel={(e) => e.stopPropagation()}>
                 {addingModel ? (
                     <div className="p-3 space-y-3 bg-background">
                         <div className="flex items-center justify-between border-b pb-2">

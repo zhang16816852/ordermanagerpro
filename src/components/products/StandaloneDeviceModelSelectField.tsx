@@ -211,7 +211,7 @@ export function StandaloneDeviceModelSelectField({
                         選擇型號或群組...
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[350px] p-0 overflow-hidden max-h-[min(400px,var(--radix-popover-content-available-height))]" align="start" usePortal={false}>
+                <PopoverContent className="w-[350px] max-w-[90vw] p-0 overflow-hidden max-h-[min(400px,var(--radix-popover-content-available-height))]" align="start" usePortal={false}>
                     <Tabs defaultValue="models" className="flex flex-col h-full min-h-0">
                         <div className="flex-shrink-0 p-2 border-b flex justify-between items-center bg-muted/20">
                             <TabsList className="h-8">

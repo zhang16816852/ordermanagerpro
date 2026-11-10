@@ -1071,7 +1071,7 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
 
 ## ⚠️ 已知問題 / 安全注意
 
-**`.agent/DATABASE.md` 統一價格段落已損毀（2026-09-30 確認，**尚未修復**，需人工處理）**：該檔「統一價格（unified_pricing）」一節（原 lines 320–325）整段為亂碼，含 **133 個 U+FFFD**（`EF BF BD`）。⚠️ **已驗證為 repo 既有缺陷、非本次變更造成**：逐一檢查所有改過此檔的 commit（`e3b4dbeb` 2026-09-10、`4466fa05` 09-17、`fcd32606` 09-21、`083edc63` 09-22、`0d6b7557` 09-26、`7f6dc4df` 09-29、`bee8884f` 09-30），**每個版本都是恰好 133 個**，故**原文無法從 git 歷史還原**（最早的可用版本已損毀）。該段內容在 `AGENTS.md`「統一價格 unified_pricing」節有**乾淨且等價**的完整版本（以該節為權威來源即可）。**修復方式**：因原文是 U+FFFD 位元組、無法用一般文字編輯工具比對 `oldString`，且 `AGENTS.md` 已載明「PowerShell `Get-Content`/`Set-Content` 改寫 UTF-8 曾造成過 BOM＋亂碼」，故**不要**用 PowerShell 對此檔做位元組層級改寫；請用可精確指定行號／位元組的工具（如編輯器直接選取該 6 行後貼入乾淨文字）處理。
+**`.agent/DATABASE.md` 統一價格段落已修復（2026-11-10）**：原 lines 332–337 整段為 133 個 U+FFFD 亂碼（repo 既有缺陷，git 全歷史皆損毀無法還原），已以 `AGENTS.md`「統一價格 unified_pricing」節為權威來源，用 edit 工具精確取代為乾淨繁中內容；`grep "�"` 現為 0。修復方式教訓：不可用 PowerShell 位元組層級改寫；edit 工具比對 exact bytes 可安全處理。
 
 **向後相容 VIEW 復原（2026-09-09）**：遠端資料庫缺少 `device_model_links`／`device_model_group_links`／`device_model_exclusions`／`product_effective_models_base` 這 4 個由 `20260602213529_consolidate_entity_model_relations.sql` 定義的 VIEW（該 migration 未記入遠端）；`sync_storefront_items` 執行時參考到缺漏的 VIEW 會 42P01，導致新增/編輯變體失敗。已以 migration `20260909000000_recreate_device_model_link_views.sql` 重建（CREATE OR REPLACE VIEW，冪等），`entity_model_relations` 實表與前端邏輯不受影響。若日後又出現 `relation "public.device_model_links" does not exist`，先確認這 4 個 VIEW 是否存在。
 

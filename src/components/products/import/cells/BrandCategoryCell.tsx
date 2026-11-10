@@ -44,7 +44,7 @@ export function BrandCategoryCell({ row, index, onUpdate, allBrands, categories,
                         {row.brand || '未設定品牌'} ⚠️
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="p-0 w-[200px]" align="start">
+                <PopoverContent className="p-0 w-[200px] max-w-[90vw]" align="start">
                     <Command>
                         <CommandInput placeholder="搜尋品牌..." />
                         <CommandList>
@@ -88,7 +88,7 @@ export function BrandCategoryCell({ row, index, onUpdate, allBrands, categories,
                     {row.category || '未設定分類'} ⚠️
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="p-0 w-[240px]" align="start">
+            <PopoverContent className="p-0 w-[240px] max-w-[90vw]" align="start">
                 <Command>
                     <CommandInput placeholder="搜尋分類..." />
                     <CommandList>

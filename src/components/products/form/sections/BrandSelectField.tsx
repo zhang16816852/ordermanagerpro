@@ -108,7 +108,7 @@ export function BrandSelectField({ form }: BrandSelectFieldProps) {
                                 </Button>
                             </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="p-0 w-[300px]" align="start">
+                        <PopoverContent className="p-0 w-[300px] max-w-[90vw]" align="start">
                             {isAdding ? (
                                 <div className="p-3 space-y-3 bg-background">
                                     <div className="flex items-center justify-between border-b pb-2">

@@ -11,8 +11,11 @@ import { adminRoutes } from "./admin";
 import { storeRoutes } from "./store";
 import { sharedRoutes } from "./shared";
 import { workshopRoutes } from "./workshop";
-import MarketPage from "@/pages/market/index";
-import MarketDetailPage from "@/pages/market/detail";
+import { lazy, Suspense } from "react";
+const MarketPage = lazy(() => import("@/pages/market/index"));
+const MarketDetailPage = lazy(() => import("@/pages/market/detail"));
+
+const PageFallback = () => <div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">載入中...</div>;
 
 export function AppRoutes() {
     return (
@@ -52,7 +55,9 @@ export function AppRoutes() {
                 path="/market"
                 element={
                     <AppLayout>
-                        <MarketPage />
+                        <Suspense fallback={<PageFallback />}>
+                            <MarketPage />
+                        </Suspense>
                     </AppLayout>
                 }
             />
@@ -60,7 +65,9 @@ export function AppRoutes() {
                 path="/market/:id"
                 element={
                     <AppLayout>
-                        <MarketDetailPage />
+                        <Suspense fallback={<PageFallback />}>
+                            <MarketDetailPage />
+                        </Suspense>
                     </AppLayout>
                 }
             />

@@ -44,19 +44,22 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
   const toggleSection = (s: string) =>
     setOpenSections((prev) => {
       const n = new Set(prev);
-      n.has(s) ? n.delete(s) : n.add(s);
+      if (n.has(s)) n.delete(s);
+      else n.add(s);
       return n;
     });
   const toggleCat = (id: string) =>
     setExpandedCats((prev) => {
       const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
   const toggleBrand = (id: string) =>
     setExpandedBrands((prev) => {
       const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
 

@@ -23,7 +23,7 @@ export function VariantPreviewTable({
   const longestSkuLen = variants.reduce((m, v) => Math.max(m, v.sku.length), 0);
   const skuWidth = `${Math.max(16, Math.min(longestSkuLen + 3, 40))}ch`;
   return (
-    <div className="border rounded-lg overflow-y-auto" style={{ maxHeight }}>
+    <div className="border rounded-lg overflow-x-auto overflow-y-auto" style={{ maxHeight }}>
       <table className="w-full text-sm">
         <thead className="bg-muted sticky top-0">
           <tr>

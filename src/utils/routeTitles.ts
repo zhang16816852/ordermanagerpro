@@ -23,6 +23,7 @@ const EXACT_TITLES: Record<string, string> = {
   '/admin/accounting': '會計管理',
   '/admin/logistics': '物流管理',
   '/admin/storefront': '首頁內容',
+  '/admin/notification-bots': 'Telegram Bot 管理',
   '/admin/purchase-orders': '採購單管理',
   '/admin/cross-border': '集運倉管理',
   '/admin/consignment': '寄賣管理',

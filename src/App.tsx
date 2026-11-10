@@ -6,6 +6,7 @@ import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { AppRoutes } from "./routes";
 import { CacheGate } from "@/components/CacheGate";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const queryClient = new QueryClient();
 
@@ -20,7 +21,9 @@ const App = () => {
             {/* 公開頁面不等 ERP 離線快取；其餘路徑維持原本的載入 gate。
                 放在 BrowserRouter 內是因為 CacheGate 需要 useLocation。 */}
             <CacheGate>
-              <AppRoutes />
+              <ErrorBoundary>
+                <AppRoutes />
+              </ErrorBoundary>
             </CacheGate>
           </AuthProvider>
         </BrowserRouter>

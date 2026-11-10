@@ -196,7 +196,7 @@ function ProductSelectionDialog({
                             })}
                         </div>
                     ) : (
-                        <div className="border rounded-lg overflow-hidden">
+                        <div className="border rounded-lg overflow-x-auto">
                             <table className="w-full">
                                 <thead>
                                     <tr className="bg-muted/50 text-xs font-medium text-muted-foreground">

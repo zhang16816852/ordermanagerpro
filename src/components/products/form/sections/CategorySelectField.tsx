@@ -182,7 +182,7 @@ export function CategorySelectField({ form }: CategorySelectFieldProps) {
                             </Button>
                         </PopoverTrigger>
                         <PopoverContent 
-                            className="w-[300px] p-0" 
+                            className="w-[300px] max-w-[90vw] p-0" 
                             align="start"
                             onWheel={(e) => e.stopPropagation()}
                         >

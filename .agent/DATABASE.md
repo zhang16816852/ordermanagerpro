@@ -329,12 +329,15 @@
 - **變體選項原子更新（2026-09-12，migration `20260912000000_upsert_variant_options.sql`）**：`upsert_variant_options(p_variant_id, p_items)` —— SECURITY DEFINER（僅 admin），將 `VariantEditDialog` 的 `manageVariantOptions`（5~8 次前端 HTTP，非交易）改為**單一 transaction**：依 `(label OR value)` 對齊選項值（不存在 INSERT、存在且 hex_code 為 NULL 時補色庫 hex_code）→ DELETE+INSERT `product_variant_options` → orphan 清理（該產品所有群組中無任何變體使用的 `product_option_values`）。`p_items=[{group_id,label}]`，直接傳 JS 陣列、不 `JSON.stringify`。
 - **跨 schema email 解析（2026-09-07，migration `20260907000005_repair_assignee_emails_rpc.sql`）**：⚠️ `auth.users` 在 auth schema，PostgREST 預設 `db-schemas` 不含 auth，**不能對其做 embed**（`repair_orders?select=assigned_tech:assigned_to(email)` 報 400 PGRST200，schema reload 無效）。改用 SECURITY DEFINER RPC `repair_assignee_emails()` 回傳 `{user_id, email, full_name}`（統整 `repair_orders.assigned_to/created_by` 與 `repair_order_status_history.changed_by` 的使用者），僅 grant execute to authenticated；前端 `useRepairOrders.useRepairAssigneeMap()` 產生 id→email map 供列表/詳情解析。任何新 embed 對 `auth.users` 一律不可用。
 
-## �Τ@����]unified_pricing�^
+## 統一價格（unified_pricing）
 
-- products.unified_pricing BOOLEAN�Bunified_wholesale_price NUMERIC�Bunified_retail_price NUMERIC�]migration 20260827000001_add_unified_pricing.sql�^
-- 	rg_enforce_unified_variant_price�G���� INSERT/UPDATE �ɭY���ݲ��~ unified_pricing=true�A�j�� wholesale_price/retail_price = ���~�Τ@���]����~�|�ҵL�k���������}���^
-- 	rg_sync_unified_price_to_variants�G���~����/�ק�Τ@���ɡAUPDATE �Ҧ� product_variants ���Τ@��
-- �s��Ȥ����]store_products�^��Τ@���ӫ~�H���~�h�� (ariant_id = null) �x�s�A��Ҧ�����]�t���ӷs�W�^�Τ@�ͮġFuseStoreProductCache ��Τ@���ӫ~�����v���� store_products �C�A������~�h�ŦC
+- `products` 新增 `unified_pricing BOOLEAN`、`unified_wholesale_price NUMERIC`、`unified_retail_price NUMERIC`（migration `20260827000001_add_unified_pricing.sql`）
+- 兩支 trigger：`trg_enforce_unified_variant_price`（變體寫入時強制價格=產品統一價）、`trg_sync_unified_price_to_variants`（產品切換/修改統一價時覆寫所有變體價格）
+- `ProductFormDialog` 新增 DAIGO 風格「統一價格」核取方塊 + 統一批發價/零售價輸入；首次啟用會彈確認「將覆寫所有現有變體價格」
+- `VariantSection` / `VariantBatchCreator` / `VariantEditDialog`：統一價商品隱藏/停用逐變體價格編輯，生成變體自動繼承統一價
+- `BrandPricing`：統一價商品之連鎖客戶價格改以「產品層級」(`store_products.variant_id = null`) 儲存並套用至所有變體
+- `useStoreProductCache`：統一價商品的門市價改取產品層級 `store_products`（忽略逐變體列），確保未來新增變體也吃到同一連鎖價
+- 商品目錄 / 詳情顯示「統一價格」徽章；因變體價格皆相同，`calculatePriceRange` 自然顯示單一價格
 
 ## 9. 服務型商品 + A+B 加購 + 運費月結（2026-09-06，migration 20260906000001~0003）
 

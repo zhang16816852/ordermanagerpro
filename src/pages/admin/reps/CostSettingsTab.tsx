@@ -106,7 +106,10 @@ export function CostSettingsTab({
                             failCount++;
                             failures.push(`${p.name}: 業務成本 $${data.rep_cost} < 進貨成本 $${data.purchase_cost}`);
                           }
-                        } catch {}
+                        } catch (e) {
+                             // eslint-disable-next-line no-console
+                             console.error(e);
+                           }
                       } else {
                         for (const v of variants) {
                           try {
@@ -119,7 +122,10 @@ export function CostSettingsTab({
                               failCount++;
                               failures.push(`${p.name} / ${v.name || v.sku}: 業務成本 $${data.rep_cost} < 進貨成本 $${data.purchase_cost}`);
                             }
-                          } catch {}
+                          } catch (e) {
+                             // eslint-disable-next-line no-console
+                             console.error(e);
+                           }
                         }
                       }
                     }

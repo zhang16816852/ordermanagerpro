@@ -208,7 +208,7 @@ export function ReceivingTab() {
 
             {isExpanded && (
               <CardContent className="pt-0">
-                <div className="border rounded-md">
+                <div className="border rounded-md overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">

@@ -109,7 +109,7 @@ export function SearchableSelect({
                 </Button>
             </PopoverTrigger>
             <PopoverContent 
-                className="w-[var(--radix-popover-trigger-width)] min-w-[340px] max-w-[min(560px,95vw)] p-0" 
+                className="w-[var(--radix-popover-trigger-width)] min-w-[min(340px,90vw)] max-w-[min(560px,95vw)] p-0" 
                 align="start"
             >
                 <Command shouldFilter={false}>

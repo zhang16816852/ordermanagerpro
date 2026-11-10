@@ -178,7 +178,8 @@ export default function StoreRepairOrderDetail() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground text-xs">
                     <th className="text-left py-2 px-1 w-16">類型</th>
@@ -225,6 +226,7 @@ export default function StoreRepairOrderDetail() {
                   )}
                 </tbody>
               </table>
+              </div>
             </CardContent>
           </Card>
         </div>

@@ -139,7 +139,7 @@ export function DeviceModelSelectField({ form }: DeviceModelSelectFieldProps) {
                                     : '新增型號或群組...'}
                             </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-[350px] p-0" align="start">
+                        <PopoverContent className="w-[350px] max-w-[90vw] p-0" align="start">
                             <Tabs defaultValue="models">
                                 <div className="p-2 border-b flex justify-between items-center bg-muted/20">
                                     <TabsList className="h-8">
