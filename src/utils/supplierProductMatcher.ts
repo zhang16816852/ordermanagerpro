@@ -1,10 +1,27 @@
 import { SupplierProduct, ProductDiff, FieldChange, DiffAction, FIELD_LABELS } from './supplierProductSchema';
 import type { ProductWithDetails, ProductVariant } from '@/types/product';
+import type { SupplierProductMapping } from '@/pages/admin/purchase-orders/hooks/useSupplierMappings';
 
 /**
- * 比對鍵優先序：supplier_sku → barcode → sku → name
+ * 比對鍵優先序：supplier_mappings → supplier_sku → barcode → sku → name
  */
-function getMatchKey(sp: SupplierProduct, existingProducts: ProductWithDetails[]): { product: ProductWithDetails | null; variant: ProductVariant | null; keyType: string } {
+function getMatchKey(
+  sp: SupplierProduct,
+  existingProducts: ProductWithDetails[],
+  supplierMappings?: SupplierProductMapping[]
+): { product: ProductWithDetails | null; variant: ProductVariant | null; keyType: string } {
+  // 0. supplier_product_mappings（廠商代號 → 內部產品/變體）
+  if (supplierMappings) {
+    const mapping = supplierMappings.find(m => m.vendor_product_id === sp.supplier_sku);
+    if (mapping) {
+      const product = existingProducts.find(p => p.id === mapping.internal_product_id);
+      const variant = mapping.internal_variant_id
+        ? (product?.variants || []).find(v => v.id === mapping.internal_variant_id) || null
+        : null;
+      if (product) return { product, variant, keyType: 'supplier_mapping' };
+    }
+  }
+
   // 1. supplier_sku → products.code 或 variants.sku
   for (const p of existingProducts) {
     if (p.code === sp.supplier_sku) return { product: p, variant: null, keyType: 'code' };
@@ -31,16 +48,13 @@ function compareField(field: string, oldVal: unknown, newVal: unknown): boolean 
   if (oldVal === newVal) return true;
   if (oldVal == null && newVal == null) return true;
   if (oldVal == null || newVal == null) return false;
-  // 數字比較
   if (typeof oldVal === 'number' && typeof newVal === 'number') {
     return Math.abs(oldVal - newVal) < 0.0001;
   }
-  // 陣列比較（images）
   if (Array.isArray(oldVal) && Array.isArray(newVal)) {
     if (oldVal.length !== newVal.length) return false;
     return oldVal.every((v, i) => v === newVal[i]);
   }
-  // 物件比較（dimensions）
   if (typeof oldVal === 'object' && typeof newVal === 'object') {
     return JSON.stringify(oldVal) === JSON.stringify(newVal);
   }
@@ -50,8 +64,6 @@ function compareField(field: string, oldVal: unknown, newVal: unknown): boolean 
 function buildFieldChanges(sp: SupplierProduct, product: ProductWithDetails, variant: ProductVariant | null): FieldChange[] {
   const changes: FieldChange[] = [];
 
-  // 產品層級欄位（依實際 DB schema：products 表無 barcode/brand/category/base_* 欄位，
-  // 這些資料分散於 product_variants / product_brands / product_category_links / product_images）
   const firstVariant = product.variants?.[0];
   const productFields: { field: keyof SupplierProduct; label: string; oldGetter: (p: ProductWithDetails, v: ProductVariant | null) => unknown }[] = [
     { field: 'name', label: '品名', oldGetter: (p) => p.name },
@@ -73,12 +85,11 @@ function buildFieldChanges(sp: SupplierProduct, product: ProductWithDetails, var
       changes.push({ field, label, old_value: oldVal, new_value: newVal });
     }
   }
-  // 變體層級比對
+
   if (sp.variants && sp.variants.length > 0) {
     const existingVariants = product.variants || [];
     const variantChanges: string[] = [];
 
-    // 檢查新增/刪除/修改的變體
     const spSkus = new Set(sp.variants.map(v => v.sku));
     const existingSkus = new Set(existingVariants.map(v => v.sku));
 
@@ -117,15 +128,17 @@ function buildFieldChanges(sp: SupplierProduct, product: ProductWithDetails, var
 
 /**
  * 比對供應商產品與系統現有產品
+ * 新增 supplierMappings 參數，優先透過廠商代號對照規則匹配
  */
 export function matchSupplierProducts(
   supplierProducts: SupplierProduct[],
   existingProducts: ProductWithDetails[],
+  supplierMappings?: SupplierProductMapping[]
 ): ProductDiff[] {
   const diffs: ProductDiff[] = [];
 
   for (const sp of supplierProducts) {
-    const { product, variant, keyType } = getMatchKey(sp, existingProducts);
+    const { product, variant, keyType } = getMatchKey(sp, existingProducts, supplierMappings);
 
     if (!product) {
       diffs.push({
@@ -147,7 +160,6 @@ export function matchSupplierProducts(
         reason: `比對鍵：${keyType}`,
       });
     } else {
-      // 檢查是否有衝突（名稱差異過大）
       const nameChange = changes.find(c => c.field === 'name');
       const isConflict = nameChange && String(nameChange.old_value).trim() !== String(nameChange.new_value).trim() &&
         !String(nameChange.old_value).includes(String(nameChange.new_value)) &&
@@ -167,9 +179,6 @@ export function matchSupplierProducts(
   return diffs;
 }
 
-/**
- * 統計差異
- */
 export function summarizeDiffs(diffs: ProductDiff[]): { create: number; update: number; unchanged: number; conflict: number } {
   return {
     create: diffs.filter(d => d.action === 'create').length,

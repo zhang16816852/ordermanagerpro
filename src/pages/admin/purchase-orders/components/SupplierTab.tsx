@@ -152,6 +152,7 @@ export function SupplierTab({
         open={!!importSupplier}
         onOpenChange={(open) => { if (!open) { setImportSupplier(null); setScrapedProducts([]); } }}
         supplierName={importSupplier?.name}
+        supplierId={importSupplier?.id}
         initialProducts={scrapedProducts.length > 0 ? scrapedProducts : undefined}
       />
     </div>

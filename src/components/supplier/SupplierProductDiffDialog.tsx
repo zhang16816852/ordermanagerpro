@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { useProductCache } from '@/hooks/useProductCache';
+import { useSupplierMappings } from '@/pages/admin/purchase-orders/hooks/useSupplierMappings';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
@@ -21,6 +22,8 @@ interface SupplierProductDiffDialogProps {
   onOpenChange: (open: boolean) => void;
   /** 預設供應商名稱（僅顯示用） */
   supplierName?: string;
+  /** 供應商 ID，用於查詢 supplier_product_mappings */
+  supplierId?: string;
   /** 預先載入的產品資料（如爬蟲結果），開啟時自動比對 */
   initialProducts?: SupplierProduct[];
 }
@@ -50,9 +53,11 @@ export function SupplierProductDiffDialog({
   open,
   onOpenChange,
   supplierName,
+  supplierId,
   initialProducts,
 }: SupplierProductDiffDialogProps) {
   const { products } = useProductCache();
+  const { mappings } = useSupplierMappings(supplierId);
   const [activeTab, setActiveTab] = useState<'upload' | 'paste'>('upload');
   const [pastedText, setPastedText] = useState('');
   const [fileName, setFileName] = useState('');
@@ -81,7 +86,7 @@ export function SupplierProductDiffDialog({
   // 解析 + 比對
   const processProducts = (supplierProducts: SupplierProduct[]) => {
     setParsed(supplierProducts);
-    const result = matchSupplierProducts(supplierProducts, products as any);
+    const result = matchSupplierProducts(supplierProducts, products as any, mappings);
     setDiffs(result);
     // 預設勾選 create + update + conflict
     const initial = new Set<number>();
@@ -168,11 +173,11 @@ export function SupplierProductDiffDialog({
   const summary = useMemo(() => summarizeDiffs(diffs), [diffs]);
 
   useEffect(() => {
-    if (open && initialProducts && initialProducts.length > 0 && diffs.length === 0) {
+    if (open && initialProducts && initialProducts.length > 0 && diffs.length === 0 && mappings) {
       processProducts(initialProducts);
     }
     if (!open) reset();
-  }, [open, initialProducts]);
+  }, [open, initialProducts, mappings]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>

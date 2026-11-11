@@ -13,21 +13,17 @@ const MAX_COST = 9999;
 const MAX_PRICE = 9999;
 const MIN_COST = 1;
 
-// Cookie jar with proper quote handling
 const cookies: Record<string, string> = {};
 
 function setCookiesFromResponse(res: Response) {
   const setCookie = res.headers.get('set-cookie');
   if (setCookie) {
     const match = setCookie.match(/^([^=]+)="([^"]*)"/);
-    if (match) {
-      cookies[match[1]] = '"' + match[2] + '"';
-    } else {
+    if (match) cookies[match[1]] = '"' + match[2] + '"';
+    else {
       const [nameValue] = setCookie.split(';');
       const eqIdx = nameValue.indexOf('=');
-      if (eqIdx > 0) {
-        cookies[nameValue.substring(0, eqIdx).trim()] = nameValue.substring(eqIdx + 1).trim();
-      }
+      if (eqIdx > 0) cookies[nameValue.substring(0, eqIdx).trim()] = nameValue.substring(eqIdx + 1).trim();
     }
   }
 }
@@ -79,11 +75,11 @@ function shouldExclude(product: { name: string; cost: string; retail_price: stri
   const cost = parseFloat(product.cost);
   const price = parseFloat(product.retail_price);
   if (isNaN(cost) || isNaN(price)) return true;
-  if (cost >= MAX_COST) return true;
-  if (price >= MAX_PRICE) return true;
-  if (cost < MIN_COST) return true;
+  if (cost >= 9999) return true;
+  if (price >= 9999) return true;
+  if (cost < 1) return true;
   if (!product.name || product.name.trim() === '') return true;
-  for (const pattern of EXCLUDED_PATTERNS) {
+  for (const pattern of ['OEM', '預購中', '售完為止', '已停產', '請至.*專區下單', '保卡']) {
     try {
       if (new RegExp(pattern).test(product.name)) return true;
     } catch (e) { /* ignore */ }
@@ -111,38 +107,55 @@ export function useKcimosScrape() {
     setResult(null);
 
     try {
-      // Step 1: 登入
-      const loginRes = await fetch(`${BASE_URL}/login.shtml`, {
+      const workerUrl = import.meta.env.VITE_KCIMOS_WORKER_URL;
+      if (workerUrl) {
+        const res = await fetch(`${workerUrl}/scrape`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '抓取失敗');
+        const scrapeResult: ScrapeResult = {
+          success: true,
+          total_scraped: data.total_scraped,
+          excluded_count: data.excluded_auto + data.excluded_pattern,
+          included_count: data.included_count,
+          products: data.products,
+        };
+        setResult(scrapeResult);
+        return scrapeResult;
+      }
+
+      const loginRes = await fetch('/kcimos/login.shtml', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
           'X-Requested-With': 'XMLHttpRequest',
+          'Referer': 'http://kcimos.kv.idv.tw/frontend/login.html',
         },
         credentials: 'include',
         body: `login.type=1&login.captchaCheck=${CAPTCHA_CHECK}&login.account=${LOGIN_ACCOUNT}&login.password=${LOGIN_PASSWORD}&login.captcha=${CAPTCHA_VALUE}`,
       });
       setCookiesFromResponse(loginRes);
       const loginResult = await loginRes.json();
-      if (!loginResult.status) {
-        throw new Error(`登入失敗: ${loginResult.msg}`);
-      }
+      if (!loginResult.status) throw new Error(`登入失敗: ${loginResult.msg}`);
 
-      // Step 2: 取得分類
-      const fastOrderRes = await fetch(`${BASE_URL}/frontend/initFastOrder.shtml`, {
-        headers: { Cookie: getCookieHeader() },
+      const fastOrderRes = await fetch('/kcimos/frontend/initFastOrder.shtml', {
+        headers: { Cookie: getCookieHeader(), 'Referer': 'http://kcimos.kv.idv.tw/frontend/initFastOrder.shtml' },
         credentials: 'include',
       });
       const categories = parseCategoryList(await fastOrderRes.text());
 
-      // Step 3: 抓取所有產品
       const allProducts: any[] = [];
       for (const cat of categories) {
-        const res = await fetch(`${BASE_URL}/frontend/product/listProduct.shtml`, {
+        const res = await fetch('/kcimos/frontend/product/listProduct.shtml', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
             'X-Requested-With': 'XMLHttpRequest',
             Cookie: getCookieHeader(),
+            'Referer': 'http://kcimos.kv.idv.tw/frontend/initFastOrder.shtml',
           },
           credentials: 'include',
           body: `productCatPk=${cat.id}`,
@@ -152,19 +165,13 @@ export function useKcimosScrape() {
         await new Promise((r) => setTimeout(r, DELAY_MS));
       }
 
-      // Step 4: 三層排除
       const included: any[] = [];
       let excludedCount = 0;
-
       for (const p of allProducts) {
-        if (shouldExclude(p)) {
-          excludedCount++;
-          continue;
-        }
+        if (shouldExclude(p)) { excludedCount++; continue; }
         included.push(p);
       }
 
-      // Step 5: 轉換為 SupplierProduct 格式
       const supplierProducts: SupplierProduct[] = included.map((p) => ({
         supplier_sku: p.vendor_product_id,
         name: p.name,
