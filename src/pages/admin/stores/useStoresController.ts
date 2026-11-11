@@ -48,6 +48,7 @@ export function useStoresController() {
     userRoles,
     storeUsers,
     storesList,
+    storeSalesSummary,
     invitations,
     profilesForStore,
   } = useStoresQueries();
@@ -265,6 +266,7 @@ export function useStoresController() {
     profilesLoading,
     storeUsers,
     storesList,
+    storeSalesSummary,
     invitations,
     profilesForStore,
     createStoreMutation,

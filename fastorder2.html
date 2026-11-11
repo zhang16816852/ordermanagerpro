@@ -1,0 +1,156 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<link rel="icon" href="/common/image/favicon.ico" type="image/x-icon" />
+<title>kcimos</title>
+<script type="text/javascript" src="/common/js/jquery-1.8.3.min.js"></script>
+<script type="text/javascript" src="/common/js/jquery.form.js"></script>
+<script type="text/javascript" src="/common/js/jquery.cookie.js"></script>
+</head>
+<body>
+<div>
+  <center><img src="/common/image/logo.png" alt="kcimos" /></center>
+  <center>
+  <form id="form_login">
+    <input type="hidden" name="login.type" value="1" />
+    <input type="hidden" id="captcha_check" name="login.captchaCheck"  />
+    <input type="text" name="login.account" style="color:gray" value="請輸入帳號" placeholder="請輸入帳號" />
+    <br/>
+    <br/>
+    <input id="input_pwd_text" type="text" style="color:gray" value="請輸入密碼" placeholder="請輸入密碼" />
+    <input id="input_pwd" type="password" name="login.password" style="color:gray" value="請輸入密碼" placeholder="請輸入密碼" style="display: none;" />
+    <br/>
+    <br/>
+    <input class="captcha" type="text" name="login.captcha" style="color:gray" id="captcha" value="驗証碼" placeholder="驗証碼" />
+    <br/>
+    <br/>
+    <div class="captcha_bg">
+      <img id="captcha_img" src="" width="135" height="36" align="middle" />
+      <img id="refresh_captcha_img" src="/common/image/refresh.png" width="35" height="35" align="absmiddle" style="cursor: pointer;"  />
+    </div>
+    <div class="error"><span id="error_msg" style="color:red"></span></div>
+    <br/>
+    <input type="button" id="button_login" value="登入" />
+  </form>
+  </center>
+</div>
+<br/><br/>
+<div>
+  <table align="center" id="table_bannerItem">
+  </table>
+</div>
+
+<form id="form_catphacode_request"></form>
+<script type="text/javascript">
+function getLoginBannerItem() {
+	$.ajax({
+		url: '/listLoginBannerItem.shtml',
+		type: 'post',
+		data: null,
+		dataType: 'json',
+		success: function(data) {
+			if(data.status) {
+				let bis = data.msg;
+				for(let i = 0; i < bis.length; i++) {
+					let bi = bis[i];
+					let idx = i % 3;
+					if(0 == idx) {
+						$('#table_bannerItem').append('<tr align="center"></tr>');
+					}
+					
+					let lastTr = $('#table_bannerItem').find('tr:last');
+					if(bi.linkUrl == '') {
+						$(lastTr).append('<td width="' + bi.width + 'px"><img style="width: ' + bi.width + 'px;height: ' + bi.height + 'px" src="' + bi.imageUrl + '" /></td>');
+					} else {
+						$(lastTr).append('<td width="' + bi.width + 'px"><a href="' + bi.linkUrl + '" target="_blank"><img style="width: ' + bi.width + 'px;height: ' + bi.height + 'px" src="' + bi.imageUrl + '" /></a></td>');
+					}
+				}
+			}
+		},
+		error: function() {
+		}
+	});
+}
+
+$(document).ready(function() {
+	if($.cookie("FE")) {
+		window.location.href = '/frontend/index.shtml';
+	}
+	
+	//帳號密碼輸入完按enter可以直接進行登入動作
+  $('input').keypress(function(e) {
+      if(e.which == 13) {
+          $(this).blur();
+          document.getElementById('button_login').click();
+      }
+  });
+	
+	//載入頁面先將真正輸入密碼的欄位隱藏
+	$("#input_pwd").hide();
+	
+	$("input").focus(function() {
+		$(this).css("color","black");
+		if($(this).val() == $(this).attr('placeholder')) {
+			$(this).val('');
+		}
+		if($(this).attr('id') == "input_pwd_text") {
+			$(this).hide();
+			$("#input_pwd").show().focus();
+		}
+	});
+	
+	$("input").blur(function() {
+		if($(this).val() == "") {
+			$(this).val($(this).attr('placeholder'));
+			$(this).css("color","gray");
+			if($(this).attr('id') == "input_pwd") {
+				$(this).hide();
+				$("#input_pwd_text").show();
+			}
+		}
+	});
+	
+	$("#refresh_captcha_img").click(function() {
+		$(this).hide();
+		$("#form_catphacode_request").ajaxSubmit({
+			url : '/jCaptchaSource.shtml',
+      		type : 'post',
+      		dataType : 'json',
+      		success: function(data) {
+      			$("#captcha_img").attr('src', 'data:image/bmp;base64,' + data.img64String);
+       			$("#captcha_check").val(data.imgInfo);
+       			$("#refresh_captcha_img").show();
+      		},
+      		error: function(responseText){
+        		//alert(responseText.status+'  ::  '+responseText.statusText);
+      		}
+		});
+	});
+	
+	$("#button_login").click(function() {
+		$("#form_login").ajaxSubmit({
+			url : '/login.shtml',
+      		type : 'post',
+      		dataType : 'json',
+      		success: function(data) {
+      			if(data.status) {
+      				window.location.href = '/frontend/index.shtml';
+      			} else {
+      				$("#error_msg").text(data.msg);
+      				$("#error_msg").show();
+      				$("#refresh_captcha_img").click();
+      			}
+      		},
+      		error: function(responseText){
+        		//alert(responseText.status+'  ::  '+responseText.statusText);
+      		}
+		});
+	});
+	
+	$("#refresh_captcha_img").click();
+	getLoginBannerItem();
+});
+</script>
+</body>
+</html>

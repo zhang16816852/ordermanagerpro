@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Plus, User, Phone, Mail, MapPin, FileEdit, Download, Pencil, Truck } from 'lucide-react';
+import { Plus, User, Phone, Mail, MapPin, FileEdit, Pencil, Truck, PackageSearch, Loader2, Download } from 'lucide-react';
 import { Supplier } from '../types';
 
 interface SupplierTabProps {
@@ -15,6 +15,8 @@ import { useState } from 'react';
 import { SupplierMappingDialog } from './SupplierMappingDialog';
 import { MappingExportDialog } from './mapping/MappingExportDialog';
 import { useSupplierMappings } from '../hooks/useSupplierMappings';
+import { SupplierProductDiffDialog } from '@/components/supplier/SupplierProductDiffDialog';
+import { useKcimosScrape } from '@/hooks/useKcimosScrape';
 
 export function SupplierTab({
   suppliers,
@@ -24,6 +26,17 @@ export function SupplierTab({
 }: SupplierTabProps) {
   const [mappingSupplier, setMappingSupplier] = useState<Supplier | null>(null);
   const [exportSupplier, setExportSupplier] = useState<Supplier | null>(null);
+  const [importSupplier, setImportSupplier] = useState<Supplier | null>(null);
+  const [scrapedProducts, setScrapedProducts] = useState<any[]>([]);
+  const { loading: scraping, scrape } = useKcimosScrape();
+
+  const handleScrape = async (supplier: Supplier) => {
+    const result = await scrape();
+    if (result?.success && result.products?.length > 0) {
+      setScrapedProducts(result.products);
+      setImportSupplier(supplier);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -37,25 +50,46 @@ export function SupplierTab({
           <p className="col-span-full text-center py-12 text-muted-foreground">載入中...</p>
         ) : suppliers.map((supplier) => (
           <Card key={supplier.id} className="group hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-lg font-bold">{supplier.name}</CardTitle>
-              {supplier.is_logistics_company && (
-                <Badge variant="secondary" className="ml-2 shrink-0 gap-1">
-                  <Truck className="h-3 w-3" aria-hidden="true" />
-                  物流
-                </Badge>
-              )}
-              <Badge variant="outline" className="ml-2 shrink-0 font-mono text-xs">
-                {supplier.currency || 'TWD'}
-              </Badge>
-              <div className="flex gap-1 ml-auto">
+            <CardHeader className="space-y-3 pb-2">
+              <div className="flex flex-row items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <CardTitle className="text-lg font-bold truncate">{supplier.name}</CardTitle>
+                  {supplier.is_logistics_company && (
+                    <Badge variant="secondary" className="shrink-0 gap-1">
+                      <Truck className="h-3 w-3" aria-hidden="true" />
+                      物流
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className="shrink-0 font-mono text-xs">
+                    {supplier.currency || 'TWD'}
+                  </Badge>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={() => onEdit(supplier)}>
-                  <Pencil className="h-4 w-4 mr-2" aria-hidden="true" />
+                  <Pencil className="h-4 w-4 mr-1" aria-hidden="true" />
                   編輯
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => setMappingSupplier(supplier)}>
-                  <FileEdit className="h-4 w-4 mr-2" aria-hidden="true" />
+                  <FileEdit className="h-4 w-4 mr-1" aria-hidden="true" />
                   對照設定
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setImportSupplier(supplier)}>
+                  <PackageSearch className="h-4 w-4 mr-1" aria-hidden="true" />
+                  匯入產品
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleScrape(supplier)}
+                  disabled={scraping}
+                >
+                  {scraping ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <PackageSearch className="h-4 w-4 mr-1" aria-hidden="true" />
+                  )}
+                  {scraping ? '抓取中...' : '爬蟲抓取'}
                 </Button>
               </div>
             </CardHeader>
@@ -112,6 +146,13 @@ export function SupplierTab({
       <SupplierExportWrapper
         supplier={exportSupplier}
         onOpenChange={(open) => !open && setExportSupplier(null)}
+      />
+
+      <SupplierProductDiffDialog
+        open={!!importSupplier}
+        onOpenChange={(open) => { if (!open) { setImportSupplier(null); setScrapedProducts([]); } }}
+        supplierName={importSupplier?.name}
+        initialProducts={scrapedProducts.length > 0 ? scrapedProducts : undefined}
       />
     </div>
   );

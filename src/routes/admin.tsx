@@ -6,6 +6,7 @@ const AdminOrderList = lazy(() => import("@/pages/admin/orders/list/OrderListPag
 const AdminProducts = lazy(() => import("@/pages/admin/products/ProductsPage"));
 const AdminProductFormPage = lazy(() => import("@/pages/admin/products/ProductFormPage"));
 const AdminStores = lazy(() => import("@/pages/admin/Stores"));
+const AdminStoreDetail = lazy(() => import("@/pages/admin/stores/StoreDetailPage"));
 const AdminOrderForm = lazy(() => import("@/pages/admin/AdminOrderForm"));
 const AdminSalesNotes = lazy(() => import("@/pages/admin/SalesNotes"));
 const AdminShippingPool = lazy(() => import("@/pages/admin/ShippingPool"));
@@ -43,6 +44,7 @@ export const adminRoutes = [
     { path: "/admin/categories/new", element: <Suspense fallback={<PageFallback />}><CategoryEditor /></Suspense> },
     { path: "/admin/categories/:categoryId", element: <Suspense fallback={<PageFallback />}><CategoryEditor /></Suspense> },
     { path: "/admin/stores", element: <Suspense fallback={<PageFallback />}><AdminStores /></Suspense> },
+{ path: "/admin/stores/:storeId", element: <Suspense fallback={<PageFallback />}><AdminStoreDetail /></Suspense> },
     { path: "/admin/reps", element: <Suspense fallback={<PageFallback />}><AdminReps /></Suspense> },
     { path: "/admin/reps/:userId/commission", element: <Suspense fallback={<PageFallback />}><RepCommissionPage /></Suspense> },
     { path: "/admin/my-commission", element: <Suspense fallback={<PageFallback />}><MyCommissionPage /></Suspense> },

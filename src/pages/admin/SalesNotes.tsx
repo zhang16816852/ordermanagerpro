@@ -210,6 +210,7 @@ export default function AdminSalesNotes() {
           storeId: note.store_id,
           storeName: note.store?.name ?? undefined,
           created_at: note.created_at,
+          shippedAt: note.shipped_at ?? null,
           totalAmount:
             (note.sales_note_items || []).reduce(
               (sum, item) => {

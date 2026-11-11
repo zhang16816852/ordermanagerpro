@@ -1,0 +1,1887 @@
+{
+  "auto": [
+    {
+      "category": "imos iPhone 14 系列專區",
+      "name": "三合一 保卡 iP 12 (6.1)",
+      "retail_price": "99999",
+      "cost": "150",
+      "vendor_product_id": "input_cartQty_1906",
+      "reason": "售價 >= 9999 (佔位符)"
+    },
+    {
+      "category": "imos iPhone 14 系列專區",
+      "name": "三合一 保卡 iP 12 PM (6.7)",
+      "retail_price": "99999",
+      "cost": "150",
+      "vendor_product_id": "input_cartQty_1942",
+      "reason": "售價 >= 9999 (佔位符)"
+    },
+    {
+      "category": "imos iPhone 14 系列專區",
+      "name": "三合一 保卡 iP 13/13 Pro (6.1)",
+      "retail_price": "99999",
+      "cost": "150",
+      "vendor_product_id": "input_cartQty_1943",
+      "reason": "售價 >= 9999 (佔位符)"
+    },
+    {
+      "category": "imos iPhone 14 系列專區",
+      "name": "三合一 保卡 iP 13 PM (6.7)",
+      "retail_price": "99999",
+      "cost": "150",
+      "vendor_product_id": "input_cartQty_1944",
+      "reason": "售價 >= 9999 (佔位符)"
+    },
+    {
+      "category": "imos iPhone 14 系列專區",
+      "name": "三合一 保卡 iP 14 (6.1)",
+      "retail_price": "99999",
+      "cost": "150",
+      "vendor_product_id": "input_cartQty_1945",
+      "reason": "售價 >= 9999 (佔位符)"
+    },
+    {
+      "category": "imos iPhone 14 系列專區",
+      "name": "三合一 保卡 iP 14+ (6.7)",
+      "retail_price": "99999",
+      "cost": "150",
+      "vendor_product_id": "input_cartQty_1946",
+      "reason": "售價 >= 9999 (佔位符)"
+    },
+    {
+      "category": "imos iPhone 14 系列專區",
+      "name": "三合一 保卡 iP 14 Pro (6.1)",
+      "retail_price": "99999",
+      "cost": "150",
+      "vendor_product_id": "input_cartQty_1947",
+      "reason": "售價 >= 9999 (佔位符)"
+    },
+    {
+      "category": "imos iPhone 14 系列專區",
+      "name": "三合一 保卡 iP 14 PM (6.7)",
+      "retail_price": "99999",
+      "cost": "150",
+      "vendor_product_id": "input_cartQty_1948",
+      "reason": "售價 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 12 pro L+定(預購中)",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2224",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 12 promax L+定(預購中)",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2225",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 13/13pro/14 L+定(預購中)",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2226",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 13promax/14plus L+定(預購中)",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2227",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 14pro/15/16 L+定(預購中)",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2230",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 14promax/15plus/16plus L+定(預購中)",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2231",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 15PRO L+定(預購中)",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2232",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 15PROMAX L+定(預購中)",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2233",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 16PRO L+定(預購中)",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2234",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 16PROMAX L+定(預購中)",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2235",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "VivoWatch BP $250",
+      "retail_price": "250",
+      "cost": "0",
+      "vendor_product_id": "input_cartQty_1118",
+      "reason": "成本 < 1 (零成本)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "亮面OEM iP 13/13P/14 (6.1)",
+      "retail_price": "99999",
+      "cost": "99999",
+      "vendor_product_id": "input_cartQty_1916",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "亮面OEM iP 13 PM/14+ (6.7)",
+      "retail_price": "99999",
+      "cost": "99999",
+      "vendor_product_id": "input_cartQty_1917",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "亮面OEM iP 14 Pro (6.1)",
+      "retail_price": "99999",
+      "cost": "99999",
+      "vendor_product_id": "input_cartQty_1918",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "亮面OEM iP 14 Pro Max (6.7)",
+      "retail_price": "99999",
+      "cost": "99999",
+      "vendor_product_id": "input_cartQty_1919",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "霧面OEM iP 13/13P/14 (6.1)",
+      "retail_price": "99999",
+      "cost": "99999",
+      "vendor_product_id": "input_cartQty_1920",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "霧面OEM iP 13 PM/14+ (6.7)",
+      "retail_price": "99999",
+      "cost": "99999",
+      "vendor_product_id": "input_cartQty_1923",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "霧面OEM iP 14 Pro (6.1)",
+      "retail_price": "99999",
+      "cost": "99999",
+      "vendor_product_id": "input_cartQty_1924",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "霧面OEM iP 14 Pro Max (6.7)",
+      "retail_price": "99999",
+      "cost": "99999",
+      "vendor_product_id": "input_cartQty_1925",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "防窺OEM iP 13/13P/14 (6.1)",
+      "retail_price": "99999",
+      "cost": "99999",
+      "vendor_product_id": "input_cartQty_1926",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "防窺OEM iP 13 PM/14+ (6.7)",
+      "retail_price": "99999",
+      "cost": "99999",
+      "vendor_product_id": "input_cartQty_1927",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "防窺OEM iP 14 Pro (6.1)",
+      "retail_price": "99999",
+      "cost": "99999",
+      "vendor_product_id": "input_cartQty_1928",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "防窺OEM iP 14 Pro Max (6.7)",
+      "retail_price": "99999",
+      "cost": "99999",
+      "vendor_product_id": "input_cartQty_1929",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "三合一 保卡 iP 15 (6.1) 2.5D",
+      "retail_price": "99999",
+      "cost": "150",
+      "vendor_product_id": "input_cartQty_2120",
+      "reason": "售價 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "三合一 保卡 iP 15+ (6.7) 2.5D",
+      "retail_price": "99999",
+      "cost": "150",
+      "vendor_product_id": "input_cartQty_2121",
+      "reason": "售價 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "三合一 保卡 iP 15 Pro (6.1) 2.5D",
+      "retail_price": "99999",
+      "cost": "150",
+      "vendor_product_id": "input_cartQty_2122",
+      "reason": "售價 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "三合一 保卡 iP 15 PM (6.7) 2.5D",
+      "retail_price": "99999",
+      "cost": "150",
+      "vendor_product_id": "input_cartQty_2123",
+      "reason": "售價 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "三合一 保卡 iP 15 Pro (6.1) 3D",
+      "retail_price": "99999",
+      "cost": "250",
+      "vendor_product_id": "input_cartQty_2124",
+      "reason": "售價 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "三合一 保卡 iP 15 PM (6.7) 3D",
+      "retail_price": "99999",
+      "cost": "250",
+      "vendor_product_id": "input_cartQty_2125",
+      "reason": "售價 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "保固卡",
+      "retail_price": "0",
+      "cost": "0",
+      "vendor_product_id": "input_cartQty_2665",
+      "reason": "成本 < 1 (零成本)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 2.5D高透保貼(超細黑邊) iP 16 / 15 / 14Pro (6.1吋)共用版(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2349",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 2.5D高透保貼(超細黑邊) iP 16 Plus / 15 Plus / 14 ProMax(6.7吋)共用版(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2350",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 2.5D高透保貼(超細黑邊) iP16 Pro(6.3吋)專用版(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2351",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 2.5D高透保貼(超細黑邊) iP 16 Pro Max(6.9吋)專用版(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2352",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D霧面) 強化玻璃保貼(超細黑邊) iP 16 / 15 / 14Pro (6.1吋)共用版(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2353",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D霧面) 強化玻璃保貼(超細黑邊) iP 16 Plus / 15 Plus / 14 ProMax(6.7吋)共用版(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2354",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D霧面) 強化玻璃保貼(超細黑邊) iP 16 Pro(6.3吋)專用版(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2355",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D霧面) 強化玻璃保貼(超細黑邊) iP 16 Pro Max(6.9吋)專用版(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2356",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D防窺) 強化玻璃保貼(超細黑邊) iP 16 / 15 / 14Pro (6.1吋)共用版(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2357",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D防窺) 強化玻璃保貼(超細黑邊) iP 16 Plus / 15 Plus / 14 ProMax(6.7吋)共用版(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2358",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D防窺) 強化玻璃保貼(超細黑邊) iP 16 Pro(6.3吋)專用版",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2359",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D防窺) 強化玻璃保貼(超細黑邊) iP 16 Pro Max(6.9吋)專用版",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2360",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 16/16 Plus -定位神器+黑色(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2361",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 16/16 Plus -定位神器+藍色(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2362",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 16/16 Plus -定位神器+銀色(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2364",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 16/16 Plus -定位神器+綠色(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2363",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 16/16 Plus -定位神器+粉色(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2365",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 16/16 Plus -定位神器+燒鈦色(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2366",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 16 Pro / 16 ProMax -定位神器+黑色(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2367",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 16 Pro / 16 ProMax -定位神器+鈦 / 銀色(預購中)",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2368",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 16 Pro / 16 ProMax -定位神器+金色",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2369",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 16 Pro / 16 ProMax -定位神器+燒鈦色",
+      "retail_price": "99999999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2370",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 2.5D高透保貼(超細黑邊) iP 15 (6.1吋)專用版",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2015",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 2.5D高透保貼(超細黑邊) iP 15 Plus (6.7吋)專用版",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2016",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 2.5D高透保貼(超細黑邊) iP 15 Pro (6.1吋)專用版",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2017",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 2.5D高透保貼(超細黑邊) iP 15 Pro Max(6.7吋)專用版",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2020",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D霧面) 強化玻璃保貼(超細黑邊) iP 15 (6.1吋)專用版",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2022",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D霧面) 強化玻璃保貼(超細黑邊) iP 15 Plus(6.7吋)專用版",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2023",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D霧面) 強化玻璃保貼(超細黑邊) iP 15 Pro(6.1吋)專用版",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2024",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D霧面) 強化玻璃保貼(超細黑邊) iP 15 Pro Max(6.7吋)專用版",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2025",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D防窺) 強化玻璃保貼(超細黑邊) iP 15 (6.1吋)專用版",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2026",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D防窺) 強化玻璃保貼(超細黑邊) iP 15 Plus(6.7吋)專用版",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2028",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D防窺) 強化玻璃保貼(超細黑邊) iP 15 Pro(6.1吋)專用版",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2029",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM (2.5D防窺) 強化玻璃保貼(超細黑邊) iP 15 Pro Max(6.7吋)專用版",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2030",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15/15 Plus -黑色",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2035",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15/15 Plus -淺藍",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2037",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15/15 Plus -淺綠",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2038",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15/15 Plus -淺黃",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2040",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15/15 Plus -淺粉",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2041",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15/15 Plus -燒鈦色",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2042",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15 Pro -黑色",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2043",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15 Pro -銀色",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2044",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15 Pro -灰色",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2045",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15 Pro -藍色",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2046",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15 Pro -燒鈦色",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2047",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15 Pro Max -黑色",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2048",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15 Pro Max -銀色",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2050",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15 Pro Max -灰色",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2051",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15 Pro Max -藍色",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2052",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "3H疏水疏油3SAS",
+      "name": "OEM 鏡頭貼 iP 15 Pro Max -燒鈦色",
+      "retail_price": "9999",
+      "cost": "9999",
+      "vendor_product_id": "input_cartQty_2053",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 2.5D高透保貼(超細黑邊) iPhone 17 air(預購中)",
+      "retail_price": "9999999",
+      "cost": "9999999",
+      "vendor_product_id": "input_cartQty_2654",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 2.5D高透保貼(超細黑邊) iPhone 16 Pro / 17/ 17 Pro (共用版) (預購中)",
+      "retail_price": "9999999",
+      "cost": "9999999",
+      "vendor_product_id": "input_cartQty_2655",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 2.5D高透保貼(超細黑邊) iPhone 16 Pro Max / 17 Pro Max (共用版) (預購中)",
+      "retail_price": "9999999",
+      "cost": "9999999",
+      "vendor_product_id": "input_cartQty_2656",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM (2.5D霧面) 強化玻璃保貼(超細黑邊) iPhone 17 air(預購中)",
+      "retail_price": "9999999",
+      "cost": "9999999",
+      "vendor_product_id": "input_cartQty_2657",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM (2.5D霧面) 強化玻璃保貼(超細黑邊)16 Pro / 17/ 17 Pro (共用版) (預購中)",
+      "retail_price": "9999999",
+      "cost": "9999999",
+      "vendor_product_id": "input_cartQty_2658",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM (2.5D霧面) 強化玻璃保貼(超細黑邊)16 Pro Max / 17 Pro Max (共用版) (預購中)",
+      "retail_price": "9999999",
+      "cost": "9999999",
+      "vendor_product_id": "input_cartQty_2660",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM (2.5D防窺) 強化玻璃保貼(超細黑邊)iPhone 17 air(預購中)",
+      "retail_price": "9999999",
+      "cost": "9999999",
+      "vendor_product_id": "input_cartQty_2661",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM (2.5D防窺) 強化玻璃保貼(超細黑邊)16 Pro / 17/ 17 Pro (共用版) (預購中)",
+      "retail_price": "9999999",
+      "cost": "9999999",
+      "vendor_product_id": "input_cartQty_2662",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM (2.5D防窺) 強化玻璃保貼(超細黑邊)16 Pro Max / 17 Pro Max (共用版) (預購中)",
+      "retail_price": "9999999",
+      "cost": "9999999",
+      "vendor_product_id": "input_cartQty_2663",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 2.5D高透保貼(超細黑邊) iPhone 18 Pro/17 /17 Pro  (共用版) (預購中)",
+      "retail_price": "9999999",
+      "cost": "9999999",
+      "vendor_product_id": "input_cartQty_2731",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 2.5D高透保貼(超細黑邊) iPhone 18 Pro Max /17 Pro Max  (共用版) (預購中)",
+      "retail_price": "9999999",
+      "cost": "9999999",
+      "vendor_product_id": "input_cartQty_2732",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM (2.5D霧面) 強化玻璃保貼(超細黑邊)18 Pro (預購中)",
+      "retail_price": "9999999",
+      "cost": "9999999",
+      "vendor_product_id": "input_cartQty_2733",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM (2.5D霧面) 強化玻璃保貼(超細黑邊)18 Pro Max(預購中)",
+      "retail_price": "9999999",
+      "cost": "9999999",
+      "vendor_product_id": "input_cartQty_2734",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM (2.5D防窺) 強化玻璃保貼(超細黑邊)18 Pro (預購中)",
+      "retail_price": "9999999",
+      "cost": "9999999",
+      "vendor_product_id": "input_cartQty_2735",
+      "reason": "成本 >= 9999 (佔位符)"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM (2.5D防窺) 強化玻璃保貼(超細黑邊)18 Pro Max (預購中)",
+      "retail_price": "9999999",
+      "cost": "9999999",
+      "vendor_product_id": "input_cartQty_2736",
+      "reason": "成本 >= 9999 (佔位符)"
+    }
+  ],
+  "pattern": [
+    {
+      "category": "imos iPhone 18 系列專區",
+      "name": "imos透明磁吸防摔殼for iPhone Duo(摺疊機)((( 磁吸款 )))(透明)$1090(預購中)",
+      "retail_price": "1090",
+      "cost": "490",
+      "vendor_product_id": "input_cartQty_2753",
+      "reason": "匹配排除模式: 預購中"
+    },
+    {
+      "category": "imos iPhone 18 系列專區",
+      "name": "imos透黑磁吸防摔殼for iPhone Duo(摺疊機)((( 磁吸款 )))(透黑)$1090(預購中)",
+      "retail_price": "1090",
+      "cost": "490",
+      "vendor_product_id": "input_cartQty_2771",
+      "reason": "匹配排除模式: 預購中"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "(售完為止)(2.5D黑邊-亮面)imos RPF80低藍光玻璃貼for iPhone 16 Pro/17/17 Pro (共用版)(2.5D 低藍光)",
+      "retail_price": "1390",
+      "cost": "447",
+      "vendor_product_id": "input_cartQty_2594",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "(售完為止)(2.5D黑邊-亮面)imos RPF80低藍光玻璃貼for iPhone 16 Pro Max/17 Pro Max (共用版)(2.5D 低藍光)",
+      "retail_price": "1390",
+      "cost": "447",
+      "vendor_product_id": "input_cartQty_2595",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "(售完為止)(3D黑邊-亮面)imos RPF80低藍光玻璃貼for iPhone 16 Pro/17/17 Pro (3D 低藍光)(售完為止)",
+      "retail_price": "1490",
+      "cost": "497",
+      "vendor_product_id": "input_cartQty_2604",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【已停產,請勿下單】(3D黑邊-亮面)imos RPF80低藍光玻璃貼for iPhone 16 Pro Max/17 Pro Max (3D 低藍光)【已停產,請勿下單】",
+      "retail_price": "1490",
+      "cost": "497",
+      "vendor_product_id": "input_cartQty_2605",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】(2.5D黑邊)AR低反光低藍光CPF60玻璃貼for iPhone 16 Pro/17/17 Pro (共用版)(2.5D 低藍光 CPF60)【請至18專區下單】",
+      "retail_price": "1490",
+      "cost": "497",
+      "vendor_product_id": "input_cartQty_2607",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】(2.5D黑邊)imos AR低反光低藍光CPF60玻璃貼for iPhone 16 Pro Max/17 Pro Max (共用版)(2.5D 低藍光 CPF60)【請至18專區下單】",
+      "retail_price": "1490",
+      "cost": "497",
+      "vendor_product_id": "input_cartQty_2608",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】(2.5D黑邊-亮面)imos RPF80低藍光藍寶石玻璃貼for iPhone 16 Pro/17/17 Pro (共用版)(EX2 9M)【請至18專區下單】",
+      "retail_price": "1699",
+      "cost": "820",
+      "vendor_product_id": "input_cartQty_2610",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】(2.5D黑邊-亮面)imos RPF80低藍光藍寶石玻璃貼for iPhone 16 Pro Max/17 Pro Max (共用版)(EX2 9M)【請至18專區下單】",
+      "retail_price": "1699",
+      "cost": "820",
+      "vendor_product_id": "input_cartQty_2611",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】(2.5D黑邊)imos AGbC康寧授權玻璃貼for iPhone 16 Pro/17/17 Pro (共用版)(2.5D康寧)【請至18專區下單】",
+      "retail_price": "1090",
+      "cost": "361",
+      "vendor_product_id": "input_cartQty_2584",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】(2.5D黑邊)imos AGbC康寧授權玻璃貼for iPhone 16 Pro Max/17 Pro Max (共用版)(2.5D康寧)【請至18專區下單】",
+      "retail_price": "1090",
+      "cost": "361",
+      "vendor_product_id": "input_cartQty_2585",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】(3D黑邊)imos AGbC康寧授權玻璃貼for iPhone 16Pro/17/17 Pro (共用款)(3D 康寧)【請至18專區下單】",
+      "retail_price": "1390",
+      "cost": "447",
+      "vendor_product_id": "input_cartQty_2590",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos黑色軍規殼for iPhone 17 Pro(一般款)$890(黑色)【請至18專區下單】",
+      "retail_price": "890",
+      "cost": "370",
+      "vendor_product_id": "input_cartQty_2505",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos黑色軍規殼for iPhone 17 Pro Max(一般款)$890(黑色)【請至18專區下單】",
+      "retail_price": "890",
+      "cost": "370",
+      "vendor_product_id": "input_cartQty_2507",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos透明軍規殼for iPhone 17 Pro(一般款)$890(透明)【請至18專區下單】",
+      "retail_price": "890",
+      "cost": "370",
+      "vendor_product_id": "input_cartQty_2510",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos透明軍規殼for iPhone 17 Pro Max(一般款)$890(透明)【請至18專區下單】",
+      "retail_price": "890",
+      "cost": "370",
+      "vendor_product_id": "input_cartQty_2511",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos黑色磁吸支架軍規殼for iPhone 17 Pro(( 支架款 ))(潮流黑)$1290【請至18專區下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2526",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos黑色磁吸支架軍規殼for iPhone 17 Pro Max(( 支架款 ))(潮流黑)$1290【請至18專區下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2527",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos透明磁吸支架軍規殼for iPhone 17 Pro(( 支架款 ))(透明)$1290【請至18專區下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2530",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos透明磁吸支架軍規殼for iPhone 17 Pro Max(( 支架款 ))(透明)$1290【請至18專區下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2531",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【已停產,請勿下單】imos紫色磁吸支架軍規殼for iPhone 17(( 支架款 ))(丁香紫色)$1290【已停產,請勿下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2532",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos紫色磁吸支架軍規殼for iPhone 17 Pro(( 支架款 ))(丁香紫色)$1290【請至18專區下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2534",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos紫色磁吸支架軍規殼for iPhone 17 Pro Max(( 支架款 ))(丁香紫色)$1290【請至18專區下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2536",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【已停產,請勿下單】imos綠色磁吸支架軍規殼for iPhone 17(( 支架款 ))(亞麻綠色)$1290【已停產,請勿下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2537",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos綠色磁吸支架軍規殼for iPhone 17 Pro(( 支架款 ))(亞麻綠色)$1290【請至18專區下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2539",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos綠色磁吸支架軍規殼for iPhone 17 Pro Max(( 支架款 ))(亞麻綠色)$1290【請至18專區下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2540",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【已停產,請勿下單】imos藍色磁吸支架軍規殼for iPhone 17(( 支架款 ))(藍莓色)$1290【已停產,請勿下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2541",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos藍色磁吸支架軍規殼for iPhone 17 Pro(( 支架款 ))(藍莓色)$1290【請至18專區下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2543",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos藍色磁吸支架軍規殼for iPhone 17 Pro Max(( 支架款 ))(藍莓色)$1290【請至18專區下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2544",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos黑色磁吸軍規殼for iPhone 17 Pro((( 磁吸款 )))(潮流黑)$1090【請至18專區下單】",
+      "retail_price": "1090",
+      "cost": "470",
+      "vendor_product_id": "input_cartQty_2547",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos黑色磁吸軍規殼for iPhone 17 Pro Max((( 磁吸款 )))(潮流黑)$1090【請至18專區下單】",
+      "retail_price": "1090",
+      "cost": "470",
+      "vendor_product_id": "input_cartQty_2548",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos透明磁吸軍規殼for iPhone 17 Pro((( 磁吸款 )))(透明)$1090【請至18專區下單】",
+      "retail_price": "1090",
+      "cost": "470",
+      "vendor_product_id": "input_cartQty_2551",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos透明磁吸軍規殼for iPhone 17 Pro Max((( 磁吸款 )))(透明)$1090【請至18專區下單】",
+      "retail_price": "1090",
+      "cost": "470",
+      "vendor_product_id": "input_cartQty_2552",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【已停產,請勿下單】imos紫色磁吸軍規殼for iPhone 17((( 磁吸款 )))(丁香紫色)$1090【已停產,請勿下單】",
+      "retail_price": "1090",
+      "cost": "470",
+      "vendor_product_id": "input_cartQty_2553",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos紫色磁吸軍規殼for iPhone 17 Pro((( 磁吸款 )))(丁香紫色)$1090【請至18專區下單】",
+      "retail_price": "1090",
+      "cost": "470",
+      "vendor_product_id": "input_cartQty_2555",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos紫色磁吸軍規殼for iPhone 17 Pro Max((( 磁吸款 )))(丁香紫色)$1090【請至18專區下單】",
+      "retail_price": "1090",
+      "cost": "470",
+      "vendor_product_id": "input_cartQty_2556",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【已停產,請勿下單】imos綠色磁吸軍規殼for iPhone 17((( 磁吸款 )))(亞麻綠色)$1090【已停產,請勿下單】",
+      "retail_price": "1090",
+      "cost": "470",
+      "vendor_product_id": "input_cartQty_2557",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos綠色磁吸軍規殼for iPhone 17 Pro((( 磁吸款 )))(亞麻綠色)$1090【請至18專區下單】",
+      "retail_price": "1090",
+      "cost": "470",
+      "vendor_product_id": "input_cartQty_2559",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos綠色磁吸軍規殼for iPhone 17 Pro Max((( 磁吸款 )))(亞麻綠色)$1090【請至18專區下單】",
+      "retail_price": "1090",
+      "cost": "470",
+      "vendor_product_id": "input_cartQty_2560",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【已停產,請勿下單】imos藍色磁吸軍規殼for iPhone 17((( 磁吸款 )))(藍莓色)$1090【已停產,請勿下單】",
+      "retail_price": "1090",
+      "cost": "470",
+      "vendor_product_id": "input_cartQty_2561",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos藍色磁吸軍規殼for iPhone 17 Pro((( 磁吸款 )))(藍莓色)$1090【請至18專區下單】",
+      "retail_price": "1090",
+      "cost": "470",
+      "vendor_product_id": "input_cartQty_2563",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 17 系列專區",
+      "name": "【請至18專區下單】imos藍色磁吸軍規殼for iPhone 17 Pro Max((( 磁吸款 )))(藍莓色)$1090【請至18專區下單】",
+      "retail_price": "1090",
+      "cost": "470",
+      "vendor_product_id": "input_cartQty_2564",
+      "reason": "匹配排除模式: 請至.*專區下單"
+    },
+    {
+      "category": "imos iPhone 16 系列專區",
+      "name": "【已停產,請勿下單】imos EX2 低藍光 RPF60+GRS驗證 for iPhone16 Pro (6.3吋) HOT【已停產,請勿下單】",
+      "retail_price": "1390",
+      "cost": "447",
+      "vendor_product_id": "input_cartQty_2345",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 16 系列專區",
+      "name": "imos EX2 低藍光 RPF60+GRS驗證 for iPhone16 Pro Max (6.9吋) HOT(售完為止)",
+      "retail_price": "1390",
+      "cost": "447",
+      "vendor_product_id": "input_cartQty_2346",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "imos iPhone 16 系列專區",
+      "name": "【已停產,請勿下單】2.5D康寧保貼(超細黑邊) iP 16 Pro Max(6.9吋)專用版 (2.5D康寧)HOT【已停產,請勿下單】",
+      "retail_price": "1090",
+      "cost": "361",
+      "vendor_product_id": "input_cartQty_2242",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 16 系列專區",
+      "name": "【已停產,請勿下單】(滿版黑邊) 9M 人造藍寶石(RPF60)螢幕貼 for iPhone 16/15/14 Pro (9M RPF60)HOT",
+      "retail_price": "1699",
+      "cost": "820",
+      "vendor_product_id": "input_cartQty_2255",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 16 系列專區",
+      "name": "(售完為止)(滿版黑邊) 9M 人造藍寶石(RPF60)螢幕貼 for iPhone 16Plus/15Plus/14 ProMax (9M RPF60)HOT",
+      "retail_price": "1699",
+      "cost": "820",
+      "vendor_product_id": "input_cartQty_2256",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "imos iPhone 16 系列專區",
+      "name": "【已停產,請勿下單】(軍規殼)imosCase iP 16 Pro Max(6.9吋)-藍莓色(藍)(支架款) HOT【已停產,請勿下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2290",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 16 系列專區",
+      "name": "【已停產,請勿下單】(軍規殼)imosCase iP 16 Pro(6.3吋)-丁香紫色(紫)(支架款) HOT【已停產,請勿下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2293",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 16 系列專區",
+      "name": "【已停產,請勿下單】(軍規殼)imosCase iP 16 Pro Max(6.9吋)-丁香紫色(紫)(支架款) HOT【已停產,請勿下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2294",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 16 系列專區",
+      "name": "(售完為止)(軍規殼)imosCase iP 16 (6.1吋)-亞麻綠色(綠)(支架款) HOT",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2295",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "imos iPhone 16 系列專區",
+      "name": "【已停產,請勿下單】藍寶石鏡頭貼(PVDSS不鏽鋼系列) for iPhone 16Pro/16 ProMax-(18K金色)三顆$950 HOT【已停產,請勿下單】",
+      "retail_price": "950",
+      "cost": "410",
+      "vendor_product_id": "input_cartQty_2337",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "SOLID-EX2 低藍光",
+      "name": "【已停產,請勿下單】imos EX2 低藍光 RPF60+GRS驗證 for iPad A16/10代(10.9吋/2024/2025) $1790【已停產,請勿下單】",
+      "retail_price": "1790",
+      "cost": "732",
+      "vendor_product_id": "input_cartQty_2220",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "SOLID-EX2 低藍光",
+      "name": "【已停產,請勿下單】超聲波指紋辨識低藍光RPF60保護貼for SAMSUNG Galaxy S25 Ultra",
+      "retail_price": "1390",
+      "cost": "447",
+      "vendor_product_id": "input_cartQty_2452",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 15 系列專區",
+      "name": "【已停產,請勿下單】3D高透保貼(超細黑邊) iP 15 Pro Max(6.7吋)專用版 HOT【已停產,請勿下單】",
+      "retail_price": "1290",
+      "cost": "375",
+      "vendor_product_id": "input_cartQty_1972",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 15 系列專區",
+      "name": "【已停產,請勿下單】(3D霧面)超細黑邊強化玻璃貼for iPhone 15 ProMax(6.7吋)(2023)$1090 HOT【已停產,請勿下單】",
+      "retail_price": "1090",
+      "cost": "380",
+      "vendor_product_id": "input_cartQty_2097",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 15 系列專區",
+      "name": "(售完為止)(2.5D霧面)  點膠保貼(超細黑邊) iP 15 (6.1吋)專用版 HOT",
+      "retail_price": "1090",
+      "cost": "345",
+      "vendor_product_id": "input_cartQty_2002",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "imos iPhone 15 系列專區",
+      "name": "(售完為止)(2.5D霧面)  點膠保貼(超細黑邊) iP 15 Plus(6.7吋)專用版 HOT",
+      "retail_price": "1090",
+      "cost": "345",
+      "vendor_product_id": "input_cartQty_2003",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "imos iPhone 15 系列專區",
+      "name": "(售完為止)9M 2.5D 人造藍寶石螢幕貼 for iPhone 15 Plus (6.7\") HOT",
+      "retail_price": "1699",
+      "cost": "820",
+      "vendor_product_id": "input_cartQty_2082",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "imos iPhone 15 系列專區",
+      "name": "(售完為止)(滿版黑邊) 9M 人造藍寶石(RPF60)螢幕貼 for iPhone 15 Pro (9M RPF60)HOT",
+      "retail_price": "1699",
+      "cost": "820",
+      "vendor_product_id": "input_cartQty_2422",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "imos iPhone 15 系列專區",
+      "name": "(售完為止)(軍規殼)imosCase iP 15 Pro(6.1吋)- (黑色)(磁吸支架款) HOT(售完為止)",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_1983",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "imos iPhone 15 系列專區",
+      "name": "【已停產,請勿下單】(軍規殼)imosCase iP 15 (6.1吋)-藍莓色(藍)(磁吸支架款) HOT【已停產,請勿下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2106",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 15 系列專區",
+      "name": "【已停產,請勿下單】(軍規殼)imosCase iP 15 Pro(6.1吋)-藍莓色(藍)(磁吸支架款) HOT【已停產,請勿下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2108",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 15 系列專區",
+      "name": "【已停產,請勿下單】(軍規殼)imosCase iP 15 Pro Max(6.7吋)-藍莓色(藍)(磁吸支架款) HOT已停產,請勿下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2109",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 15 系列專區",
+      "name": "【已停產,請勿下單】(軍規殼)imosCase iP 15 (6.1吋)-丁香紫色(紫)(磁吸支架款) HOT【已停產,請勿下單】",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2110",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 15 系列專區",
+      "name": "(售完為止)(軍規殼)imosCase iP 15 Plus(6.7吋)-丁香紫色(紫)(磁吸支架款) HOT(售完為止)",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2111",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "imos iPhone 15 系列專區",
+      "name": "(售完為止)(軍規殼)imosCase iP 15 Pro(6.1吋)-丁香紫色(紫)(磁吸支架款) HOT(售完為止)",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2112",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "imos iPhone 15 系列專區",
+      "name": "(售完為止)(軍規殼)imosCase iP 15 Pro Max(6.7吋)-亞麻綠色(綠)(磁吸支架款) HOT(售完為止)",
+      "retail_price": "1290",
+      "cost": "615",
+      "vendor_product_id": "input_cartQty_2117",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "imos iPhone 15 系列專區",
+      "name": "【已停產,請勿下單】[imos Case](磁吸款)耐衝擊軍規保護殼for iPhone 15(6.1吋)-丁香紫色(紫)(磁吸款) HOT【已停產,請勿下單】",
+      "retail_price": "990",
+      "cost": "420",
+      "vendor_product_id": "input_cartQty_2141",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 14 系列專區",
+      "name": "【已停產,請勿下單】9M 人造藍寶石 iP 14 Pro (6.1\") HOT【已停產,請勿下單】",
+      "retail_price": "1699",
+      "cost": "820",
+      "vendor_product_id": "input_cartQty_1849",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos iPhone 14 系列專區",
+      "name": "(售完為止)霧面玻璃 iP 14 Pro (6.1)",
+      "retail_price": "1190",
+      "cost": "455",
+      "vendor_product_id": "input_cartQty_1903",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "imos iPhone 14 系列專區",
+      "name": "(售完為止)霧面玻璃 iP 14 Pro Max (6.7)",
+      "retail_price": "1190",
+      "cost": "455",
+      "vendor_product_id": "input_cartQty_1904",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "【已停產，請勿下單】鏡頭貼 iPhone 13 Pro/13 Pro Max (PVDSS ™ 不鏽鋼系列-原機感石墨色) HOT",
+      "retail_price": "800",
+      "cost": "330",
+      "vendor_product_id": "input_cartQty_1761",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "【已停產，請勿下單】鏡頭貼 iPhone 13 Pro/13 Pro Max (PVDSS ™ 不鏽鋼系列-原機感銀色) HOT",
+      "retail_price": "800",
+      "cost": "330",
+      "vendor_product_id": "input_cartQty_1762",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "(霧面黑框)藍寶石霧面CNC款鈦合金框手錶保護貼for Apple Watch Ultra(霧面黑框)一/二/三/四代$1390(預購中)",
+      "retail_price": "1390",
+      "cost": "675",
+      "vendor_product_id": "input_cartQty_2428",
+      "reason": "匹配排除模式: 預購中"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "(霧面黑框)藍寶石霧面CNC款鋁合金框手錶保護貼for Apple Watch Ultra(霧面黑框)一/二/三/四代$900(預購中)",
+      "retail_price": "900",
+      "cost": "430",
+      "vendor_product_id": "input_cartQty_2418",
+      "reason": "匹配排除模式: 預購中"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "(鈦合金框-霧面) 藍寶石手錶保護貼 Apple watch ultra (1/2/3/4代共用)$1390 HOT(預購中)",
+      "retail_price": "1390",
+      "cost": "675",
+      "vendor_product_id": "input_cartQty_1915",
+      "reason": "匹配排除模式: 預購中"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "【已停產,請勿下單】鏡頭貼 iPhone 12 Pro max(PVDSS 不鏽鋼-藍環)",
+      "retail_price": "800",
+      "cost": "330",
+      "vendor_product_id": "input_cartQty_1496",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "【已停產,請勿下單】鏡頭貼 iPhone 12 Pro max(PVDSS 不鏽鋼-金環)",
+      "retail_price": "800",
+      "cost": "330",
+      "vendor_product_id": "input_cartQty_1494",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "(售完為止)鏡頭貼 iPhone SE 2/SE 3/7/8(紅框) CO",
+      "retail_price": "290",
+      "cost": "130",
+      "vendor_product_id": "input_cartQty_1387",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "(售完為止)(閃耀系列)鏡頭貼 iPhone12 Pro /11Pro /11Pro Max 閃耀銀(三顆) CO",
+      "retail_price": "1590",
+      "cost": "730",
+      "vendor_product_id": "input_cartQty_1541",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "(售完為止)(閃耀系列)鏡頭貼 iPhone12 Pro /11Pro /11Pro Max 閃耀藍(三顆) CO",
+      "retail_price": "1590",
+      "cost": "730",
+      "vendor_product_id": "input_cartQty_1558",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "(售完為止)(閃耀系列)鏡頭貼 iPhone12 / 12 mini /11 閃耀金(兩顆) CO",
+      "retail_price": "1090",
+      "cost": "480",
+      "vendor_product_id": "input_cartQty_1544",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "(售完為止)(閃耀系列)鏡頭貼 iPhone12 / 12 mini /11 閃耀藍(兩顆) CO",
+      "retail_price": "1090",
+      "cost": "480",
+      "vendor_product_id": "input_cartQty_1559",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "(售完為止)鏡頭貼 iPhone 11 Pro/11 Pro Max(漸變偏紫紅環) CO",
+      "retail_price": "888",
+      "cost": "313",
+      "vendor_product_id": "input_cartQty_1324",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "(售完為止)藍寶石鏡頭保護鏡for iPhone 11 Pro/11 Pro Max(漸變藍環)三顆(贈平台亮貼)$888 CO",
+      "retail_price": "888",
+      "cost": "1",
+      "vendor_product_id": "input_cartQty_1323",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "(售完為止)鏡頭貼 iPhone XR(冰河銀) CO",
+      "retail_price": "680",
+      "cost": "340",
+      "vendor_product_id": "input_cartQty_1146",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "(售完為止)鏡頭貼 iPhone XR(香檳金) CO",
+      "retail_price": "680",
+      "cost": "340",
+      "vendor_product_id": "input_cartQty_1143",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "(售完為止)鏡頭貼 iPhone XR(蘋果紅) CO",
+      "retail_price": "680",
+      "cost": "340",
+      "vendor_product_id": "input_cartQty_1142",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "iMOS鏡頭貼 (蘋果)",
+      "name": "(售完為止)鏡頭貼 iPhone X/XS/XS Max(銀框) CO",
+      "retail_price": "680",
+      "cost": "340",
+      "vendor_product_id": "input_cartQty_1141",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "iMOS鏡頭貼   (非蘋果)",
+      "name": "(單金屬框)鏡頭保護框for Sony Xperia 1 V $450(單金屬框)【售完為止】",
+      "retail_price": "450",
+      "cost": "230",
+      "vendor_product_id": "input_cartQty_1966",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "iMOS鏡頭貼   (非蘋果)",
+      "name": "【已停產,請勿下單】(不適用原廠殼)鏡頭貼 SAMSUNG Galaxy S22 Ultra(鋁合金-帽蓋式) 五顆",
+      "retail_price": "800",
+      "cost": "380",
+      "vendor_product_id": "input_cartQty_1818",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "iMOS鏡頭貼   (非蘋果)",
+      "name": "【已停產,請勿下單】(無金屬框)鏡頭貼 Sony Xperia 1 III/IV CO",
+      "retail_price": "490",
+      "cost": "225",
+      "vendor_product_id": "input_cartQty_1810",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "iMOS鏡頭貼   (非蘋果)",
+      "name": "藍寶石鏡頭貼 for OPPO Reno 13(銀)兩顆$550(預購中)",
+      "retail_price": "550",
+      "cost": "230",
+      "vendor_product_id": "input_cartQty_2648",
+      "reason": "匹配排除模式: 預購中"
+    },
+    {
+      "category": "iMOS鏡頭貼   (非蘋果)",
+      "name": "藍寶石鏡頭貼 for OPPO Reno 13 Pro(銀)兩顆$550(預購中)",
+      "retail_price": "550",
+      "cost": "230",
+      "vendor_product_id": "input_cartQty_2649",
+      "reason": "匹配排除模式: 預購中"
+    },
+    {
+      "category": "iMOS鏡頭貼   (非蘋果)",
+      "name": "藍寶石鏡頭貼for SAMSUNG Galaxy S26/26+(鋁合金-銀色) 三顆$750(預購中)",
+      "retail_price": "750",
+      "cost": "313",
+      "vendor_product_id": "input_cartQty_2673",
+      "reason": "匹配排除模式: 預購中"
+    },
+    {
+      "category": "imos 配件",
+      "name": "【已停產,請勿下單】imos 45W萬旅GaN極速充電器(四年保固)$790 HOT【已停產,請勿下單】",
+      "retail_price": "790",
+      "cost": "465",
+      "vendor_product_id": "input_cartQty_2149",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos 配件",
+      "name": "【已停產,請勿下單】(150cm)imos都會隨行手機掛繩 銀扣+亞麻綠繩$790【已停產,請勿下單】",
+      "retail_price": "790",
+      "cost": "375",
+      "vendor_product_id": "input_cartQty_2158",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos 配件",
+      "name": "【已停產,請勿下單】(150cm)imos都會隨行手機掛繩 銀扣+藍莓色繩$790【已停產,請勿下單】",
+      "retail_price": "790",
+      "cost": "375",
+      "vendor_product_id": "input_cartQty_2164",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos 配件",
+      "name": "【已停產,請勿下單】(150cm)imos都會隨行手機掛繩 銀扣+丁香紫繩$790【已停產,請勿下單】",
+      "retail_price": "790",
+      "cost": "375",
+      "vendor_product_id": "input_cartQty_2170",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "imos 配件",
+      "name": "【已停產,請勿下單】imos PD3.0/QC3.0 35W雙孔充電器(三年保固) HOT(售完為止)【已停產,請勿下單】",
+      "retail_price": "690",
+      "cost": "304",
+      "vendor_product_id": "input_cartQty_1791",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "9H霧面玻璃手感膜",
+      "name": "MMS x imos(黑邊)霧面電競玻璃貼 iPhone 12 Pro Max 6.7吋$990 CO【售完為止】",
+      "retail_price": "990",
+      "cost": "451",
+      "vendor_product_id": "input_cartQty_1567",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "9H霧面玻璃手感膜",
+      "name": "MMS x imos(黑邊)霧面電競玻璃貼 for iPhone 14/13/13 Pro(6.1\")$1190 CO【售完為止】",
+      "retail_price": "1190",
+      "cost": "451",
+      "vendor_product_id": "input_cartQty_1645",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "9H霧面玻璃手感膜",
+      "name": "MMS x imos(黑邊)霧面電競玻璃貼 for iPhone 14 Plus/13 Pro Max(6.7\")$1190 CO【售完為止】",
+      "retail_price": "1190",
+      "cost": "451",
+      "vendor_product_id": "input_cartQty_1646",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "9H霧面玻璃手感膜",
+      "name": "霧面玻璃 iP 12 mini (5.4)【售完為止】",
+      "retail_price": "990",
+      "cost": "355",
+      "vendor_product_id": "input_cartQty_1529",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "9H強化",
+      "name": "強化玻璃for iPad Air/Air2/Pro 9.7吋/2017(版)/2018(版)$1390 CO (售完為止)",
+      "retail_price": "1390",
+      "cost": "550",
+      "vendor_product_id": "input_cartQty_1581",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "9H強化",
+      "name": "強化玻璃for APPLE iPad Pro 10.5吋/Air(2019)$1390 CO (售完為止)",
+      "retail_price": "1390",
+      "cost": "550",
+      "vendor_product_id": "input_cartQty_1580",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "9H強化",
+      "name": "強化玻璃for iPad Pro 12.9吋(無開home鍵孔位)(2018-2022)$1590 CO (售完為止)",
+      "retail_price": "1590",
+      "cost": "650",
+      "vendor_product_id": "input_cartQty_1555",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "手機殼",
+      "name": "imos case 軍規殼 iP 13 (6.1吋) 藍色【售完為止】",
+      "retail_price": "790",
+      "cost": "320",
+      "vendor_product_id": "input_cartQty_1658",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "手機殼",
+      "name": "【已停產,請勿下單】imos case 軍規殼 iP 11 Pro Max(6.5\") 黑【已停產,請勿下單】",
+      "retail_price": "680",
+      "cost": "320",
+      "vendor_product_id": "input_cartQty_1247",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "手機殼",
+      "name": "(售完為止)imos case 軍規殼 iP XR(6.1吋) 黑(售完為止)",
+      "retail_price": "680",
+      "cost": "320",
+      "vendor_product_id": "input_cartQty_1041",
+      "reason": "匹配排除模式: 售完為止"
+    },
+    {
+      "category": "手機殼",
+      "name": "【已停產,請勿下單】[imos Case](磁吸款)耐衝擊軍規保護殼 for Samsung Galaxy S25(磁吸款)(透明)【已停產,請勿下單】",
+      "retail_price": "890",
+      "cost": "370",
+      "vendor_product_id": "input_cartQty_2460",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "手機殼",
+      "name": "【已停產,請勿下單】[imos Case](磁吸款)耐衝擊軍規保護殼 for Samsung Galaxy S24 Ultra(透明)(磁吸款)$890",
+      "retail_price": "890",
+      "cost": "370",
+      "vendor_product_id": "input_cartQty_2184",
+      "reason": "匹配排除模式: 已停產"
+    },
+    {
+      "category": "手機殼",
+      "name": "[imos Case](磁吸款)耐衝擊軍規保護殼 for Samsung Galaxy S25+ (磁吸款)(黑)(預購中)",
+      "retail_price": "890",
+      "cost": "370",
+      "vendor_product_id": "input_cartQty_2475",
+      "reason": "匹配排除模式: 預購中"
+    },
+    {
+      "category": "手機殼",
+      "name": "[imos Case]磁吸透明保護殼 for Samsung Galaxy S26+ (磁吸款)(透明)$890(預購中)",
+      "retail_price": "890",
+      "cost": "370",
+      "vendor_product_id": "input_cartQty_2671",
+      "reason": "匹配排除模式: 預購中"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環 PVDSS+強化玻璃 IP 14P/PM (黑色)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_1883",
+      "reason": "匹配排除模式: OEM"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環 PVDSS+強化玻璃 IP 14P/PM (金色)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_1885",
+      "reason": "匹配排除模式: OEM"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環 PVDSS+強化玻璃 IP 14P/PM (銀色)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_1886",
+      "reason": "匹配排除模式: OEM"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環 PVDSS+強化玻璃 IP 14P/PM (紫色)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_1887",
+      "reason": "匹配排除模式: OEM"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環 PVDSS+強化玻璃 IP 14P/PM (燒鈦)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_1888",
+      "reason": "匹配排除模式: OEM"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環 鋁合金+強化玻璃 IP 14/14 Plus (黑色)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_1889",
+      "reason": "匹配排除模式: OEM"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環 鋁合金+強化玻璃 IP 14/14 Plus (銀色)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_1890",
+      "reason": "匹配排除模式: OEM"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環 鋁合金+強化玻璃 IP 14/14 Plus (紅色)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_1891",
+      "reason": "匹配排除模式: OEM"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環 鋁合金+強化玻璃 IP 14/14 Plus (藍色)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_1892",
+      "reason": "匹配排除模式: OEM"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環 鋁合金+強化玻璃 IP 14/14 Plus (紫色)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_1893",
+      "reason": "匹配排除模式: OEM"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環 鋁合金+強化玻璃 IP 14/14 Plus (黃色)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_1950",
+      "reason": "匹配排除模式: OEM"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環 PVDSS+強化玻璃 IP 14/14 Plus (燒鈦)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_1894",
+      "reason": "匹配排除模式: OEM"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環 鋁合金+強化玻璃 IP 13/13mini (黑色)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_1957",
+      "reason": "匹配排除模式: OEM"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環 鋁合金+強化玻璃 IP 13/13mini (銀色)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_1958",
+      "reason": "匹配排除模式: OEM"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環(附定位神器) 鋁合金+強化玻璃 IP 13/13mini (藍色)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_2424",
+      "reason": "匹配排除模式: OEM"
+    },
+    {
+      "category": "OEM 專區",
+      "name": "OEM 鏡頭環(附定位神器) PVDSS+強化玻璃 IP 13P/PM (銀色)",
+      "retail_price": "9900",
+      "cost": "9900",
+      "vendor_product_id": "input_cartQty_2425",
+      "reason": "匹配排除模式: OEM"
+    }
+  ],
+  "manual": []
+}

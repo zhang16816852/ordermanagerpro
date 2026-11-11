@@ -23,7 +23,7 @@ export function EntryForm(props: EntryFormProps) {
       {ctl.isShipping && <EntryShippingFields ctl={ctl} />}
       {ctl.isRepair && <EntryRepairFields ctl={ctl} />}
       {ctl.isConsume && <EntryConsumeFields ctl={ctl} />}
-      <EntryCommonFields ctl={ctl} />
+      <EntryCommonFields ctl={ctl} splitPayment={props.splitPayment} />
     </div>
   );
 }

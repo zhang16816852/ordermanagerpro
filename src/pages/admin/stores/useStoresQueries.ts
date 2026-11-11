@@ -10,6 +10,7 @@ export interface StoresQueriesResult {
   userRoles?: any[];
   storeUsers?: any[];
   storesList?: { id: string; name: string; code: string | null }[];
+  storeSalesSummary?: Record<string, { revenue: number; unpaid: number; count: number }>;
   invitations?: any[];
   profilesForStore?: any[];
 }
@@ -79,6 +80,35 @@ export function useStoresQueries(): StoresQueriesResult {
     },
   });
 
+
+  const { data: storeSalesSummary } = useQuery({
+    queryKey: ['admin-stores-sales-summary'],
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from('sales_notes') as any)
+        .select('store_id, payment_status, shipping_fee, sales_note_items(quantity, order_items(unit_price, line_type))');
+      if (error) throw error;
+      const map: Record<string, { revenue: number; unpaid: number; count: number }> = {};
+      for (const sn of (data || [])) {
+        const sid = sn.store_id;
+        if (!map[sid]) map[sid] = { revenue: 0, unpaid: 0, count: 0 };
+        let rev = Number(sn.shipping_fee) || 0;
+        for (const it of (sn.sales_note_items || [])) {
+          const oi = it.order_items;
+          const q = (oi?.line_type === 'return' || oi?.line_type === 'defective')
+            ? -Math.abs(it.quantity || 0)
+            : (it.quantity || 0);
+          rev += q * (Number(oi?.unit_price) || 0);
+        }
+        map[sid].revenue += rev;
+        map[sid].count += 1;
+        if (sn.payment_status !== 'paid') map[sid].unpaid += rev;
+      }
+      return map;
+    },
+    staleTime: 60 * 1000,
+  });
+
   const { data: invitations } = useQuery({
     queryKey: ['admin-invitations'],
     queryFn: async () => {
@@ -111,6 +141,7 @@ export function useStoresQueries(): StoresQueriesResult {
     userRoles,
     storeUsers,
     storesList,
+    storeSalesSummary,
     invitations,
     profilesForStore,
   };

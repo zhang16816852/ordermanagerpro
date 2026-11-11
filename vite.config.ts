@@ -8,6 +8,17 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    proxy: {
+      '/kcimos': {
+        target: 'http://kcimos.kv.idv.tw',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/kcimos/, ''),
+        cookieDomainRewrite: 'localhost',
+        headers: {
+          'Referer': 'http://kcimos.kv.idv.tw/frontend/login.html',
+        },
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

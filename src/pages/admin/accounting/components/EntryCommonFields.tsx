@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { DialogFooter } from '@/components/ui/dialog';
 import { EntryFormController } from './useEntryFormController';
 
-export function EntryCommonFields({ ctl }: { ctl: EntryFormController }) {
+export function EntryCommonFields({ ctl, splitPayment }: { ctl: EntryFormController; splitPayment?: boolean }) {
   const {
     description,
     setDescription,
@@ -33,7 +33,7 @@ export function EntryCommonFields({ ctl }: { ctl: EntryFormController }) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>交易日期</Label>
-          <Input type="date" value={transactionDate} onChange={e => setTransactionDate(e.target.value)} />
+          <Input type="date" value={transactionDate} onChange={e => setTransactionDate(e.target.value)} disabled={splitPayment} />
         </div>
         <div className="space-y-2">
           <Label>到期日（選填）</Label>

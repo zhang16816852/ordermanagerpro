@@ -102,6 +102,7 @@ export interface EntryFormProps {
   onShippingSettleSubmit?: (payload: ShippingSettlementSubmission) => void;
   onConsumeSubmit?: (payload: { accountId: string; amount: number; sourceType: string; referenceId?: string; transactionDate: string; docItems: DocItem[] }) => void;
   isLoading: boolean;
+  splitPayment?: boolean;
 }
 
 export interface PayoutRep {

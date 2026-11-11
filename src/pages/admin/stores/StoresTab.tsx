@@ -18,15 +18,18 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Search, Users, Pencil, Store } from 'lucide-react';
+import { Plus, Search, Users, Pencil, Store, Eye } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useState, useEffect } from 'react';
+import { formatCurrency } from '@/lib/formatters';
 import { DeliveryType, useDeliveryMethods, DeliveryMethodPicker, DeliveryTypePicker } from '@/components/shipping/DeliveryMethodPicker';
 import { ShippingAddressFields, ShippingAddressValue } from '@/components/shipping/ShippingAddressFields';
 import type { StoresController } from './useStoresController';
 
 export function StoresTab({ c }: { c: StoresController }) {
+  const navigate = useNavigate();
   const { data: deliveryMethods = [] } = useDeliveryMethods();
 
   const formatFullAddress = (s: any) => {
@@ -247,7 +250,7 @@ export function StoresTab({ c }: { c: StoresController }) {
               ))
             ) : c.filteredStores?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                   沒有找到店鋪
                 </TableCell>
               </TableRow>
@@ -282,6 +285,12 @@ export function StoresTab({ c }: { c: StoresController }) {
                     })()}
                   </TableCell>
                   <TableCell>{store.phone || '-'}</TableCell>
+                  <TableCell className="text-right text-sm">
+                    {formatCurrency(c.storeSalesSummary?.[store.id]?.revenue ?? 0)}
+                  </TableCell>
+                  <TableCell className="text-right text-sm text-amber-600">
+                    {formatCurrency(c.storeSalesSummary?.[store.id]?.unpaid ?? 0)}
+                  </TableCell>
                   <TableCell>
                     <Button
                       variant="ghost"
@@ -297,9 +306,14 @@ export function StoresTab({ c }: { c: StoresController }) {
                     </Button>
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" aria-label="編輯門市" onClick={() => { c.setEditingStore(store); c.setIsStoreDialogOpen(true); }}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="icon" aria-label="查看詳情" onClick={() => navigate(`/admin/stores/${store.id}`)}>
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" aria-label="編輯門市" onClick={() => { c.setEditingStore(store); c.setIsStoreDialogOpen(true); }}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -327,6 +341,9 @@ export function StoresTab({ c }: { c: StoresController }) {
                       <p className="font-medium truncate">{store.name}</p>
                       <p className="font-mono text-xs text-muted-foreground">{store.code || '-'}</p>
                     </div>
+                    <Button variant="ghost" size="icon" aria-label="查看詳情" onClick={() => navigate(`/admin/stores/${store.id}`)}>
+                      <Eye className="h-4 w-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" aria-label="編輯門市" onClick={() => { c.setEditingStore(store); c.setIsStoreDialogOpen(true); }}>
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -334,6 +351,10 @@ export function StoresTab({ c }: { c: StoresController }) {
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     {(store as any).brand && <Badge variant="secondary">{(store as any).brand}</Badge>}
                     {store.phone && <span>{store.phone}</span>}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className="text-muted-foreground">營業 <span className="font-medium text-foreground">{formatCurrency(c.storeSalesSummary?.[store.id]?.revenue ?? 0)}</span></span>
+                    <span className="text-muted-foreground">未收 <span className="font-medium text-amber-600">{formatCurrency(c.storeSalesSummary?.[store.id]?.unpaid ?? 0)}</span></span>
                   </div>
                   {(store as any).recipient && (
                     <p className="text-xs text-muted-foreground">

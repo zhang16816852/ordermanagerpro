@@ -1,0 +1,17 @@
+{
+  "excluded_patterns": [
+    "OEM",
+    "預購中",
+    "售完為止",
+    "已停產",
+    "請至.*專區下單",
+    "保卡"
+  ],
+  "auto_exclude_rules": {
+    "max_cost": 9999,
+    "max_retail_price": 9999,
+    "min_cost": 1
+  },
+  "supplier_id": "9734a72c-ab3d-4cb8-b29d-61db169e1873",
+  "supplier_name": "國圳國際有限公司-imos"
+}

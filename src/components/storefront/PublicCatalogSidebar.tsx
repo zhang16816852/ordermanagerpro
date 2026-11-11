@@ -10,11 +10,10 @@ import {
   usePublicDeviceModels,
   usePublicSpecOptions,
   type PublicCategoryNode,
-  type PublicBrand,
-  type PublicBrandSeries,
-  type PublicDeviceModel,
   type PublicSpecOption,
 } from "@/storefront/usePublicCatalog";
+import { BrandClassifier } from "@/components/classification/BrandClassifier";
+import { DeviceModelClassifier } from "@/components/classification/DeviceModelClassifier";
 
 export type PublicFilters = {
   categoryId: string | null;
@@ -80,10 +79,10 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
   }, [catTree]);
 
   const seriesByBrand = useMemo(() => {
-    const map: Record<string, PublicBrandSeries[]> = {};
-    (brandSeries ?? []).forEach((s) => {
+    const map: Record<string, { id: string; name: string; count?: number }[]> = {};
+    (brandSeries ?? []).forEach((s: any) => {
       if (!map[s.brand_id]) map[s.brand_id] = [];
-      map[s.brand_id].push(s);
+      map[s.brand_id].push({ id: s.series_id, name: s.series_name, count: s.product_count });
     });
     return map;
   }, [brandSeries]);
@@ -165,7 +164,7 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
             )}
           </div>
 
-          {/* Brands + Series */}
+          {/* Brands + Series (組件化) */}
           <div>
             <button
               type="button"
@@ -177,57 +176,32 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
             </button>
             {openSections.has("brands") && (
               <div className="space-y-1 pb-2">
-                {(brands ?? []).map((b: PublicBrand) => {
-                  const expanded = expandedBrands.has(b.id);
-                  const series = seriesByBrand[b.id] ?? [];
-                  const brandSelected = filters.brandIds.includes(b.id);
-                  return (
-                    <div key={b.id}>
-                      <div className="flex items-center gap-2 py-1">
-                        <Checkbox
-                          checked={brandSelected}
-                          onCheckedChange={(c) => {
-                            const next = c
-                              ? [...filters.brandIds, b.id]
-                              : filters.brandIds.filter((x) => x !== b.id);
-                            onChange({ ...filters, brandIds: next });
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => toggleBrand(b.id)}
-                          className="flex flex-1 items-center justify-between text-sm text-sf-muted hover:text-sf-text"
-                        >
-                          <span>{b.name} <span className="text-xs opacity-60">({b.product_count})</span></span>
-                          {series.length > 0 && (expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />)}
-                        </button>
-                      </div>
-                      {expanded && series.length > 0 && (
-                        <div className="ml-6 space-y-1">
-                          {series.map((s: PublicBrandSeries) => (
-                            <label key={s.series_id} className="flex items-center gap-2 py-0.5 text-sm text-sf-muted">
-                              <Checkbox
-                                checked={filters.seriesIds.includes(s.series_id)}
-                                onCheckedChange={(c) => {
-                                  const next = c
-                                    ? [...filters.seriesIds, s.series_id]
-                                    : filters.seriesIds.filter((x) => x !== s.series_id);
-                                  onChange({ ...filters, seriesIds: next });
-                                }}
-                              />
-                              {s.series_name} <span className="text-xs opacity-60">({s.product_count})</span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                <BrandClassifier
+                  brands={(brands ?? []).map((b: any) => ({ id: b.id, name: b.name, count: b.product_count }))}
+                  childrenByBrand={seriesByBrand}
+                  selectedBrands={filters.brandIds}
+                  selectedChildren={filters.seriesIds}
+                  onBrandToggle={(id) => {
+                    const next = filters.brandIds.includes(id)
+                      ? filters.brandIds.filter((x) => x !== id)
+                      : [...filters.brandIds, id];
+                    onChange({ ...filters, brandIds: next });
+                  }}
+                  onChildToggle={(id) => {
+                    const next = filters.seriesIds.includes(id)
+                      ? filters.seriesIds.filter((x) => x !== id)
+                      : [...filters.seriesIds, id];
+                    onChange({ ...filters, seriesIds: next });
+                  }}
+                  searchable={false}
+                  variant="vertical"
+                  showCounts
+                />
               </div>
             )}
           </div>
 
-          {/* Device Models */}
+          {/* Device Models (組件化) */}
           <div>
             <button
               type="button"
@@ -238,21 +212,40 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
               {openSections.has("models") ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </button>
             {openSections.has("models") && (
-              <div className="max-h-60 space-y-1 overflow-y-auto pb-2">
-                {(models ?? []).map((m: PublicDeviceModel) => (
-                  <label key={m.id} className="flex items-center gap-2 py-0.5 text-sm text-sf-muted">
-                    <Checkbox
-                      checked={filters.modelIds.includes(m.id)}
-                      onCheckedChange={(c) => {
-                        const next = c
-                          ? [...filters.modelIds, m.id]
-                          : filters.modelIds.filter((x) => x !== m.id);
-                        onChange({ ...filters, modelIds: next });
-                      }}
-                    />
-                    {m.name} <span className="text-xs opacity-60">({m.product_count})</span>
-                  </label>
-                ))}
+              <div className="pb-2">
+                <DeviceModelClassifier
+                  tree={(() => {
+                    const t: Record<string, Record<string, { name: string; count: number }[]>> = {};
+                    (models ?? []).forEach((m: any) => {
+                      const brandId = m.brand_id ?? "__unassigned__";
+                      if (!t[brandId]) t[brandId] = {};
+                      if (!t[brandId]["__unassigned__"]) t[brandId]["__unassigned__"] = [];
+                      t[brandId]["__unassigned__"].push({ name: m.name, count: m.product_count });
+                    });
+                    return t;
+                  })()}
+                  brandNameMap={(() => {
+                    const m: Record<string, string> = {};
+                    (models ?? []).forEach((x: any) => {
+                      if (x.brand_id && !m[x.brand_id]) m[x.brand_id] = x.brand_id;
+                    });
+                    return m;
+                  })()}
+                  selectedModels={(models ?? [])
+                    .filter((mm: any) => filters.modelIds.includes(mm.id))
+                    .map((mm: any) => mm.name)}
+                  onModelToggle={(name) => {
+                    const found = (models ?? []).find((mm: any) => mm.name === name);
+                    if (!found) return;
+                    const next = filters.modelIds.includes(found.id)
+                      ? filters.modelIds.filter((x) => x !== found.id)
+                      : [...filters.modelIds, found.id];
+                    onChange({ ...filters, modelIds: next });
+                  }}
+                  searchable
+                  variant="vertical"
+                  showCounts
+                />
               </div>
             )}
           </div>
