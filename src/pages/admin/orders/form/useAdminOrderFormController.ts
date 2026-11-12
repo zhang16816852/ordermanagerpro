@@ -218,16 +218,46 @@ export function useAdminOrderFormController() {
         const variant = item.variantId
           ? product.variants?.find((v: any) => v.id === item.variantId)
           : undefined;
+        const hasBrandPrice = variant
+          ? !!(variant as any).has_brand_price
+          : !!(product as any).has_store_price;
+        const newPriceSource: 'default' | 'brand' = hasBrandPrice ? 'brand' : 'default';
         const newPrice = (variant as any)?.effective_wholesale_price ?? product.wholesale_price ?? item.unitPrice;
-        if (newPrice !== item.unitPrice) {
+        if (newPrice !== item.unitPrice || newPriceSource !== item.priceSource) {
           changed = true;
-          return { ...item, unitPrice: newPrice };
+          return { ...item, unitPrice: newPrice, priceSource: newPriceSource };
         }
         return item;
       });
       return changed ? next : prev;
     });
   }, [storeProducts, isEditMode]);
+
+  // 編輯模式：不重算價格，但依 store_products 解析價格來源（預設／連鎖客戶批發價）供 UI 標示
+  useEffect(() => {
+    if (!isEditMode || isPurchase || !storeProducts || storeProducts.length === 0) return;
+    setItems((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        if ((item.lineType ?? 'sale') !== 'sale') return item;
+        const product = storeProducts.find((p) => p.id === item.productId);
+        if (!product) return item;
+        const variant = item.variantId
+          ? product.variants?.find((v: any) => v.id === item.variantId)
+          : undefined;
+        const hasBrandPrice = variant
+          ? !!(variant as any).has_brand_price
+          : !!(product as any).has_store_price;
+        const newSource: 'default' | 'brand' = hasBrandPrice ? 'brand' : 'default';
+        if (newSource !== item.priceSource) {
+          changed = true;
+          return { ...item, priceSource: newSource };
+        }
+        return item;
+      });
+      return changed ? next : prev;
+    });
+  }, [storeProducts, isEditMode, isPurchase]);
 
   // Re-price items from supplier mappings (purchase/consignment)
   useEffect(() => {
@@ -244,7 +274,7 @@ export function useAdminOrderFormController() {
         );
         if (mapping?.vendor_unit_cost != null && mapping.vendor_unit_cost !== item.unitPrice) {
           changed = true;
-          return { ...item, unitPrice: mapping.vendor_unit_cost };
+          return { ...item, unitPrice: mapping.vendor_unit_cost, priceSource: undefined };
         }
         return item;
       });

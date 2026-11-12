@@ -6,6 +6,8 @@ export interface OrderItemRow {
     quantity: number;
     unitPrice: number;
     isNew?: boolean;
+    /** 價格來源：預設批發價 (default) 或 連鎖客戶批發價 (brand) */
+    priceSource?: 'default' | 'brand';
     variantId?: string;
     variantName?: string;
     selectedModelName?: string;

@@ -121,6 +121,7 @@ export function useStoresController() {
       name: formData.get('name') as string,
       code: (formData.get('code') as string) || null,
       brand: (formData.get('brand') as string) || null,
+      tax_id: (formData.get('tax_id') as string) || null,
       address: (formData.get('street_address') as string) || (formData.get('address') as string) || null,
       phone: (formData.get('phone') as string) || null,
       recipient: (formData.get('recipient') as string) || null,

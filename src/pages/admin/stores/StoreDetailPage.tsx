@@ -261,7 +261,7 @@ export default function StoreDetailPage() {
         title={store ? `${store.name} 詳情` : '店鋪詳情'}
         subtitle={store ? `${store.code || ''} ${store.brand ? '· ' + store.brand : ''}`.trim() : '載入中...'}
         icon={<StoreIcon className="h-5 w-5" />}
-        actions={
+        back={
           <Button variant="ghost" size="sm" onClick={() => navigate('/admin/stores')}>
             <ArrowLeft className="h-4 w-4 mr-1" /> 返回店鋪管理
           </Button>

@@ -6,6 +6,8 @@ interface PageHeaderProps {
   subtitle?: string;
   actions?: ReactNode;
   icon?: ReactNode;
+  /** 左側返回按鈕（顯示於標題左側） */
+  back?: ReactNode;
   className?: string;
   children?: ReactNode;
 }
@@ -15,6 +17,7 @@ export function PageHeader({
   subtitle,
   actions,
   icon,
+  back,
   className,
   children,
 }: PageHeaderProps) {
@@ -22,6 +25,7 @@ export function PageHeader({
     <div className={cn('page-enter', className)}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 min-w-0">
+          {back && <div className="flex-shrink-0">{back}</div>}
           {icon && (
             <div className="flex-shrink-0 text-muted-foreground">
               {icon}

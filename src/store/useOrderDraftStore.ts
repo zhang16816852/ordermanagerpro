@@ -114,6 +114,7 @@ export interface OrderDraftItem {
   shippingPayment?: string | null;
   tempKey?: string;
   parentTempKey?: string;
+  priceSource?: 'default' | 'brand';
 }
 
 // 後台訂單表單的表頭欄位（隨草稿一起持久化，重新整理後不遺失）
@@ -251,6 +252,7 @@ export const useOrderDraftStore = create<OrderDraftState>()(
               shippingPayment: (product as any).shipping_payment ?? null,
               tempKey: (product as any).temp_key,
               parentTempKey: (product as any).parent_temp_key,
+              priceSource: (isVirtual ? false : (variant ? (variant as any).has_brand_price : (product as any).has_store_price)) ? 'brand' : 'default',
             };
             newItems = [...draft.items, newItem];
           }

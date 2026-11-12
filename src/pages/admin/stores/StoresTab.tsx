@@ -143,6 +143,10 @@ export function StoresTab({ c }: { c: StoresController }) {
                 <Input id="brand" name="brand" defaultValue={(c.editingStore as any)?.brand || ''} placeholder="例：雷神快修" />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="tax_id">統一編號</Label>
+                <Input id="tax_id" name="tax_id" defaultValue={(c.editingStore as any)?.tax_id || ''} placeholder="例：12345678" />
+              </div>
+              <div className="space-y-2">
                 <Label>營業地址</Label>
                 <ShippingAddressFields
                   value={businessAddress}
@@ -233,8 +237,8 @@ export function StoresTab({ c }: { c: StoresController }) {
               <TableHead>代碼</TableHead>
               <TableHead>名稱</TableHead>
               <TableHead>品牌</TableHead>
-              <TableHead>地址</TableHead>
-              <TableHead>電話</TableHead>
+              <TableHead className="text-right">營業</TableHead>
+              <TableHead className="text-right">未收</TableHead>
               <TableHead>成員數</TableHead>
               <TableHead className="w-12"></TableHead>
             </TableRow>
@@ -250,7 +254,7 @@ export function StoresTab({ c }: { c: StoresController }) {
               ))
             ) : c.filteredStores?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   沒有找到店鋪
                 </TableCell>
               </TableRow>
@@ -264,27 +268,6 @@ export function StoresTab({ c }: { c: StoresController }) {
                       <Badge variant="secondary">{(store as any).brand}</Badge>
                     ) : '-'}
                   </TableCell>
-                  <TableCell className="text-muted-foreground max-w-[260px]">
-                    {(() => {
-                      const full = formatFullAddress(store);
-                      const biz = formatBusinessAddress(store);
-                      return (
-                        <div className="min-w-0">
-                          {(store as any).recipient && (
-                            <div className="text-xs font-medium text-foreground/80">
-                              收件人：{(store as any).recipient}
-                              {store.phone ? ` ・ ${store.phone}` : ''}
-                            </div>
-                          )}
-                          <div className="truncate">{full || '-'}</div>
-                          {biz && biz !== full && (
-                            <div className="truncate text-xs text-muted-foreground/80">營業：{biz}</div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </TableCell>
-                  <TableCell>{store.phone || '-'}</TableCell>
                   <TableCell className="text-right text-sm">
                     {formatCurrency(c.storeSalesSummary?.[store.id]?.revenue ?? 0)}
                   </TableCell>
@@ -356,21 +339,6 @@ export function StoresTab({ c }: { c: StoresController }) {
                     <span className="text-muted-foreground">營業 <span className="font-medium text-foreground">{formatCurrency(c.storeSalesSummary?.[store.id]?.revenue ?? 0)}</span></span>
                     <span className="text-muted-foreground">未收 <span className="font-medium text-amber-600">{formatCurrency(c.storeSalesSummary?.[store.id]?.unpaid ?? 0)}</span></span>
                   </div>
-                  {(store as any).recipient && (
-                    <p className="text-xs text-muted-foreground">
-                      收件人：{(store as any).recipient}
-                    </p>
-                  )}
-                  {formatFullAddress(store) && (
-                    <p className="text-xs text-muted-foreground truncate">{formatFullAddress(store)}</p>
-                  )}
-                  {(() => {
-                    const full = formatFullAddress(store);
-                    const biz = formatBusinessAddress(store);
-                    return biz && biz !== full ? (
-                      <p className="text-xs text-muted-foreground/80 truncate">營業：{biz}</p>
-                    ) : null;
-                  })()}
                   <Button
                     variant="ghost"
                     size="sm"

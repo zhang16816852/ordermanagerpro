@@ -5258,6 +5258,7 @@ export type Database = {
           phone: string | null
           postal_code: string | null
           recipient: string | null
+          tax_id: string | null
           updated_at: string
         }
         Insert: {
@@ -5280,6 +5281,7 @@ export type Database = {
           phone?: string | null
           postal_code?: string | null
           recipient?: string | null
+          tax_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -5302,6 +5304,7 @@ export type Database = {
           phone?: string | null
           postal_code?: string | null
           recipient?: string | null
+          tax_id?: string | null
           updated_at?: string
         }
         Relationships: [

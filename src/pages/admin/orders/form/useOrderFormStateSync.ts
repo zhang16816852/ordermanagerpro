@@ -175,6 +175,7 @@ export function useOrderFormStateSync(params: OrderFormStateSyncParams) {
         variantId: item.variantId,
         quantity: item.quantity,
         unitPrice: mapping?.vendor_unit_cost ?? item.price,
+        priceSource: mapping?.vendor_unit_cost != null ? undefined : item.priceSource,
         unitCost: item.unitCost,
         itemType: item.itemType,
         shippingPayment: item.shippingPayment,

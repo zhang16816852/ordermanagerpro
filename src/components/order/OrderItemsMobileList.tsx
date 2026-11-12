@@ -159,9 +159,23 @@ export function OrderItemsMobileList({
                                 <div className="space-y-1.5">
                                     <label className="text-[10px] text-muted-foreground flex items-center gap-1"><Tag className="h-3 w-3" /> {priceLabel}</label>
                                     {showPriceInput && ((item.lineType ?? 'sale') === 'sale' || (item.lineType ?? 'sale') === 'exchange' || (item.lineType ?? 'sale') === 'return') ? (
-                                        <Input type="number" value={item.unitPrice} onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)} onKeyDown={(e) => handleColumnNav(e, 'price')} onFocus={selectOnFocus} data-col="price" className="h-9" />
+                                        <div className="space-y-0.5">
+                                            <Input type="number" value={item.unitPrice} onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)} onKeyDown={(e) => handleColumnNav(e, 'price')} onFocus={selectOnFocus} data-col="price" className="h-9" />
+                                            {item.priceSource && (
+                                                <div className={`text-[10px] ${item.priceSource === 'brand' ? 'text-blue-600' : 'text-muted-foreground'}`}>
+                                                    {item.priceSource === 'brand' ? '連鎖客戶批發價' : '預設批發價'}
+                                                </div>
+                                            )}
+                                        </div>
                                     ) : (
-                                        <div className="font-medium p-1.5 text-sm">{formatCurrency(item.unitPrice)}</div>
+                                        <div className="space-y-0.5">
+                                            <div className="font-medium p-1.5 text-sm">{formatCurrency(item.unitPrice)}</div>
+                                            {item.priceSource && (
+                                                <div className={`text-[10px] ${item.priceSource === 'brand' ? 'text-blue-600' : 'text-muted-foreground'}`}>
+                                                    {item.priceSource === 'brand' ? '連鎖客戶批發價' : '預設批發價'}
+                                                </div>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             </div>

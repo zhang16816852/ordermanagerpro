@@ -369,6 +369,8 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       toast.success('訂單已更新');
       queryClient.invalidateQueries({ queryKey: ['order-detail'] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['consignment-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['consignment-order-detail'] });
       navigate(listReturnTo(window.location.search));
     },
     onError: (error: any) => {

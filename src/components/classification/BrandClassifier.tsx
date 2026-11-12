@@ -175,8 +175,8 @@ export function BrandClassifier({
               type="button"
               onClick={() => onBrandToggle(brand.id)}
               className={cn(
-                "shrink-0 snap-start rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                selected ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:bg-muted",
+                "shrink-0 snap-start sf-link-underline text-[0.9375rem] transition-colors",
+                selected ? "text-sf-text font-medium" : "text-sf-muted hover:text-sf-text",
               )}
             >
               {brand.name}

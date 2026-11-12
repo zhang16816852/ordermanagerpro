@@ -17,7 +17,7 @@ export type PublicDeviceModelClassifierProps = {
 export function PublicDeviceModelClassifier(props: PublicDeviceModelClassifierProps) {
   const { data: models } = usePublicDeviceModels();
 
-  const tree: Record<string, Record<string, { name: string; count: number }[]>> = {};
+  const tree: Record<string, Record<string, { id: string; name: string; count: number }[]>> = {};
   const brandNameMap: Record<string, string> = {};
 
   (models ?? []).forEach((m: PublicDeviceModel) => {
@@ -27,7 +27,7 @@ export function PublicDeviceModelClassifier(props: PublicDeviceModelClassifierPr
     if (!tree[brandId][seriesKey]) tree[brandId][seriesKey] = [];
     tree[brandId][seriesKey].push({ id: m.id, name: m.name, count: m.product_count });
     if (m.brand_id && !brandNameMap[m.brand_id]) {
-      brandNameMap[m.brand_id] = m.brand_id;
+      brandNameMap[m.brand_id] = m.brand_name || m.brand_id;
     }
   });
 

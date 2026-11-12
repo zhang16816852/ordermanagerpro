@@ -188,17 +188,31 @@ export function OrderItemsDesktopTable({
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 {showPriceInput && ((item.lineType ?? 'sale') === 'sale' || (item.lineType ?? 'sale') === 'exchange' || (item.lineType ?? 'sale') === 'return') ? (
-                                                    <Input
-                                                        type="number"
-                                                        value={item.unitPrice}
-                                                        onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)}
-                                                        onKeyDown={(e) => handleColumnNav(e, 'price')}
-                                                        onFocus={selectOnFocus}
-                                                        data-col="price"
-                                                        className="w-24 text-right ml-auto h-8"
-                                                    />
+                                                    <div className="flex flex-col items-end gap-0.5">
+                                                        <Input
+                                                            type="number"
+                                                            value={item.unitPrice}
+                                                            onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)}
+                                                            onKeyDown={(e) => handleColumnNav(e, 'price')}
+                                                            onFocus={selectOnFocus}
+                                                            data-col="price"
+                                                            className="w-24 text-right ml-auto h-8"
+                                                        />
+                                                        {item.priceSource && (
+                                                            <span className={`text-[10px] ${item.priceSource === 'brand' ? 'text-blue-600' : 'text-muted-foreground'}`}>
+                                                                {item.priceSource === 'brand' ? '連鎖客戶批發價' : '預設批發價'}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 ) : (
-                                                    <span>{formatCurrency(item.unitPrice)}</span>
+                                                    <div className="flex flex-col items-end gap-0.5">
+                                                        <span>{formatCurrency(item.unitPrice)}</span>
+                                                        {item.priceSource && (
+                                                            <span className={`text-[10px] ${item.priceSource === 'brand' ? 'text-blue-600' : 'text-muted-foreground'}`}>
+                                                                {item.priceSource === 'brand' ? '連鎖客戶批發價' : '預設批發價'}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right font-semibold">
@@ -299,17 +313,31 @@ export function OrderItemsDesktopTable({
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 {showPriceInput && ((item.lineType ?? 'sale') === 'sale' || (item.lineType ?? 'sale') === 'exchange' || (item.lineType ?? 'sale') === 'return') ? (
-                                                    <Input
-                                                        type="number"
-                                                        value={item.unitPrice}
-                                                        onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)}
-                                                        onKeyDown={(e) => handleColumnNav(e, 'price')}
-                                                        onFocus={selectOnFocus}
-                                                        data-col="price"
-                                                        className="w-24 text-right ml-auto h-8"
-                                                    />
+                                                    <div className="flex flex-col items-end gap-0.5">
+                                                        <Input
+                                                            type="number"
+                                                            value={item.unitPrice}
+                                                            onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)}
+                                                            onKeyDown={(e) => handleColumnNav(e, 'price')}
+                                                            onFocus={selectOnFocus}
+                                                            data-col="price"
+                                                            className="w-24 text-right ml-auto h-8"
+                                                        />
+                                                        {item.priceSource && (
+                                                            <span className={`text-[10px] ${item.priceSource === 'brand' ? 'text-blue-600' : 'text-muted-foreground'}`}>
+                                                                {item.priceSource === 'brand' ? '連鎖客戶批發價' : '預設批發價'}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 ) : (
-                                                    <span>{formatCurrency(item.unitPrice)}</span>
+                                                    <div className="flex flex-col items-end gap-0.5">
+                                                        <span>{formatCurrency(item.unitPrice)}</span>
+                                                        {item.priceSource && (
+                                                            <span className={`text-[10px] ${item.priceSource === 'brand' ? 'text-blue-600' : 'text-muted-foreground'}`}>
+                                                                {item.priceSource === 'brand' ? '連鎖客戶批發價' : '預設批發價'}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right font-semibold">

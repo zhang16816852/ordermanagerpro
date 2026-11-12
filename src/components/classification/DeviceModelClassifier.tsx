@@ -234,8 +234,8 @@ export function DeviceModelClassifier({
                 type="button"
                 onClick={() => toggleBrand(bid)}
                 className={cn(
-                  "shrink-0 snap-start rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                  expanded || selectedCount > 0 ? "border-primary bg-primary/10 text-primary" : "border-border bg-background hover:bg-muted",
+                  "shrink-0 snap-start sf-link-underline text-[0.9375rem] transition-colors",
+                  expanded || selectedCount > 0 ? "text-sf-text font-medium" : "text-sf-muted hover:text-sf-text",
                 )}
               >
                 {label}
@@ -261,8 +261,8 @@ export function DeviceModelClassifier({
                       type="button"
                       onClick={() => onModelToggle(key)}
                       className={cn(
-                        "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
-                        checked ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:bg-muted",
+                        "sf-link-underline text-[0.9375rem] transition-colors",
+                        checked ? "text-sf-text font-medium" : "text-sf-muted hover:text-sf-text",
                       )}
                     >
                       {m.name}

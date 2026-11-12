@@ -67,6 +67,7 @@ export type PublicDeviceModel = {
   id: string;
   name: string;
   brand_id: string | null;
+  brand_name: string | null;
   product_count: number;
 };
 
