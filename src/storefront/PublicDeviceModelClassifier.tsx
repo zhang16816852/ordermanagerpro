@@ -25,7 +25,7 @@ export function PublicDeviceModelClassifier(props: PublicDeviceModelClassifierPr
     if (!tree[brandId]) tree[brandId] = {};
     const seriesKey = "__unassigned__";
     if (!tree[brandId][seriesKey]) tree[brandId][seriesKey] = [];
-    tree[brandId][seriesKey].push({ name: m.name, count: m.product_count });
+    tree[brandId][seriesKey].push({ id: m.id, name: m.name, count: m.product_count });
     if (m.brand_id && !brandNameMap[m.brand_id]) {
       brandNameMap[m.brand_id] = m.brand_id;
     }

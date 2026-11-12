@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { usePublicProducts, usePublicCategoryTree } from "@/storefront/usePublicCatalog";
 import { PublicCatalogSidebar, type PublicFilters } from "@/components/storefront/PublicCatalogSidebar";
+import { PublicBrandClassifier } from "@/storefront/PublicBrandClassifier";
+import { PublicDeviceModelClassifier } from "@/storefront/PublicDeviceModelClassifier";
 import { siteBrand } from "@/config/site";
 
 const DEFAULT_FILTERS: PublicFilters = {
@@ -109,6 +111,9 @@ export default function ShopPage() {
     setSearchParams(new URLSearchParams(), { replace: true });
   };
 
+  const toggleArr = (arr: string[], v: string) =>
+    arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
+
   const activeCount =
     (filters.categoryId ? 1 : 0) +
     filters.brandIds.length +
@@ -152,6 +157,22 @@ export default function ShopPage() {
               <PublicCatalogSidebar filters={filters} onChange={setFilters} onClear={clearAll} />
             </SheetContent>
           </Sheet>
+        </div>
+
+        {/* 快速分類（組件化） */}
+        <div className="mb-4 space-y-3">
+          <PublicBrandClassifier
+            selectedBrands={filters.brandIds}
+            selectedSeries={filters.seriesIds}
+            onBrandToggle={(id) => setFilters({ ...filters, brandIds: toggleArr(filters.brandIds, id) })}
+            onSeriesToggle={(id) => setFilters({ ...filters, seriesIds: toggleArr(filters.seriesIds, id) })}
+            variant="horizontal"
+          />
+          <PublicDeviceModelClassifier
+            selectedModels={filters.modelIds}
+            onModelToggle={(id) => setFilters({ ...filters, modelIds: toggleArr(filters.modelIds, id) })}
+            variant="horizontal"
+          />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[280px_1fr]">

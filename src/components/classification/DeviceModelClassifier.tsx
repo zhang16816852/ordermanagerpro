@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import type { ClassificationVariant } from "./types";
 
 export type DeviceModelClassifierProps = {
-  tree: Record<string, Record<string, { name: string; count: number }[]>>;
+  tree: Record<string, Record<string, { id?: string; name: string; count: number }[]>>;
   brandNameMap?: Record<string, string>;
   selectedModels: string[];
   onModelToggle: (name: string) => void;
@@ -122,11 +122,12 @@ export function DeviceModelClassifier({
                   </div>
                 )}
                 <div className={brandId !== "__unassigned__" ? "pl-3 border-l ml-2" : ""}>
-                  {seriesEntries[0][1].map(({ name, count }) => {
-                    const checked = selectedModels.includes(name);
+                  {seriesEntries[0][1].map(({ id, name, count }) => {
+                    const key = id ?? name;
+                    const checked = selectedModels.includes(key);
                     return (
                       <div key={name} className="flex items-center gap-2 py-0.5">
-                        <Checkbox id={`model-${name}`} checked={checked} onCheckedChange={() => onModelToggle(name)} />
+                        <Checkbox id={`model-${name}`} checked={checked} onCheckedChange={() => onModelToggle(key)} />
                         <Label htmlFor={`model-${name}`} className="text-sm font-normal cursor-pointer flex-1 truncate text-muted-foreground hover:text-foreground">
                           {name}
                           {showCounts && <span className="ml-1 text-xs opacity-60">({count})</span>}
@@ -158,7 +159,8 @@ export function DeviceModelClassifier({
                     const isSeriesExpanded = expandedSeries.has(seriesKeyFull);
                     if (models.length === 1) {
                       const m = models[0];
-                      const checked = selectedModels.includes(m.name);
+                      const key = m.id ?? m.name;
+                      const checked = selectedModels.includes(key);
                       return (
                         <div key={seriesKeyFull} className="flex items-center gap-2 py-0.5">
                           <Checkbox id={`model-${m.name}`} checked={checked} onCheckedChange={() => onModelToggle(m.name)} />
@@ -183,11 +185,12 @@ export function DeviceModelClassifier({
                         </div>
                         {isSeriesExpanded && (
                           <div className="pl-4 ml-2 border-l space-y-0.5">
-                            {models.map(({ name, count }) => {
-                              const checked = selectedModels.includes(name);
+                            {models.map(({ id, name, count }) => {
+                              const key = id ?? name;
+                              const checked = selectedModels.includes(key);
                               return (
                                 <div key={name} className="flex items-center gap-2 py-0.5">
-                                  <Checkbox id={`model-${name}`} checked={checked} onCheckedChange={() => onModelToggle(name)} />
+                                  <Checkbox id={`model-${name}`} checked={checked} onCheckedChange={() => onModelToggle(key)} />
                                   <Label htmlFor={`model-${name}`} className="text-sm font-normal cursor-pointer flex-1 truncate text-muted-foreground hover:text-foreground">
                                     {name}
                                     {showCounts && <span className="ml-1 text-xs opacity-60">({count})</span>}
@@ -250,12 +253,13 @@ export function DeviceModelClassifier({
               <div className="text-xs font-medium text-foreground">{brandNameMap[bid] || bid}</div>
               <div className="flex flex-wrap gap-1.5">
                 {models.map((m) => {
-                  const checked = selectedModels.includes(m.name);
+                  const key = m.id ?? m.name;
+                  const checked = selectedModels.includes(key);
                   return (
                     <button
                       key={m.name}
                       type="button"
-                      onClick={() => onModelToggle(m.name)}
+                      onClick={() => onModelToggle(key)}
                       className={cn(
                         "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
                         checked ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:bg-muted",
