@@ -2,6 +2,13 @@
 
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
+## 近期變更（訂單編輯同步寄賣草稿，2026-11-12）
+
+- **目的**：訂單編輯（數量/價格/品項）時，若有關聯的寄賣草稿（draft），自動以訂單為準重建 consignment_order_items（quantity = quantity − shipped_quantity），避免寄賣單與訂單漂移。已出貨寄賣單（active/settled）存在時，品項層級變更會被阻擋（回傳 `{ok:false, reason}`），需先回滾出貨；notes-only 編輯仍允許。
+- **後端**：migration `20261112000001_consignment_draft_sync_on_order_update.sql` patch `update_order_with_items`：① active/settled 守門（品項變更時阻擋）② draft 同步（DELETE + INSERT 重建）。
+- **前端**：`useOrderFormMutations.ts` onSuccess 新增 invalidate `['consignment-orders']`/`['consignment-order-detail']`。
+- **驗證**：migration 已套用遠端；typecheck 進行中（既有 0 errors）、lint 0 errors（本批 1 檔 0 新 warning）。
+
 ## 近期變更（客戶對帳單支援多店家（同品牌），2026-11-03）
 
 - **目的**：客戶對帳單（`/share/statement/:id`）由單店家擴充為可涵蓋多店家，但限制所選店家必須屬於**同一品牌**。
@@ -1358,3 +1365,45 @@ App 啟動 → CacheService.init()（src/services/cacheService.ts）
   - 部分被引用 → 彈出確認 Dialog（列出每變體引用來源 Badge，如「訂單品項 ×3」），可「返回調整」或「仍要儲存（被引用者保留）」；被引用者保留原樣（失去選項連結）。
 - **diff 顯示**改為「新增 N／更新 N（既有就地更新）／保留 N」＋孤兒警示清單（取代原先「移除⋯僅提示，儲存時不會刪除」的誤導文案）；`updated` 命中時價格變動仍以 Amber 提示「原有手動修改已覆寫」。
 - ⚠️ 沿用既有慣例：jsonb payload 直接傳 JS 陣列（不 `JSON.stringify`）、RPC 呼叫 `(supabase.rpc as any)`、`npm run typecheck`＋`npm run lint` 通過、build 成功。
+
+<!-- trail:start -->
+## Trail — repo context graph
+
+This repo is indexed in `.trail/cache/`: small linked markdown nodes that explain each
+system and carry exact file:line spans, kept in sync with the code through git.
+
+For ANY task here — understanding how something works, finding where code lives,
+or scoping a change — get context from the graph before grepping or opening
+source files. Re-ask freely (it's cheap) and reuse literal identifiers you
+already have (symbol, error string, file name) as the query. New to this repo?
+Run `trail map` first — a token-budgeted orientation (dir clusters, hubs,
+hotspots), no LLM, no key.
+
+- Run `trail ask "<your question>" --source` → ranked nodes with the relevant
+  code spans inlined (each hit's ≤8-line crux by default; `--full` for whole
+  definitions when the crux isn't enough). Match the tool to the task shape:
+  for understanding or editing, the top node IS the answer — cite its
+  `covers:` file:line spans and edit straight from `--source`. For
+  exhaustive tasks ("every occurrence / every caller of this pattern"), ranked
+  results are top-N, not complete — run `trail grep "<literal>"` instead
+  (exhaustive over indexed files, grouped by enclosing symbol), falling back
+  to raw `grep -rn` only for unindexed files.
+- `trail skeleton <file>` → every definition's signature + span, ~10× cheaper
+  than reading the file; use it to skim an API surface.
+- `trail callers <symbol>` gives precomputed, exact edges — who calls this.
+  Add `--direction out` for what it calls, or `--depth N` to walk
+  transitively for the full blast radius. For structural questions, skip
+  ranking and use this directly.
+- Or browse: `.trail/cache/INDEX.md` lists every node; follow the links.
+- Monorepos and folders of multiple repos rank fairly across sub-projects —
+  hits carry `[scope/]` labels naming which one they're from. Narrow with
+  `trail ask "<task>" --in <scope>/` once you know where you're working.
+
+If a returned span is truncated ("+N more lines"), open the file at that exact
+range before finalizing. Only open source files when a node genuinely lacks a
+needed detail, and then at the exact file:line the node points to — never
+re-read whole files.
+
+After big code changes, refresh the graph with `trail build` (deterministic,
+no API key, $0).
+<!-- trail:end -->
