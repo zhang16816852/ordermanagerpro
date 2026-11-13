@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { usePublicCategoryTree, type PublicCategoryNode } from "@/storefront/usePublicCatalog";
+import { NavBrandMenu } from "@/components/storefront/NavBrandMenu";
+import { NavDeviceModelMenu } from "@/components/storefront/NavDeviceModelMenu";
 import Lenis from "lenis";
 import { ArrowUpRight, Menu, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -212,6 +214,8 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
 
           <nav aria-label="主要" className="hidden items-center gap-8 md:flex">
             <CategoryMegaMenu />
+            <NavBrandMenu />
+            <NavDeviceModelMenu />
             {siteBrand.nav.map((item) =>
               item.href.startsWith("/") ? (
                 <Link key={item.label} to={item.href} className="sf-link-underline text-[0.9375rem]">
@@ -241,6 +245,15 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       {menuOpen ? (
         <div className="fixed inset-x-0 bottom-0 top-16 z-30 overflow-y-auto bg-sf-paper md:hidden">
           <nav aria-label="行動版主要" className="sf-container flex flex-col gap-1 py-8">
+            <Link to="/shop" onClick={() => setMenuOpen(false)} className="border-b border-[color:var(--sf-line)] py-4 text-lg text-sf-text">
+              商品分類
+            </Link>
+            <Link to="/shop" onClick={() => setMenuOpen(false)} className="border-b border-[color:var(--sf-line)] py-4 text-lg text-sf-text">
+              品牌 / 系列
+            </Link>
+            <Link to="/shop" onClick={() => setMenuOpen(false)} className="border-b border-[color:var(--sf-line)] py-4 text-lg text-sf-text">
+              裝置型號
+            </Link>
             {siteBrand.nav.map((item) =>
               item.href.startsWith("/") ? (
                 <Link

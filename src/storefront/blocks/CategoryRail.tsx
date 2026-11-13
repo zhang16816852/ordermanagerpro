@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { usePublicCategories, type PublicCategory } from "@/storefront/usePublicCatalog";
 import { columnsClass } from "@/storefront/columns";
 import type { CategoryRailBlock } from "@/storefront/blocks/schema";
@@ -52,10 +53,13 @@ export function CategoryRail({ block }: { block: CategoryRailBlock }) {
         >
           {picked.map((c) => (
             <li key={c.id} className="bg-sf-surface">
-              <div className="flex h-full flex-col justify-between gap-8 p-6 sm:p-7">
+              <Link
+                to={`/shop?cat=${c.id}`}
+                className="flex h-full flex-col justify-between gap-8 p-6 sm:p-7 transition-colors hover:bg-sf-paper"
+              >
                 <span className="sf-h3 text-sf-text">{c.name}</span>
                 <span className="sf-eyebrow">{c.product_count} 項在售</span>
-              </div>
+              </Link>
             </li>
           ))}
         </ul>

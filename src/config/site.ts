@@ -105,18 +105,6 @@ export const defaultBlocks = [
     columns: 4,
     limit: 6,
   },
-  {
-    type: "hero",
-    enabled: true,
-    eyebrow: "",
-    title: "要建立通路自己的\n商品頁？",
-    lead: "這份型錄是公開的，進到工作台就能管理品項、庫存與訂單。",
-    primaryCta: { label: "登入", href: "/auth" },
-    secondaryCta: null,
-    media: { src: null, alt: "", hue: 200 },
-    align: "left",
-    tone: "ink",
-  },
 ] as const;
 
 /**
