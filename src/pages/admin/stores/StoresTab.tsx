@@ -237,6 +237,7 @@ export function StoresTab({ c }: { c: StoresController }) {
               <TableHead>代碼</TableHead>
               <TableHead>名稱</TableHead>
               <TableHead>品牌</TableHead>
+              <TableHead>統一編號</TableHead>
               <TableHead className="text-right">營業</TableHead>
               <TableHead className="text-right">未收</TableHead>
               <TableHead>成員數</TableHead>
@@ -268,6 +269,7 @@ export function StoresTab({ c }: { c: StoresController }) {
                       <Badge variant="secondary">{(store as any).brand}</Badge>
                     ) : '-'}
                   </TableCell>
+                  <TableCell className="font-mono text-xs">{(store as any).tax_id || '-'}</TableCell>
                   <TableCell className="text-right text-sm">
                     {formatCurrency(c.storeSalesSummary?.[store.id]?.revenue ?? 0)}
                   </TableCell>
@@ -333,7 +335,7 @@ export function StoresTab({ c }: { c: StoresController }) {
                   </div>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     {(store as any).brand && <Badge variant="secondary">{(store as any).brand}</Badge>}
-                    {store.phone && <span>{store.phone}</span>}
+                    {(store as any).tax_id && <span className="font-mono text-xs">統編 {(store as any).tax_id}</span>}
                   </div>
                   <div className="flex items-center gap-3 text-xs">
                     <span className="text-muted-foreground">營業 <span className="font-medium text-foreground">{formatCurrency(c.storeSalesSummary?.[store.id]?.revenue ?? 0)}</span></span>

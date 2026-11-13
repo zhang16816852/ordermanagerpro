@@ -52,6 +52,7 @@ interface StoreRow {
   brand: string | null;
   phone: string | null;
   recipient: string | null;
+  tax_id: string | null;
   address: string | null;
   city: string | null;
   district: string | null;
@@ -287,22 +288,14 @@ export default function StoreDetailPage() {
                 <div>{store.brand || '-'}</div>
               </div>
               <div>
-                <div className="text-muted-foreground text-xs">電話</div>
-                <div>{store.phone || '-'}</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground text-xs">收件人</div>
-                <div>{store.recipient || '-'}</div>
-              </div>
-              <div className="sm:col-span-2">
-                <div className="text-muted-foreground text-xs">地址</div>
-                <div>{[store.postal_code, store.city, store.district, store.address].filter(Boolean).join('') || '-'}</div>
+                <div className="text-muted-foreground text-xs">統一編號</div>
+                <div className="font-mono">{store.tax_id || '-'}</div>
               </div>
               <div>
                 <div className="text-muted-foreground text-xs">成員數</div>
                 <div>{store.store_users?.[0]?.count ?? 0}</div>
               </div>
-              <div>
+              <div className="sm:col-span-2 lg:col-span-4">
                 <div className="text-muted-foreground text-xs">業務</div>
                 <div>
                   {repInfo.length > 0
@@ -313,6 +306,16 @@ export default function StoreDetailPage() {
             </div>
           ) : (
             <p className="text-muted-foreground">找不到店鋪</p>
+          )}
+          {store && (store.phone || store.recipient || store.address || store.city) && (
+            <details className="mt-3 text-sm border-t pt-3">
+              <summary className="cursor-pointer text-muted-foreground text-xs select-none">地址 / 聯絡資訊（點擊展開）</summary>
+              <div className="grid gap-2 sm:grid-cols-2 mt-2 text-sm">
+                <div><span className="text-muted-foreground text-xs">電話：</span>{store.phone || '-'}</div>
+                <div><span className="text-muted-foreground text-xs">收件人：</span>{store.recipient || '-'}</div>
+                <div className="sm:col-span-2"><span className="text-muted-foreground text-xs">地址：</span>{[store.postal_code, store.city, store.district, store.address].filter(Boolean).join('') || '-'}</div>
+              </div>
+            </details>
           )}
         </CardContent>
       </Card>
