@@ -39,14 +39,15 @@ export function CategoryMegaMenu({ onNavigate }: { onNavigate?: () => void }) {
     >
       <button
         type="button"
-        className="sf-link-underline text-[0.9375rem]"
+        className="flex items-center gap-1 text-[0.9375rem] text-sf-text transition-colors hover:text-sf-muted"
         onClick={() => setOpen((v) => !v)}
       >
         商品分類
+        <ChevronDown className="h-3.5 w-3.5 opacity-60" />
       </button>
       {open && tree.length > 0 && (
         <div
-          className="absolute left-0 top-full z-50 mt-2 w-[min(90vw,720px)] rounded-xl border border-[color:var(--sf-line)] bg-sf-paper p-6 shadow-lg"
+          className="absolute left-0 top-full z-50 mt-2 w-[min(90vw,720px)] rounded-lg border border-[color:var(--sf-line)] bg-sf-surface p-6 shadow-xl"
           onMouseEnter={cancelClose}
           onMouseLeave={scheduleClose}
         >

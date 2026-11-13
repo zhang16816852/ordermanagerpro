@@ -33,7 +33,7 @@ export function ShopFilterNav({
       {/* Desktop nav-style filter bar */}
       <nav
         aria-label="商品分類導覽"
-        className="hidden items-center gap-8 md:flex"
+        className="hidden items-center gap-6 md:flex"
       >
         <CategoryMegaMenu />
         <BrandMegaMenu
@@ -50,7 +50,7 @@ export function ShopFilterNav({
           <button
             type="button"
             onClick={onClear}
-            className="sf-link-underline text-[0.9375rem] text-sf-muted hover:text-sf-text"
+            className="text-[0.9375rem] text-sf-muted transition-colors hover:text-sf-text"
           >
             清除篩選 ({selectedCount})
           </button>

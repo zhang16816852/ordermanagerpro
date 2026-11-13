@@ -212,7 +212,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             {siteBrand.name}
           </Link>
 
-          <nav aria-label="主要" className="hidden items-center gap-8 md:flex">
+          <nav aria-label="主要" className="hidden items-center gap-6 md:flex">
             <CategoryMegaMenu />
             <NavBrandMenu />
             <NavDeviceModelMenu />
