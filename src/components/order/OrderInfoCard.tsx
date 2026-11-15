@@ -152,8 +152,16 @@ export function OrderInfoCard({
   return (
     <Card className="h-full flex flex-col">
       <CardHeader
+        role="button"
+        tabIndex={0}
         className="sticky top-0 bg-background z-10 shrink-0 cursor-pointer select-none py-3 px-4"
         onClick={onTogglePanel}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onTogglePanel?.();
+          }
+        }}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

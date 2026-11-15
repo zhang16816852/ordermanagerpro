@@ -157,7 +157,7 @@ export default function AdminProducts() {
                     </TabsList>
                 </div>
 
-                <TabsContent value="list" className="mt-6 outline-none">
+                <TabsContent value="list" className="mt-6">
                     <div className="flex flex-col md:flex-row gap-6">
                         <aside className="hidden md:block w-64 flex-shrink-0">
                             <CatalogSidebar
@@ -237,13 +237,13 @@ export default function AdminProducts() {
                 </TabsContent>
 
 
-                <TabsContent value="variants" className="mt-6 outline-none">
+                <TabsContent value="variants" className="mt-6">
                     <div className="rounded-xl border bg-card shadow-sm p-1">
                         <VariantManager products={products || []} search={search} />
                     </div>
                 </TabsContent>
 
-                <TabsContent value="colors" className="mt-6 outline-none">
+                <TabsContent value="colors" className="mt-6">
                     <div className="rounded-xl border bg-card shadow-sm p-4">
                         <ColorManager />
                     </div>

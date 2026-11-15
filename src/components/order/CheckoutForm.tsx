@@ -159,7 +159,8 @@ export default function CheckoutForm({
           </CardHeader>
           <CardContent>
             <Textarea
-              placeholder="例如：急件、指定送貨時間、特殊包裝需求..."
+              aria-label="訂單備註"
+              placeholder="例如：急件、指定送貨時間、特殊包裝需求…"
               value={notes}
               onChange={(e) => updateNotes(e.target.value)}
               rows={5}
@@ -205,7 +206,7 @@ export default function CheckoutForm({
             disabled={isPending}
           >
             <Send className="h-5 w-5 mr-2" />
-            {isPending ? "提交中..." : "確認送出訂單"}
+            {isPending ? "提交中…" : "確認送出訂單"}
           </Button>
 
           <Button
@@ -246,7 +247,7 @@ export default function CheckoutForm({
             disabled={isPending}
           >
             <Send className="h-5 w-5 mr-2" />
-            {isPending ? "提交中..." : "確認送出訂單"}
+            {isPending ? "提交中…" : "確認送出訂單"}
           </Button>
           <Button
             variant="outline"

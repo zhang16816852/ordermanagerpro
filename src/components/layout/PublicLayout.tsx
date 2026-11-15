@@ -76,6 +76,8 @@ function CategoryMegaMenu() {
     >
       <button
         type="button"
+        aria-expanded={open}
+        aria-haspopup="true"
         className="sf-link-underline text-[0.9375rem]"
         onClick={() => setOpen((v) => !v)}
       >
@@ -243,7 +245,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       </header>
 
       {menuOpen ? (
-        <div className="fixed inset-x-0 bottom-0 top-16 z-30 overflow-y-auto bg-sf-paper md:hidden">
+        <div className="fixed inset-x-0 bottom-0 top-16 z-30 overflow-y-auto overscroll-contain bg-sf-paper pb-[env(safe-area-inset-bottom)] md:hidden">
           <nav aria-label="行動版主要" className="sf-container flex flex-col gap-1 py-8">
             <Link to="/shop" onClick={() => setMenuOpen(false)} className="border-b border-[color:var(--sf-line)] py-4 text-lg text-sf-text">
               商品分類
@@ -308,7 +310,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="sf-rule mt-12 pt-7">
-            <p className="sf-eyebrow">
+            <p className="sf-eyebrow" suppressHydrationWarning>
               © {new Date().getFullYear()} {siteBrand.name} ·{" "}
               {siteBrand.tagline}
             </p>

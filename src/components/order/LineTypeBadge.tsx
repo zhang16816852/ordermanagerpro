@@ -53,7 +53,7 @@ export function LineTypePicker({ row, index, onUpdate }: {
             value={lt}
             onChange={(e) => onUpdate(index, e.target.value as LineTypeOption)}
             onClick={(e) => e.stopPropagation()}
-            className="ml-2 h-7 rounded-md border border-input bg-transparent px-1.5 text-xs text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="ml-2 h-7 rounded-md border border-input bg-transparent px-1.5 text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             title="打單性質"
         >
             {(Object.keys(LINE_TYPE_OPTION_LABELS) as LineTypeOption[]).map((opt) => (

@@ -85,7 +85,7 @@ export const BrandPricingMobileFilters = ({
   <>
     {open && (
       <div className="fixed inset-0 z-50 lg:hidden">
-        <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+        <div aria-hidden="true" className="absolute inset-0 bg-black/40" onClick={onClose} />
         <div className="absolute inset-y-0 right-0 flex w-full max-w-sm flex-col bg-background shadow-xl">
           <div className="flex items-center justify-between border-b p-4">
             <h2 className="font-semibold">選項篩選</h2>

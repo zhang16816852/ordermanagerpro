@@ -79,7 +79,7 @@ export function MarketImageUploader({ value, onChange, disabled }: MarketImageUp
       <div className="flex gap-3 flex-wrap">
         {value.map((url, idx) => (
           <div key={url} className="relative group w-24 h-24 rounded-xl overflow-hidden border border-white/10">
-            <img src={url} alt={`圖片 ${idx + 1}`} className="w-full h-full object-cover" />
+            <img src={url} alt={`圖片 ${idx + 1}`} width={96} height={96} className="w-full h-full object-cover" />
             <button
               type="button"
               onClick={() => handleRemove(url)}

@@ -130,7 +130,7 @@ export function DeviceModelGroupView({
                             
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pl-4">
                               {s.models.map(model => (
-                                <div key={model.id} className={`flex flex-col gap-2 p-3 border rounded-md bg-card shadow-sm transition-all hover:shadow-md ${!model.is_active ? 'opacity-60 bg-muted/30' : ''}`}>
+                                <div key={model.id} className={`flex flex-col gap-2 p-3 border rounded-md bg-card shadow-sm transition-shadow hover:shadow-md ${!model.is_active ? 'opacity-60 bg-muted/30' : ''}`}>
                                   <div className="flex items-start justify-between">
                                     <div className="flex flex-col max-w-[80%]">
                                       <div className="font-bold text-sm truncate" title={model.name}>{model.name}</div>

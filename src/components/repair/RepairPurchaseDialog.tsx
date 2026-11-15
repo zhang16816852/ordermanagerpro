@@ -400,7 +400,7 @@ export function RepairPurchaseDialog({
               onCheckedChange={(checked) => setDirectReceive(!!checked)}
               className="mt-0.5"
             />
-            <div className="space-y-0.5 select-none cursor-pointer flex-1" onClick={() => setDirectReceive(!directReceive)}>
+            <div className="space-y-0.5 select-none flex-1">
               <Label htmlFor="direct-receive" className="text-sm font-medium cursor-pointer flex items-center gap-1.5 text-foreground">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 建立並直接完成收貨入庫（現成零件 / 現貨已到）

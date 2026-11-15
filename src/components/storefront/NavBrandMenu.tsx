@@ -25,9 +25,9 @@ export function NavBrandMenu() {
 
   return (
     <div className="relative" onMouseEnter={() => { cancelClose(); setOpen(true); }} onMouseLeave={scheduleClose}>
-      <button type="button" className="flex items-center gap-1 text-[0.9375rem] text-sf-text transition-colors hover:text-sf-muted" onClick={() => setOpen((v) => !v)}>
+      <button type="button" aria-expanded={open} aria-haspopup="true" className="flex items-center gap-1 text-[0.9375rem] text-sf-text transition-colors hover:text-sf-muted" onClick={() => setOpen((v) => !v)}>
         品牌 / 系列
-        <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+        <ChevronDown className="h-3.5 w-3.5 opacity-60" aria-hidden="true" />
       </button>
       {open && (brands ?? []).length > 0 && (
         <div

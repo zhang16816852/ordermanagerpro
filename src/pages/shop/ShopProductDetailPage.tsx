@@ -25,7 +25,7 @@ export default function ShopProductDetailPage() {
 
   if (isLoading) {
     return (
-      <main id="main" tabIndex={-1} className="outline-none">
+      <main id="main" tabIndex={-1} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
         <div className="sf-container py-20 text-center text-sf-muted">載入中...</div>
       </main>
     );
@@ -33,7 +33,7 @@ export default function ShopProductDetailPage() {
 
   if (error || !product) {
     return (
-      <main id="main" tabIndex={-1} className="outline-none">
+      <main id="main" tabIndex={-1} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
         <div className="sf-container py-20 text-center">
           <p className="text-sf-muted">找不到此商品</p>
           <Link to="/shop" className="mt-4 inline-block text-sm text-sf-text underline">
@@ -45,13 +45,13 @@ export default function ShopProductDetailPage() {
   }
 
   return (
-    <main id="main" tabIndex={-1} className="outline-none">
+    <main id="main" tabIndex={-1} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
       <div className="sf-container py-10">
         <Link
           to="/shop"
           className="inline-flex items-center gap-1 text-sm text-sf-muted hover:text-sf-text"
         >
-          <ArrowLeft className="h-4 w-4" /> 返回商品目錄
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" /> 返回商品目錄
         </Link>
 
         <div className="mt-6 grid gap-8 lg:grid-cols-2">
@@ -60,6 +60,8 @@ export default function ShopProductDetailPage() {
               <img
                 src={product.image_url}
                 alt={product.product_name}
+                 width={400}
+                 height={400}
                 className="h-full w-full object-cover"
               />
             ) : (
@@ -82,8 +84,8 @@ export default function ShopProductDetailPage() {
               {minPrice != null ? (
                 <span className="text-2xl font-semibold text-sf-text">
                   {minPrice === maxPrice
-                    ? "$" + minPrice.toLocaleString()
-                    : "$" + minPrice.toLocaleString() + " – $" + maxPrice!.toLocaleString()}
+                    ? "$" + new Intl.NumberFormat("zh-TW").format(minPrice)
+                    : "$" + new Intl.NumberFormat("zh-TW").format(minPrice) + " – $" + new Intl.NumberFormat("zh-TW").format(maxPrice!)}
                 </span>
               ) : (
                 <span className="text-sm text-sf-muted">價格洽詢</span>
@@ -115,7 +117,7 @@ export default function ShopProductDetailPage() {
                       <div className="shrink-0 text-right">
                         {v.retail_price != null ? (
                           <span className="font-medium text-sf-text">
-                            ${Number(v.retail_price).toLocaleString()}
+                            ${new Intl.NumberFormat("zh-TW").format(Number(v.retail_price))}
                           </span>
                         ) : (
                           <span className="text-xs text-sf-muted">洽詢</span>

@@ -36,6 +36,8 @@ export function ImageGallery({ images, coverUrl }: ImageGalleryProps) {
                 <img
                     src={allImages[activeIndex]?.url}
                     alt="產品圖片"
+                    width={400}
+                    height={400}
                     className="w-full h-full object-cover"
                 />
                 {allImages.length > 1 && (
@@ -44,13 +46,13 @@ export function ImageGallery({ images, coverUrl }: ImageGalleryProps) {
                             className="absolute left-1 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                             onClick={() => setActiveIndex(i => (i - 1 + allImages.length) % allImages.length)}
                         >
-                            <ChevronLeft className="h-4 w-4" />
+                            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                         </button>
                         <button
                             className="absolute right-1 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                             onClick={() => setActiveIndex(i => (i + 1) % allImages.length)}
                         >
-                            <ChevronRight className="h-4 w-4" />
+                            <ChevronRight className="h-4 w-4" aria-hidden="true" />
                         </button>
                         <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1">
                             {allImages.map((_, i) => (
@@ -67,16 +69,18 @@ export function ImageGallery({ images, coverUrl }: ImageGalleryProps) {
             {allImages.length > 1 && (
                 <div className="flex gap-1.5 overflow-x-auto pb-1">
                     {allImages.map((img, i) => (
-                        <div
+                        <button
                             key={img.id}
+                            type="button"
+                            aria-label={"查看圖片 " + (i + 1)}
                             className={cn(
-                                'w-14 h-14 flex-shrink-0 rounded overflow-hidden border-2 cursor-pointer transition-all',
+                                'w-14 h-14 flex-shrink-0 rounded overflow-hidden border-2 cursor-pointer transition-[border-color]',
                                 i === activeIndex ? 'border-primary' : 'border-transparent hover:border-muted-foreground/40'
                             )}
                             onClick={() => setActiveIndex(i)}
                         >
-                            <img src={img.url} alt="" className="w-full h-full object-cover" />
-                        </div>
+                            <img src={img.url} alt="" width={56} height={56} className="w-full h-full object-cover" />
+                        </button>
                     ))}
                 </div>
             )}

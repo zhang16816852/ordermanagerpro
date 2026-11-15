@@ -195,7 +195,18 @@ export function OrderGridProductPicker({
                       onCheckedChange={() => toggleProduct(product.id)}
                       onClick={(e) => e.stopPropagation()}
                     />
-                    <div className="flex-1 min-w-0" onClick={() => toggleExpand(product.id)}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      className="flex-1 min-w-0 cursor-pointer"
+                      onClick={() => toggleExpand(product.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggleExpand(product.id);
+                        }
+                      }}
+                    >
                       <div className="text-sm truncate">{product.name}</div>
                       <div className="text-xs text-muted-foreground">{product.code}</div>
                     </div>

@@ -155,6 +155,8 @@ export default function MarketDetailPage() {
             <img
               src={listing.images[imgIndex]}
               alt={`圖片 ${imgIndex + 1}`}
+              width={400}
+              height={300}
               className="w-full h-full object-cover"
             />
           </div>
@@ -163,9 +165,10 @@ export default function MarketDetailPage() {
               {listing.images.map((_, i) => (
                 <button
                   key={i}
+                  aria-label={`查看圖片 ${i + 1}`}
                   onClick={() => setImgIndex(i)}
                   className={cn(
-                    "h-1.5 rounded-full transition-all duration-200",
+                    "h-1.5 rounded-full transition-[width,background-color] duration-200",
                     i === imgIndex ? "w-6 bg-primary" : "w-1.5 bg-muted-foreground/40"
                   )}
                 />

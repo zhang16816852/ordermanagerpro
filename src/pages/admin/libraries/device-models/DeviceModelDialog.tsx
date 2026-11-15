@@ -79,7 +79,7 @@ function TagEditor({ values, onChange, placeholder }: { values: string[]; onChan
         </div>
       ))}
       <input
-        className="flex-1 bg-transparent border-none outline-none text-sm min-w-[120px]"
+        className="flex-1 bg-transparent border-none outline-none text-sm min-w-[120px] focus-visible:ring-2 focus-visible:ring-ring rounded"
         placeholder={placeholder}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
@@ -271,7 +271,7 @@ export function DeviceModelDialog({
                   </div>
                 ))}
                 <input
-                  className="flex-1 bg-transparent border-none outline-none text-sm min-w-[120px]"
+                  className="flex-1 bg-transparent border-none outline-none text-sm min-w-[120px] focus-visible:ring-2 focus-visible:ring-ring rounded"
                   placeholder="輸入別名後按 Enter..."
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {

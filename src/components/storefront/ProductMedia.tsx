@@ -43,6 +43,15 @@ export function ProductMedia({
 }: ProductMediaProps) {
   const tone = hue ?? hueFromSeed(alt || "sf");
 
+  // 為 <img> 提供明確的 width/height（防 CLS），CSS 仍以 h-full w-full 覆蓋顯示
+  const dims: Record<Ratio, [number, number]> = {
+    square: [100, 100],
+    portrait: [100, 125],
+    landscape: [150, 100],
+    wide: [160, 90],
+  };
+  const [w, h] = dims[ratio];
+
   return (
     <div
       className={cn(
@@ -66,6 +75,8 @@ export function ProductMedia({
         <img
           src={src}
           alt={alt}
+          width={w}
+          height={h}
           loading={priority ? "eager" : "lazy"}
           // @ts-expect-error fetchpriority 目前不在 React 19 前的型別裡
           fetchpriority={priority ? "high" : "auto"}

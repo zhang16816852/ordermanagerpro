@@ -164,11 +164,13 @@ export default function MyListingsPage() {
             <img
               src={mainImg}
               alt={l.title}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              width={112}
+              height={112}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
-              <ShoppingBag className="h-8 w-8" />
+              <ShoppingBag className="h-8 w-8" aria-hidden="true" />
             </div>
           )}
           <span className={cn(
@@ -319,7 +321,7 @@ export default function MyListingsPage() {
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="active" className="focus-visible:outline-none">
+            <TabsContent value="active" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <div className="bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 rounded-xl p-3 flex gap-2 mb-3">
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>貼文上架期限為 7 天。到期後將自動移入「草稿箱」供您重新上架。</span>
@@ -327,7 +329,7 @@ export default function MyListingsPage() {
               {renderTabContent("active")}
             </TabsContent>
 
-            <TabsContent value="draft" className="focus-visible:outline-none">
+            <TabsContent value="draft" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <div className="bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 rounded-xl p-3 flex gap-2 mb-3">
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>草稿如果超過 30 天未再次更新/上架，系統將自動永久清除！</span>
@@ -335,7 +337,7 @@ export default function MyListingsPage() {
               {renderTabContent("draft")}
             </TabsContent>
 
-            <TabsContent value="completed" className="focus-visible:outline-none">
+            <TabsContent value="completed" className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <div className="bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 rounded-xl p-3 flex gap-2 mb-3">
                 <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>已標示為成交的媒合項目，不會在市場清單中展示。</span>

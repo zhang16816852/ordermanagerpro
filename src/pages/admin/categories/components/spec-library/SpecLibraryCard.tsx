@@ -18,7 +18,7 @@ interface SpecCardProps {
 export function SpecCard({ spec, relation, onEdit, onDelete, showRelations = true }: SpecCardProps) {
     return (
         <Card className={cn(
-            "relative group overflow-hidden transition-all duration-200",
+            "relative group overflow-hidden transition-shadow duration-200",
             spec.type === 'heading' 
                 ? "bg-slate-900 border-slate-700 shadow-sm" 
                 : "border-primary/10 hover:border-primary/40 hover:shadow-md"

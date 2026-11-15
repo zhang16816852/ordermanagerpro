@@ -334,7 +334,7 @@ export default function AdminOrderForm() {
       {/* Mobile right-side catalog drawer */}
       {c.mobileCatalogOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/40" onClick={() => c.setMobileCatalogOpen(false)} />
+          <div aria-hidden="true" className="absolute inset-0 bg-black/40" onClick={() => c.setMobileCatalogOpen(false)} />
           <div className="absolute inset-y-0 right-0 w-full max-w-md bg-background shadow-xl flex flex-col">
             <div className="flex items-center justify-between p-3 border-b shrink-0">
               <span className="font-semibold">商品選擇</span>

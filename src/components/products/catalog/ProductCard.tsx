@@ -28,11 +28,13 @@ export function ProductCard({ product, onClick, onInfoClick }: ProductCardProps)
           <img
             src={product.image_url}
             alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            width={200}
+            height={200}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
           />
         ) : (
           <div className="flex flex-col items-center justify-center text-muted-foreground/30">
-            <Package className="w-12 h-12 mb-2" />
+            <Package className="w-12 h-12 mb-2" aria-hidden="true" />
             <span className="text-xs font-medium uppercase tracking-wider">No Image</span>
           </div>
         )}

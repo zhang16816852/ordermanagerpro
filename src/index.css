@@ -372,6 +372,16 @@
     transform: scale(1.035);
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .sf-media-zoom img {
+      transition: none;
+      will-change: auto;
+    }
+    .sf-media-zoom:hover img {
+      transform: none;
+    }
+  }
+
   /* sticky blur header */
   .sf-header-blur {
     background: color-mix(in srgb, var(--sf-paper) 72%, transparent);

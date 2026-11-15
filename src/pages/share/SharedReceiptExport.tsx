@@ -34,13 +34,13 @@ export function calcReceiptTotals(items: ReceiptItem[]): ReceiptTotals {
 }
 
 export const ITEMS_PER_PAGE: Record<"a4" | "middle-cut", number> = {
-  a4: 16,
+  a4: 17,
   "middle-cut": 6,
 };
 
 /* 每頁筆數採「兩層」：前面無底部框頁用 maxCapacity，最後一頁（含總計+備註框）用 lastCapacity */
 export const CHUNK_CAPACITY: Record<"a4" | "middle-cut", { max: number; last: number }> = {
-  a4: { max: 20, last: 16 },
+  a4: { max: 20, last: 17 },
   "middle-cut": { max: 8, last: 6 },
 };
 
@@ -301,7 +301,7 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
 
   const statusText = status;
 
-  // 連續模式（僅網頁預覽）：不切割頁面、只渲染單一表頭；列印/PDF 維持逐頁實體分頁
+  // 連續模式（僅網頁預覽）：與分頁模式共用同一套 chunking，確保螢幕與列印分頁一致
   const continuous = !!webPreview && !pagination;
 
   // 分頁：前面頁用 maxCapacity、末頁用 lastCapacity，序號整單連續
@@ -418,82 +418,52 @@ export function SharedReceiptExport(props: SharedReceiptProps): JSX.Element {
       ].filter(Boolean).join(" ")}
       {...(!webPreview && !printMode ? {} : {})}
     >
-      {continuous ? (
-        <ReceiptPage
-          items={items}
-          startIndex={0}
-          capacity={items.length}
-          pageIndex={0}
-          totalPages={1}
-          showPageNo={false}
-          showPrice={showPrice}
-          showQR={showQR}
-          qrValue={qrValue}
-          title={title}
-          docTitleLabel={docTitleLabel}
-          storeName={storeName}
-          code={code}
-          createdAt={createdAt}
-          status={statusText}
-          notes={notes}
-          deliveryMethodTitle={deliveryMethodTitle}
-          deliveryType={deliveryType}
-          trackingNumbers={trackingNumbers}
-          widthClass={widthClass}
-        >
-          <LastPageSummary
-            items={items}
-            showPrice={showPrice}
-            notes={notes}
-            canShowPrice={baseShowPrice}
-            shippingFee={shippingFee}
-          />
-        </ReceiptPage>
-      ) : (
-        (() => {
-          const pages: JSX.Element[] = [];
-          let running = 0;
-          pageChunks.forEach((chunk, pageIndex) => {
-            const isLast = pageIndex === pageChunks.length - 1;
-            pages.push(
-              <ReceiptPage
-                key={pageIndex}
-                items={chunk}
-                startIndex={running}
-                capacity={pageSizes[pageIndex]}
-                pageIndex={pageIndex}
-                totalPages={totalPages}
-                showPrice={showPrice}
-                showQR={showQR}
-                qrValue={qrValue}
-                title={title}
-                docTitleLabel={docTitleLabel}
-                storeName={storeName}
-                code={code}
-                createdAt={createdAt}
-                status={statusText}
-                notes={notes}
-                deliveryMethodTitle={deliveryMethodTitle}
-                deliveryType={deliveryType}
-                trackingNumbers={trackingNumbers}
-                widthClass={widthClass}
-              >
-                {isLast && (
-                  <LastPageSummary
-                    items={items}
-                    showPrice={showPrice}
-                    notes={notes}
-                    canShowPrice={baseShowPrice}
-                    shippingFee={shippingFee}
-                  />
-                )}
-              </ReceiptPage>
-            );
-            running += chunk.length;
-          });
-          return pages;
-        })()
-      )}
+      {(() => {
+        // 連續模式與分頁模式統一走同一套 chunking，確保「畫面預覽」與「列印/PDF」的分頁一致
+        // （避免連續模式把所有品項+總計塞在同一頁、列印時才被瀏覽器自動拆頁造成落差）
+        const pages: JSX.Element[] = [];
+        let running = 0;
+        pageChunks.forEach((chunk, pageIndex) => {
+          const isLast = pageIndex === pageChunks.length - 1;
+          pages.push(
+            <ReceiptPage
+              key={pageIndex}
+              items={chunk}
+              startIndex={running}
+              capacity={pageSizes[pageIndex]}
+              pageIndex={pageIndex}
+              totalPages={totalPages}
+              showPageNo={!continuous}
+              showPrice={showPrice}
+              showQR={showQR}
+              qrValue={qrValue}
+              title={title}
+              docTitleLabel={docTitleLabel}
+              storeName={storeName}
+              code={code}
+              createdAt={createdAt}
+              status={statusText}
+              notes={notes}
+              deliveryMethodTitle={deliveryMethodTitle}
+              deliveryType={deliveryType}
+              trackingNumbers={trackingNumbers}
+              widthClass={widthClass}
+            >
+              {isLast && (
+                <LastPageSummary
+                  items={items}
+                  showPrice={showPrice}
+                  notes={notes}
+                  canShowPrice={baseShowPrice}
+                  shippingFee={shippingFee}
+                />
+              )}
+            </ReceiptPage>
+          );
+          running += chunk.length;
+        });
+        return pages;
+      })()}
     </div>
   );
 

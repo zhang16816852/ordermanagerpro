@@ -230,6 +230,8 @@ export function ProductImageManager({ entityType, entityId, className }: Product
                             <img
                                 src={image.url}
                                 alt={image.alt_text || '產品圖片'}
+                                width={96}
+                                height={96}
                                 className="w-full h-full object-cover"
                             />
 

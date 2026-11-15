@@ -406,7 +406,7 @@ export default function MarketCreatePage() {
                 <Label htmlFor="price" className="text-xs">
                   {listingType === "sell" ? "出售價格" : "收購預算"}
                 </Label>
-                <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => setIsPriceNegotiable(!isPriceNegotiable)}>
+                <label htmlFor="negotiable" className="flex items-center gap-1.5 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={isPriceNegotiable}
@@ -417,7 +417,7 @@ export default function MarketCreatePage() {
                   <Label htmlFor="negotiable" className="text-xs text-muted-foreground cursor-pointer">
                     面議
                   </Label>
-                </div>
+                </label>
               </div>
               {!isPriceNegotiable && (
                 <div className="relative">

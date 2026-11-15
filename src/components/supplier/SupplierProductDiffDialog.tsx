@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { CheckCircle2, Plus, Pencil, AlertTriangle, Minus, ChevronDown, ChevronRight, FileUp, ClipboardPaste, Upload, X } from 'lucide-react';
+import { CheckCircle2, Plus, Pencil, AlertTriangle, Minus, ChevronDown, ChevronRight, FileUp, ClipboardPaste, Upload, X, Tag, DollarSign } from 'lucide-react';
 import { parseSupplierProductExcel, parseSupplierProductText } from '@/utils/supplierProductParser';
 import { matchSupplierProducts, summarizeDiffs } from '@/utils/supplierProductMatcher';
 import { SupplierProduct, ProductDiff, DiffAction } from '@/utils/supplierProductSchema';
@@ -33,6 +33,7 @@ const ACTION_LABELS: Record<DiffAction, string> = {
   update: '更新',
   unchanged: '無變更',
   conflict: '衝突',
+  applied: '已套用',
 };
 
 const ACTION_BADGE_CLASSES: Record<DiffAction, string> = {
@@ -40,6 +41,7 @@ const ACTION_BADGE_CLASSES: Record<DiffAction, string> = {
   update: 'bg-blue-100 text-blue-800 border-blue-200',
   unchanged: 'bg-muted text-muted-foreground border-border',
   conflict: 'bg-amber-100 text-amber-800 border-amber-200',
+  applied: 'bg-gray-100 text-gray-600 border-gray-300',
 };
 
 const ACTION_ICONS: Record<DiffAction, React.ReactNode> = {
@@ -47,6 +49,7 @@ const ACTION_ICONS: Record<DiffAction, React.ReactNode> = {
   update: <Pencil className="h-3.5 w-3.5" />,
   unchanged: <Minus className="h-3.5 w-3.5" />,
   conflict: <AlertTriangle className="h-3.5 w-3.5" />,
+  applied: <CheckCircle2 className="h-3.5 w-3.5" />,
 };
 
 export function SupplierProductDiffDialog({
@@ -97,9 +100,30 @@ export function SupplierProductDiffDialog({
     onOpenChange(next);
   };
 
-  const processProducts = (supplierProducts: SupplierProduct[]) => {
+  const processProducts = async (supplierProducts: SupplierProduct[]) => {
     setParsed(supplierProducts);
-    const result = matchSupplierProducts(supplierProducts, products as any, mappings);
+    
+    // 讀取已忽略的產品（scrape_decisions）
+    let ignoredIds = new Set<string>();
+    if (supplierId) {
+      try {
+        const { data } = await (supabase as any)
+          .from('scrape_decisions')
+          .select('vendor_product_id')
+          .eq('supplier_id', supplierId)
+          .eq('action', 'skip');
+        if (data) {
+          ignoredIds = new Set(data.map((d: any) => d.vendor_product_id));
+        }
+      } catch (err) {
+        console.error('讀取 scrape_decisions 失敗:', err);
+      }
+    }
+    
+    // 過濾已忽略的產品
+    const filtered = supplierProducts.filter(sp => !ignoredIds.has(sp.supplier_sku));
+    
+    const result = matchSupplierProducts(filtered, products as any, mappings);
     setDiffs(result);
     const initial = new Set<number>();
     result.forEach((d, i) => {
@@ -193,6 +217,26 @@ export function SupplierProductDiffDialog({
     });
   };
 
+  // 輔助函式：從名稱解析狀態標記
+  // oldName: 舊名稱（mapping 儲存的名稱），newName: 爬取的新名稱
+  // 新名稱有標記 → 使用新標記
+  // 新名稱無標記但舊名稱有標記 → 產品已脫離該狀態，恢復為 active/visible
+  // 新舊皆無標記 → 不變更（null）
+  const parseStatusFromNames = (oldName: string, newName: string): { isHidden: boolean | null; variantStatus: string | null } => {
+    const parseOne = (name: string): { isHidden: boolean; variantStatus: string } | null => {
+      if (name.includes('停產')) return { isHidden: true, variantStatus: 'discontinued' };
+      if (name.includes('售完')) return { isHidden: true, variantStatus: 'sold_out' };
+      if (name.includes('缺貨')) return { isHidden: true, variantStatus: 'sold_out' };
+      if (name.includes('預購')) return { isHidden: false, variantStatus: 'preorder' };
+      return null;
+    };
+    const oldStatus = parseOne(oldName);
+    const newStatus = parseOne(newName);
+    if (newStatus) return newStatus;
+    if (oldStatus) return { isHidden: false, variantStatus: 'active' };
+    return { isHidden: null, variantStatus: null };
+  };
+
   // 套用已勾選的項目
   const handleApply = async () => {
     if (!supplierId || selected.size === 0) return;
@@ -200,13 +244,58 @@ export function SupplierProductDiffDialog({
     let successCount = 0;
     let errorCount = 0;
 
+    const appliedIndices = new Set<number>();
+
     for (const idx of selected) {
       const diff = diffs[idx];
       if (!diff) continue;
 
       try {
+        const mapping = mappings?.find(m => m.vendor_product_id === diff.supplier_product.supplier_sku);
+
+        if (mapping) {
+          // 計算新舊名稱
+          const nameChange = (diff.changes || []).find(c => c.field === 'name');
+          const oldName = nameChange
+            ? (nameChange.old_value as string || mapping.vendor_product_name || '')
+            : (mapping.vendor_product_name || diff.supplier_product.name || '');
+          const newName = diff.supplier_product.name || '';
+          const status = parseStatusFromNames(oldName, newName);
+
+          // 若有狀態需要同步 → 使用 RPC 原子化更新（涵蓋所有 action，包括 unchanged）
+          if (status.isHidden !== null || status.variantStatus !== null) {
+            const rpcParams: Record<string, any> = {
+              p_mapping_id: mapping.id,
+            };
+            // update/conflict 時同時更新名稱/成本
+            if (diff.action === 'update' || diff.action === 'conflict') {
+              for (const change of diff.changes || []) {
+                if (change.field === 'name') rpcParams.p_vendor_product_name = diff.supplier_product.name;
+                if (change.field === 'wholesale_price') rpcParams.p_vendor_unit_cost = diff.supplier_product.wholesale_price;
+              }
+              if (diff.action === 'conflict') {
+                if (diff.supplier_product.name && !rpcParams.p_vendor_product_name) rpcParams.p_vendor_product_name = diff.supplier_product.name;
+                if (diff.supplier_product.wholesale_price !== undefined && !rpcParams.p_vendor_unit_cost) rpcParams.p_vendor_unit_cost = diff.supplier_product.wholesale_price;
+              }
+            }
+            if (status.isHidden !== null) rpcParams.p_is_hidden = status.isHidden;
+            if (status.variantStatus !== null) {
+              rpcParams.p_variant_status = status.variantStatus;
+              if (diff.matched_variant_id) rpcParams.p_variant_id = diff.matched_variant_id;
+            }
+
+            const { data, error } = await (supabase as any).rpc('sync_supplier_mapping_status', rpcParams);
+            if (error) throw error;
+            if (data && data.ok === false) throw new Error(data.reason || '同步失敗');
+
+            successCount++;
+            appliedIndices.add(idx);
+            continue; // 已處理，跳過後續 action-specific 邏輯
+          }
+        }
+
+        // 無狀態變更 → 根據 action 執行原有邏輯
         if (diff.action === 'update') {
-          // 更新 mapping 的 vendor_product_name / vendor_unit_cost
           const mapping = mappings?.find(m => m.vendor_product_id === diff.supplier_product.supplier_sku);
           if (mapping) {
             const updates: Record<string, any> = { updated_at: new Date().toISOString() };
@@ -214,34 +303,36 @@ export function SupplierProductDiffDialog({
               if (change.field === 'name') updates.vendor_product_name = diff.supplier_product.name;
               if (change.field === 'wholesale_price') updates.vendor_unit_cost = diff.supplier_product.wholesale_price;
             }
-            const { error } = await (supabase
-              .from('supplier_product_mappings') as any)
+            const { error } = await (supabase as any)
+              .from('supplier_product_mappings')
               .update(updates)
               .eq('id', mapping.id);
             if (error) throw error;
             successCount++;
+            appliedIndices.add(idx);
           }
         } else if (diff.action === 'create') {
-          // 開啟指派對話框（逐一處理）
           setAssigningIdx(idx);
           setSelectorOpen(true);
-          // 暫停批次處理，等使用者指派
           setApplying(false);
           return;
         } else if (diff.action === 'conflict') {
-          // 衝突：更新 mapping
           const mapping = mappings?.find(m => m.vendor_product_id === diff.supplier_product.supplier_sku);
           if (mapping) {
             const updates: Record<string, any> = { updated_at: new Date().toISOString() };
             if (diff.supplier_product.name) updates.vendor_product_name = diff.supplier_product.name;
             if (diff.supplier_product.wholesale_price !== undefined) updates.vendor_unit_cost = diff.supplier_product.wholesale_price;
-            const { error } = await (supabase
-              .from('supplier_product_mappings') as any)
+            const { error } = await (supabase as any)
+              .from('supplier_product_mappings')
               .update(updates)
               .eq('id', mapping.id);
             if (error) throw error;
             successCount++;
+            appliedIndices.add(idx);
           }
+        } else if (diff.action === 'unchanged') {
+          // 無狀態變更且無其他變更 → 跳過
+          continue;
         }
       } catch (err) {
         console.error('套用失敗:', err);
@@ -251,19 +342,18 @@ export function SupplierProductDiffDialog({
 
     if (successCount > 0) {
       toast.success(`成功更新 ${successCount} 筆對照關係`);
+      // 將已套用的項目 action 改為 'applied'，讓它們移到「已套用」TAB
+      setDiffs(prev => prev.map((d, i) => appliedIndices.has(i) ? { ...d, action: 'applied' as DiffAction } : d));
     }
     if (errorCount > 0) {
       toast.error(`${errorCount} 筆更新失敗`);
     }
 
-    // 重新整理
     if (initialProducts) {
-      // 重新比對
       setDiffs([]);
       setSelected(new Set());
       setSkippedIndices(new Set());
-      // 延遲一下讓 DB 更新完成
-      setTimeout(() => processProducts(initialProducts), 500);
+      setTimeout(() => { processProducts(initialProducts); }, 500);
     }
 
     setApplying(false);
@@ -319,7 +409,7 @@ export function SupplierProductDiffDialog({
           setDiffs([]);
           setSelected(new Set());
           setSkippedIndices(new Set());
-          setTimeout(() => processProducts(initialProducts), 500);
+          setTimeout(() => { processProducts(initialProducts); }, 500);
         }
       }
     } catch (err) {
@@ -424,7 +514,7 @@ export function SupplierProductDiffDialog({
   return (
     <>
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
+      <DialogContent className="max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>供應商產品匯入與比對</DialogTitle>
           <DialogDescription>
@@ -488,7 +578,7 @@ export function SupplierProductDiffDialog({
           <>
             {/* 篩選器 */}
             <div className="flex flex-wrap items-center gap-2 py-2">
-              {(['create', 'update', 'unchanged', 'conflict'] as DiffAction[]).map(action => (
+              {(['create', 'update', 'unchanged', 'conflict', 'applied'] as DiffAction[]).map(action => (
                 <Badge
                   key={action}
                   variant="outline"
@@ -571,8 +661,8 @@ export function SupplierProductDiffDialog({
               </div>
             )}
 
-            <ScrollArea className="h-[400px] w-full rounded-md border">
-              <div className="space-y-2 p-3">
+            <ScrollArea className="flex-1 min-h-0 max-h-[400px] w-full rounded-md border">
+              <div className="space-y-2 p-3 min-w-0">
                 {filteredDiffs.length === 0 && diffs.length > 0 ? (
                   <div className="text-center py-8 text-muted-foreground text-sm">
                     沒有符合篩選條件的項目
@@ -590,14 +680,14 @@ export function SupplierProductDiffDialog({
                         }`}
                       >
                         <div className="flex items-start gap-3">
-                          {diff.action !== 'unchanged' && (
+                          {diff.action !== 'unchanged' && diff.action !== 'applied' && (
                             <Checkbox
                               checked={isSelected}
                               onCheckedChange={() => toggleSelect(originalIdx)}
                               className="mt-1"
                             />
                           )}
-                          {diff.action === 'unchanged' && <div className="w-4" />}
+                          {(diff.action === 'unchanged' || diff.action === 'applied') && <div className="w-4" />}
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
@@ -605,17 +695,47 @@ export function SupplierProductDiffDialog({
                                 {ACTION_ICONS[diff.action]}
                                 {ACTION_LABELS[diff.action]}
                               </Badge>
-                              <span className="font-medium text-sm truncate">
+                              {(() => {
+                                const oldName = (diff.changes || []).find(c => c.field === 'name')?.old_value as string || '';
+                                const newName = diff.supplier_product.name || '';
+                                const st = parseStatusFromNames(oldName, newName);
+                                if (!st.isHidden && st.variantStatus === null) return null;
+                                const isStatusChange = st.variantStatus !== null;
+                                if (!isStatusChange) return null;
+                                return (
+                                  <Badge variant="outline" className="gap-1 bg-purple-100 text-purple-800 border-purple-200">
+                                    <Tag className="h-3 w-3" />
+                                    上架狀態
+                                  </Badge>
+                                );
+                              })()}
+                              {(diff.changes || []).some(c => c.field === 'wholesale_price' || c.field === 'retail_price') && (
+                                <Badge variant="outline" className="gap-1 bg-orange-100 text-orange-800 border-orange-200">
+                                  <DollarSign className="h-3 w-3" />
+                                  價格變更
+                                </Badge>
+                              )}
+                              <span className="font-medium text-sm break-words">
                                 {diff.supplier_product.name}
                               </span>
-                              <span className="text-xs text-muted-foreground font-mono">
+                              <span className="text-xs text-muted-foreground font-mono break-all">
                                 {diff.supplier_product.supplier_sku}
                               </span>
-                              {diff.action === 'create' && (
+                              {(() => {
+                                const mapping = mappings?.find(m => m.vendor_product_id === diff.supplier_product.supplier_sku);
+                                if (!mapping) return null;
+                                const displayName = mapping.internal_variant?.name || mapping.internal_product?.name || '未知';
+                                return (
+                                  <span className="text-xs text-muted-foreground">
+                                    → {displayName}
+                                  </span>
+                                );
+                              })()}
+                              {diff.action !== 'unchanged' && diff.action !== 'applied' && (
                                 <Button
-                                  variant="ghost"
+                                  variant="outline"
                                   size="sm"
-                                  className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive ml-auto"
+                                  className="h-6 px-2 text-xs text-destructive border-destructive/30 hover:bg-destructive/10 ml-auto"
                                   onClick={() => handleSkipPersistent(originalIdx)}
                                 >
                                   <X className="h-3 w-3 mr-1" />

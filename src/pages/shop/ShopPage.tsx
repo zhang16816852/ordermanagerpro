@@ -118,7 +118,7 @@ export default function ShopPage() {
     Object.values(filters.specFilters).reduce((a, b) => a + b.length, 0);
 
   return (
-    <main id="main" tabIndex={-1} className="outline-none">
+    <main id="main" tabIndex={-1} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
       <div className="sf-container py-10">
         <header className="mb-6">
           <p className="sf-eyebrow">{siteBrand.tagline}</p>
@@ -130,7 +130,9 @@ export default function ShopPage() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sf-muted" />
             <Input
               value={localSearch}
-              onChange={(e) => setLocalSearch(e.target.value)}
+              name="q"
+               autoComplete="off"
+               onChange={(e) => setLocalSearch(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
@@ -178,15 +180,17 @@ export default function ShopPage() {
                   <Link
                     key={p.item_id}
                     to={`/shop/${p.product_id}`}
-                    className="group flex flex-col overflow-hidden rounded-xl border border-[color:var(--sf-line)] bg-sf-surface transition-all hover:border-sf-text hover:shadow-md"
+                    className="group flex flex-col overflow-hidden rounded-xl border border-[color:var(--sf-line)] bg-sf-surface transition-[border-color,box-shadow] hover:border-sf-text hover:shadow-md"
                   >
                     <div className="aspect-square bg-sf-paper flex items-center justify-center overflow-hidden">
                       {p.image_url ? (
                         <img
                           src={p.image_url}
                           alt={p.product_name}
-                          className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                          className="h-full w-full object-cover transition-transform group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
                           loading="lazy"
+                           width={100}
+                           height={100}
                         />
                       ) : (
                         <span className="text-xs text-sf-muted/40">No Image</span>
@@ -208,7 +212,7 @@ export default function ShopPage() {
                       <div className="mt-auto pt-2">
                         {p.retail_price != null ? (
                           <span className="text-base font-semibold text-sf-text">
-                            ${Number(p.retail_price).toLocaleString()}
+                            ${new Intl.NumberFormat("zh-TW").format(Number(p.retail_price))}
                           </span>
                         ) : (
                           <span className="text-xs text-sf-muted">價格洽詢</span>
@@ -220,7 +224,7 @@ export default function ShopPage() {
               </div>
             )}
             {isFetching && !isLoading && (
-              <div className="mt-4 text-center text-xs text-sf-muted">更新中...</div>
+              <div className="mt-4 text-center text-xs text-sf-muted">更新中…</div>
             )}
           </section>
         </div>

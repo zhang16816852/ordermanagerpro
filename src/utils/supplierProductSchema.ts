@@ -47,7 +47,7 @@ export interface SupplierProduct {
   fetched_at?: string;
 }
 
-export type DiffAction = 'create' | 'update' | 'unchanged' | 'conflict';
+export type DiffAction = 'create' | 'update' | 'unchanged' | 'conflict' | 'applied';
 
 export interface FieldChange {
   field: string;
@@ -80,12 +80,13 @@ export const FIELD_LABELS: Record<string, string> = {
 };
 
 /** 統計差異 */
-export function summarizeDiffs(diffs: ProductDiff[]): { create: number; update: number; unchanged: number; conflict: number } {
+export function summarizeDiffs(diffs: ProductDiff[]): { create: number; update: number; unchanged: number; conflict: number; applied: number } {
   return {
     create: diffs.filter(d => d.action === 'create').length,
     update: diffs.filter(d => d.action === 'update').length,
     unchanged: diffs.filter(d => d.action === 'unchanged').length,
     conflict: diffs.filter(d => d.action === 'conflict').length,
+    applied: diffs.filter(d => d.action === 'applied').length,
   };
 }
 

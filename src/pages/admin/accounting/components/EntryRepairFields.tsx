@@ -42,7 +42,7 @@ export function EntryRepairFields({ ctl }: { ctl: EntryFormController }) {
         <button
           type="button"
           onClick={() => handleRepairModeChange('income_repair')}
-          className={`p-3 rounded-lg border text-left transition-all ${
+          className={`p-3 rounded-lg border text-left transition-colors ${
             repairMode === 'income_repair'
               ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500/30 font-medium'
               : 'border-border/60 bg-card hover:bg-accent/40'
@@ -60,7 +60,7 @@ export function EntryRepairFields({ ctl }: { ctl: EntryFormController }) {
         <button
           type="button"
           onClick={() => handleRepairModeChange('expense_part')}
-          className={`p-3 rounded-lg border text-left transition-all ${
+          className={`p-3 rounded-lg border text-left transition-colors ${
             repairMode === 'expense_part'
               ? 'border-rose-500 bg-rose-500/10 ring-1 ring-rose-500/30 font-medium'
               : 'border-border/60 bg-card hover:bg-accent/40'
@@ -78,7 +78,7 @@ export function EntryRepairFields({ ctl }: { ctl: EntryFormController }) {
         <button
           type="button"
           onClick={() => handleRepairModeChange('expense_service')}
-          className={`p-3 rounded-lg border text-left transition-all ${
+          className={`p-3 rounded-lg border text-left transition-colors ${
             repairMode === 'expense_service'
               ? 'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30 font-medium'
               : 'border-border/60 bg-card hover:bg-accent/40'

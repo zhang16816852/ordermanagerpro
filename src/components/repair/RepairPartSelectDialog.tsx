@@ -275,7 +275,7 @@ export function RepairPartSelectDialog({
                     <div
                       key={opt.id}
                       onClick={() => handleSelectOption(opt)}
-                      className={`flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer hover:border-primary/50 hover:bg-accent/40 ${isSelected
+                      className={`flex items-center justify-between p-2.5 rounded-lg border transition-[border-color,background-color] cursor-pointer hover:border-primary/50 hover:bg-accent/40 ${isSelected
                         ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
                         : 'border-border/60 bg-card'
                         }`}

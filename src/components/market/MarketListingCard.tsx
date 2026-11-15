@@ -43,15 +43,17 @@ export function MarketListingCard({ listing, isAuthenticated }: MarketListingCar
     : null;
 
   return (
-    <Link to={`/market/${listing.id}`} className="block group focus:outline-none">
-      <Card className="overflow-hidden border border-white/8 bg-card/60 backdrop-blur-sm transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5 active:translate-y-0">
+    <Link to={`/market/${listing.id}`} className="block group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <Card className="overflow-hidden border border-white/8 bg-card/60 backdrop-blur-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5 active:translate-y-0">
         {/* Cover Image */}
         <div className="relative aspect-[4/3] w-full bg-muted/30 overflow-hidden">
           {coverImage ? (
             <img
               src={coverImage}
               alt={listing.title}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+              width={400}
+              height={300}
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
             />
           ) : (
             <div className="flex h-full items-center justify-center">

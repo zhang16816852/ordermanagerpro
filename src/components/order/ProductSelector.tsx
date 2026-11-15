@@ -146,7 +146,18 @@ export function ProductSelector({
   if (bare) {
     return (
       <div className="flex flex-col h-full">
-        <div className="sticky top-0 bg-background z-10 shrink-0 cursor-pointer py-3 px-4" onClick={onTogglePanel}>
+        <div
+          role="button"
+          tabIndex={0}
+          className="sticky top-0 bg-background z-10 shrink-0 cursor-pointer py-3 px-4"
+          onClick={onTogglePanel}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onTogglePanel();
+            }
+          }}
+        >
           {header}
         </div>
         {!collapsed && (
@@ -160,7 +171,18 @@ export function ProductSelector({
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader className="sticky top-0 bg-background z-10 shrink-0 cursor-pointer select-none py-3 px-4" onClick={onTogglePanel}>
+      <CardHeader
+        role="button"
+        tabIndex={0}
+        className="sticky top-0 bg-background z-10 shrink-0 cursor-pointer select-none py-3 px-4"
+        onClick={onTogglePanel}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onTogglePanel();
+          }
+        }}
+      >
         {header}
       </CardHeader>
       {!collapsed && (
