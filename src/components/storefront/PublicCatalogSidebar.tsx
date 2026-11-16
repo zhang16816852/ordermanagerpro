@@ -9,8 +9,10 @@ import {
   usePublicBrandSeries,
   usePublicDeviceModels,
   usePublicSpecOptions,
+  usePublicCategorySpecs,
   type PublicCategoryNode,
   type PublicSpecOption,
+  type PublicCategorySpec,
 } from "@/storefront/usePublicCatalog";
 import { BrandClassifier } from "@/components/classification/BrandClassifier";
 import { DeviceModelClassifier } from "@/components/classification/DeviceModelClassifier";
@@ -35,6 +37,7 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
   const { data: brandSeries } = usePublicBrandSeries();
   const { data: models } = usePublicDeviceModels();
   const { data: specOpts } = usePublicSpecOptions(filters.categoryId ?? null);
+  const { data: categorySpecs } = usePublicCategorySpecs(filters.categoryId ?? null);
 
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(["categories", "specs"]));
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
@@ -174,7 +177,7 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-4 space-y-1">
           {/* Specs (moved to top, more prominent) */}
-          {specOpts && specOpts.length > 0 && (
+          {filters.categoryId && (
             <div>
               <button
                 type="button"
@@ -186,33 +189,56 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
               </button>
               {openSections.has("specs") && (
                 <div className="space-y-3 pb-2">
-                  {specOpts.map((so: PublicSpecOption) => (
-                    <div key={so.spec_id}>
-                      <div className="mb-1 text-xs font-medium text-sf-text">{so.spec_name}</div>
-                      <div className="space-y-1">
-                        {(so.distinct_values ?? []).map((v: any, idx: number) => {
-                          const val = typeof v === "string" ? v : JSON.stringify(v);
-                          const checked = (filters.specFilters[so.spec_id] ?? []).includes(val);
-                          return (
-                            <label key={idx} className="flex items-center gap-2 text-sm text-sf-muted">
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={(c) => {
-                                  const cur = filters.specFilters[so.spec_id] ?? [];
-                                  const next = c ? [...cur, val] : cur.filter((x) => x !== val);
-                                  const newSpecs = { ...filters.specFilters };
-                                  if (next.length === 0) delete newSpecs[so.spec_id];
-                                  else newSpecs[so.spec_id] = next;
-                                  onChange({ ...filters, specFilters: newSpecs });
-                                }}
-                              />
-                              {val}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
+                  {(() => {
+                    // 合併 categorySpecs（名稱）與 specOpts（值），以 spec_id 為 key
+                    const valueMap = new Map((specOpts ?? []).map((so) => [so.spec_id, so]));
+                    const defs = categorySpecs ?? [];
+                    if (defs.length === 0 && (specOpts ?? []).length === 0) {
+                      return <div className="text-xs text-sf-muted py-2">此分類暫無可篩選的規格</div>;
+                    }
+                    // 優先用 specOpts（有值），補上 categorySpecs 中缺的 spec 名稱
+                    const allSpecIds = new Set([
+                      ...(specOpts ?? []).map((so) => so.spec_id),
+                      ...defs.map((d) => d.spec_id),
+                    ]);
+                    return Array.from(allSpecIds).map((specId) => {
+                      const so = valueMap.get(specId);
+                      const def = defs.find((d) => d.spec_id === specId);
+                      const name = so?.spec_name ?? def?.spec_name ?? specId;
+                      const values = so?.distinct_values ?? [];
+                      return (
+                        <div key={specId}>
+                          <div className="mb-1 text-xs font-medium text-sf-text">{name}</div>
+                          {values.length > 0 ? (
+                            <div className="space-y-1">
+                              {values.map((v: any, idx: number) => {
+                                const val = typeof v === "string" ? v : JSON.stringify(v);
+                                const checked = (filters.specFilters[specId] ?? []).includes(val);
+                                return (
+                                  <label key={idx} className="flex items-center gap-2 text-sm text-sf-muted">
+                                    <Checkbox
+                                      checked={checked}
+                                      onCheckedChange={(c) => {
+                                        const cur = filters.specFilters[specId] ?? [];
+                                        const next = c ? [...cur, val] : cur.filter((x) => x !== val);
+                                        const newSpecs = { ...filters.specFilters };
+                                        if (next.length === 0) delete newSpecs[specId];
+                                        else newSpecs[specId] = next;
+                                        onChange({ ...filters, specFilters: newSpecs });
+                                      }}
+                                    />
+                                    {val}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-sf-muted/60 py-1">無可用值</div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               )}
             </div>

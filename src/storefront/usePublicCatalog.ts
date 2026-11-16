@@ -200,3 +200,26 @@ export function usePublicSpecOptions(categoryId?: string | null) {
     staleTime: STALE_MS,
   });
 }
+
+export type PublicCategorySpec = {
+  spec_id: string;
+  spec_name: string;
+  spec_type: string;
+  sort_order: number | null;
+};
+
+export function usePublicCategorySpecs(categoryId?: string | null) {
+  return useQuery({
+    queryKey: ["public-category-specs", categoryId ?? null],
+    queryFn: async () => {
+      if (!categoryId) return [] as PublicCategorySpec[];
+      const { data, error } = await (supabase.rpc as any)("get_public_category_specs", {
+        p_category_id: categoryId,
+      });
+      if (error) throw error;
+      return (data ?? []) as PublicCategorySpec[];
+    },
+    staleTime: STALE_MS,
+    enabled: !!categoryId,
+  });
+}
