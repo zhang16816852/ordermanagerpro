@@ -34,9 +34,9 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
   const { data: brands } = usePublicBrands();
   const { data: brandSeries } = usePublicBrandSeries();
   const { data: models } = usePublicDeviceModels();
-  const { data: specOpts } = usePublicSpecOptions(filters.categoryId);
+  const { data: specOpts } = usePublicSpecOptions(filters.categoryId ?? null);
 
-  const [openSections, setOpenSections] = useState<Set<string>>(new Set(["categories"]));
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set(["categories", "specs"]));
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [expandedBrands, setExpandedBrands] = useState<Set<string>>(new Set());
 
@@ -134,8 +134,8 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-card border rounded-xl overflow-hidden shadow-sm">
-      <div className="p-4 border-b bg-muted/30 flex items-center justify-between">
+    <div className="flex flex-col h-full max-h-[calc(100vh-6rem)] bg-card border rounded-xl overflow-hidden shadow-sm">
+      <div className="p-4 border-b bg-muted/30 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2 font-semibold text-sm">
           <Filter className="h-4 w-4" />
           篩選條件
@@ -147,8 +147,77 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
         )}
       </div>
 
-      <ScrollArea className="flex-1">
+      {/* 已選規格 chip 列 */}
+      {Object.keys(filters.specFilters).length > 0 && (
+        <div className="flex flex-wrap gap-1.5 px-4 py-2 border-b shrink-0">
+          {Object.entries(filters.specFilters).map(([specId, vals]) =>
+            vals.map((v) => (
+              <button
+                key={`${specId}:${v}`}
+                type="button"
+                onClick={() => {
+                  const next = vals.filter((x) => x !== v);
+                  const newSpecs = { ...filters.specFilters };
+                  if (next.length === 0) delete newSpecs[specId];
+                  else newSpecs[specId] = next;
+                  onChange({ ...filters, specFilters: newSpecs });
+                }}
+                className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary hover:bg-primary/20"
+              >
+                {v} <span className="opacity-60">×</span>
+              </button>
+            )),
+          )}
+        </div>
+      )}
+
+      <ScrollArea className="flex-1 min-h-0">
         <div className="p-4 space-y-1">
+          {/* Specs (moved to top, more prominent) */}
+          {specOpts && specOpts.length > 0 && (
+            <div>
+              <button
+                type="button"
+                onClick={() => toggleSection("specs")}
+                className="flex w-full items-center justify-between py-2 text-sm font-medium text-sf-text"
+              >
+                <span>進階規格</span>
+                {openSections.has("specs") ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </button>
+              {openSections.has("specs") && (
+                <div className="space-y-3 pb-2">
+                  {specOpts.map((so: PublicSpecOption) => (
+                    <div key={so.spec_id}>
+                      <div className="mb-1 text-xs font-medium text-sf-text">{so.spec_name}</div>
+                      <div className="space-y-1">
+                        {(so.distinct_values ?? []).map((v: any, idx: number) => {
+                          const val = typeof v === "string" ? v : JSON.stringify(v);
+                          const checked = (filters.specFilters[so.spec_id] ?? []).includes(val);
+                          return (
+                            <label key={idx} className="flex items-center gap-2 text-sm text-sf-muted">
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(c) => {
+                                  const cur = filters.specFilters[so.spec_id] ?? [];
+                                  const next = c ? [...cur, val] : cur.filter((x) => x !== val);
+                                  const newSpecs = { ...filters.specFilters };
+                                  if (next.length === 0) delete newSpecs[so.spec_id];
+                                  else newSpecs[so.spec_id] = next;
+                                  onChange({ ...filters, specFilters: newSpecs });
+                                }}
+                              />
+                              {val}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Categories */}
           <div>
             <button
@@ -250,50 +319,7 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
             )}
           </div>
 
-          {/* Specs */}
-          {filters.categoryId && specOpts && specOpts.length > 0 && (
-            <div>
-              <button
-                type="button"
-                onClick={() => toggleSection("specs")}
-                className="flex w-full items-center justify-between py-2 text-sm font-medium text-sf-text"
-              >
-                <span>規格篩選</span>
-                {openSections.has("specs") ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              </button>
-              {openSections.has("specs") && (
-                <div className="space-y-3 pb-2">
-                  {specOpts.map((so: PublicSpecOption) => (
-                    <div key={so.spec_id}>
-                      <div className="mb-1 text-xs font-medium text-sf-text">{so.spec_name}</div>
-                      <div className="space-y-1">
-                        {(so.distinct_values ?? []).map((v: any, idx: number) => {
-                          const val = typeof v === "string" ? v : JSON.stringify(v);
-                          const checked = (filters.specFilters[so.spec_id] ?? []).includes(val);
-                          return (
-                            <label key={idx} className="flex items-center gap-2 text-sm text-sf-muted">
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={(c) => {
-                                  const cur = filters.specFilters[so.spec_id] ?? [];
-                                  const next = c ? [...cur, val] : cur.filter((x) => x !== val);
-                                  const newSpecs = { ...filters.specFilters };
-                                  if (next.length === 0) delete newSpecs[so.spec_id];
-                                  else newSpecs[so.spec_id] = next;
-                                  onChange({ ...filters, specFilters: newSpecs });
-                                }}
-                              />
-                              {val}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          {/* (Specs moved to top) */}
         </div>
       </ScrollArea>
     </div>
