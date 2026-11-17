@@ -260,8 +260,8 @@ export function ProductFormBody({ active, initialData, onSubmit, isLoading, onCl
   return (
     <>
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-        <div className="px-6 border-b">
-          <TabsList className="w-full justify-start h-12 bg-transparent p-0 gap-6">
+        <div className="px-6 border-b overflow-x-auto scrollbar-none">
+          <TabsList className="w-max min-w-full justify-start h-12 bg-transparent p-0 gap-6">
             <TabsTrigger value="basic" className="data-[state=active]:border-b-2 border-primary rounded-none px-2 h-12 bg-transparent shadow-none">
               基本資訊
             </TabsTrigger>

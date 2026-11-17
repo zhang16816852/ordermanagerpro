@@ -303,7 +303,7 @@ export default function StoreSalesNotes() {
       toast.warning("此商品沒有可回報的剩餘數量");
       return;
     }
-    setQuantity(available);
+    setQuantity(1);
     setReportItem({ orderId, itemId });
   };
 
@@ -576,7 +576,7 @@ export default function StoreSalesNotes() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={!!reportItem} onOpenChange={(open) => { if (!open) setReportItem(null); }}>
+      <Dialog open={!!reportItem} onOpenChange={(open) => { if (!open) { setReportItem(null); setQuantity(1); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>回報銷售</DialogTitle>

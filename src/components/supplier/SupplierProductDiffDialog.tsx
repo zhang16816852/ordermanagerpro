@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect } from 'react';
+import { useMemo, useState, useRef, useEffect, useDeferredValue } from 'react';
 import { useProductCache } from '@/hooks/useProductCache';
 import { supabase } from '@/integrations/supabase/client';
 import { InternalProductSelector } from '@/pages/admin/purchase-orders/components/mapping/InternalProductSelector';
@@ -8,7 +8,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -74,6 +73,9 @@ export function SupplierProductDiffDialog({
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [changeFieldFilter, setChangeFieldFilter] = useState<string>('all');
   const [skippedIndices, setSkippedIndices] = useState<Set<number>>(new Set());
+  const [searchText, setSearchText] = useState('');
+  // 輸入時先更新輸入框，篩選計算延後，避免每次按鍵都阻塞主執行緒
+  const deferredSearchText = useDeferredValue(searchText);
   const [showExcluded, setShowExcluded] = useState(false);
   const [applying, setApplying] = useState(false);
   const [assigningIdx, setAssigningIdx] = useState<number | null>(null);
@@ -90,6 +92,7 @@ export function SupplierProductDiffDialog({
     setActionFilter('all');
     setCategoryFilter('all');
     setSkippedIndices(new Set());
+    setSearchText('');
     setApplying(false);
     setAssigningIdx(null);
     setSelectorOpen(false);
@@ -445,20 +448,45 @@ export function SupplierProductDiffDialog({
 
   const summary = useMemo(() => summarizeDiffs(diffs), [diffs]);
 
-  const filteredDiffs = useMemo(() => {
-    return diffs.filter((d, i) => {
-      if (skippedIndices.has(i)) return false;
-      if (actionFilter !== 'all' && d.action !== actionFilter) return false;
-      if (categoryFilter !== 'all' && d.supplier_product.category !== categoryFilter) return false;
-      if (changeFieldFilter !== 'all' && !(d.changes || []).some(c => c.field === changeFieldFilter)) return false;
-      return true;
+  // 預先建立 vendor_product_id -> mapping 的 Map，避免在迴圈中重複 O(n*m) 查找
+  const mappingBySku = useMemo(() => {
+    const m = new Map<string, any>();
+    (mappings || []).forEach((mm: any) => {
+      if (mm?.vendor_product_id) m.set(mm.vendor_product_id, mm);
     });
-  }, [diffs, actionFilter, categoryFilter, changeFieldFilter, skippedIndices]);
+    return m;
+  }, [mappings]);
 
+  // 只保留「符合條件的原始 index」，避免 render 時再用 diffs.indexOf() 造成 O(n²)
+  const filteredIndices = useMemo(() => {
+    const search = deferredSearchText.trim().toLowerCase();
+    const out: number[] = [];
+    for (let i = 0; i < diffs.length; i++) {
+      const d = diffs[i];
+      if (skippedIndices.has(i)) continue;
+      if (actionFilter !== 'all' && d.action !== actionFilter) continue;
+      if (categoryFilter !== 'all' && d.supplier_product.category !== categoryFilter) continue;
+      if (changeFieldFilter !== 'all' && !(d.changes || []).some((c: any) => c.field === changeFieldFilter)) continue;
+      if (search) {
+        const mapping = mappingBySku.get(d.supplier_product.supplier_sku);
+        const internalName = mapping?.internal_variant?.name || mapping?.internal_product?.name || '';
+        const haystack = `${d.supplier_product.name || ''} ${d.supplier_product.supplier_sku || ''} ${internalName}`.toLowerCase();
+        if (!haystack.includes(search)) continue;
+      }
+      out.push(i);
+    }
+    return out;
+  }, [diffs, actionFilter, categoryFilter, changeFieldFilter, skippedIndices, deferredSearchText, mappingBySku]);
+
+  // 分類計數直接從 filteredIndices 衍生，避免第二次 O(n*m) 掃描
   const categories = useMemo(() => {
-    const cats = new Set(diffs.map(d => d.supplier_product.category).filter(Boolean));
-    return Array.from(cats) as string[];
-  }, [diffs]);
+    const catCount = new Map<string, number>();
+    filteredIndices.forEach((i) => {
+      const cat = diffs[i]?.supplier_product?.category;
+      if (cat) catCount.set(cat, (catCount.get(cat) || 0) + 1);
+    });
+    return Array.from(catCount.entries()).map(([cat, count]) => ({ cat, count }));
+  }, [filteredIndices, diffs]);
 
   const changeFields = useMemo(() => {
     const fields = new Set<string>();
@@ -470,10 +498,18 @@ export function SupplierProductDiffDialog({
 
   const handleSelectAll = () => {
     const newSelected = new Set<number>();
-    filteredDiffs.forEach((d) => {
-      const originalIdx = diffs.indexOf(d);
-      if (d.action !== 'unchanged' && !skippedIndices.has(originalIdx)) {
+    filteredIndices.forEach((originalIdx) => {
+      const d = diffs[originalIdx];
+      if (skippedIndices.has(originalIdx)) return;
+      // 選取所有非 unchanged 項目，以及有狀態標記的 unchanged 項目
+      if (d.action !== 'unchanged' && d.action !== 'applied') {
         newSelected.add(originalIdx);
+      } else if (d.action === 'unchanged') {
+        const oldName = (d.changes || []).find((c: any) => c.field === 'name')?.old_value as string || '';
+        const st = parseStatusFromNames(oldName, d.supplier_product.name || '');
+        if (st.isHidden !== null || st.variantStatus !== null) {
+          newSelected.add(originalIdx);
+        }
       }
     });
     setSelected(newSelected);
@@ -481,6 +517,51 @@ export function SupplierProductDiffDialog({
 
   const handleDeselectAll = () => {
     setSelected(new Set());
+  };
+
+  // 批次忽略所有已勾選的項目
+  const handleBatchSkip = async () => {
+    if (!supplierId || selected.size === 0) return;
+    setApplying(true);
+
+    const toSkip = Array.from(selected)
+      .map(idx => diffs[idx])
+      .filter(d => d && d.action !== 'unchanged' && d.action !== 'applied');
+
+    if (toSkip.length === 0) {
+      toast.info('沒有可忽略的項目');
+      setApplying(false);
+      return;
+    }
+
+    const rows = toSkip.map(d => ({
+      supplier_id: supplierId,
+      vendor_product_id: d.supplier_product.supplier_sku,
+      action: 'skip',
+      note: '使用者批次忽略',
+    }));
+
+    const { error } = await (supabase as any)
+      .from('scrape_decisions')
+      .upsert(rows, { onConflict: 'supplier_id,vendor_product_id' });
+
+    if (error) {
+      console.error('批次忽略失敗:', error);
+      toast.error('批次忽略失敗', { description: error.message });
+      setApplying(false);
+      return;
+    }
+
+    // 將這些項目從畫面中移除
+    const skippedSet = new Set(selected);
+    setSkippedIndices(prev => {
+      const next = new Set(prev);
+      skippedSet.forEach(i => next.add(i));
+      return next;
+    });
+    setSelected(new Set());
+    toast.success(`已忽略 ${toSkip.length} 筆產品`);
+    setApplying(false);
   };
 
   const mappingsLoadedRef = useRef(false);
@@ -596,11 +677,17 @@ export function SupplierProductDiffDialog({
                   onChange={(e) => setCategoryFilter(e.target.value)}
                 >
                   <option value="all">全部分類</option>
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
+                  {categories.map(({ cat, count }) => (
+                    <option key={cat} value={cat}>{cat} ({count})</option>
                   ))}
                 </select>
               )}
+              <Input
+                className="text-xs h-7 w-40"
+                placeholder="搜尋產品名/SKU..."
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+              />
               {changeFields.length > 0 && (
                 <select
                   className="text-xs border rounded px-2 py-1 bg-background"
@@ -615,17 +702,17 @@ export function SupplierProductDiffDialog({
               )}
               <div className="flex gap-1 ml-auto">
                 <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => {
-                  const allSelected = filteredDiffs.every((d) => {
-                    const idx = diffs.indexOf(d);
-                    return selected.has(idx);
-                  });
+                   const allSelected = filteredIndices.every((idx) => selected.has(idx));
+
+
+
                   if (allSelected) {
                     handleDeselectAll();
                   } else {
                     handleSelectAll();
                   }
                 }}>
-                  {filteredDiffs.every((d) => selected.has(diffs.indexOf(d))) ? '全取消' : '全選'}
+                   {filteredIndices.every((idx) => selected.has(idx)) ? '全取消' : '全選'}
                 </Button>
               </div>
               {skippedIndices.size > 0 && (
@@ -661,15 +748,15 @@ export function SupplierProductDiffDialog({
               </div>
             )}
 
-            <ScrollArea className="flex-1 min-h-0 max-h-[400px] w-full rounded-md border">
-              <div className="space-y-2 p-3 min-w-0">
-                {filteredDiffs.length === 0 && diffs.length > 0 ? (
+            <div className="flex-1 min-h-0 w-full rounded-md border overflow-y-auto overflow-x-hidden" style={{ maxHeight: 'calc(85vh - 220px)' }}>
+              <div className="space-y-2 p-3">
+                {filteredIndices.length === 0 && diffs.length > 0 ? (
                   <div className="text-center py-8 text-muted-foreground text-sm">
                     沒有符合篩選條件的項目
                   </div>
                 ) : (
-                  filteredDiffs.map((diff, idx) => {
-                    const originalIdx = diffs.indexOf(diff);
+                  filteredIndices.map((originalIdx, idx) => {
+                    const diff = diffs[originalIdx];
                     const isExpanded = expanded.has(originalIdx);
                     const isSelected = selected.has(originalIdx);
                     return (
@@ -784,7 +871,7 @@ export function SupplierProductDiffDialog({
                   })  // end filteredDiffs.map
                 )}
               </div>
-            </ScrollArea>
+            </div>
 
             <DialogFooter className="flex items-center justify-between gap-2 pt-2">
               <span className="text-xs text-muted-foreground">
@@ -794,9 +881,20 @@ export function SupplierProductDiffDialog({
                 <Button variant="outline" onClick={() => { reset(); }}>重新匯入</Button>
                 <Button variant="outline" onClick={() => handleClose(false)}>關閉</Button>
                 {selected.size > 0 && (
-                  <Button onClick={handleApply} disabled={applying}>
-                    {applying ? '套用中...' : `套用已勾選 (${selected.size})`}
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={handleBatchSkip}
+                      disabled={applying}
+                      className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      忽略已勾選 ({selected.size})
+                    </Button>
+                    <Button onClick={handleApply} disabled={applying}>
+                      {applying ? '套用中...' : `套用已勾選 (${selected.size})`}
+                    </Button>
+                  </>
                 )}
               </div>
             </DialogFooter>

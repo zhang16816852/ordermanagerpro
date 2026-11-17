@@ -207,7 +207,7 @@ export async function fetchReferencedModels(
   if (referencedModelIds.length > 0) {
     for (let i = 0; i < referencedModelIds.length; i += pageSize) {
       const batch = referencedModelIds.slice(i, i + pageSize);
-      const { data } = await supabase.from('device_models').select('id, name, aliases').in('id', batch);
+      const { data } = await supabase.from('device_models').select('id, name, aliases, device_series, brand_id').in('id', batch);
       if (data) allModels.push(...data);
     }
   }
@@ -225,7 +225,7 @@ export async function fetchDeviceModelGroups(
 ): Promise<Map<string, any>> {
   const { data: allGroupsWithItems } = await supabase
     .from('device_model_groups')
-    .select('id, name, device_model_group_items(device_models(id, name, aliases))');
+    .select('id, name, device_model_group_items(device_models(id, name, aliases, device_series, brand_id))');
 
   const map = new Map<string, any>();
   allGroupsWithItems?.forEach((g: any) => map.set(g.id, g));

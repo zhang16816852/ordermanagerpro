@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ChevronLeft, ChevronRight, Home } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Home, Monitor, Smartphone, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NotificationDropdown } from './NotificationDropdown';
+import { useLayoutPreference, LAYOUT_LABELS } from '@/store/useLayoutPreference';
 import type { PageHeaderConfig } from './PageHeaderContext';
 
 interface DesktopHeaderProps {
@@ -13,6 +14,9 @@ interface DesktopHeaderProps {
 
 export function DesktopHeader({ isExpanded, onToggleCollapse, pageHeader }: DesktopHeaderProps) {
   const navigate = useNavigate();
+  const preference = useLayoutPreference((s) => s.preference);
+  const cycle = useLayoutPreference((s) => s.cycle);
+  const LayoutIcon = preference === 'mobile' ? Smartphone : preference === 'desktop' ? Monitor : Wand2;
 
   const handleBack = () => {
     if (pageHeader?.onBack) {
@@ -53,6 +57,16 @@ export function DesktopHeader({ isExpanded, onToggleCollapse, pageHeader }: Desk
       </div>
       <div className="flex items-center gap-4">
         {showActions && pageHeader?.actions}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={cycle}
+          aria-label={`版面：${LAYOUT_LABELS[preference]}（點擊切換）`}
+          title={LAYOUT_LABELS[preference]}
+          className="h-8 w-8 shrink-0"
+        >
+          <LayoutIcon className="h-4 w-4" />
+        </Button>
         <Button variant="ghost" size="icon" onClick={() => navigate("/")} aria-label="返回首頁" className="h-8 w-8 shrink-0">
           <Home className="h-4 w-4" />
         </Button>

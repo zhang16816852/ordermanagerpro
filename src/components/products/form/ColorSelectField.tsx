@@ -1,9 +1,24 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useColorStore } from '@/store/useColorStore';
 import { ProductColor } from '@/types/colors';
-import { Check, ChevronsUpDown, Plus, Search, X, Palette } from 'lucide-react';
+import { Check, ChevronsUpDown, Plus, Search, X, Palette, GripVertical } from 'lucide-react';
 import { QuickColorAdd } from '@/pages/admin/libraries/colors/QuickColorAdd';
 import { Button } from '@/components/ui/button';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  arrayMove,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   Command,
   CommandEmpty,
@@ -21,6 +36,47 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { getContrastColor } from '@/utils/colorUtils';
 import { toast } from 'sonner';
+
+interface SortableColorPillProps {
+  color: ProductColor;
+  onRemove: (e: React.MouseEvent) => void;
+}
+
+function SortableColorPill({ color, onRemove }: SortableColorPillProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: color.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  return (
+    <Badge
+      ref={setNodeRef}
+      style={{
+        ...style,
+        backgroundColor: color.hex_code || 'transparent',
+        color: color.hex_code ? getContrastColor(color.hex_code) : 'inherit',
+        borderColor: 'rgba(0,0,0,0.1)',
+      }}
+      variant="outline"
+      className="flex items-center gap-1 pr-1 pl-2 h-6 cursor-grab active:cursor-grabbing touch-none"
+      {...attributes}
+      {...listeners}
+    >
+      <GripVertical className="h-3 w-3 opacity-40 shrink-0" />
+      {color.name} ({color.code})
+      <X
+        className="h-3 w-3 cursor-pointer hover:bg-black/10 rounded-full shrink-0"
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove(e);
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+      />
+    </Badge>
+  );
+}
 
 interface ColorSelectFieldProps {
   selectedColorIds: string[];
@@ -45,6 +101,19 @@ export function ColorSelectField({ selectedColorIds, onChange, multiple = true }
   }, [selectedColorIds, colors]);
 
   const [isAddingNew, setIsAddingNew] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = selectedColorIds.indexOf(String(active.id));
+    const newIndex = selectedColorIds.indexOf(String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    onChange(arrayMove(selectedColorIds, oldIndex, newIndex));
+  }, [selectedColorIds, onChange]);
 
   const toggleColor = (id: string) => {
     if (!multiple) {
@@ -79,31 +148,27 @@ export function ColorSelectField({ selectedColorIds, onChange, multiple = true }
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-1 mb-2 min-h-[32px] p-1 border rounded-md bg-background/50">
+      <div className="min-h-[32px] p-1 border rounded-md bg-background/50">
         {selectedColors.length === 0 && (
-          <span className="text-xs text-muted-foreground p-1">尚未選擇顏色</span>
+          <div className="flex items-center min-h-[32px]">
+            <span className="text-xs text-muted-foreground p-1">尚未選擇顏色</span>
+          </div>
         )}
-        {selectedColors.map(color => (
-          <Badge
-            key={color.id}
-            variant="outline"
-            className="flex items-center gap-1 pr-1 pl-2 h-6"
-            style={{ 
-              backgroundColor: color.hex_code || 'transparent',
-              color: color.hex_code ? getContrastColor(color.hex_code) : 'inherit',
-              borderColor: 'rgba(0,0,0,0.1)'
-            }}
-          >
-            {color.name} ({color.code})
-            <X 
-              className="h-3 w-3 cursor-pointer hover:bg-black/10 rounded-full" 
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleColor(color.id);
-              }}
-            />
-          </Badge>
-        ))}
+        {selectedColors.length > 0 && (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={selectedColorIds} strategy={horizontalListSortingStrategy}>
+              <div className="flex flex-wrap gap-1">
+                {selectedColors.map(color => (
+                  <SortableColorPill
+                    key={color.id}
+                    color={color}
+                    onRemove={() => toggleColor(color.id)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        )}
       </div>
 
       <Popover open={open} onOpenChange={setOpen}>

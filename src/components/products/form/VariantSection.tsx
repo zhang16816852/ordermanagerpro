@@ -312,14 +312,14 @@ export function VariantSection({ product }: { product: any }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center bg-muted/30 p-4 rounded-lg border border-dashed">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-muted/30 p-4 rounded-lg border border-dashed">
         <div>
           <h3 className="font-medium">變體清單</h3>
           <p className="text-xs text-muted-foreground">
             {isLoading ? <span role="status" aria-live="polite">讀取中...</span> : `目前此產品共有 ${variants?.length || 0} 個規格選項`}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 justify-end">
           <Button size="sm" variant="outline" onClick={() => setIsBatchOpen(true)}>
             <Layers className="mr-2 h-4 w-4" />
             {variants && variants.length > 0 ? '批次編輯 / 產生' : '批次產生'}
@@ -344,10 +344,10 @@ export function VariantSection({ product }: { product: any }) {
 
       {/* 批次操作列 */}
       {selectedVariantIds.size > 0 && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-lg">
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2 bg-muted/50 rounded-lg">
           <CheckSquare className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm text-muted-foreground">已選取 {selectedVariantIds.size} 項</span>
-          <div className="ml-auto flex gap-2">
+          <div className="ml-auto flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => { setBatchEditEntries([]); setIsBatchEditOpen(true); }}>
               <Edit3 className="mr-1 h-4 w-4" />
               批次編輯
@@ -364,8 +364,8 @@ export function VariantSection({ product }: { product: any }) {
         </div>
       )}
 
-      <div className="border rounded-md">
-        <Table>
+      <div className="border rounded-md overflow-x-auto">
+        <Table className="min-w-[720px]">
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="w-10">

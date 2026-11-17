@@ -96,13 +96,15 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
       allSpecs,
       allCovers,
       allOptionGroups,
+      allOptionValues,
       allVariantOptions,
     ] = await Promise.all([
       fetchAllPages('entity_model_relations', 'product_id, variant_id, model_id, group_id, relation_type, reason'),
       fetchAllPages('device_model_groups', 'id, name, device_model_group_items(device_models(id, name, aliases))'),
       fetchAllPages('entity_spec_values', '*'),
       fetchAllPages('product_images', 'entity_type, entity_id, url', { filters: { is_cover: true } }),
-      fetchAllPages('product_option_groups', '*, product_option_values(*)'),
+      fetchAllPages('product_option_groups', '*', { order: { column: 'sort_order', ascending: true } }),
+      fetchAllPages('product_option_values', '*', { order: { column: 'sort_order', ascending: true } }),
       fetchAllPages('product_variant_options', '*'),
     ]);
 
@@ -130,14 +132,18 @@ export const syncProducts = async (incomingData?: any, version?: string): Promis
     // 3b. 選項資料索引
     const optionGroupsByProduct = new Map<string, any[]>();
     const optionValueById = new Map<string, any>();
+    const optionValuesByGroup = new Map<string, any[]>();
+    (allOptionValues || []).forEach((ov: any) => {
+      optionValueById.set(ov.id, ov);
+      if (!optionValuesByGroup.has(ov.group_id)) optionValuesByGroup.set(ov.group_id, []);
+      optionValuesByGroup.get(ov.group_id)!.push(ov);
+    });
     allOptionGroups?.forEach((og: any) => {
       if (!optionGroupsByProduct.has(og.product_id)) optionGroupsByProduct.set(og.product_id, []);
+      const values = (optionValuesByGroup.get(og.id) || []).slice();
       optionGroupsByProduct.get(og.product_id)!.push({
         ...og,
-        values: og.product_option_values || [],
-      });
-      (og.product_option_values || []).forEach((ov: any) => {
-        optionValueById.set(ov.id, ov);
+        values,
       });
     });
 

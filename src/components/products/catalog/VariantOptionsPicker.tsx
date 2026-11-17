@@ -49,11 +49,19 @@ export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChan
                 values: modelNames.map(n => ({ label: n }))
             });
         }
+        // 僅顯示實際被任一變體使用的選項值，避免改名後殘留的孤兒舊值並存
+        const usedValueIds = new Set<string>();
+        variants.forEach((v: any) => {
+            (v.option_values || []).forEach((ov: any) => {
+                if (ov?.id) usedValueIds.add(ov.id);
+            });
+        });
         optionDimensions.forEach(dim => {
+            const filteredValues = (dim.values || []).filter((v: any) => !v.id || usedValueIds.has(v.id));
             results.push({
                 key: dim.groupId,
                 name: dim.groupName,
-                values: dim.values.map((v: any) => ({
+                values: filteredValues.map((v: any) => ({
                     id: v.id,
                     label: v.label || v.value,
                     hex_code: v.hex_code
@@ -135,6 +143,19 @@ export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChan
         }));
     };
 
+    // 型號維度：依 device_series 自動分組（group 類型無 series，不強制分組）
+    const modelSeriesMap = useMemo(() => {
+        const map = new Map<string, string>();
+        variants.forEach((v: any) => {
+            if (!v.modelDisplay || map.has(v.modelDisplay)) return;
+            const series = v.device_models?.[0]?.device_series
+                || v.device_models?.[0]?.brand_name
+                || null;
+            if (series) map.set(v.modelDisplay, series);
+        });
+        return map;
+    }, [variants]);
+
     const badgeQuantity = useCallback((dimKey: string, value: string) => {
         if (!getVariantQuantity) return 0;
         const hasSelectionInOtherDim = allDimensions.some(({ key }) =>
@@ -159,6 +180,69 @@ export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChan
 
     if (!product?.variants || variants.length === 0) return null;
 
+    const isModelDim = (k: string) => k === 'modelDisplay';
+
+    // 型號維度：依 series 分組
+    const groupModelValues = (vals: { id?: string; label: string; hex_code?: string | null }[]) => {
+        const groups = new Map<string, typeof vals>();
+        vals.forEach(v => {
+            const series = modelSeriesMap.get(v.label) || '其他';
+            if (!groups.has(series)) groups.set(series, []);
+            groups.get(series)!.push(v);
+        });
+        // 已選的 series 排前面
+        const selectedSeries = modelSeriesMap.get(selectedOptions['modelDisplay'] || '') || null;
+        return Array.from(groups.entries()).sort((a, b) => {
+            if (selectedSeries && a[0] === selectedSeries) return -1;
+            if (selectedSeries && b[0] === selectedSeries) return 1;
+            return a[0].localeCompare(b[0], 'zh-Hant');
+        });
+    };
+
+    const renderPill = (key: string, val: { id?: string; label: string; hex_code?: string | null }, wide: boolean) => {
+        const valueKey = val.id || val.label;
+        const isSelected = selectedOptions[key] === valueKey;
+        const isAvailable = isOptionAvailable(key, valueKey);
+        const qty = badgeQuantity(key, valueKey);
+        return (
+            <Badge
+                key={valueKey}
+                variant={isSelected ? "default" : "outline"}
+                className={cn(
+                    wide
+                        ? "flex-1 min-w-[calc(50%-0.25rem)] justify-center px-3 py-1.5 cursor-pointer transition-all text-sm flex items-center gap-2"
+                        : "px-3 py-1.5 cursor-pointer transition-all text-sm flex items-center gap-2",
+                    !isSelected && !isAvailable && "opacity-30 grayscale cursor-not-allowed pointer-events-none",
+                    isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                )}
+                onClick={() => isAvailable && handleOptionClick(key, valueKey)}
+            >
+                <div className={cn("flex items-center gap-2 min-w-0", wide && "justify-center flex-1")}>
+                    {val.hex_code && (
+                        <div
+                            className="w-3.5 h-3.5 rounded-full border border-black/10 shadow-sm shrink-0"
+                            style={{ backgroundColor: val.hex_code }}
+                        />
+                    )}
+                    <span className={cn("truncate min-w-0", wide && "text-center")}>{val.label}</span>
+                    {getVariantQuantity && (
+                        <span
+                            className={cn(
+                                "text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none min-w-[1.25rem] text-center tabular-nums shrink-0",
+                                qty > 0
+                                    ? (isSelected ? "text-primary-foreground bg-primary-foreground/20" : "text-primary bg-primary/10")
+                                    : "opacity-0"
+                            )}
+                            aria-hidden={qty <= 0}
+                        >
+                            {qty > 0 ? qty : "\u00A0"}
+                        </span>
+                    )}
+                </div>
+            </Badge>
+        );
+    };
+
     return (
         <div className="space-y-6">
             {allDimensions.map(({ key, name, values }) => (
@@ -166,39 +250,28 @@ export function VariantOptionsPicker({ product, onVariantSelect, onSelectionChan
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
                         {name}
                     </h3>
-                    <div className="flex flex-wrap gap-2">
-                        {values.map((val) => {
-                            const valueKey = val.id || val.label;
-                            const isSelected = selectedOptions[key] === valueKey;
-                            const isAvailable = isOptionAvailable(key, valueKey);
-                            const qty = badgeQuantity(key, valueKey);
-                            return (
-                                <Badge
-                                    key={valueKey}
-                                    variant={isSelected ? "default" : "outline"}
-                                    className={cn(
-                                        "px-3 py-1.5 cursor-pointer transition-all text-sm flex items-center gap-2",
-                                        !isSelected && !isAvailable && "opacity-30 grayscale cursor-not-allowed pointer-events-none",
-                                        isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
-                                    )}
-                                    onClick={() => isAvailable && handleOptionClick(key, valueKey)}
-                                >
-                                    {val.hex_code && (
-                                        <div
-                                            className="w-3.5 h-3.5 rounded-full border border-black/10 shadow-sm"
-                                            style={{ backgroundColor: val.hex_code }}
-                                        />
-                                    )}
-                                    {val.label}
-                                    {qty > 0 && (
-                                        <span className="ml-1 text-[10px] font-bold text-primary bg-primary/10 rounded-full px-1.5 py-0.5 leading-none">
-                                            {qty}
-                                        </span>
-                                    )}
-                                </Badge>
-                            );
-                        })}
-                    </div>
+                    {isModelDim(key) && modelSeriesMap.size > 0 ? (
+                        <div className="space-y-3">
+                            {groupModelValues(values).map(([series, sValues]) => (
+                                <div key={series} className="space-y-1.5">
+                                    <div className="text-[11px] font-medium text-muted-foreground/80 px-1">
+                                        {series} <span className="text-[10px] opacity-60">({sValues.length})</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {sValues.map(val => renderPill(key, val, true))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : isModelDim(key) ? (
+                        <div className="flex flex-wrap gap-2">
+                            {values.map(val => renderPill(key, val, true))}
+                        </div>
+                    ) : (
+                        <div className="flex flex-wrap gap-2">
+                            {values.map(val => renderPill(key, val, false))}
+                        </div>
+                    )}
                 </div>
             ))}
         </div>

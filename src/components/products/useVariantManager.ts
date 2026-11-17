@@ -73,7 +73,7 @@ export function useVariantManager({ products, search }: { products: Product[]; s
       const valueMap: Record<string, { label: string; hexCode: string | null; groupName: string }> = {};
       const groups = (groupsData ?? []) as any[];
       for (const group of groups) {
-        const values = (group as any).product_option_values ?? [];
+        const values = ((group as any).product_option_values ?? []).slice().sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
         for (const val of values) {
           valueMap[val.id] = {
             label: val.label,
@@ -112,7 +112,10 @@ export function useVariantManager({ products, search }: { products: Product[]; s
         .eq('product_id', selectedProductId)
         .order('sort_order');
       if (error) throw error;
-      return (data || []) as OptionGroupRow[];
+      return ((data || []) as any[]).map((g: any) => ({
+        ...g,
+        product_option_values: (g.product_option_values || []).slice().sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
+      })) as OptionGroupRow[];
     },
     enabled: !!selectedProductId,
   });

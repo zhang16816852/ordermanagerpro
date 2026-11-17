@@ -26,6 +26,8 @@ export default function AdminConsignment() {
     orderSummaries,
     pendingReports,
     reportsLoading,
+    confirmedReports,
+    confirmedReportsLoading,
   } = useConsignment();
 
   const { setPageHeader } = usePageHeader();
@@ -125,6 +127,8 @@ export default function AdminConsignment() {
           <ReportsTab
             reports={pendingReports}
             isLoading={reportsLoading}
+            confirmedReports={confirmedReports}
+            confirmedLoading={confirmedReportsLoading}
           />
         </TabsContent>
       </Tabs>

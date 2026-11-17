@@ -240,6 +240,10 @@ export default function SharedCustomerStatement() {
     0
   );
   const totalAmount = sortedNotes.reduce((s, n) => s + noteTotal(n), 0);
+  const unpaidAmount = sortedNotes.reduce(
+    (s, n) => s + (n.payment_status === "paid" ? 0 : noteTotal(n)),
+    0
+  );
 
   return (
     <div className="container mx-auto p-4 max-w-4xl space-y-4">
@@ -274,6 +278,10 @@ export default function SharedCustomerStatement() {
           <span>
             總金額：<strong>{formatCurrency(totalAmount)}</strong>
           </span>
+          <span className="text-muted-foreground">|</span>
+          <span>
+            未付金額：<strong className="text-amber-600">{formatCurrency(unpaidAmount)}</strong>
+          </span>
         </CardContent>
       </Card>
 
@@ -291,6 +299,10 @@ export default function SharedCustomerStatement() {
               0
             );
             const storeAmount = storeNotes.reduce((s, n) => s + noteTotal(n), 0);
+            const storeUnpaid = storeNotes.reduce(
+              (s, n) => s + (n.payment_status === "paid" ? 0 : noteTotal(n)),
+              0
+            );
             return (
               <section key={st.id} className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2 border-b pb-2">
@@ -324,6 +336,10 @@ export default function SharedCustomerStatement() {
                   <span className="text-muted-foreground">|</span>
                   <span>
                     總金額 <strong>{formatCurrency(storeAmount)}</strong>
+                  </span>
+                  <span className="text-muted-foreground">|</span>
+                  <span>
+                    未付金額 <strong className="text-amber-600">{formatCurrency(storeUnpaid)}</strong>
                   </span>
                 </div>
               </section>

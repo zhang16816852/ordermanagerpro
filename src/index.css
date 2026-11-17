@@ -850,3 +850,30 @@
 .safe-area-pb {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+
+/* ===== Layout preference overrides (forced mobile/desktop) ===== */
+/* 強制手機版：在桌面寬度下仍套用手機雙視圖（table↔card） */
+[data-layout="mobile"] .hidden.md\:block,
+[data-layout="mobile"] .hidden.md\:flex,
+[data-layout="mobile"] .hidden.md\:grid,
+[data-layout="mobile"] .hidden.md\:inline-flex { display: none !important; }
+
+[data-layout="mobile"] .md\:hidden { display: block !important; }
+/* 保留 flex/grid 容器的原始 display 型別：若元素本身有 flex/grid class 則由該 class 決定 */
+[data-layout="mobile"] .md\:hidden.flex { display: flex !important; }
+[data-layout="mobile"] .md\:hidden.grid { display: grid !important; }
+[data-layout="mobile"] .md\:hidden.inline-flex { display: inline-flex !important; }
+
+/* 強制手機版：header 切換 */
+[data-layout="mobile"] header.hidden.md\:flex { display: none !important; }
+[data-layout="mobile"] header.md\:hidden { display: flex !important; }
+
+/* 強制桌面版：在窄視窗下仍顯示桌面雙視圖 */
+[data-layout="desktop"] .md\:hidden { display: none !important; }
+[data-layout="desktop"] .hidden.md\:block { display: block !important; }
+[data-layout="desktop"] .hidden.md\:flex { display: flex !important; }
+[data-layout="desktop"] .hidden.md\:grid { display: grid !important; }
+
+[data-layout="desktop"] header.md\:hidden { display: none !important; }
+[data-layout="desktop"] header.hidden.md\:flex { display: flex !important; }
+/* ===== End Layout preference overrides ===== */

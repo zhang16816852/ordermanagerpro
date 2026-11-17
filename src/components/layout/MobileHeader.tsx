@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Home } from 'lucide-react';
+import { ArrowLeft, Home, Monitor, Smartphone, Wand2 } from 'lucide-react';
 import { NotificationDropdown } from './NotificationDropdown';
 import { MobileSidebar } from './MobileSidebar';
+import { useLayoutPreference, LAYOUT_LABELS } from '@/store/useLayoutPreference';
 import type { NavItem } from '@/config/navigation';
 import type { PageHeaderConfig } from './PageHeaderContext';
 
@@ -15,6 +16,9 @@ interface MobileHeaderProps {
 
 export function MobileHeader({ navItems, sidebarOpen, onSidebarOpenChange, pageHeader }: MobileHeaderProps) {
   const navigate = useNavigate();
+  const preference = useLayoutPreference((s) => s.preference);
+  const cycle = useLayoutPreference((s) => s.cycle);
+  const LayoutIcon = preference === 'mobile' ? Smartphone : preference === 'desktop' ? Monitor : Wand2;
 
   const handleBack = () => {
     if (pageHeader?.onBack) {
@@ -46,6 +50,16 @@ export function MobileHeader({ navItems, sidebarOpen, onSidebarOpenChange, pageH
         )
       )}
       {pageHeader?.actions && <div className="shrink-0">{pageHeader.actions}</div>}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={cycle}
+        aria-label={`版面：${LAYOUT_LABELS[preference]}（點擊切換）`}
+        title={LAYOUT_LABELS[preference]}
+        className="h-8 w-8 shrink-0"
+      >
+        <LayoutIcon className="h-4 w-4" />
+      </Button>
       <Button variant="ghost" size="icon" onClick={() => navigate("/")} aria-label="返回首頁" className="h-8 w-8 shrink-0">
         <Home className="h-4 w-4" />
       </Button>

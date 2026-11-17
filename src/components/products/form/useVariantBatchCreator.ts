@@ -55,15 +55,33 @@ export function useVariantBatchCreator({ open, onOpenChange, product, onSuccess 
 
   const savePrefixDefaults = async () => {
     if (!product?.id) return;
+    const np = namePrefix.trim();
+    const sp = skuPrefix.trim();
+
+    // 回填：把抬頭寫入 products.name / products.code（若尚未包含該抬頭則前置）
+    const updates: Record<string, any> = {
+      default_variant_name_prefix: np || null,
+      default_variant_sku_prefix: sp || null,
+    };
+    const curName = (product?.name ?? '').trim();
+    const curCode = (product?.code ?? '').trim();
+    if (np && curName && !curName.startsWith(np)) {
+      updates.name = `${np}${curName}`;
+    }
+    if (sp && curCode && !curCode.startsWith(sp)) {
+      updates.code = `${sp}${curCode}`;
+    }
+
     const { error } = await supabase
       .from('products')
-      .update({
-        default_variant_name_prefix: namePrefix.trim() || null,
-        default_variant_sku_prefix: skuPrefix.trim() || null,
-      })
+      .update(updates)
       .eq('id', product.id);
     if (error) throw error;
-    toast.success('已儲存為產品預設抬頭');
+    toast.success(
+      updates.name || updates.code
+        ? '已儲存抬頭並回填產品名稱/SKU'
+        : '已儲存為產品預設抬頭'
+    );
   };
 
   useEffect(() => {

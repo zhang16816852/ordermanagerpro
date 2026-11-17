@@ -57,6 +57,7 @@ export function ProductDetailDialog({
     const [pickerOptions, setPickerOptions] = useState<Record<string, string | null> | null>(null);
     const [showImages, setShowImages] = useState(getShowImagesDefault);
     const [showSpecs, setShowSpecs] = useState(false);
+    const [showModels, setShowModels] = useState(false);
 
     const [productImages, setProductImages] = useState<ProductImage[]>([]);
     const [variantImageMap, setVariantImageMap] = useState<Map<string, ProductImage[]>>(new Map());
@@ -390,33 +391,44 @@ export function ProductDetailDialog({
 
                         {effectiveModels.length > 0 && (
                             <div className="pt-4 border-t">
-                                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                                    適用型號 {selectedVariantId && <Badge variant="outline" className="ml-2 text-[10px] font-normal py-0">規格專屬</Badge>}
-                                </h3>
-                                <div className="flex flex-wrap gap-2 mt-1">
-                                    {effectiveModels.map((m: any) => (
-                                        <div key={m.model_id} className={cn(
-                                            "flex items-center gap-1.5 border rounded-full px-2 py-0.5",
-                                            m.source === 'direct' ? "bg-amber-50/50 border-amber-200" : "bg-blue-50/50 border-blue-200"
-                                        )}>
-                                            <span className={cn("text-[11px] font-medium", m.source === 'direct' ? "text-amber-700" : "text-blue-700")}>
-                                                {m.model_name}
+                                <Collapsible open={showModels} onOpenChange={setShowModels}>
+                                    <CollapsibleTrigger className="flex items-center gap-2 w-full">
+                                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                                            <span className="inline-flex items-center gap-2">
+                                                適用型號
+                                                <Badge variant="outline" className="text-[10px] font-normal py-0">{effectiveModels.length}</Badge>
+                                                {selectedVariantId && <Badge variant="outline" className="ml-2 text-[10px] font-normal py-0">規格專屬</Badge>}
                                             </span>
-                                            {m.source === 'group' && m.items && m.items.length > 0 && (
-                                                <>
-                                                    <span className="text-[10px] text-muted-foreground/40">|</span>
-                                                    <div className="flex items-center gap-1">
-                                                        {m.items.map((item: any, idx: number) => (
-                                                            <span key={item.id} className="text-[10px] text-muted-foreground">
-                                                                {item.name}{idx < m.items.length - 1 ? ',' : ''}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                </>
-                                            )}
+                                        </h3>
+                                        <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", showModels && "rotate-180")} />
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent className="pt-2">
+                                        <div className="flex flex-wrap gap-2 mt-1">
+                                            {effectiveModels.map((m: any) => (
+                                                <div key={m.model_id} className={cn(
+                                                    "flex items-center gap-1.5 border rounded-full px-2 py-0.5",
+                                                    m.source === 'direct' ? "bg-amber-50/50 border-amber-200" : "bg-blue-50/50 border-blue-200"
+                                                )}>
+                                                    <span className={cn("text-[11px] font-medium", m.source === 'direct' ? "text-amber-700" : "text-blue-700")}>
+                                                        {m.model_name}
+                                                    </span>
+                                                    {m.source === 'group' && m.items && m.items.length > 0 && (
+                                                        <>
+                                                            <span className="text-[10px] text-muted-foreground/40">|</span>
+                                                            <div className="flex items-center gap-1">
+                                                                {m.items.map((item: any, idx: number) => (
+                                                                    <span key={item.id} className="text-[10px] text-muted-foreground">
+                                                                        {item.name}{idx < m.items.length - 1 ? ',' : ''}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
-                                </div>
+                                    </CollapsibleContent>
+                                </Collapsible>
                             </div>
                         )}
 

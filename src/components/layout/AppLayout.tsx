@@ -2,6 +2,7 @@ import { ReactNode, useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useStoreDraft } from '@/store/useOrderDraftStore';
+import { useLayoutPreference } from '@/store/useLayoutPreference';
 import { cn } from '@/lib/utils';
 import { performGlobalDataSync } from '@/utils/versionCheck';
 import {
@@ -31,6 +32,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 function AppLayoutContent({ children }: AppLayoutProps) {
   const { pageHeader } = usePageHeader();
   const { user, isAdmin, isRep, isFixEngineer, storeId: currentStoreId, storeRoles, isAuthReady } = useAuth();
+  const layoutPreference = useLayoutPreference((s) => s.preference);
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
@@ -83,8 +85,13 @@ function AppLayoutContent({ children }: AppLayoutProps) {
     return buildStoreNavItems(totalCartItems);
   }, [user, isAdmin, isRep, isFixEngineer, totalCartItems]);
 
+  const forceMobile = layoutPreference === 'mobile';
+
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className="min-h-screen bg-background"
+      data-layout={layoutPreference}
+    >
       <DesktopSidebar
         navItems={navItems}
         isExpanded={isExpanded}
@@ -107,7 +114,9 @@ function AppLayoutContent({ children }: AppLayoutProps) {
           isExpanded ? 'md:pl-64' : 'md:pl-16'
         )}
       >
-        <div className="container py-6">{children}</div>
+        <div className={cn('container py-6', forceMobile && 'max-w-[430px] mx-auto')}>
+          {children}
+        </div>
       </main>
     </div>
   );

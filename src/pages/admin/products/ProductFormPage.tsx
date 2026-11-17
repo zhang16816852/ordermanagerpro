@@ -108,7 +108,7 @@ export default function AdminProductFormPage() {
 
             const groups = (groupsResult.data || []).map((g: any) => ({
                 ...g,
-                values: g.product_option_values || [],
+                values: (g.product_option_values || []).slice().sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
             }));
 
             const valueById = new Map<string, any>();
@@ -174,7 +174,7 @@ export default function AdminProductFormPage() {
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
             ) : (
-                <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                <div className="rounded-xl border bg-card shadow-sm">
                     <ProductFormBody
                         active={true}
                         initialData={initialData}

@@ -120,6 +120,29 @@ export function useConsignment() {
     },
   });
 
+  const { data: confirmedReports = [], isLoading: confirmedReportsLoading } = useQuery({
+    queryKey: ['consignment-reports-confirmed'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('consignment_sales_reports')
+        .select(`
+          *,
+          consignment_order:consignment_orders(code),
+          store:stores(id, name),
+          item:consignment_order_items(
+            id,
+            product:products(id, name, code),
+            variant:product_variants(id, name)
+          )
+        `)
+        .eq('status', 'confirmed')
+        .order('confirmed_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return (data || []) as ConsignmentSalesReport[];
+    },
+  });
+
   function useOrderDetail(orderId: string | null) {
     return useQuery({
       queryKey: ['consignment-order-detail', orderId],
@@ -673,6 +696,8 @@ export function useConsignment() {
     orderSummaries,
     pendingReports,
     reportsLoading,
+    confirmedReports,
+    confirmedReportsLoading,
     useOrderDetail,
     accounts,
     warehouses,
