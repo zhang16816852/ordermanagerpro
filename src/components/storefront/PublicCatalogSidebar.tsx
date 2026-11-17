@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Filter, ChevronRight, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   usePublicCategoryTree,
@@ -160,7 +160,7 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
   };
 
   return (
-    <div className="flex flex-col max-h-[calc(100vh-6rem)] bg-card border rounded-xl overflow-hidden shadow-sm">
+    <div className="flex flex-col h-full bg-card border rounded-xl overflow-hidden shadow-sm">
       <div className="p-4 border-b bg-muted/30 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2 font-semibold text-sm">
           <Filter className="h-4 w-4" />
@@ -197,7 +197,7 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
         </div>
       )}
 
-      <ScrollArea className="flex-1 min-h-0 max-h-[calc(100vh-12rem)] overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-4 space-y-1">
           {/* Specs (moved to top, more prominent) */}
           {filters.categoryId && (
@@ -332,7 +332,7 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
 
           {/* (Specs moved to top) */}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

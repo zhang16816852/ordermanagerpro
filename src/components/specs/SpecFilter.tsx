@@ -39,8 +39,8 @@ function RangeSliderFilter({
   if (allNumbers.length === 0) return <p className="text-xs text-muted-foreground italic">無數值可篩選</p>;
 
   return (
-    <div className="px-2 pb-2 pt-4 space-y-4">
-      <Slider
+    <div className="w-full max-w-full px-2 pb-2 pt-4 space-y-4 overflow-hidden">
+      <Slider className="w-full"
         defaultValue={[minBound, maxBound]}
         value={[currentMin, currentMax]}
         min={minBound}
@@ -107,7 +107,7 @@ export function SpecFilter({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 w-full max-w-full overflow-hidden">
       {specEntries.map(([key, values]) => {
         const parts = key.split(":");
         const specId = parts.length === 3 ? parts[1] : parts.length === 2 ? parts[1] : key;
