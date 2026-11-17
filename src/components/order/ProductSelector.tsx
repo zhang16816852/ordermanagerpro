@@ -170,7 +170,7 @@ export function ProductSelector({
   }
 
   return (
-    <Card className="h-full flex flex-col">
+    <Card className="h-full flex flex-col min-h-0 overflow-hidden">
       <CardHeader
         role="button"
         tabIndex={0}

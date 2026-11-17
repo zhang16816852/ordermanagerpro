@@ -165,7 +165,7 @@ export function PurchaseProductPicker({
 
   return (
     <div className="flex flex-col h-full min-h-0 gap-3">
-      <div className="flex-1 min-h-0 rounded-md border overflow-hidden">
+      <div className="h-[320px] md:h-[420px] rounded-md border overflow-hidden">
         <ProductSelector
           products={products}
           productsLoading={productsLoading}
