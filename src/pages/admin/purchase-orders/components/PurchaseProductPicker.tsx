@@ -93,19 +93,30 @@ export function PurchaseProductPicker({
     brandMap,
   });
 
-  // 供應商商品對應的廠商成本優先於變體批價
+  // 查詢供應商對照的 ID（用於手動輸入成本後自動更新 vendor_unit_cost）
+const { data: supplierMappings = [] } = useQuery({
+  queryKey: ['po-supplier-mappings', supplierId],
+  queryFn: async () => {
+    if (!supplierId) return [] as { id: string; internal_product_id: string; internal_variant_id: string | null }[];
+    const { data, error } = await (supabase as any)
+      .from('supplier_product_mappings')
+      .select('id, internal_product_id, internal_variant_id')
+      .eq('supplier_id', supplierId);
+    if (error) throw error;
+    return (data as any[]) ?? [];
+  },
+  enabled: !!supplierId,
+});
   const { data: vendorCostMap = {} } = useQuery({
-    queryKey: ['po-vendor-costs', supplierId],
+    queryKey: ['po-supplier-costs', supplierId],
     queryFn: async () => {
       if (!supplierId) return {} as Record<string, number>;
-      const { data, error } = await (supabase as any)
-        .from('supplier_product_mappings')
-        .select('internal_product_id, internal_variant_id, vendor_unit_cost')
-        .eq('supplier_id', supplierId);
+      const { data, error } = await (supabase as any).rpc('get_supplier_product_costs', { p_supplier_id: supplierId });
       if (error) throw error;
-      return ((data as any[]) ?? []).reduce<Record<string, number>>((acc, m) => {
-        if (m.vendor_unit_cost != null) {
-          acc[mappingKey(m.internal_product_id, m.internal_variant_id)] = m.vendor_unit_cost;
+      const raw = (data as Record<string, { cost: number; source: string }>) ?? {};
+      return Object.entries(raw).reduce<Record<string, number>>((acc, [key, val]) => {
+        if (val && typeof val.cost === 'number' && val.cost > 0) {
+          acc[key] = val.cost;
         }
         return acc;
       }, {});
@@ -156,6 +167,22 @@ export function PurchaseProductPicker({
     );
     // 整單傳入失敗時不清除草稿，保留使用者輸入以便重試
     if (ok !== false) {
+      // B：自動更新供應商商品對照的 vendor_unit_cost（手動輸入的成本）
+    if (supplierId && supplierMappings.length > 0) {
+      for (const item of stagedItems) {
+        if (costOverrides[item.id] != null) {
+          const mapping = supplierMappings.find(
+            (m: any) => m.internal_product_id === item.productId && (m.internal_variant_id ?? null) === (item.variantId ?? null)
+          );
+          if (mapping?.id) {
+            await (supabase as any)
+              .from('supplier_product_mappings')
+              .update({ vendor_unit_cost: costOverrides[item.id] })
+              .eq('id', mapping.id);
+          }
+        }
+      }
+    }
       clearDraft();
       setCostOverrides({});
     }
