@@ -164,8 +164,8 @@ export function PurchaseProductPicker({
   };
 
   return (
-    <div className="space-y-3">
-      <div className="h-[320px] rounded-md border">
+    <div className="flex flex-col h-full min-h-0 gap-3">
+      <div className="flex-1 min-h-0 rounded-md border overflow-hidden">
         <ProductSelector
           products={products}
           productsLoading={productsLoading}
@@ -191,8 +191,8 @@ export function PurchaseProductPicker({
         />
       </div>
 
-      <div className="rounded-md border">
-        <div className="flex items-center justify-between border-b px-3 py-2">
+      <div className="shrink-0 rounded-md border max-h-48 overflow-y-auto">
+        <div className="flex items-center justify-between border-b px-3 py-2 sticky top-0 bg-background z-10">
           <span className="text-sm font-medium">
             已選購品項（{stagedItems.length}）
           </span>
@@ -206,7 +206,7 @@ export function PurchaseProductPicker({
             尚未選擇品項，請由上方商品目錄點選加入。
           </p>
         ) : (
-          <div className="max-h-44 divide-y overflow-auto">
+          <div className="divide-y">
             {stagedItems.map((item) => (
               <div key={item.id} className="flex items-center gap-2 px-3 py-2">
                 <div className="min-w-0 flex-1">
@@ -259,7 +259,7 @@ export function PurchaseProductPicker({
         )}
       </div>
 
-      <DialogFooter>
+      <DialogFooter className="shrink-0 border-t pt-3 mt-2">
         <Button onClick={handleSubmit} disabled={stagedItems.length === 0 || isLoading}>
           {isLoading ? '處理中...' : `加入採購單（${stagedItems.length} 項）`}
         </Button>

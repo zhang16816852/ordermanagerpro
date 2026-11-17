@@ -49,17 +49,19 @@ export function PurchaseOrderDetailImportSection(props: Props) {
         <DialogTrigger asChild>
           <Button size="sm" variant="outline"><Plus className="h-4 w-4 mr-1" />預算外品項</Button>
         </DialogTrigger>
-        <DialogContent className="max-w-5xl">
-          <DialogHeader>
+        <DialogContent className="max-w-6xl w-[95vw] max-h-[90vh] flex flex-col overflow-hidden p-0">
+          <DialogHeader className="shrink-0 px-6 py-4 border-b">
             <DialogTitle>新增品項</DialogTitle>
             <DialogDescription>請挑選預算外需額外採購的品項，可調整數量與進貨價後一次加入。</DialogDescription>
           </DialogHeader>
-          <PurchaseProductPicker
-            purchaseOrderId={order.id}
-            supplierId={order.supplier_id}
-            isLoading={isLoading}
-            onSubmit={async (items) => { if (await submitNewItems(items)) setAddItemOpen(false); }}
-          />
+          <div className="flex-1 min-h-0 overflow-hidden px-6 py-4">
+            <PurchaseProductPicker
+              purchaseOrderId={order.id}
+              supplierId={order.supplier_id}
+              isLoading={isLoading}
+              onSubmit={async (items) => { if (await submitNewItems(items)) setAddItemOpen(false); }}
+            />
+          </div>
         </DialogContent>
       </Dialog>
 
