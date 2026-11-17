@@ -162,14 +162,12 @@ export default function ShopPage() {
           <ShopFilterNav filters={filters} onChange={setFilters} onClear={clearAll} />
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-          <aside className="hidden lg:block">
-            <div className="sticky top-20">
-              <PublicCatalogSidebar filters={filters} onChange={setFilters} onClear={clearAll} />
-            </div>
+        <div className="grid gap-6 lg:grid-cols-[280px_1fr] lg:items-start">
+          <aside className="hidden lg:block lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+            <PublicCatalogSidebar filters={filters} onChange={setFilters} onClear={clearAll} />
           </aside>
 
-          <section>
+          <section className="min-h-0">
             {isLoading ? (
               <div className="py-20 text-center text-sf-muted">載入中...</div>
             ) : filtered.length === 0 ? (

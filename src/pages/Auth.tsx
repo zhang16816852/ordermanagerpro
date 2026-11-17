@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -206,6 +206,11 @@ export default function Auth() {
           <p className="text-muted-foreground mt-1">高效管理您的店鋪訂單</p>
         </div>
 
+        <div className="mb-4">
+          <Link to="/shop" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            ← 返回商店
+          </Link>
+        </div>
         <Card className="shadow-soft">
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-xl text-center">
