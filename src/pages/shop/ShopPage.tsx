@@ -125,7 +125,7 @@ export default function ShopPage() {
           <h1 className="mt-2 text-3xl font-medium tracking-tight text-sf-text">商品目錄</h1>
         </header>
 
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="sticky top-16 z-20 -mx-4 mb-4 bg-sf-paper px-4 py-2 border-b border-[color:var(--sf-line)] flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sf-muted" />
             <Input
@@ -158,12 +158,12 @@ export default function ShopPage() {
         </div>
 
         {/* Shop 頂部分類導覽（nav 風格） */}
-        <div className="mb-6 border-b border-[color:var(--sf-line)] pb-3">
+        <div className="sticky top-32 z-20 -mx-4 mb-4 bg-sf-paper px-4 py-2 border-b border-[color:var(--sf-line)]">
           <ShopFilterNav filters={filters} onChange={setFilters} onClear={clearAll} />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[280px_1fr] lg:items-start">
-          <aside className="hidden lg:block lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+          <aside className="hidden lg:block lg:sticky lg:top-20">
             <PublicCatalogSidebar filters={filters} onChange={setFilters} onClear={clearAll} />
           </aside>
 

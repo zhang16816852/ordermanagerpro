@@ -137,7 +137,7 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
   };
 
   return (
-    <div className="flex flex-col h-full max-h-[calc(100vh-6rem)] bg-card border rounded-xl overflow-hidden shadow-sm">
+    <div className="flex flex-col max-h-[calc(100vh-6rem)] bg-card border rounded-xl overflow-hidden shadow-sm">
       <div className="p-4 border-b bg-muted/30 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2 font-semibold text-sm">
           <Filter className="h-4 w-4" />
@@ -174,7 +174,7 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
         </div>
       )}
 
-      <ScrollArea className="flex-1 min-h-0">
+      <ScrollArea className="flex-1 min-h-0 max-h-[calc(100vh-12rem)] overflow-y-auto">
         <div className="p-4 space-y-1">
           {/* Specs (moved to top, more prominent) */}
           {filters.categoryId && (
@@ -210,7 +210,7 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
                         <div key={specId}>
                           <div className="mb-1 text-xs font-medium text-sf-text">{name}</div>
                           {values.length > 0 ? (
-                            <div className="space-y-1">
+                            <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
                               {values.map((v: any, idx: number) => {
                                 const val = typeof v === "string" ? v : JSON.stringify(v);
                                 const checked = (filters.specFilters[specId] ?? []).includes(val);
