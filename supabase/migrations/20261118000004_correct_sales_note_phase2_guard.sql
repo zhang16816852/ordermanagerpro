@@ -1,0 +1,17 @@
+-- 修復 correct_sales_note Phase 2：追加已有品項時檢查重複
+-- 根因：Phase 2 不檢查 sales_note_items 是否已存在該 order_item，可能重複追加
+-- 修法：在 INSERT 前加入 EXISTS guard，若品項已存在於此銷貨單則 RAISE EXCEPTION
+
+-- 此 migration 已透過 DO block 套用遠端（patch 方式）
+-- 以下為記錄用的 SQL（實際套用已透過 dynamic SQL 完成）:
+-- DO $$
+-- DECLARE v_def text; v_old text; v_new text; v_patched text;
+-- BEGIN
+--   SELECT pg_get_functiondef(oid) INTO v_def FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname = 'correct_sales_note';
+--   v_old := '      INSERT INTO public.sales_note_items (sales_note_id, order_item_id, quant';
+--   v_new := E'      -- 防重複追加：若該品項已存在於此銷貨單，拒絕\n      IF EXISTS (SELECT 1 FROM public.sales_note_items WHERE sales_note_id = p_sales_note_id AND order_item_id = v_item_order_item_id) THEN\n        RAISE EXCEPTION ''品項已存在於此銷貨單，不可重複追加（order_item %）'', v_item_order_item_id;\n      END IF;\n\n' || v_old;
+--   IF position(v_old in v_def) = 0 THEN RAISE EXCEPTION 'Pattern not found'; END IF;
+--   v_patched := replace(v_def, v_old, v_new);
+--   EXECUTE v_patched;
+-- END;
+-- $$;

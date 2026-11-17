@@ -215,7 +215,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
     mutationFn: async () => {
       const { data: processingOrders, error } = await (supabase
         .from('orders') as any)
-        .select(`id, order_items (quantity, shipped_quantity, status)`)
+        .select(`id, order_items (quantity, shipped_quantity, status, line_type)`)
         .eq('status', 'processing');
 
       if (error) throw error;
@@ -235,13 +235,11 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
 
       if (ordersToUpdate.length === 0) return 0;
 
-      const { error: updateError } = await (supabase
-        .from('orders') as any)
-        .update({ status: 'shipped' })
-        .in('id', ordersToUpdate);
-
-      if (updateError) throw updateError;
-      return ordersToUpdate.length;
+      const { data: rpcData, error: rpcError } = await (supabase.rpc as any)('sync_order_shipped_status', {
+         p_order_ids: ordersToUpdate,
+       });
+       if (rpcError) throw rpcError;
+       return (rpcData as any)?.updated ?? ordersToUpdate.length;
     },
     onSuccess: (count) => {
       if (count > 0) {
@@ -255,11 +253,10 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
   });
 
   const confirmOrdersMutation = useMutation({
-    mutationFn: async (orderIds: string[]) => {
-      const { error } = await (supabase
-        .from('orders') as any)
-        .update({ status: 'processing' })
-        .in('id', orderIds);
+     mutationFn: async (orderIds: string[]) => {
+       const { error } = await (supabase.rpc as any)('confirm_orders', {
+         p_order_ids: orderIds,
+       });
       if (error) throw error;
     },
     onSuccess: (_, variables) => {
@@ -313,13 +310,11 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
         if (error) throw error;
       }
 
-      // 自動鎖定訂單：將相關訂單設為 processing
+      // 自動鎖定訂單：將相關訂單設為 processing（僅 pending 單）
       if (orderIdsToLock.size > 0) {
-        const { error: lockError } = await (supabase
-          .from('orders') as any)
-          .update({ status: 'processing' })
-          .in('id', Array.from(orderIdsToLock))
-          .eq('status', 'pending');
+        const { error: lockError } = await (supabase.rpc as any)('lock_orders_for_shipping_pool', {
+          p_order_ids: Array.from(orderIdsToLock),
+        });
         if (lockError) throw lockError;
       }
     },
@@ -333,13 +328,13 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
   });
 
   const cancelItemsMutation = useMutation({
-    mutationFn: async ({ itemIds, targetStatus }: { itemIds: string[]; targetStatus: 'cancelled' | 'waiting' }) => {
-      const { error } = await (supabase
-        .from('order_items') as any)
-        .update({ status: targetStatus })
-        .in('id', itemIds);
+     mutationFn: async ({ itemIds, targetStatus }: { itemIds: string[]; targetStatus: 'cancelled' | 'waiting' }) => {
+       const { data, error } = await (supabase.rpc as any)('cancel_order_items', {
+         p_item_ids: itemIds,
+         p_target_status: targetStatus,
+       });
       if (error) throw error;
-      return { count: itemIds.length, targetStatus };
+       return { count: (data as any)?.updated ?? itemIds.length, targetStatus };
     },
     onSuccess: ({ count, targetStatus }) => {
       const label = targetStatus === 'cancelled' ? '停產/取消' : '還原待出貨';

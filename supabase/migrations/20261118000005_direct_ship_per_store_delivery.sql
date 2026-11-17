@@ -1,0 +1,11 @@
+-- 修復 direct_ship_orders 配送資訊不一致問題
+-- 根因：配送資訊只從第一筆訂單繼承，多店家時所有店家使用同一份配送設定
+-- 修法：配送資訊改為 per-store 解析，每個店家使用自己訂單的配送設定，
+--       全局 p_delivery_* 參數作為 override（若提供）
+
+-- 此 migration 已透過 DO block 套用遠端（patch 方式）
+-- 關鍵變更：
+-- 1. 移除全局 v_delivery 解析
+-- 2. 在 store 迴圈內，從 store 的第一筆訂單解析 delivery_type/delivery_method_id
+-- 3. 使用 COALESCE(p_delivery_*, v_store_*) 作為 override
+-- 4. 新增 v_store_delivery_type 和 v_store_delivery_method_id 變數

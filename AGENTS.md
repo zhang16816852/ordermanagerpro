@@ -1,5 +1,78 @@
 # Order Manager Pro — 專案記憶
 
+## 近期變更（correct_sales_note Phase 4 未收款引用修復，2026-11-18）
+
+- **目的**：修復 `correct_sales_note` Phase 4 價格更新時不檢查其他已收款銷貨單引用的問題。
+- **根因**：Phase 4 僅檢查當前銷貨單是否有會計分錄，不檢查其他銷貨單是否已收款。若其他已收款銷貨單引用同一 order_item，調價會影響該銷貨單的總額計算。
+- **修法**（已套用遠端）：在 Phase 4 的 UPDATE 前加入 guard，若 `v_other_notes` 中有任何 `paid=true` 的銷貨單，則 RAISE EXCEPTION 阻擋調價。
+- **驗證**：遠端 `pg_get_functiondef` 確認 guard 已就位。
+
+## 近期變更（correct_sales_note Phase 2 guard 修正，2026-11-18）
+
+- **目的**：修正 `correct_sales_note` Phase 2 重複追加 guard 誤加到 Phase 3 的問題。
+- **根因**：先前的 patch 使用 `replace()` 替換所有 occurrences，導致 Phase 3（新品追加）也加入了 guard，但 Phase 3 的變數是 `v_new_order_item_id` 而非 `v_item_order_item_id`，guard 會檢查錯誤的變數。
+- **修法**：先移除所有 guard，再用 `overlay()` 只在第一個 occurrence（Phase 2）插入 guard。
+- **驗證**：遠端確認 guard_count = 1（僅 Phase 2）。
+
+## 近期變更（direct_ship_orders 配送資訊 per-store 修復，2026-11-18）
+
+- **目的**：修復 DirectShip 多店家時配送資訊不一致的問題。
+- **根因**：`direct_ship_orders` 的配送資訊（delivery_type, delivery_method_id, shipping_fee 等）只從第一筆訂單繼承，多店家時所有店家使用同一份配送設定。
+- **修法**（Migration `20261118000005`，已套用遠端）：配送資訊改為 per-store 解析，每個店家使用自己訂單的配送設定，全局 p_delivery_* 參數作為 override。
+- **驗證**：遠端 `pg_get_functiondef` 確認 `v_store_delivery_type` 已就位。
+
+## 近期變更（getOrderShipmentStatus 前後端統一，2026-11-18）
+
+- **目的**：統一 admin 和 store 端的 `getOrderShipmentStatus` 邏輯。
+- **根因**：admin 版本只檢查 `shipped`/`cancelled`/`discontinued`/`out_of_stock`，不過濾 `return`/`defective` 行；store 版本只檢查 `shipped`，過濾 `return`/`defective` 行。同一訂單在兩端顯示不同出貨狀態。
+- **修法**：
+  - `orderListUtils.ts`（shared）：已正確過濾 return/defective + 檢查 cancelled/discontinued/out_of_stock
+  - `OrderTableView.tsx`：移除本地重複定義，改用 shared import
+  - `StoreOrderList.tsx`：更新為與 shared 一致的邏輯
+- **Typecheck 0 errors、Lint 0 errors、Build 通過**
+
+## 近期變更（採購成本解析統一，2026-11-18）
+
+- **目的**：統一兩條採購路徑（AggregateToPODialog vs ImportFromOrdersDialog）的成本解析邏輯。
+- **根因**：Path A（AggregateToPO）成本解析：mapping → variant wholesale → product unified wholesale。Path B（ImportFromOrders）成本解析：mapping → variant wholesale（無 product fallback）。相同品項在不同路徑可能得到不同成本。
+- **修法**：ImportFromOrdersDialog 的 estimated_cost 新增 product unified_wholesale_price fallback（mapping → variant wholesale → product unified wholesale → product price map → 0），與 Path A 一致。同時在 queryFn 中新增 products 表查詢以取得 unified_wholesale_price。
+- **Typecheck 0 errors、Lint 0 errors、Build 通過**
+
+## 近期變更（correct_sales_note Phase 2 重複追加修復，2026-11-18）
+
+- **目的**：修復 `correct_sales_note` RPC Phase 2 追加品項時不檢查重複的問題。
+- **根因**：Phase 2 直接 INSERT `sales_note_items`，不檢查該 `order_item` 是否已存在於此銷貨單。若使用者重複追加同一品項，會產生重複的 `sales_note_items` 列，導致出貨量計算錯誤。
+- **修法**（Migration `20261118000004`，已套用遠端）：在 Phase 2 的 INSERT 前加入 EXISTS guard，若品項已存在於此銷貨單則 RAISE EXCEPTION。
+- **驗證**：遠端 `pg_get_functiondef` 確認 guard 已就位。
+
+## 近期變更（訂單狀態轉換 RPC 化，2026-11-18）
+
+- **目的**：將所有訂單/訂單項目狀態變更從前端直接 UPDATE 改為 RPC，統一 guards 和事務保護。
+- **新增 5 支 RPC**（Migration `20261118000003`，已套用遠端）：
+  - `confirm_orders(p_order_ids)`：pending → processing（僅 pending 單）
+  - `sync_order_shipped_status(p_order_ids)`：processing → shipped（所有品項已出貨時）
+  - `lock_orders_for_shipping_pool(p_order_ids)`：pending → processing（加入出貨池時自動鎖定）
+  - `cancel_order_items(p_item_ids, p_target_status)`：waiting/partial → cancelled/discontinued/waiting
+  - `toggle_order_status(p_order_id)`：pending ↔ processing（有出貨紀錄時不可回退）
+- **前端更新**：
+  - `useOrdersList.ts`：syncOrdersMutation、confirmOrdersMutation、addToShippingPoolMutation、cancelItemsMutation 全改用 RPC
+  - `useOrderFormMutations.ts`：toggleStatusMutation 改用 toggle_order_status RPC
+- **Typecheck 0 errors、Lint 0 errors、Build 通過**
+
+## 近期變更（轉換路徑 RPC 合併與修復，2026-11-18）
+
+- **目的**：檢測採購/銷售/出貨池/訂單之間的轉換路徑，找出可合併的 RPC 與不一致的路徑，並修復。
+- **修復 1（Migration `20261118000001`）**：`create_consignment_shipment_layer` 的配送/包裹資訊只落到最後一筆寄賣單的 bug。根因：`v_co_id` 在迴圈中被覆寫，配送 UPDATE 僅作用於最後一個 `v_co_id`。修法：收集所有 `v_co_id` 到 `v_co_ids` 陣列，迴圈結束後逐一套用配送/包裹資訊。已套用遠端並驗證。
+- **修復 2（Migration `20261118000002` + 前端）**：合併 `direct_ship_order` 至 `direct_ship_orders`。前端 `useOrderFormMutations.ts` 改用 `direct_ship_orders`（單筆時傳 `[orderId]`），並從回傳的 `sales_notes[0]` 提取 `sales_note_id`/`sales_note_code`/`access_token`。已刪除 `direct_ship_order` 函數。Typecheck 0 errors、lint 0 errors、build 通過。
+- **識別的可合併 RPC**（尚未實作，供後續參考）：
+  - `create_consignment_shipment` + `create_consignment_shipment_layer` → 共用底層 helper
+  - `create_order_with_sales_note` + `direct_ship_order`（已刪除）→ 共用銷售單建立邏輯
+  - `_ship_stock_movements` + `allocate_inventory` → 共用庫存扣減
+- **識別的不一致路徑**：
+  - 採購：AggregateToPODialog（聚合）vs ImportFromOrdersDialog（不聚合）→ 同一採購單可能有重複品項
+  - 銷售：DirectShip（第一筆訂單的配送資訊）vs ShipFromPool（per-store override）→ 多店家時配送資訊可能不正確
+  - 訂單資訊：不同路徑處理備註/配送地址/倉庫的方式不同
+
 本檔案由 AI 自動載入並**持續維護**。開新對話前請先完整閱讀本檔；詳細內容再依需求 lazy-load 下方指定文件。
 
 ## 近期變更（訂單編輯同步寄賣草稿，2026-11-12）

@@ -16,6 +16,7 @@ import { formatCurrency } from '@/lib/formatters';
 import { zhTW } from 'date-fns/locale';
 import { OrderStatusBadge } from '@/components/order/OrderStatusBadge';
 import { Order, OrderItem } from '@/types/order';
+import { getOrderShipmentStatus } from '../orderListUtils';
 import { ProfitCell } from '@/components/shared/ProfitCell';
 import { orderPoBindBadge, type OrderPoBindMap } from '@/utils/poBindStatus';
 import type { OrderProfitView } from '../useOrderListDerived';
@@ -60,16 +61,7 @@ export function OrderTableView({
   commissionByOrder,
   profitByOrderId,
 }: OrderTableViewProps) {
-  const getOrderShipmentStatus = (items: OrderItem[]) => {
-    if (items.length === 0) return 'waiting';
-    const allProcessed = items.every((i) =>
-      i.status === 'shipped' || i.status === 'cancelled' || i.status === 'discontinued' || i.status === 'out_of_stock'
-    );
-    const someShipped = items.some((i) => i.shipped_quantity > 0);
-    if (allProcessed) return 'shipped';
-    if (someShipped) return 'partial';
-    return 'waiting';
-  };
+  // 使用傳入的 getOrderShipmentStatus（來自 orderListUtils，與 StoreOrderList 一致）
 
   const getOrderTotal = (items: OrderItem[], shippingFee?: number | null) => {
     const itemTotal = items.reduce((sum, item) => {

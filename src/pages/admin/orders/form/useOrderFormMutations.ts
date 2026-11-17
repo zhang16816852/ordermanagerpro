@@ -509,12 +509,11 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
   // Status toggle (edit mode only)
   const toggleStatusMutation = useMutation({
     mutationFn: async () => {
-      if (!orderId || !order) throw new Error('訂單不存在');
-      if (order.status !== 'pending' && order.status !== 'processing') {
-        throw new Error('僅未確認或處理中的訂單可切換狀態');
-      }
-      const newStatus = order.status === 'pending' ? 'processing' : 'pending';
-      await (supabase.from('orders') as any).update({ status: newStatus }).eq('id', orderId);
+       if (!orderId || !order) throw new Error('訂單不存在');
+       const { data, error } = await (supabase.rpc as any)('toggle_order_status', {
+         p_order_id: orderId,
+       });
+       if (error) throw error;
     },
     onSuccess: () => {
       toast.success('訂單狀態已更新');
@@ -635,7 +634,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       }
       const loader = delivery || { deliveryType: getDeliveryType(), deliveryMethodId: null, trackingCompany: null, trackingNumber: null, trackingUrl: null };
       const addr = loader?.deliveryType === 'logistics' && loader.shippingAddress ? loader.shippingAddress : undefined;
-      const { data, error } = await supabase.rpc('direct_ship_order', {
+      const { data, error } = await (supabase.rpc as any)('direct_ship_orders', {
         p_order_id: orderId,
         p_created_by: user.id,
         p_notes: undefined,
@@ -652,8 +651,14 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
         p_tracking_number: loader?.trackingNumber || undefined,
         p_tracking_url: loader?.trackingUrl || undefined,
         p_item_quantities: itemQuantities && Object.keys(itemQuantities).length > 0 ? itemQuantities : undefined,
-      });
-      if (error) throw error;
+       });
+       if (error) throw error;
+       const _sn = Array.isArray((data as any)?.sales_notes) ? (data as any).sales_notes[0] : null;
+       if (_sn) {
+         (data as any).sales_note_id = _sn.sales_note_id;
+         (data as any).sales_note_code = _sn.sales_note_code;
+         (data as any).access_token = _sn.access_token;
+       }
 
       // 勾選「同步至店鋪」：出貨後將配送地址回寫店家（僅地址欄位，不含配送類型/方式）
       if (addr && loader?.syncToStore) {

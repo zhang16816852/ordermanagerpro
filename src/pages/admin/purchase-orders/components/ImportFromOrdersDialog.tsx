@@ -54,6 +54,16 @@ export function ImportFromOrdersDialog({
         });
       }
 
+      // Fetch product prices for cost fallback (consistent with AggregateToPODialog)
+      const productPriceMap: Record<string, number> = {};
+      const { data: allProducts } = await (supabase as any)
+        .from('products')
+        .select('id, unified_wholesale_price');
+      (allProducts || []).forEach((p: any) => {
+        const price = Number(p.unified_wholesale_price);
+        if (Number.isFinite(price) && price > 0) productPriceMap[p.id] = price;
+      });
+
       // Fetch orders including shipped (completed) for replenishment
       const { data: orders, error } = await (supabase
         .from('orders') as any)
@@ -70,7 +80,7 @@ export function ImportFromOrdersDialog({
             variant_id,
             line_type,
             is_repair,
-            products (id, name, code),
+            products (id, name, code, unified_wholesale_price),
             product_variants (id, name, sku, wholesale_price)
           )
         `)
@@ -140,7 +150,9 @@ export function ImportFromOrdersDialog({
             estimated_cost: (() => {
               const key = `${item.product_id}_${item.variant_id || 'null'}`;
               if (mappingMap[key]) return mappingMap[key];
-              return item.product_variants?.wholesale_price || 0;
+              if (item.product_variants?.wholesale_price) return item.product_variants.wholesale_price;
+              if (item.products?.unified_wholesale_price) return item.products.unified_wholesale_price;
+              return productPriceMap[item.product_id] || 0;
             })(),
           });
         });

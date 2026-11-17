@@ -114,9 +114,11 @@ export default function StoreOrderList() {
   const getOrderShipmentStatus = (items: OrderItem[]) => {
     const activeItems = items.filter(i => i.line_type !== 'return' && i.line_type !== 'defective');
     if (activeItems.length === 0) return 'shipped';
-    const allShipped = activeItems.every((i) => i.status === 'shipped');
+    const allProcessed = activeItems.every((i) =>
+      i.status === 'shipped' || i.status === 'cancelled' || i.status === 'discontinued' || i.status === 'out_of_stock'
+    );
     const someShipped = activeItems.some((i) => i.shipped_quantity > 0);
-    if (allShipped) return 'shipped';
+    if (allProcessed) return 'shipped';
     if (someShipped) return 'partial';
     return 'waiting';
   };
