@@ -9,11 +9,12 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
-import { Save, Search, Loader2, CheckSquare, Square, Layers } from 'lucide-react';
+import { Save, Loader2, CheckSquare, Square, Layers } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { VariantModelMatrixModelsTab } from './VariantModelMatrixModelsTab';
 import { VariantModelMatrixGroupsTab } from './VariantModelMatrixGroupsTab';
+import { SearchInput } from '@/components/classification/primitives/SearchInput';
 
 interface VariantModelMatrixProps {
     productId: string;
@@ -217,15 +218,14 @@ export function VariantModelMatrix({ productId }: VariantModelMatrixProps) {
                     </div>
 
                     <div className="flex flex-1 gap-2 max-w-sm">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                            <Input
-                                placeholder={activeTab === 'models' ? "搜尋型號..." : "搜尋群組..."}
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                className="h-9 pl-9 text-sm"
-                            />
-                        </div>
+                        <SearchInput
+                            value={search}
+                            onChange={setSearch}
+                            placeholder={activeTab === 'models' ? "搜尋型號..." : "搜尋群組..."}
+                            className="flex-1 max-w-sm"
+                            inputClassName="h-9 text-sm pl-9"
+                            iconSize="md"
+                        />
                     </div>
 
                     <Button

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { X, Plus, Search } from 'lucide-react';
+import { X, Plus } from 'lucide-react';
 import { UseFormReturn } from 'react-hook-form';
 import { supabase } from '@/integrations/supabase/client';
 import { useState, useMemo } from 'react';
@@ -14,6 +14,7 @@ import { useDeviceModelGroups } from '@/pages/admin/products/hooks/useDeviceMode
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Layers, ShieldAlert } from 'lucide-react';
+import { SearchInput } from '@/components/classification/primitives/SearchInput';
 
 interface DeviceModelSelectFieldProps {
     form: UseFormReturn<any>;
@@ -146,15 +147,13 @@ export function DeviceModelSelectField({ form }: DeviceModelSelectFieldProps) {
                                         <TabsTrigger value="models" className="text-xs">個別型號</TabsTrigger>
                                         <TabsTrigger value="groups" className="text-xs">型號群組</TabsTrigger>
                                     </TabsList>
-                                    <div className="relative w-32">
-                                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                                        <Input 
-                                            placeholder="搜尋..." 
-                                            value={search}
-                                            onChange={(e) => setSearch(e.target.value)}
-                                            className="h-6 pl-7 text-[10px]"
-                                        />
-                                    </div>
+                                    <SearchInput
+                                        value={search}
+                                        onChange={setSearch}
+                                        placeholder="搜尋..."
+                                        className="w-32"
+                                        inputClassName="h-6 text-[10px]"
+                                    />
                                 </div>
 
                                 <TabsContent value="models" className="m-0">

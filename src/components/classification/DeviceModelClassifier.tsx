@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { ChevronDown, ChevronRight, Search } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import type { ClassificationVariant } from "./types";
+import { SearchInput } from "./primitives/SearchInput";
 
 export type DeviceModelClassifierProps = {
   tree: Record<string, Record<string, { id?: string; name: string; count: number }[]>>;
@@ -218,10 +219,7 @@ export function DeviceModelClassifier({
     return (
       <div className="space-y-2">
         {searchable && (
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜尋型號..." className="h-8 text-xs pl-7" />
-          </div>
+          <SearchInput value={search} onChange={setSearch} placeholder="搜尋型號..." inputClassName="h-8" />
         )}
         <div className="flex gap-2 overflow-x-auto pb-2 snap-x">
           {uniqueBrands.map((bid) => {

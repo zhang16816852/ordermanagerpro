@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { ChevronDown, Search, Smartphone } from "lucide-react";
+import { ChevronDown, Smartphone } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { SectionHeader, EmptyState } from "./sidebarPrimitives";
 import { DeviceModelFilterSectionProps } from "./catalogSidebarTypes";
 import { useDeviceModelStore } from "@/store/useDeviceModelStore";
+import { SearchInput } from "@/components/classification/primitives/SearchInput";
 
 export function DeviceModelFilterSection({
     open,
@@ -133,15 +134,13 @@ export function DeviceModelFilterSection({
             </div>
             <CollapsibleContent>
                 <div className="space-y-1 pb-3">
-                    <div className="relative mb-1">
-                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                        <Input
-                            value={modelSearch}
-                            onChange={(e) => setModelSearch(e.target.value)}
-                            placeholder="搜尋型號..."
-                            className="h-7 text-xs pl-6"
-                        />
-                    </div>
+                    <SearchInput
+                        value={modelSearch}
+                        onChange={setModelSearch}
+                        placeholder="搜尋型號..."
+                        className="mb-1"
+                        inputClassName="h-7 pl-6"
+                    />
                     <div className="max-h-[300px] overflow-y-auto space-y-0.5">
                         {Object.keys(deviceModelTree).length === 0 && modelSearch && (
                             <EmptyState icon={Smartphone} text="找不到符合的型號" />

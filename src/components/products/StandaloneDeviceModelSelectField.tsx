@@ -3,12 +3,13 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { X, Plus, Search, Layers, ShieldAlert } from 'lucide-react';
+import { X, Plus, Layers, ShieldAlert } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllRows } from '@/lib/utils';
 import { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SearchInput } from '@/components/classification/primitives/SearchInput';
 import { useDeviceModelGroups } from '@/pages/admin/products/hooks/useDeviceModelGroups';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -218,15 +219,13 @@ export function StandaloneDeviceModelSelectField({
                                 <TabsTrigger value="models" className="text-xs">型號</TabsTrigger>
                                 <TabsTrigger value="groups" className="text-xs">群組</TabsTrigger>
                             </TabsList>
-                            <div className="relative w-32">
-                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                                <Input 
-                                    placeholder="搜尋..." 
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    className="h-7 pl-7 text-xs"
-                                />
-                            </div>
+                            <SearchInput
+                                value={search}
+                                onChange={setSearch}
+                                placeholder="搜尋..."
+                                className="w-32"
+                                inputClassName="h-7"
+                            />
                         </div>
 
                         <div className="flex-1 min-h-0 overflow-hidden">

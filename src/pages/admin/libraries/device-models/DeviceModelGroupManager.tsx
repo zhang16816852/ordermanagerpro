@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
-  Plus, Search, Edit2, Trash2, Users, Layers, 
+  Plus, Edit2, Trash2, Users, Layers, 
   ChevronRight, ArrowRight, Loader2, Info, AlertTriangle 
 } from 'lucide-react';
 import { 
@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errorMessages';
 import { Download, Upload, FileUp } from 'lucide-react';
 import { useRef } from 'react';
+import { SearchInput } from '@/components/classification/primitives/SearchInput';
 
 interface DeviceModelGroupManagerProps {
   search?: string;
@@ -359,15 +360,14 @@ export function DeviceModelGroupManager({ search = '', typeFilter = 'all' }: Dev
             <DialogDescription>勾選以將型號加入此群組。已選中的型號將同步至所有連結此群組的產品。</DialogDescription>
           </DialogHeader>
           
-          <div className="relative mt-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="搜尋型號或系列..." 
-              value={modelSearch} 
-              onChange={e => setModelSearch(e.target.value)}
-              className="pl-10"
-            />
-          </div>
+          <SearchInput
+            value={modelSearch}
+            onChange={setModelSearch}
+            placeholder="搜尋型號或系列..."
+            className="mt-2"
+            inputClassName="pl-10 h-10"
+            iconSize="md"
+          />
 
           <ScrollArea className="flex-1 mt-4 border rounded-md p-4">
             {isLoadingItems ? (

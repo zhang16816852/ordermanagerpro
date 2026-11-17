@@ -1,7 +1,7 @@
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Plus, Upload, Download, Filter } from 'lucide-react';
+import { Plus, Upload, Download, Filter } from 'lucide-react';
 import { useRef } from 'react';
+import { SearchInput } from '@/components/classification/primitives/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface DeviceModelActionsProps {
@@ -32,15 +32,14 @@ export function DeviceModelActions({
   return (
     <div className="flex flex-col sm:flex-row justify-between gap-4">
       <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="搜尋型號名稱..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="搜尋型號名稱..."
+          className="w-full sm:w-64"
+          inputClassName="pl-9"
+          iconSize="md"
+        />
         <div className="w-full sm:w-40 flex items-center gap-2">
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger>
