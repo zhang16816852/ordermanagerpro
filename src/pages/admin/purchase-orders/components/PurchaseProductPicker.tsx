@@ -190,7 +190,7 @@ const { data: supplierMappings = [] } = useQuery({
 
   return (
     <div className="flex flex-col h-full min-h-0 gap-3">
-      <div className="h-[400px] md:h-[520px] rounded-md border overflow-hidden">
+      <div className="h-[500px] md:h-[640px] rounded-md border overflow-hidden">
         <ProductSelector
           products={products}
           productsLoading={productsLoading}
@@ -216,7 +216,7 @@ const { data: supplierMappings = [] } = useQuery({
         />
       </div>
 
-      <div className="shrink-0 rounded-md border max-h-64 overflow-y-auto">
+      <div className="shrink-0 rounded-md border max-h-80 overflow-y-auto">
         <div className="flex items-center justify-between border-b px-3 py-2 sticky top-0 bg-background z-10">
           <span className="text-sm font-medium">
             已選購品項（{stagedItems.length}）
