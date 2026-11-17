@@ -185,7 +185,7 @@ export function PurchaseProductPicker({
           activePanel={catalogOpen ? 'products' : null}
           onTogglePanel={() => setCatalogOpen((v) => !v)}
           collapsed={!catalogOpen}
-          catalogSidebarMaxHeight={280}
+          catalogSidebarMaxHeight={500}
         />
       </div>
 
