@@ -76,6 +76,7 @@ export type PublicSpecOption = {
   spec_name: string;
   spec_type: string;
   distinct_values: any[];
+  configuration?: any;
 };
 
 const STALE_MS = 5 * 60 * 1000;
@@ -206,6 +207,7 @@ export type PublicCategorySpec = {
   spec_name: string;
   spec_type: string;
   sort_order: number | null;
+  configuration?: any;
 };
 
 export function usePublicCategorySpecs(categoryId?: string | null) {

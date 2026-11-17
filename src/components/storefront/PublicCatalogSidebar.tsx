@@ -16,6 +16,7 @@ import {
 } from "@/storefront/usePublicCatalog";
 import { BrandClassifier } from "@/components/classification/BrandClassifier";
 import { DeviceModelClassifier } from "@/components/classification/DeviceModelClassifier";
+import { SpecFilter } from "@/components/specs/SpecFilter";
 
 export type PublicFilters = {
   categoryId: string | null;
@@ -38,6 +39,28 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
   const { data: models } = usePublicDeviceModels();
   const { data: specOpts } = usePublicSpecOptions(filters.categoryId ?? null);
   const { data: categorySpecs } = usePublicCategorySpecs(filters.categoryId ?? null);
+
+  const specFields = useMemo(() => {
+    const map = new Map<string, any>();
+    (categorySpecs ?? []).forEach((cs: any) => {
+      map.set(cs.spec_id, { id: cs.spec_id, name: cs.spec_name, type: cs.spec_type, configuration: cs.configuration, sort_order: cs.sort_order });
+    });
+    (specOpts ?? []).forEach((so: any) => {
+      if (!map.has(so.spec_id)) {
+        map.set(so.spec_id, { id: so.spec_id, name: so.spec_name, type: so.spec_type, configuration: so.configuration });
+      }
+    });
+    return Array.from(map.values());
+  }, [categorySpecs, specOpts]);
+
+  const availableSpecs = useMemo(() => {
+    const result: Record<string, string[]> = {};
+    (specOpts ?? []).forEach((so: any) => {
+      const vals = (so.distinct_values ?? []).map((v: any) => (typeof v === "string" ? v : JSON.stringify(v)));
+      if (vals.length > 0) result[so.spec_id] = vals;
+    });
+    return result;
+  }, [specOpts]);
 
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(["categories", "specs"]));
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
@@ -188,57 +211,19 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
                 {openSections.has("specs") ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               </button>
               {openSections.has("specs") && (
-                <div className="space-y-3 pb-2">
-                  {(() => {
-                    // 合併 categorySpecs（名稱）與 specOpts（值），以 spec_id 為 key
-                    const valueMap = new Map((specOpts ?? []).map((so) => [so.spec_id, so]));
-                    const defs = categorySpecs ?? [];
-                    if (defs.length === 0 && (specOpts ?? []).length === 0) {
-                      return <div className="text-xs text-sf-muted py-2">此分類暫無可篩選的規格</div>;
-                    }
-                    // 優先用 specOpts（有值），補上 categorySpecs 中缺的 spec 名稱
-                    const allSpecIds = new Set([
-                      ...(specOpts ?? []).map((so) => so.spec_id),
-                      ...defs.map((d) => d.spec_id),
-                    ]);
-                    return Array.from(allSpecIds).map((specId) => {
-                      const so = valueMap.get(specId);
-                      const def = defs.find((d) => d.spec_id === specId);
-                      const name = so?.spec_name ?? def?.spec_name ?? specId;
-                      const values = so?.distinct_values ?? [];
-                      return (
-                        <div key={specId}>
-                          <div className="mb-1 text-xs font-medium text-sf-text">{name}</div>
-                          {values.length > 0 ? (
-                            <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
-                              {values.map((v: any, idx: number) => {
-                                const val = typeof v === "string" ? v : JSON.stringify(v);
-                                const checked = (filters.specFilters[specId] ?? []).includes(val);
-                                return (
-                                  <label key={idx} className="flex items-center gap-2 text-sm text-sf-muted">
-                                    <Checkbox
-                                      checked={checked}
-                                      onCheckedChange={(c) => {
-                                        const cur = filters.specFilters[specId] ?? [];
-                                        const next = c ? [...cur, val] : cur.filter((x) => x !== val);
-                                        const newSpecs = { ...filters.specFilters };
-                                        if (next.length === 0) delete newSpecs[specId];
-                                        else newSpecs[specId] = next;
-                                        onChange({ ...filters, specFilters: newSpecs });
-                                      }}
-                                    />
-                                    {val}
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div className="text-xs text-sf-muted/60 py-1">無可用值</div>
-                          )}
-                        </div>
-                      );
-                    });
-                  })()}
+                <div className="pb-2">
+                  <SpecFilter
+                    availableSpecs={availableSpecs}
+                    specFields={specFields}
+                    selectedSpecs={filters.specFilters}
+                    onSpecChange={(key, values) => {
+                      const newSpecs = { ...filters.specFilters };
+                      if (values.length === 0) delete newSpecs[key];
+                      else newSpecs[key] = values;
+                      onChange({ ...filters, specFilters: newSpecs });
+                    }}
+                    maxListHeight="max-h-40"
+                  />
                 </div>
               )}
             </div>

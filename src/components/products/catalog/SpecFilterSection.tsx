@@ -3,7 +3,7 @@ import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { SectionHeader } from "./sidebarPrimitives";
 import { SpecFilterSectionProps } from "./catalogSidebarTypes";
-import { AdvancedSpecFilters } from "@/components/products/catalog/AdvancedSpecFilters";
+import { SpecFilter } from "@/components/specs/SpecFilter";
 
 export function SpecFilterSection({
     open,
@@ -23,7 +23,7 @@ export function SpecFilterSection({
                 />
             </div>
             <CollapsibleContent>
-                <AdvancedSpecFilters
+                <SpecFilter
                     availableSpecs={availableSpecs}
                     specFields={specFields}
                     selectedSpecs={selectedSpecs}
