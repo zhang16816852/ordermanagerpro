@@ -34,7 +34,10 @@ export function PurchaseOrderDetailQuickCopyDialog({
 
   const lines =
     view === 'byStore'
-      ? buildByStoreRows(localItems, sourceOrderStoreMap).map((r) => {
+      ? buildByStoreRows(localItems, sourceOrderStoreMap)
+          .slice()
+          .sort((a, b) => String(a.store).localeCompare(String(b.store), 'zh-Hant-TW'))
+          .map((r) => {
           const mapping = supplierMappingMap[getMappingKey(r.item)];
           const code = mapping?.vendor_product_id || '';
           return `${code},${r.quantity}`;
