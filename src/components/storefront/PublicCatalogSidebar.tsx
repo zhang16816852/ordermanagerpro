@@ -17,6 +17,7 @@ import {
 import { BrandClassifier } from "@/components/classification/BrandClassifier";
 import { DeviceModelClassifier } from "@/components/classification/DeviceModelClassifier";
 import { SpecFilter } from "@/components/specs/SpecFilter";
+import { formatSpecValue } from "@/utils/specFormatter";
 
 export type PublicFilters = {
   categoryId: string | null;
@@ -56,11 +57,15 @@ export function PublicCatalogSidebar({ filters, onChange, onClear }: Props) {
   const availableSpecs = useMemo(() => {
     const result: Record<string, string[]> = {};
     (specOpts ?? []).forEach((so: any) => {
-      const vals = (so.distinct_values ?? []).map((v: any) => (typeof v === "string" ? v : JSON.stringify(v)));
-      if (vals.length > 0) result[so.spec_id] = vals;
+      const specDef = specFields.find((f: any) => f.id === so.spec_id);
+      const vals = (so.distinct_values ?? [])
+        .map((v: any) => formatSpecValue(v, specDef, specFields) as string)
+        .filter((v: string) => v !== "");
+      const unique = Array.from(new Set(vals)) as string[];
+      if (unique.length > 0) result[so.spec_id] = unique;
     });
     return result;
-  }, [specOpts]);
+  }, [specOpts, specFields]);
 
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(["categories", "specs"]));
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
