@@ -165,7 +165,7 @@ export default function ShopPage() {
             <PublicCatalogSidebar filters={filters} onChange={setFilters} onClear={clearAll} />
           </aside>
 
-          <section className="min-h-0">
+          <section className="min-h-[60vh]">
             {isLoading ? (
               <div className="py-20 text-center text-sf-muted">載入中...</div>
             ) : filtered.length === 0 ? (
