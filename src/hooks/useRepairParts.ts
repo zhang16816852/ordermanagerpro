@@ -30,6 +30,7 @@ export interface RepairPart {
   default_unit_price: number;
   is_active: boolean;
   sort_order: number;
+  version: string | null;
   device_model?: { name: string } | null;
   links: RepairPartLink[];
 }
@@ -58,6 +59,7 @@ export interface RepairPartInput {
   default_unit_price: number;
   is_active: boolean;
   sort_order: number;
+  version: string | null;
   links: RepairPartLinkInput[];
 }
 
@@ -65,12 +67,13 @@ const PARTS_QUERY_KEY = ['repair-parts-catalog'];
 
 /** 零件顯示名：型號 + 零件名稱（多變體時補規格） */
 export function partLabelOf(
-  part: Pick<RepairPart, 'name' | 'device_model'>,
+  part: Pick<RepairPart, 'name' | 'device_model' | 'version'>,
   link?: { spec_label: string | null } | null,
 ) {
   const model = part.device_model?.name?.trim() || '';
+  const name = part.version ? `${part.name} (${part.version})` : part.name;
   const spec = link?.spec_label?.trim() || '';
-  return [model, part.name, spec].filter(Boolean).join(' ');
+  return [model, name, spec].filter(Boolean).join(' ');
 }
 
 /** 解析零件要寫入維修單的庫存目標：優先預設連結，其次第一筆 */
@@ -116,6 +119,7 @@ function mapPart(raw: any, stockMap: Map<string, number>): RepairPart {
     default_unit_price: Number(raw.default_unit_price) || 0,
     is_active: raw.is_active !== false,
     sort_order: raw.sort_order ?? 0,
+    version: raw.version || null,
     device_model: raw.device_model || null,
     links,
   };
@@ -299,6 +303,7 @@ export function useRepairPartMutations() {
           default_unit_price: input.default_unit_price,
           is_active: input.is_active,
           sort_order: input.sort_order,
+          version: input.version || null,
         })
         .select('id')
         .single();
@@ -329,6 +334,7 @@ export function useRepairPartMutations() {
           default_unit_price: input.default_unit_price,
           is_active: input.is_active,
           sort_order: input.sort_order,
+          version: input.version || null,
         })
         .eq('id', id);
       if (error) throw error;

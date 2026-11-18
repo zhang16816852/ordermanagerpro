@@ -14,6 +14,117 @@ export type Database = {
   }
   public: {
     Tables: {
+      _backup_inventory_movements_20261031: {
+        Row: {
+          balance_after: number | null
+          batch_id: string | null
+          consignment_order_id: string | null
+          consignment_order_item_id: string | null
+          cost_match_status: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string | null
+          inventory_owner: string | null
+          matched_batch_id: string | null
+          note: string | null
+          order_item_id: string | null
+          original_cost_status: string | null
+          product_id: string | null
+          purchase_order_id: string | null
+          quantity_change: number | null
+          reference_code: string | null
+          repair_order_id: string | null
+          sales_note_id: string | null
+          source_type: string | null
+          unit_cost: number | null
+          variant_id: string | null
+          warehouse_id: string | null
+        }
+        Insert: {
+          balance_after?: number | null
+          batch_id?: string | null
+          consignment_order_id?: string | null
+          consignment_order_item_id?: string | null
+          cost_match_status?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string | null
+          inventory_owner?: string | null
+          matched_batch_id?: string | null
+          note?: string | null
+          order_item_id?: string | null
+          original_cost_status?: string | null
+          product_id?: string | null
+          purchase_order_id?: string | null
+          quantity_change?: number | null
+          reference_code?: string | null
+          repair_order_id?: string | null
+          sales_note_id?: string | null
+          source_type?: string | null
+          unit_cost?: number | null
+          variant_id?: string | null
+          warehouse_id?: string | null
+        }
+        Update: {
+          balance_after?: number | null
+          batch_id?: string | null
+          consignment_order_id?: string | null
+          consignment_order_item_id?: string | null
+          cost_match_status?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string | null
+          inventory_owner?: string | null
+          matched_batch_id?: string | null
+          note?: string | null
+          order_item_id?: string | null
+          original_cost_status?: string | null
+          product_id?: string | null
+          purchase_order_id?: string | null
+          quantity_change?: number | null
+          reference_code?: string | null
+          repair_order_id?: string | null
+          sales_note_id?: string | null
+          source_type?: string | null
+          unit_cost?: number | null
+          variant_id?: string | null
+          warehouse_id?: string | null
+        }
+        Relationships: []
+      }
+      _backup_product_inventory_20261031: {
+        Row: {
+          available_quantity: number | null
+          id: string | null
+          product_id: string | null
+          quantity: number | null
+          suspense_quantity: number | null
+          updated_at: string | null
+          variant_id: string | null
+          warehouse_id: string | null
+        }
+        Insert: {
+          available_quantity?: number | null
+          id?: string | null
+          product_id?: string | null
+          quantity?: number | null
+          suspense_quantity?: number | null
+          updated_at?: string | null
+          variant_id?: string | null
+          warehouse_id?: string | null
+        }
+        Update: {
+          available_quantity?: number | null
+          id?: string | null
+          product_id?: string | null
+          quantity?: number | null
+          suspense_quantity?: number | null
+          updated_at?: string | null
+          variant_id?: string | null
+          warehouse_id?: string | null
+        }
+        Relationships: []
+      }
       accounting_categories: {
         Row: {
           created_at: string
@@ -368,6 +479,7 @@ export type Database = {
           created_at: string | null
           id: string
           is_hidden: boolean
+          is_repair_part: boolean
           name: string
           slug: string | null
           sort_order: number | null
@@ -376,6 +488,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           is_hidden?: boolean
+          is_repair_part?: boolean
           name: string
           slug?: string | null
           sort_order?: number | null
@@ -384,6 +497,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           is_hidden?: boolean
+          is_repair_part?: boolean
           name?: string
           slug?: string | null
           sort_order?: number | null
@@ -1544,35 +1658,68 @@ export type Database = {
           },
         ]
       }
+      customer_statement_share_stores: {
+        Row: {
+          statement_id: string
+          store_id: string
+        }
+        Insert: {
+          statement_id: string
+          store_id: string
+        }
+        Update: {
+          statement_id?: string
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_statement_share_stores_statement_id_fkey"
+            columns: ["statement_id"]
+            isOneToOne: false
+            referencedRelation: "customer_statement_shares"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_statement_share_stores_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_statement_shares: {
         Row: {
           access_token: string
+          brand: string | null
           created_at: string
           created_by: string
           date_from: string
           date_to: string
           id: string
-          store_id: string
+          store_id: string | null
           title: string
         }
         Insert: {
           access_token?: string
+          brand?: string | null
           created_at?: string
           created_by: string
           date_from: string
           date_to: string
           id?: string
-          store_id: string
+          store_id?: string | null
           title: string
         }
         Update: {
           access_token?: string
+          brand?: string | null
           created_at?: string
           created_by?: string
           date_from?: string
           date_to?: string
           id?: string
-          store_id?: string
+          store_id?: string | null
           title?: string
         }
         Relationships: [
@@ -2268,18 +2415,73 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_movement_cost_allocations: {
+        Row: {
+          batch_id: string
+          id: string
+          matched_at: string
+          matched_by: string | null
+          matched_quantity: number
+          movement_id: string
+          unit_cost: number
+        }
+        Insert: {
+          batch_id: string
+          id?: string
+          matched_at?: string
+          matched_by?: string | null
+          matched_quantity: number
+          movement_id: string
+          unit_cost: number
+        }
+        Update: {
+          batch_id?: string
+          id?: string
+          matched_at?: string
+          matched_by?: string | null
+          matched_quantity?: number
+          movement_id?: string
+          unit_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_movement_cost_allocations_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "product_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movement_cost_allocations_matched_by_fkey"
+            columns: ["matched_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movement_cost_allocations_movement_id_fkey"
+            columns: ["movement_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_movements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory_movements: {
         Row: {
           balance_after: number
           batch_id: string | null
           consignment_order_id: string | null
           consignment_order_item_id: string | null
+          cost_match_status: string
           created_at: string | null
           created_by: string | null
           id: string
           inventory_owner: string
+          matched_batch_id: string | null
           note: string | null
           order_item_id: string | null
+          original_cost_status: string | null
           product_id: string
           purchase_order_id: string | null
           quantity_change: number
@@ -2296,12 +2498,15 @@ export type Database = {
           batch_id?: string | null
           consignment_order_id?: string | null
           consignment_order_item_id?: string | null
+          cost_match_status?: string
           created_at?: string | null
           created_by?: string | null
           id?: string
           inventory_owner?: string
+          matched_batch_id?: string | null
           note?: string | null
           order_item_id?: string | null
+          original_cost_status?: string | null
           product_id: string
           purchase_order_id?: string | null
           quantity_change: number
@@ -2318,12 +2523,15 @@ export type Database = {
           batch_id?: string | null
           consignment_order_id?: string | null
           consignment_order_item_id?: string | null
+          cost_match_status?: string
           created_at?: string | null
           created_by?: string | null
           id?: string
           inventory_owner?: string
+          matched_batch_id?: string | null
           note?: string | null
           order_item_id?: string | null
+          original_cost_status?: string | null
           product_id?: string
           purchase_order_id?: string | null
           quantity_change?: number
@@ -2369,6 +2577,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_matched_batch_id_fkey"
+            columns: ["matched_batch_id"]
+            isOneToOne: false
+            referencedRelation: "product_batches"
             referencedColumns: ["id"]
           },
           {
@@ -2682,12 +2897,16 @@ export type Database = {
       }
       order_items: {
         Row: {
+          cost_match_status: string
+          cost_recalculated_at: string | null
+          cost_source_batch_id: string | null
           created_at: string
           id: string
           is_repair: boolean
           line_note: string | null
           line_type: string
           order_id: string
+          original_cost_status: string | null
           parent_order_item_id: string | null
           product_id: string
           quantity: number
@@ -2706,12 +2925,16 @@ export type Database = {
           variant_id: string | null
         }
         Insert: {
+          cost_match_status?: string
+          cost_recalculated_at?: string | null
+          cost_source_batch_id?: string | null
           created_at?: string
           id?: string
           is_repair?: boolean
           line_note?: string | null
           line_type?: string
           order_id: string
+          original_cost_status?: string | null
           parent_order_item_id?: string | null
           product_id: string
           quantity?: number
@@ -2730,12 +2953,16 @@ export type Database = {
           variant_id?: string | null
         }
         Update: {
+          cost_match_status?: string
+          cost_recalculated_at?: string | null
+          cost_source_batch_id?: string | null
           created_at?: string
           id?: string
           is_repair?: boolean
           line_note?: string | null
           line_type?: string
           order_id?: string
+          original_cost_status?: string | null
           parent_order_item_id?: string | null
           product_id?: string
           quantity?: number
@@ -2759,6 +2986,13 @@ export type Database = {
             columns: ["store_id"]
             isOneToOne: false
             referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_cost_source_batch_id_fkey"
+            columns: ["cost_source_batch_id"]
+            isOneToOne: false
+            referencedRelation: "product_batches"
             referencedColumns: ["id"]
           },
           {
@@ -3209,25 +3443,31 @@ export type Database = {
       }
       product_inventory: {
         Row: {
+          available_quantity: number
           id: string
           product_id: string
           quantity: number
+          suspense_quantity: number
           updated_at: string | null
           variant_id: string | null
           warehouse_id: string
         }
         Insert: {
+          available_quantity?: number
           id?: string
           product_id: string
           quantity?: number
+          suspense_quantity?: number
           updated_at?: string | null
           variant_id?: string | null
           warehouse_id: string
         }
         Update: {
+          available_quantity?: number
           id?: string
           product_id?: string
           quantity?: number
+          suspense_quantity?: number
           updated_at?: string | null
           variant_id?: string | null
           warehouse_id?: string
@@ -4625,6 +4865,7 @@ export type Database = {
           supplier_id: string | null
           tags: string[]
           updated_at: string
+          version: string | null
         }
         Insert: {
           created_at?: string
@@ -4639,6 +4880,7 @@ export type Database = {
           supplier_id?: string | null
           tags?: string[]
           updated_at?: string
+          version?: string | null
         }
         Update: {
           created_at?: string
@@ -4653,6 +4895,7 @@ export type Database = {
           supplier_id?: string | null
           tags?: string[]
           updated_at?: string
+          version?: string | null
         }
         Relationships: [
           {
@@ -4809,6 +5052,41 @@ export type Database = {
             columns: ["warehouse_id"]
             isOneToOne: false
             referencedRelation: "warehouses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scrape_decisions: {
+        Row: {
+          action: string
+          decided_at: string | null
+          id: string
+          note: string | null
+          supplier_id: string
+          vendor_product_id: string
+        }
+        Insert: {
+          action: string
+          decided_at?: string | null
+          id?: string
+          note?: string | null
+          supplier_id: string
+          vendor_product_id: string
+        }
+        Update: {
+          action?: string
+          decided_at?: string | null
+          id?: string
+          note?: string | null
+          supplier_id?: string
+          vendor_product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scrape_decisions_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
@@ -5236,6 +5514,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      storefront_pages: {
+        Row: {
+          blocks: Json
+          id: string
+          slug: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          blocks?: Json
+          id?: string
+          slug: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          blocks?: Json
+          id?: string
+          slug?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
       }
       stores: {
         Row: {
@@ -5834,6 +6136,26 @@ export type Database = {
       }
     }
     Functions: {
+      _backfill_match_batches: {
+        Args: {
+          p_available_qty: number
+          p_new_batch_id: string
+          p_product_id: string
+          p_purchase_order_item_id: string
+          p_receipt_id?: string
+          p_variant_id: string
+        }
+        Returns: Json
+      }
+      _check_commission_adjustment: {
+        Args: {
+          p_created_by?: string
+          p_new_unit_cost: number
+          p_old_unit_cost: number
+          p_order_item_id: string
+        }
+        Returns: Json
+      }
       _consume_currency_fifo: {
         Args: {
           p_account_id: string
@@ -5845,6 +6167,22 @@ export type Database = {
         }
         Returns: Json
       }
+      _consume_fifo_batches: {
+        Args: {
+          p_created_by?: string
+          p_is_suspense?: boolean
+          p_order_item_id?: string
+          p_product_id: string
+          p_quantity: number
+          p_reference_code?: string
+          p_source_id?: string
+          p_source_type: string
+          p_variant_id: string
+          p_warehouse_id: string
+        }
+        Returns: Json
+      }
+      _debug_update_po: { Args: { p_src_ids: Json }; Returns: Json }
       _po_allocate_freight: {
         Args: { p_actor?: string; p_dry_run?: boolean; p_po_id: string }
         Returns: Json
@@ -5988,6 +6326,14 @@ export type Database = {
         Args: { p_order: Database["public"]["Tables"]["repair_orders"]["Row"] }
         Returns: boolean
       }
+      cancel_order_items: {
+        Args: { p_item_ids: string[]; p_target_status: string }
+        Returns: Json
+      }
+      check_rep_cost_guard: {
+        Args: { p_product_id: string; p_rep_id: string; p_variant_id?: string }
+        Returns: Json
+      }
       cleanup_category_spec_values: {
         Args: { p_active_spec_ids: string[]; p_category_id: string }
         Returns: undefined
@@ -6010,6 +6356,7 @@ export type Database = {
         Args: { p_confirmed_by: string; p_report_ids: string[] }
         Returns: number
       }
+      confirm_orders: { Args: { p_order_ids: string[] }; Returns: Json }
       consume_currency_fifo: {
         Args: {
           p_account_id: string
@@ -6029,7 +6376,7 @@ export type Database = {
         Args: {
           p_created_by?: string
           p_items_to_add?: Json
-          p_items_to_remove?: string[]
+          p_items_to_remove?: Json
           p_new_items?: Json
           p_price_updates?: Json
           p_sales_note_id: string
@@ -6106,6 +6453,20 @@ export type Database = {
         }
         Returns: Json
       }
+      create_customer_statement_share: {
+        Args: {
+          p_created_by: string
+          p_date_from: string
+          p_date_to: string
+          p_store_ids: string[]
+          p_title: string
+        }
+        Returns: Json
+      }
+      create_device_model_group: {
+        Args: { p_description?: string; p_name: string }
+        Returns: Json
+      }
       create_order_with_sales_note: {
         Args: {
           p_consignment_mode?: boolean
@@ -6138,6 +6499,16 @@ export type Database = {
           p_status?: string
           p_supplier_id: string
           p_supplier_order_number?: string
+        }
+        Returns: Json
+      }
+      create_purchase_return_with_items: {
+        Args: {
+          p_created_by?: string
+          p_items: Json
+          p_notes?: string
+          p_order_date?: string
+          p_supplier_id: string
         }
         Returns: Json
       }
@@ -6179,6 +6550,7 @@ export type Database = {
         Args: { p_movement_id: string }
         Returns: Json
       }
+      delete_device_model_group: { Args: { p_id: string }; Returns: Json }
       delete_order_if_unadopted: {
         Args: { p_allow_consignment_mirror?: boolean; p_order_id: string }
         Returns: Json
@@ -6200,32 +6572,12 @@ export type Database = {
       delete_sales_note: { Args: { p_sales_note_id: string }; Returns: Json }
       delete_shipment: { Args: { p_shipment_id: string }; Returns: Json }
       delete_variant_if_safe: { Args: { p_variant_id: string }; Returns: Json }
-      direct_ship_order: {
-        Args: {
-          p_created_by: string
-          p_delivery_method_id?: string
-          p_delivery_type?: string
-          p_lots?: Json
-          p_notes?: string
-          p_order_id: string
-          p_shipped_at?: string
-          p_shipping_address?: Json
-          p_shipping_cost?: number
-          p_shipping_fee?: number
-          p_source_map?: Json
-          p_tracking_company?: string
-          p_tracking_number?: string
-          p_tracking_url?: string
-          p_warehouse_id?: string
-          p_warehouse_map?: Json
-        }
-        Returns: Json
-      }
       direct_ship_orders: {
         Args: {
           p_created_by: string
           p_delivery_method_id?: string
           p_delivery_type?: string
+          p_item_quantities?: Json
           p_lots?: Json
           p_notes?: string
           p_order_ids: string[]
@@ -6297,6 +6649,24 @@ export type Database = {
         Args: { p_variant_id: string }
         Returns: string[]
       }
+      get_public_brand_series: {
+        Args: never
+        Returns: {
+          brand_id: string
+          brand_name: string
+          product_count: number
+          series_id: string
+          series_name: string
+        }[]
+      }
+      get_public_brands: {
+        Args: never
+        Returns: {
+          id: string
+          name: string
+          product_count: number
+        }[]
+      }
       get_public_categories: {
         Args: never
         Returns: {
@@ -6306,13 +6676,47 @@ export type Database = {
           slug: string
         }[]
       }
+      get_public_category_specs: {
+        Args: { p_category_id: string }
+        Returns: {
+          configuration: Json
+          sort_order: number
+          spec_id: string
+          spec_name: string
+          spec_type: string
+        }[]
+      }
+      get_public_category_tree: {
+        Args: never
+        Returns: {
+          id: string
+          name: string
+          parent_id: string
+          product_count: number
+          slug: string
+          sort_order: number
+        }[]
+      }
+      get_public_device_models: {
+        Args: never
+        Returns: {
+          brand_id: string
+          brand_name: string
+          id: string
+          name: string
+          product_count: number
+        }[]
+      }
       get_public_products: {
         Args: {
+          p_brand_ids?: string[]
           p_category_id?: string
           p_distinct_products?: boolean
           p_limit?: number
+          p_model_ids?: string[]
           p_offset?: number
           p_product_ids?: string[]
+          p_search?: string
         }
         Returns: {
           brand_name: string
@@ -6323,11 +6727,27 @@ export type Database = {
           item_id: string
           item_slug: string
           model_name: string
+          product_code: string
+          product_id: string
           product_name: string
           retail_price: number
+          spec_values: Json
+          variant_barcode: string
           variant_name: string
+          variant_sku: string
         }[]
       }
+      get_public_spec_options: {
+        Args: { p_category_id?: string }
+        Returns: {
+          configuration: Json
+          distinct_values: Json
+          spec_id: string
+          spec_name: string
+          spec_type: string
+        }[]
+      }
+      get_purchase_order_link_items: { Args: never; Returns: Json }
       get_rep_commission_rate: { Args: { _user_id: string }; Returns: number }
       get_shared_consignment_details: {
         Args: { p_identifier: string; p_token: string }
@@ -6348,6 +6768,10 @@ export type Database = {
       get_store_role: {
         Args: { _store_id: string; _user_id: string }
         Returns: Database["public"]["Enums"]["store_role"]
+      }
+      get_supplier_product_costs: {
+        Args: { p_supplier_id: string }
+        Returns: Json
       }
       get_variant_effective_models: {
         Args: { p_variant_id: string }
@@ -6454,7 +6878,11 @@ export type Database = {
         }[]
       }
       list_settleable_shipments: {
-        Args: { p_supplier_id: string }
+        Args: { p_supplier_id?: string }
+        Returns: Json
+      }
+      lock_orders_for_shipping_pool: {
+        Args: { p_order_ids: string[] }
         Returns: Json
       }
       migrate_historical_specs_to_v6: { Args: never; Returns: Json }
@@ -6546,6 +6974,21 @@ export type Database = {
         Args: { p_account_id: string; p_currency: string }
         Returns: Json
       }
+      reconcile_fifo_integrity: {
+        Args: { p_product_id?: string; p_variant_id?: string }
+        Returns: Json
+      }
+      reconcile_inventory_balances: {
+        Args: { p_created_by?: string }
+        Returns: {
+          diff: number
+          new_quantity: number
+          old_quantity: number
+          out_product_id: string
+          out_variant_id: string
+          out_warehouse_id: string
+        }[]
+      }
       refund_currency_fifo: {
         Args: {
           p_account_id: string
@@ -6618,6 +7061,10 @@ export type Database = {
           p_consolidation_shipment_id: string
           p_purchase_order_id: string
         }
+        Returns: Json
+      }
+      rename_device_model_group: {
+        Args: { p_id: string; p_new_name: string }
         Returns: Json
       }
       reorder_purchase_order_items: {
@@ -6768,6 +7215,10 @@ export type Database = {
         }
         Returns: Json
       }
+      sync_order_shipped_status: {
+        Args: { p_order_ids: string[] }
+        Returns: Json
+      }
       sync_product_specs_v6: {
         Args: {
           p_category_id: string
@@ -6789,6 +7240,27 @@ export type Database = {
         Args: { p_product_id: string }
         Returns: undefined
       }
+      sync_supplier_mapping_status: {
+        Args: {
+          p_is_hidden?: boolean
+          p_mapping_id: string
+          p_variant_id?: string
+          p_variant_status?: string
+          p_vendor_product_name?: string
+          p_vendor_unit_cost?: number
+        }
+        Returns: Json
+      }
+      sync_variant_product_transfer: {
+        Args: {
+          p_new_product_id: string
+          p_old_product_id: string
+          p_sync_movements?: boolean
+          p_variant_ids: string[]
+        }
+        Returns: Json
+      }
+      toggle_order_status: { Args: { p_order_id: string }; Returns: Json }
       transfer_currency_fifo: {
         Args: {
           p_amount: number

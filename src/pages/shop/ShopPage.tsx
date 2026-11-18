@@ -163,7 +163,7 @@ export default function ShopPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[280px_1fr] lg:items-start">
-          <aside className="hidden lg:block lg:sticky lg:top-20">
+          <aside className="hidden lg:block lg:sticky lg:top-20 lg:h-[calc(100vh-6rem)] lg:overflow-hidden">
             <PublicCatalogSidebar filters={filters} onChange={setFilters} onClear={clearAll} />
           </aside>
 

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, Link2, Star, Package, Tags, Loader2, Wrench } from 'lucide-react';
+import { Plus, Pencil, Trash2, Link2, Star, Package, Tags, Loader2, Wrench, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -98,6 +98,12 @@ export default function RepairPartsPage() {
           <Button variant="outline" onClick={() => setBatchOpen(true)}>
             <Package className="h-4 w-4 mr-1.5" />
             批次建立
+          </Button>
+          <Button variant="outline" asChild>
+            <a href="/admin/repair-parts/quick-create">
+              <Sparkles className="h-4 w-4 mr-1.5" />
+              快速建立（Prototype）
+            </a>
           </Button>
           <Button onClick={() => { setEditingPart(null); setPresetModelId(null); setFormOpen(true); }}>
             <Plus className="h-4 w-4 mr-1.5" />

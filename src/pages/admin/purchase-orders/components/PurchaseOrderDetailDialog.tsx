@@ -548,6 +548,11 @@ export function PurchaseOrderDetailDialog({
           </span>
         </TableCell>
         <TableCell className="text-right">
+          <span className="font-mono tabular-nums text-xs">
+            {Math.max(0, (item.received_quantity || 0) - (item.returned_quantity || 0) - (item.consumed_quantity || 0))}
+          </span>
+        </TableCell>
+        <TableCell className="text-right">
           {canEdit ? (
             <Input
               type="number"
@@ -742,7 +747,7 @@ export function PurchaseOrderDetailDialog({
     }
   };
 
-  const colSpan = (canReorder ? 1 : 0) + 7 + (canDelete ? 1 : 0);
+  const colSpan = (canReorder ? 1 : 0) + 8 + (canDelete ? 1 : 0);
 
   return (
     <div className="space-y-6 py-4">

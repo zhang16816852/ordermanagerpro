@@ -243,6 +243,16 @@ export function useInventoryMovements(productId: string | null, variantId: strin
                 .from('inventory_movements' as any) as any)
                 .select(`
                     *,
+                    purchase_order:purchase_orders!purchase_order_id (
+                        id,
+                        supplier_order_number,
+                        order_date
+                    ),
+                    sales_note:sales_notes!sales_note_id (
+                        id,
+                        shipped_at,
+                        code
+                    ),
                     batch:product_batches!batch_id (
                         id,
                         purchase_order_id,
@@ -280,11 +290,18 @@ export function useInventoryMovements(productId: string | null, variantId: strin
                 createdAt: m.created_at,
                 createdBy: m.created_by,
                 costMatchStatus: m.cost_match_status || 'confirmed',
+                productId: m.product_id || null,
+                variantId: m.variant_id || null,
                 batchId: m.batch_id || null,
                 matchedBatchId: m.matched_batch_id || null,
                 unitCost: m.unit_cost,
-                purchaseOrderCode: (m.batch?.purchase_orders?.supplier_order_number || m.matched_batch?.purchase_orders?.supplier_order_number) || null,
-                purchaseOrderId: (m.batch?.purchase_order_id || m.matched_batch?.purchase_order_id) || null,
+                purchaseOrderCode: (m.batch?.purchase_orders?.supplier_order_number || m.matched_batch?.purchase_orders?.supplier_order_number || m.purchase_order?.supplier_order_number || (m.purchase_order_id ? String(m.purchase_order_id).slice(0, 8) : null)) || null,
+                purchaseOrderId: (m.batch?.purchase_order_id || m.matched_batch?.purchase_order_id || m.purchase_order_id) || null,
+                documentDate: (m.source_type === 'purchase_receipt'
+                    ? (m.purchase_order?.order_date || m.created_at)
+                    : m.source_type === 'sales_shipment'
+                        ? (m.sales_note?.shipped_at || m.created_at)
+                        : m.created_at) || null,
             }));
         }
     });

@@ -47,7 +47,7 @@ export function DeviceFieldsSection({ block, onChange, models, showRam = true, s
         <ModelPicker
           models={models}
           value={block.device_model_id || null}
-          onChange={handleModelChange}
+          onChange={handleModelChange as (modelId: string | string[] | null) => void}
         />
         {modelVersions.length > 0 && (
           <div className="flex items-center gap-2 pt-1">

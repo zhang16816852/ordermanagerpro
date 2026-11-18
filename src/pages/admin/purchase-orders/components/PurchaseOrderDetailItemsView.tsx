@@ -184,6 +184,7 @@ export function PurchaseOrderDetailItemsView(props: Props) {
                     <TableHead className="min-w-[200px]">廠商（代碼 / 名稱）</TableHead>
                     <TableHead className="text-right">數量</TableHead>
                     <TableHead className="text-right">已收</TableHead>
+                    <TableHead className="text-right">剩餘</TableHead>
                     <TableHead className="text-right">進貨價</TableHead>
                     <TableHead className="text-right">總額</TableHead>
                     <TableHead>來源訂單</TableHead>
@@ -220,6 +221,7 @@ export function PurchaseOrderDetailItemsView(props: Props) {
                   <TableHead className="min-w-[200px]">廠商（代碼 / 名稱）</TableHead>
                   <TableHead className="text-right">數量</TableHead>
                   <TableHead className="text-right">已收</TableHead>
+                  <TableHead className="text-right">剩餘</TableHead>
                   <TableHead className="text-right">進貨價</TableHead>
                   <TableHead className="text-right">總額</TableHead>
                   <TableHead>來源訂單</TableHead>
@@ -265,6 +267,7 @@ export function PurchaseOrderDetailItemsView(props: Props) {
                       <TableHead className="min-w-[200px]">廠商（代碼 / 名稱）</TableHead>
                       <TableHead className="text-right">數量</TableHead>
                       <TableHead className="text-right">已收</TableHead>
+                      <TableHead className="text-right">剩餘</TableHead>
                       <TableHead className="text-right">進貨價</TableHead>
                       <TableHead className="text-right">總額</TableHead>
                     </TableRow>
@@ -289,6 +292,7 @@ export function PurchaseOrderDetailItemsView(props: Props) {
                           </TableCell>
                           <TableCell className="text-right">{r.quantity}</TableCell>
                           <TableCell className="text-right">{r.received}</TableCell>
+                          <TableCell className="text-right">{Math.max(0, r.received - (item.returned_quantity || 0) - (item.consumed_quantity || 0))}</TableCell>
                           <TableCell className="text-right">{formatCurrency(item.unit_cost)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(r.quantity * item.unit_cost)}</TableCell>
                         </TableRow>

@@ -115,6 +115,7 @@ export function RepairPartBatchCreateDialog({ open, onOpenChange }: RepairPartBa
         default_unit_price: 0,
         is_active: true,
         sort_order: 0,
+        version: null,
         links: row.links,
       };
       try {

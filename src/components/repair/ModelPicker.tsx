@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { X, Smartphone } from 'lucide-react';
+import { X, Smartphone, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface ModelPickerOption {
@@ -17,19 +17,21 @@ export interface ModelPickerOption {
 
 export interface ModelPickerProps {
   models: ModelPickerOption[];
-  value: string | null;
-  onChange: (modelId: string | null) => void;
+  value: string | string[] | null;
+  onChange: (modelId: string | string[] | null) => void;
+  multi?: boolean;
   filterLabel?: string;
   className?: string;
 }
 
-export function ModelPicker({ models, value, onChange, className }: ModelPickerProps) {
+export function ModelPicker({ models, value, onChange, multi = false, className }: ModelPickerProps) {
   const [typeFilter, setTypeFilter] = useState('all');
   const [brandFilter, setBrandFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
 
-  const selected = models.find(m => m.id === value) || null;
+  const selectedIds = useMemo(() => (Array.isArray(value) ? value : value ? [value] : []), [value]);
+  const selectedModels = useMemo(() => selectedIds.map(id => models.find(m => m.id === id)).filter(Boolean) as ModelPickerOption[], [selectedIds, models]);
 
   const types = useMemo(() => Array.from(new Set(models.map(m => m.device_type).filter(Boolean))) as string[], [models]);
   const brands = useMemo(() => {
@@ -41,33 +43,38 @@ export function ModelPicker({ models, value, onChange, className }: ModelPickerP
   }, [models]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     return models.filter(m => {
       if (typeFilter !== 'all' && m.device_type !== typeFilter) return false;
       if (brandFilter !== 'all' && m.brand_name !== brandFilter) return false;
-      if (q) {
-        const name = `${m.brand_name || ''} ${m.name}`.toLowerCase();
-        const aliases = (m.aliases || []).map(a => a.toLowerCase());
-        if (!name.includes(q) && !aliases.some(a => a.includes(q))) return false;
+      if (selectedIds.includes(m.id)) return false; // 已選的不重複顯示
+      if (tokens.length > 0) {
+        const haystack = `${m.brand_name || ''} ${m.name} ${(m.aliases || []).join(' ')}`.toLowerCase();
+        if (!tokens.every(t => haystack.includes(t))) return false;
       }
       return true;
     });
-  }, [models, typeFilter, brandFilter, query]);
+  }, [models, typeFilter, brandFilter, query, selectedIds]);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (selected) {
-      setQuery(`${selected.brand_name ? selected.brand_name + ' ' : ''}${selected.name}`);
-    }
-  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const pick = (model: ModelPickerOption) => {
-    onChange(model.id);
-    if (selected?.id !== model.id) {
-      setQuery(`${model.brand_name ? model.brand_name + ' ' : ''}${model.name}`);
+    if (multi) {
+      onChange([...selectedIds, model.id]);
+    } else {
+      onChange(model.id);
     }
+    setQuery('');
     setFocused(false);
+  };
+
+  const remove = (id: string) => {
+    if (multi) {
+      const next = selectedIds.filter(x => x !== id);
+      onChange(next.length === 0 ? null : next);
+    } else {
+      onChange(null);
+    }
   };
 
   const clear = () => {
@@ -75,7 +82,7 @@ export function ModelPicker({ models, value, onChange, className }: ModelPickerP
     setQuery('');
   };
 
-  const showList = focused && (query.trim().length > 0 || !selected);
+  const showList = focused && (query.trim().length > 0 || selectedIds.length === 0);
 
   return (
     <div className={cn('space-y-2', className)}>
@@ -104,64 +111,73 @@ export function ModelPicker({ models, value, onChange, className }: ModelPickerP
         </Select>
       </div>
 
-      <div className="relative">
-        <Label className="sr-only">型號搜尋</Label>
-        <Input
-          ref={inputRef}
-          value={selected ? `${selected.brand_name ? selected.brand_name + ' ' : ''}${selected.name}` : query}
-          onChange={(e) => {
-            if (selected) onChange(null);
-            setQuery(e.target.value);
-            setFocused(true);
-          }}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setTimeout(() => setFocused(false), 150)}
-          placeholder="輸入型號關鍵字搜尋..."
-          className="pr-8"
-        />
-        {selected && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
-            onMouseDown={(e) => { e.preventDefault(); clear(); }}
-            aria-label="清除型號"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        )}
-        <Smartphone className="absolute right-8 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-
-        {showList && (
-          <div className="absolute z-50 mt-1 w-full max-h-56 overflow-auto rounded-md border bg-popover shadow-md">
-            {filtered.length === 0 && (
-              <p className="px-3 py-2 text-sm text-muted-foreground">找不到符合的型號</p>
-            )}
-            {filtered.slice(0, 50).map(m => (
-              <button
-                key={m.id}
-                type="button"
-                className={cn(
-                  'w-full text-left px-3 py-2 text-sm hover:bg-accent',
-                  m.id === value && 'bg-accent'
-                )}
-                onMouseDown={() => pick(m)}
-              >
-                <span className="font-medium">{m.name}</span>
-                {m.brand_name && <span className="ml-2 text-xs text-muted-foreground">{m.brand_name}</span>}
-                {m.device_type && <span className="ml-2 text-xs text-muted-foreground">{m.device_type}</span>}
-                {m.aliases && m.aliases.length > 0 && (
-                  <span className="ml-2 text-xs text-muted-foreground">別名：{m.aliases.join('、')}</span>
-                )}
+      {/* 已選型號 chips */}
+      {selectedModels.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selectedModels.map(m => (
+            <span key={m.id} className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-xs">
+              {m.brand_name ? `${m.brand_name} ` : ''}{m.name}
+              <button type="button" onClick={() => remove(m.id)} className="text-muted-foreground hover:text-destructive">
+                <X className="h-3 w-3" />
               </button>
-            ))}
-          </div>
-        )}
-      </div>
-      {selected && (
+            </span>
+          ))}
+          {!multi && selectedModels.length > 0 && (
+            <button type="button" onClick={clear} className="text-xs text-muted-foreground underline">清除</button>
+          )}
+        </div>
+      )}
+
+      {/* 搜尋輸入（多選時永遠顯示；單選時未選時顯示） */}
+      {(multi || selectedIds.length === 0) && (
+        <div className="relative">
+          <Label className="sr-only">型號搜尋</Label>
+          <Input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setFocused(true); }}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setTimeout(() => setFocused(false), 150)}
+            placeholder={multi ? '搜尋並新增型號（可多選）...' : '輸入型號關鍵字搜尋...'}
+            className="pr-8"
+          />
+          <Smartphone className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+
+          {showList && (
+            <div className="absolute z-50 mt-1 w-full max-h-56 overflow-auto rounded-md border bg-popover shadow-md">
+              {filtered.length === 0 && (
+                <p className="px-3 py-2 text-sm text-muted-foreground">找不到符合的型號</p>
+              )}
+              {filtered.slice(0, 50).map(m => (
+                <button
+                  key={m.id}
+                  type="button"
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent"
+                  onMouseDown={() => pick(m)}
+                >
+                  <span className="font-medium">{m.name}</span>
+                  {m.brand_name && <span className="ml-2 text-xs text-muted-foreground">{m.brand_name}</span>}
+                  {m.device_type && <span className="ml-2 text-xs text-muted-foreground">{m.device_type}</span>}
+                  {m.aliases && m.aliases.length > 0 && (
+                    <span className="ml-2 text-xs text-muted-foreground">別名：{m.aliases.join('、')}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {selectedModels.length === 0 && (
+        <p className="text-xs text-muted-foreground">已選擇：無</p>
+      )}
+      {selectedModels.length > 0 && !multi && (
         <p className="text-xs text-muted-foreground">
-          已選擇：{selected.brand_name ? selected.brand_name + ' ' : ''}{selected.name}
+          已選擇：{selectedModels[0].brand_name ? selectedModels[0].brand_name + ' ' : ''}{selectedModels[0].name}
         </p>
+      )}
+      {multi && selectedModels.length > 0 && (
+        <p className="text-xs text-muted-foreground">已選擇 {selectedModels.length} 個型號</p>
       )}
     </div>
   );

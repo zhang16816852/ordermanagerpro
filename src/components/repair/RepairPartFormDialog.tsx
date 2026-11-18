@@ -38,6 +38,7 @@ const emptyForm = (deviceModelId?: string | null): RepairPartInput => ({
   default_unit_price: 0,
   is_active: true,
   sort_order: 0,
+  version: null,
   links: [],
 });
 
@@ -71,6 +72,7 @@ export function RepairPartFormDialog({
         default_unit_price: editingPart.default_unit_price,
         is_active: editingPart.is_active,
         sort_order: editingPart.sort_order,
+        version: editingPart.version || null,
         links: editingPart.links.map(l => ({
           id: l.id,
           product_id: l.product_id,
@@ -165,7 +167,7 @@ export function RepairPartFormDialog({
             <ModelPicker
               models={models}
               value={form.device_model_id}
-              onChange={(id) => patch({ device_model_id: id })}
+              onChange={(id) => patch({ device_model_id: (Array.isArray(id) ? id[0] : id) || null })}
             />
             <p className="text-[11px] text-muted-foreground">
               留空代表通用零件（不限機型），將出現在所有機型的選單中。
@@ -182,6 +184,18 @@ export function RepairPartFormDialog({
               className="h-9"
             />
             <p className="text-[11px] text-muted-foreground">同一型號下零件名稱不可重複。</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="repair-part-version">版本（可選）</Label>
+            <Input
+              id="repair-part-version"
+              value={form.version || ''}
+              onChange={(e) => patch({ version: e.target.value || null })}
+              placeholder="如 a版、b版、dtp、c3f"
+              className="h-9"
+            />
+            <p className="text-[11px] text-muted-foreground">留空代表無版本區分。</p>
           </div>
 
           <div className="space-y-1.5">
@@ -283,6 +297,7 @@ export function RepairPartFormDialog({
           <RepairPartLinksEditor
             links={form.links as RepairPartLinkInput[]}
             onChange={(links) => patch({ links })}
+            version={form.version}
           />
 
           {onCreateProduct && (

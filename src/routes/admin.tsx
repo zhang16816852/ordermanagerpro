@@ -25,6 +25,7 @@ const AdminRepairOrderNew = lazy(() => import("@/pages/admin/repair-orders/new")
 const AdminRepairOrderEdit = lazy(() => import("@/pages/admin/repair-orders/new"));
 const AdminRepairOrderDetail = lazy(() => import("@/pages/admin/repair-orders/detail"));
 const AdminRepairParts = lazy(() => import("@/pages/admin/repair-parts/RepairPartsPage"));
+const AdminRepairPartsQuickCreate = lazy(() => import("@/pages/admin/repair-parts/QuickCreatePrototype"));
 const AdminReps = lazy(() => import("@/pages/admin/Reps"));
 const RepCommissionPage = lazy(() => import("@/pages/admin/RepCommissionPage"));
 const MyCommissionPage = lazy(() => import("@/pages/admin/MyCommissionPage"));
@@ -71,4 +72,5 @@ export const adminRoutes = [
     { path: "/admin/repair-orders/:id", element: <Suspense fallback={<PageFallback />}><AdminRepairOrderDetail /></Suspense> },
     { path: "/admin/repair-orders/:id/edit", element: <Suspense fallback={<PageFallback />}><AdminRepairOrderEdit /></Suspense> },
   { path: "/admin/repair-parts", element: <Suspense fallback={<PageFallback />}><AdminRepairParts /></Suspense> },
+  { path: "/admin/repair-parts/quick-create", element: <Suspense fallback={<PageFallback />}><AdminRepairPartsQuickCreate /></Suspense> },
 ];

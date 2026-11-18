@@ -7,13 +7,12 @@ import { Search, RefreshCw, AlertTriangle, Save, FileText, History, Calculator, 
 import { DataTable } from '@/components/shared/DataTable';
 import { formatCurrency } from '@/lib/formatters';
 import { exportToCSV } from '@/lib/exportUtils';
-import { useInventory, useInventoryMovements } from './hooks/useInventory';
+import { useInventory } from './hooks/useInventory';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ColumnDef } from '@tanstack/react-table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
-import { costMatchLabel, costMatchColor } from '@/lib/costMatchStatus';
 import { UseMutationResult } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -24,221 +23,8 @@ import WarehousesTab from './components/WarehousesTab';
 import BatchesTab from './components/BatchesTab';
 import { ReconcileDialog } from './components/ReconcileDialog';
 import { StocktakeDialog } from './components/StocktakeDialog';
-
-const SOURCE_TYPE_LABELS: Record<string, string> = {
-    purchase_receipt: '採購入庫',
-    sales_shipment: '出貨扣減',
-    sales_note_deletion: '銷貨刪除回補',
-    manual_adjustment: '手動調整',
-};
-
-function QuantityCell({ row, updateInventory }: { row: any; updateInventory: UseMutationResult<any, Error, { id: string; quantity: number; note?: string }, unknown> }) {
-    const [val, setVal] = useState(row.original.quantity);
-    const [showAdjust, setShowAdjust] = useState(false);
-    const [adjustNote, setAdjustNote] = useState('');
-    const isDirty = val !== row.original.quantity;
-
-    return (
-        <>
-            <div className="flex items-center gap-2">
-                <Input
-                    type="number"
-                    value={val}
-                    onChange={(e) => setVal(parseInt(e.target.value) || 0)}
-                    className={cn(
-                        "w-20 h-8 text-right text-xs",
-                        row.original.isLowStock && !isDirty ? "border-rose-300 bg-rose-50 text-rose-700" : "",
-                        isDirty ? "border-blue-400 ring-1 ring-blue-400" : ""
-                    )}
-                />
-                {isDirty && (
-                    <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className="h-7 w-7 text-blue-600"
-                        onClick={() => setShowAdjust(true)}
-                        disabled={updateInventory.isPending}
-                        aria-label="儲存庫存"
-                    >
-                        <Save className="h-4 w-4" />
-                    </Button>
-                )}
-                {row.original.isLowStock && !isDirty && (
-                    <AlertTriangle className="h-4 w-4 text-rose-500 animate-pulse" />
-                )}
-            </div>
-
-            <Dialog open={showAdjust} onOpenChange={setShowAdjust}>
-                <DialogContent className="max-w-sm">
-                    <DialogHeader>
-                        <DialogTitle>庫存調整確認</DialogTitle>
-                        <DialogDescription>
-                            {row.original.name}
-                            <Badge variant="secondary" className="ml-2 text-[10px]">{row.original.warehouseName}</Badge>
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-2">
-                        <div className="flex items-center gap-4 justify-center text-lg">
-                            <span className="font-mono tabular-nums text-muted-foreground line-through">{row.original.quantity}</span>
-                            <span className="text-muted-foreground">→</span>
-                            <span className="font-mono tabular-nums font-bold text-lg">{val}</span>
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label htmlFor="adjust-reason" className="text-xs text-muted-foreground">調整原因</Label>
-                            <select
-                                id="adjust-reason"
-                                defaultValue=""
-                                onChange={(e) => {
-                                    const v = e.target.value;
-                                    if (v && v !== 'other') setAdjustNote(v);
-                                    else if (v === 'other') setAdjustNote('');
-                                }}
-                                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                            >
-                                <option value="">請選擇原因...</option>
-                                <option value="盤點差異">盤點差異</option>
-                                <option value="破損報廢">破損報廢</option>
-                                <option value="遺失">遺失</option>
-                                <option value="退貨補正">退貨補正</option>
-                                <option value="系統校正">系統校正</option>
-                                <option value="other">其他（手動輸入）</option>
-                            </select>
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label htmlFor="adjust-note" className="text-xs text-muted-foreground">補充說明（選填）</Label>
-                            <Input
-                                id="adjust-note"
-                                value={adjustNote}
-                                onChange={(e) => setAdjustNote(e.target.value)}
-                                placeholder="可輸入更詳細的調整原因..."
-                                className="text-sm"
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" size="sm" onClick={() => { setShowAdjust(false); setAdjustNote(''); }}>
-                            取消
-                        </Button>
-                        <Button size="sm" onClick={() => {
-                            updateInventory.mutate({ id: row.original.id, quantity: val, note: adjustNote || undefined });
-                            setShowAdjust(false);
-                            setAdjustNote('');
-                        }}>
-                            確認調整
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </>
-    );
-}
-
-function MovementsDialog({ open, onOpenChange, productId, variantId, name }: { open: boolean; onOpenChange: (open: boolean) => void; productId: string | null; variantId: string | null; name: string }) {
-    const { data: movements = [], isLoading } = useInventoryMovements(productId, variantId);
-    const [filterType, setFilterType] = useState('');
-
-    const filtered = filterType === 'pending_match'
-        ? movements.filter(m => m.costMatchStatus === 'pending_match')
-        : filterType
-            ? movements.filter(m => m.sourceType === filterType)
-            : movements;
-
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex h-[80vh] max-h-[90vh] max-w-3xl flex-col">
-                <DialogHeader>
-                    <DialogTitle>庫存明細 - {name}</DialogTitle>
-                    <DialogDescription>
-                        進出貨記錄，包含採購入庫、出貨扣減、手動調整等
-                    </DialogDescription>
-                </DialogHeader>
-
-                <div className="flex items-center gap-2 mb-4">
-                    <span className="text-sm text-muted-foreground">篩選：</span>
-                    <select
-                        value={filterType}
-                        onChange={(e) => setFilterType(e.target.value)}
-                        className="h-8 rounded-md border border-input bg-background px-3 text-xs"
-                    >
-                        <option value="">全部</option>
-                        <option value="purchase_receipt">採購入庫</option>
-                        <option value="sales_shipment">出貨扣減</option>
-                        <option value="sales_note_deletion">銷貨刪除回補</option>
-                        <option value="manual_adjustment">手動調整</option>
-                        <option value="pending_match">待配對（懸空）</option>
-                    </select>
-                </div>
-
-                <ScrollArea className="min-h-0 w-full flex-1">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="text-xs">時間</TableHead>
-                                <TableHead className="text-xs text-right">異動</TableHead>
-                                <TableHead className="text-xs text-right">餘額</TableHead>
-                                <TableHead className="text-xs">來源</TableHead>
-                                <TableHead className="text-xs">單號</TableHead>
-                                <TableHead className="text-xs">備註</TableHead>
-                                <TableHead className="text-xs">成本配對</TableHead>
-                                <TableHead className="text-xs">採購單號</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {isLoading ? (
-                                <TableRow>
-                                    <TableCell colSpan={8} className="text-center text-xs text-muted-foreground py-8">載入中...</TableCell>
-                                </TableRow>
-                            ) : filtered.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={8} className="text-center text-xs text-muted-foreground py-8">暫無記錄</TableCell>
-                                </TableRow>
-                            ) : (
-                                filtered.map((m: any) => (
-                                    <TableRow key={m.id}>
-                                        <TableCell className="text-xs whitespace-nowrap">
-                                            {m.createdAt ? new Date(m.createdAt).toLocaleString() : '-'}
-                                        </TableCell>
-                                        <TableCell className={cn(
-                                            "text-xs text-right font-mono tabular-nums",
-                                            m.quantityChange > 0 ? "text-emerald-600" : "text-rose-600"
-                                        )}>
-                                            {m.quantityChange > 0 ? '+' : ''}{m.quantityChange}
-                                        </TableCell>
-                                        <TableCell className="text-xs text-right font-mono tabular-nums">
-                                            {m.balanceAfter}
-                                        </TableCell>
-                                        <TableCell className="text-xs">
-                                            <Badge variant="outline" className="text-[10px] font-normal">
-                                                {SOURCE_TYPE_LABELS[m.sourceType] || m.sourceType}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-xs font-mono">
-                                            {m.referenceCode || '-'}
-                                        </TableCell>
-                                        <TableCell className="text-xs text-muted-foreground max-w-[120px] truncate">
-                                            {m.note || '-'}
-                                        </TableCell>
-                                        <TableCell className="text-xs">
-                                            <Badge variant="outline" className={cn(
-                                                "text-[10px] font-normal",
-                                                costMatchColor(m.costMatchStatus)
-                                            )}>
-                                                {costMatchLabel(m.costMatchStatus)}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-xs font-mono">
-                                            {m.purchaseOrderCode || '-'}
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
-                </ScrollArea>
-            </DialogContent>
-        </Dialog>
-    );
-}
+import { QuantityCell } from './components/QuantityCell';
+import { MovementsDialog } from './components/MovementsDialog';
 
 export default function AdminInventory() {
     const {
@@ -323,7 +109,7 @@ export default function AdminInventory() {
         {
             header: "狀態",
             cell: ({ row }) => (
-                <Badge 
+                <Badge
                     variant={row.original.isLowStock ? "destructive" : "outline"}
                     className="text-[10px] px-1.5 h-5 font-normal leading-none whitespace-nowrap"
                 >
@@ -460,13 +246,13 @@ export default function AdminInventory() {
 
                         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                             <div className="flex items-center space-x-2">
-                                <Checkbox 
-                                    id="low-stock" 
+                                <Checkbox
+                                    id="low-stock"
                                     checked={lowStockOnly}
                                     onCheckedChange={(v) => setLowStockOnly(!!v)}
                                 />
-                                <label 
-                                    htmlFor="low-stock" 
+                                <label
+                                    htmlFor="low-stock"
                                     className="text-sm font-medium leading-none cursor-pointer flex items-center gap-1"
                                 >
                                     僅顯示低庫存

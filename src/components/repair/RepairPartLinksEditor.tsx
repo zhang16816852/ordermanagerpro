@@ -9,9 +9,15 @@ import { RepairPartLinkInput, useRepairPartProductOptions } from '@/hooks/useRep
 interface RepairPartLinksEditorProps {
   links: RepairPartLinkInput[];
   onChange: (links: RepairPartLinkInput[]) => void;
+  version?: string | null;
 }
 
-export function RepairPartLinksEditor({ links, onChange }: RepairPartLinksEditorProps) {
+export function RepairPartLinksEditor({ links, onChange, version }: RepairPartLinksEditorProps) {
+  // 自動產生 spec_label：variant_name + version
+  const autoSpecLabel = (variantName: string | null) => {
+    const parts = [variantName, version].filter(Boolean);
+    return parts.length > 0 ? parts.join(' / ') : null;
+  };
   const { options: productOptions } = useRepairPartProductOptions();
 
   const { options, targetMap } = useMemo(() => {
@@ -85,7 +91,7 @@ export function RepairPartLinksEditor({ links, onChange }: RepairPartLinksEditor
                         patch(index, {
                           product_id: t.product_id,
                           variant_id: t.variant_id,
-                          spec_label: link.spec_label || t.variant_name,
+                          spec_label: link.spec_label || autoSpecLabel(t.variant_name),
                         });
                       }}
                       placeholder="選擇維修零件商品／變體"
