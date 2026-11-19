@@ -225,6 +225,8 @@ export default function AdminOrderList() {
                   onToggleAll={(checked) => handleItemToggleAll(checked, allPendingItems)}
                   onUpdateQuantity={handleUpdateItemQuantity}
                   onRestoreItem={(id) => cancelItemsMutation.mutate({ itemIds: [id], targetStatus: 'waiting' })}
+                   onCancelItem={(id) => cancelItemsMutation.mutate({ itemIds: [id], targetStatus: 'cancelled' })}
+                   onDiscontinueItem={(id) => cancelItemsMutation.mutate({ itemIds: [id], targetStatus: 'discontinued' })}
                   poLinkMap={poLinkMap}
                   poBindByOrderItem={poBindByOrderItem}
                 />
@@ -294,8 +296,13 @@ export default function AdminOrderList() {
         onConvertToConsignment={() => setConvertToConsignmentOpen(true)}
         onShipOrdersToPool={() => setOrderPoolOpen(true)}
         onCancelItems={() => {
-          if (confirm(`確定要標記這 ${selectedItems.size} 個品項為 停產/取消 嗎？`)) {
+          if (confirm(`確定要標記這 ${selectedItems.size} 個品項為 取消 嗎？`)) {
             cancelItemsMutation.mutate({ itemIds: Array.from(selectedItems.keys()), targetStatus: 'cancelled' });
+          }
+        }}
+        onDiscontinueItems={() => {
+          if (confirm(`確定要標記這 ${selectedItems.size} 個品項為 停產 嗎？（同時將變體上架狀態改為停產）`)) {
+            cancelItemsMutation.mutate({ itemIds: Array.from(selectedItems.keys()), targetStatus: 'discontinued' });
           }
         }}
         onConvertToPO={() => setConvertToPOOpen(true)}
@@ -393,6 +400,8 @@ export default function AdminOrderList() {
         open={!!viewingOrder}
         onOpenChange={(open) => !open && setViewingOrder(null)}
         onDeleteOrder={(id) => handleDeleteOrders([id])}
+        onCancelItem={(id) => cancelItemsMutation.mutate({ itemIds: [id], targetStatus: 'cancelled' })}
+        onDiscontinueItem={(id) => cancelItemsMutation.mutate({ itemIds: [id], targetStatus: 'discontinued' })}
         onProcessReturns={() => setReturnProcessOpen(true)}
         onRevertReturns={() => setReturnRevertOpen(true)}
         parcelEditable

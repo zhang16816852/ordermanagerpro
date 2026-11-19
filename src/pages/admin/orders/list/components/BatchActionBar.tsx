@@ -15,6 +15,7 @@ interface BatchActionBarProps {
   onConfirmOrders: () => void;
   onShipItems: () => void;
   onCancelItems: () => void;
+  onDiscontinueItems: () => void;
   onDirectShipOrders: () => void;
   onConvertToConsignment: () => void;
   onShipOrdersToPool: () => void;
@@ -41,6 +42,7 @@ export function BatchActionBar({
   onConfirmOrders,
   onShipItems,
   onCancelItems,
+  onDiscontinueItems,
   onDirectShipOrders,
   onConvertToConsignment,
   onShipOrdersToPool,
@@ -231,14 +233,24 @@ export function BatchActionBar({
                   </Button>
                 )}
                 <Button
-                  variant="destructive"
+                  variant="secondary"
                   size="sm"
                   onClick={onCancelItems}
                   disabled={isLoading}
                   className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
                 >
                   <XCircle className="h-4 w-4 mr-2" />
-                  標記停產/取消
+                  取消
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={onDiscontinueItems}
+                  disabled={isLoading}
+                  className="rounded-full shadow-inner active:scale-95 transition-colors duration-150"
+                >
+                  <XCircle className="h-4 w-4 mr-2" />
+                  停產
                 </Button>
               </>
             )}
@@ -428,14 +440,24 @@ export function BatchActionBar({
                 轉採購單
               </Button>
               <Button
-                variant="destructive"
+                variant="secondary"
                 size="sm"
                 onClick={onCancelItems}
                 disabled={isLoading}
                 className="snap-start shrink-0"
               >
                 <XCircle className="h-4 w-4 mr-1.5" />
-                標記停產/取消
+                取消
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={onDiscontinueItems}
+                disabled={isLoading}
+                className="snap-start shrink-0"
+              >
+                <XCircle className="h-4 w-4 mr-1.5" />
+                停產
               </Button>
             </>
           )}

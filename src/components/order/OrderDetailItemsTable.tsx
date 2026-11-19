@@ -7,7 +7,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, ShoppingCart } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, ShoppingCart, XCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { OrderStatusBadge } from './OrderStatusBadge';
 import { LineTypeBadge } from './LineTypeBadge';
@@ -28,9 +28,11 @@ interface OrderItemsTableProps {
     costByItem?: Map<string, { unitCost: number | null; costKnown: boolean }>;
     /** 採購綁定（id → 採購狀態）。未傳則不顯示採購 badge。 */
     poBindByItem?: Map<string, OrderPoBindInfo>;
+    onCancelItem?: (itemId: string) => void;
+    onDiscontinueItem?: (itemId: string) => void;
 }
 
-export function OrderDetailItemsTable({ items, costByItem, poBindByItem }: OrderItemsTableProps) {
+export function OrderDetailItemsTable({ items, costByItem, poBindByItem, onCancelItem, onDiscontinueItem }: OrderItemsTableProps) {
     const [nameSort, setNameSort] = useState<NameSort>('default');
     const [statusSort, setStatusSort] = useState<NameSort>('default');
     const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
@@ -167,7 +169,23 @@ export function OrderDetailItemsTable({ items, costByItem, poBindByItem }: Order
                                         {formatCurrency(item.unit_price)}
                                     </TableCell>
                                     <TableCell>
-                                        <OrderStatusBadge status={item.status} type="shipping" />
+                                        <div className="flex items-center gap-1">
+                                            <OrderStatusBadge status={item.status} type="shipping" />
+                                            {(item.status === 'waiting' || item.status === 'partial') && (onCancelItem || onDiscontinueItem) && (
+                                                <>
+                                                    {onCancelItem && (
+                                                        <button type="button" title="取消此品項" onClick={() => onCancelItem(item.id)} className="text-muted-foreground hover:text-destructive">
+                                                            <XCircle className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    )}
+                                                    {onDiscontinueItem && (
+                                                        <button type="button" title="停產此品項（變體上架狀態改為停產）" onClick={() => onDiscontinueItem(item.id)} className="text-muted-foreground hover:text-destructive">
+                                                            <XCircle className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
                                     </TableCell>
                                     {showCost && (
                                         <TableCell className="text-right">

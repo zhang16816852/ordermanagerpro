@@ -205,9 +205,14 @@ export function DirectShipDialog({
     const itemQuantities: Record<string, number> = {};
     for (const o of orders) {
       for (const it of o.items || []) {
-        if (removedItems.has(it.id)) continue;
+        if (removedItems.has(it.id)) {
+          // 移除的品項送 0，讓 RPC 跳過（CONTINUE WHEN <= 0），不再整單出貨
+          itemQuantities[it.id] = 0;
+          continue;
+        }
         const q = shipQty[it.id];
         if (typeof q === 'number' && q > 0) itemQuantities[it.id] = q;
+        else itemQuantities[it.id] = 0;
       }
     }
     onConfirm({

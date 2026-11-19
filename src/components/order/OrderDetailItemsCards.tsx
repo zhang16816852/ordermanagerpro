@@ -22,9 +22,11 @@ interface OrderItemsCardsProps {
     costByItem?: Map<string, { unitCost: number | null; costKnown: boolean }>;
     /** 採購綁定（id → 採購狀態）。未傳則不顯示採購 badge。 */
     poBindByItem?: Map<string, OrderPoBindInfo>;
+    onCancelItem?: (itemId: string) => void;
+    onDiscontinueItem?: (itemId: string) => void;
 }
 
-export function OrderDetailItemsCards({ items, costByItem, poBindByItem }: OrderItemsCardsProps) {
+export function OrderDetailItemsCards({ items, costByItem, poBindByItem, onCancelItem, onDiscontinueItem }: OrderItemsCardsProps) {
     const [nameSort, setNameSort] = useState<NameSort>('default');
     const [statusSort, setStatusSort] = useState<NameSort>('default');
     const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());

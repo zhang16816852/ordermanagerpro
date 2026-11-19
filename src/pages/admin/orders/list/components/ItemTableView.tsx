@@ -13,7 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, XCircle } from 'lucide-react';
 import { poBindBadge, type OrderPoBindMap } from '@/utils/poBindStatus';
 
 interface ItemTableViewProps {
@@ -26,6 +26,8 @@ interface ItemTableViewProps {
   onToggleAll: (checked: boolean) => void;
   onUpdateQuantity: (id: string, quantity: number) => void;
   onRestoreItem: (id: string) => void;
+  onCancelItem?: (id: string) => void;
+  onDiscontinueItem?: (id: string) => void;
   poLinkMap: Map<string, { poCount: number; poIds: string[] }>;
   poBindByOrderItem?: OrderPoBindMap;
 }
@@ -40,6 +42,8 @@ export function ItemTableView({
   onToggleAll,
   onUpdateQuantity,
   onRestoreItem,
+  onCancelItem,
+  onDiscontinueItem,
   poLinkMap,
   poBindByOrderItem,
 }: ItemTableViewProps) {
@@ -114,6 +118,18 @@ export function ItemTableView({
                     <TableCell className="font-mono text-xs">{item.product?.code}</TableCell>
                     <TableCell className="text-sm">
                       {item.product_variant?.name || item.product?.name}
+                      <div className="flex gap-1 mt-1">
+                        {onCancelItem && (
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => onCancelItem(item.id)} title="取消此品項">
+                            <XCircle className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        {onDiscontinueItem && (
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => onDiscontinueItem(item.id)} title="停產此品項（變體上架狀態改為停產）">
+                            <XCircle className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
                       {item.orderId && poLinkMap.has(item.orderId) && (
                         <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0 font-normal border-amber-500 text-amber-600">
                           已轉採購

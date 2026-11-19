@@ -328,7 +328,7 @@ export function useOrdersList(storeFilter: string, statusTab: 'pending' | 'proce
   });
 
   const cancelItemsMutation = useMutation({
-     mutationFn: async ({ itemIds, targetStatus }: { itemIds: string[]; targetStatus: 'cancelled' | 'waiting' }) => {
+     mutationFn: async ({ itemIds, targetStatus }: { itemIds: string[]; targetStatus: 'cancelled' | 'discontinued' | 'waiting' }) => {
        const { data, error } = await (supabase.rpc as any)('cancel_order_items', {
          p_item_ids: itemIds,
          p_target_status: targetStatus,

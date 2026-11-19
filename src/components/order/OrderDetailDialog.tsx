@@ -33,12 +33,14 @@ interface OrderDetailDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onDeleteOrder?: (orderId: string) => void;
+    onCancelItem?: (itemId: string) => void;
+    onDiscontinueItem?: (itemId: string) => void;
     onProcessReturns?: () => void;
     onRevertReturns?: () => void;
     parcelEditable?: boolean;
 }
 
-export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, onProcessReturns, onRevertReturns, parcelEditable = false }: OrderDetailDialogProps) {
+export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, onCancelItem, onDiscontinueItem, onProcessReturns, onRevertReturns, parcelEditable = false }: OrderDetailDialogProps) {
     const [isCopied, setIsCopied] = useState(false);
     const { isRep, computeOrder } = useRepCommission();
 
@@ -292,7 +294,7 @@ export function OrderDetailDialog({ order, open, onOpenChange, onDeleteOrder, on
                     />
 
                     {/* Order Items - Desktop Table */}
-                    <OrderDetailItemsTable items={sortedOrderItems} costByItem={costByItem} poBindByItem={poBindByItem} />
+                    <OrderDetailItemsTable items={sortedOrderItems} costByItem={costByItem} poBindByItem={poBindByItem} onCancelItem={onCancelItem} onDiscontinueItem={onDiscontinueItem} />
 
                     {/* Order Items - Mobile Cards */}
                     <OrderDetailItemsCards items={sortedOrderItems} costByItem={costByItem} poBindByItem={poBindByItem} />
