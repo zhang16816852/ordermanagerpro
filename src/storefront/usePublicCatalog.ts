@@ -97,6 +97,7 @@ export type PublicProductsParams = {
   categoryId?: string;
   productIds?: string[];
   limit?: number;
+  offset?: number;
   distinctProducts?: boolean;
   search?: string;
   brandIds?: string[];
@@ -107,6 +108,7 @@ export function usePublicProducts({
   categoryId,
   productIds,
   limit = 12,
+  offset = 0,
   distinctProducts = true,
   search,
   brandIds,
@@ -118,6 +120,7 @@ export function usePublicProducts({
       categoryId ?? null,
       productIds?.length ? [...productIds].sort().join(",") : null,
       limit,
+      offset,
       distinctProducts,
       search ?? null,
       brandIds?.length ? [...brandIds].sort().join(",") : null,
@@ -128,6 +131,7 @@ export function usePublicProducts({
         p_category_id: categoryId?.trim() ? categoryId : undefined,
         p_product_ids: productIds?.length ? productIds : undefined,
         p_limit: limit,
+        p_offset: offset,
         p_distinct_products: distinctProducts,
         p_search: search?.trim() ? search.trim() : undefined,
         p_brand_ids: brandIds?.length ? brandIds : undefined,
@@ -135,6 +139,45 @@ export function usePublicProducts({
       });
       if (error) throw error;
       return (data ?? []) as PublicProduct[];
+    },
+    staleTime: STALE_MS,
+  });
+}
+
+export type PublicProductsCountParams = {
+  categoryId?: string;
+  search?: string;
+  brandIds?: string[];
+  modelIds?: string[];
+  distinctProducts?: boolean;
+};
+
+export function usePublicProductsCount({
+  categoryId,
+  search,
+  brandIds,
+  modelIds,
+  distinctProducts = true,
+}: PublicProductsCountParams = {}) {
+  return useQuery({
+    queryKey: [
+      "public-products-count",
+      categoryId ?? null,
+      search ?? null,
+      brandIds?.length ? [...brandIds].sort().join(",") : null,
+      modelIds?.length ? [...modelIds].sort().join(",") : null,
+      distinctProducts,
+    ],
+    queryFn: async () => {
+      const { data, error } = await (supabase.rpc as any)("get_public_products_count", {
+        p_category_id: categoryId?.trim() ? categoryId : undefined,
+        p_search: search?.trim() ? search.trim() : undefined,
+        p_brand_ids: brandIds?.length ? brandIds : undefined,
+        p_model_ids: modelIds?.length ? modelIds : undefined,
+        p_distinct_products: distinctProducts,
+      });
+      if (error) throw error;
+      return (data ?? 0) as number;
     },
     staleTime: STALE_MS,
   });

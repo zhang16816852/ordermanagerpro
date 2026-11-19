@@ -1,11 +1,20 @@
 import { useMemo, useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Search, Filter, X } from "lucide-react";
+import { Search, Filter, X, ArrowUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
-import { usePublicProducts, usePublicCategoryTree } from "@/storefront/usePublicCatalog";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { usePublicProducts, usePublicProductsCount, usePublicCategoryTree } from "@/storefront/usePublicCatalog";
 import { PublicCatalogSidebar, type PublicFilters } from "@/components/storefront/PublicCatalogSidebar";
+import { FloatingScrollTop } from "@/components/storefront/FloatingScrollTop";
 
 import { siteBrand } from "@/config/site";
 
@@ -53,6 +62,8 @@ export default function ShopPage() {
   const [localSearch, setLocalSearch] = useState(searchParams.get("q") ?? "");
   const [filters, setFiltersState] = useState<PublicFilters>(() => parseFilters(searchParams));
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [page, setPage] = useState(0);
+  const pageSize = 24;
 
   // URL 的 q 變動時（分享連結/返回），同步輸入框與已 commit 的搜尋字
   useEffect(() => {
@@ -61,30 +72,43 @@ export default function ShopPage() {
     setLocalSearch(q);
   }, [searchParams]);
 
+  const setFilters = (next: PublicFilters) => {
+    setFiltersState(next);
+    setPage(0);
+    const sp = serializeFilters(next);
+    if (search.trim()) sp.set("q", search.trim());
+    setSearchParams(sp, { replace: true });
+  };
+
   const commitSearch = (val: string) => {
     const v = val.trim();
     setSearch(v);
+    setPage(0);
     const sp = serializeFilters(filters);
     if (v) sp.set("q", v);
     else sp.delete("q");
     setSearchParams(sp, { replace: true });
   };
 
-  const setFilters = (next: PublicFilters) => {
-    setFiltersState(next);
-    const sp = serializeFilters(next);
-    if (search.trim()) sp.set("q", search.trim());
-    setSearchParams(sp, { replace: true });
-  };
-
   const { data: products, isLoading, isFetching } = usePublicProducts({
     categoryId: filters.categoryId ?? undefined,
-    limit: 60,
+    limit: pageSize,
+    offset: page * pageSize,
     distinctProducts: true,
     search: search.trim() || undefined,
     brandIds: filters.brandIds.length ? filters.brandIds : undefined,
     modelIds: filters.modelIds.length ? filters.modelIds : undefined,
   });
+
+  const { data: totalCount } = usePublicProductsCount({
+    categoryId: filters.categoryId ?? undefined,
+    search: search.trim() || undefined,
+    brandIds: filters.brandIds.length ? filters.brandIds : undefined,
+    modelIds: filters.modelIds.length ? filters.modelIds : undefined,
+    distinctProducts: true,
+  });
+
+  const totalPages = totalCount ? Math.ceil(totalCount / pageSize) : 1;
 
   // client-side spec filter
   const filtered = useMemo(() => {
@@ -222,9 +246,46 @@ export default function ShopPage() {
             {isFetching && !isLoading && (
               <div className="mt-4 text-center text-xs text-sf-muted">更新中…</div>
             )}
+
+            {totalPages > 1 && (
+              <div className="mt-6">
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={(e) => { e.preventDefault(); if (page > 0) { setPage(page - 1); window.scrollTo({ top: 0, behavior: "smooth" }); } }}
+                        className={page === 0 ? "pointer-events-none opacity-50" : ""}
+                      />
+                    </PaginationItem>
+                    {Array.from({ length: totalPages }, (_, i) => i).map((i) => (
+                      <PaginationItem key={i}>
+                        <PaginationLink
+                          href="#"
+                          isActive={i === page}
+                          onClick={(e) => { e.preventDefault(); setPage(i); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                        >
+                          {i + 1}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ))}
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(e) => { e.preventDefault(); if (page < totalPages - 1) { setPage(page + 1); window.scrollTo({ top: 0, behavior: "smooth" }); } }}
+                        className={page >= totalPages - 1 ? "pointer-events-none opacity-50" : ""}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
           </section>
         </div>
       </div>
+
+      {/* 浮動置頂按鈕（可擴展多功能） */}
+      <FloatingScrollTop />
     </main>
   );
 }
