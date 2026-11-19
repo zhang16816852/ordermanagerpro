@@ -635,7 +635,7 @@ export function useOrderFormMutations(params: OrderFormMutationParams) {
       const loader = delivery || { deliveryType: getDeliveryType(), deliveryMethodId: null, trackingCompany: null, trackingNumber: null, trackingUrl: null };
       const addr = loader?.deliveryType === 'logistics' && loader.shippingAddress ? loader.shippingAddress : undefined;
       const { data, error } = await (supabase.rpc as any)('direct_ship_orders', {
-        p_order_id: orderId,
+        p_order_ids: [orderId],
         p_created_by: user.id,
         p_notes: undefined,
         p_shipped_at: shippedAt ? new Date(shippedAt).toISOString() : undefined,
