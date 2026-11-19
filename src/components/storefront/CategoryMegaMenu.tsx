@@ -24,25 +24,27 @@ export function CategoryMegaMenu({ onNavigate }: { onNavigate?: () => void }) {
     id: root.id,
     name: root.name,
     count: root.product_count,
-    children: root.children.map((child: any) => ({
-      id: child.id,
-      name: child.name,
-      count: child.product_count,
-      href: `/shop?cat=${child.id}`,
-      children: child.children?.map((g: any) => ({
+    children: (root.children || []).flatMap((child: any) => {
+      const childItem = {
+        id: child.id,
+        name: child.name,
+        count: child.product_count,
+        href: `/shop?cat=${child.id}`,
+      };
+      const grandChildren = (child.children || []).map((g: any) => ({
         id: g.id,
-        name: g.name,
+        name: `${child.name} › ${g.name}`,
         count: g.product_count,
         href: `/shop?cat=${g.id}`,
-      })),
-    })),
+      }));
+      return [childItem, ...grandChildren];
+    }),
   }));
 
   return (
     <MegaMenu
       label="商品分類"
       items={items}
-      columns={3}
       width="w-[min(90vw,720px)]"
       footerHref="/shop"
       footerLabel="查看全部商品 →"

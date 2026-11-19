@@ -27,7 +27,6 @@ export function NavBrandMenu() {
     <MegaMenu
       label="品牌 / 系列"
       items={items}
-      columns={3}
       width="w-[min(90vw,520px)]"
       footerHref="/shop"
       footerLabel="查看全部商品 →"

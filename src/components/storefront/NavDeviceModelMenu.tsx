@@ -37,7 +37,6 @@ export function NavDeviceModelMenu() {
     <MegaMenu
       label="裝置型號"
       items={items}
-      columns={3}
       width="w-[min(90vw,640px)]"
       footerHref="/shop"
       footerLabel="查看全部商品 →"
