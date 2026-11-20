@@ -1,0 +1,4 @@
+
+> order-manager-pro@0.0.0 typecheck
+> tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json
+

@@ -1,0 +1,189 @@
+
+> order-manager-pro@0.0.0 lint
+> eslint .
+
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\layout\PageHeaderContext.tsx
+  60:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\order\LineTypeBadge.tsx
+   4:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  12:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\orders\DirectShipDialog.tsx
+  171:15  warning  Unused eslint-disable directive (no problems were reported from 'react-hooks/exhaustive-deps')
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\VariantBatchImport.tsx
+  216:6  warning  React Hook useCallback has a missing dependency: 'validateRow'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\VariantEditDialog.tsx
+  230:8  warning  React Hook useEffect has missing dependencies: 'fetchSuggestionsForProduct', 'form', 'isUnified', 'product', and 'variant'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\catalog\CatalogSidebar.tsx
+  170:8  warning  React Hook useMemo has an unnecessary dependency: 'categories'. Either exclude it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\catalog\ProductDetailDialog.tsx
+  296:8  warning  React Hook useMemo has a missing dependency: 'categoryLinks'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\catalog\VariantOptionsPicker.tsx
+  82:8  warning  React Hook useEffect has missing dependencies: 'optionDimensions' and 'product'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\form\ColorSelectField.tsx
+  94:6  warning  React Hook useEffect has a missing dependency: 'fetchColors'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\form\sections\BrandSelectField.tsx
+  28:11  warning  The 'selectedIds' logical expression could make the dependencies of useMemo Hook (at line 82) change on every render. To fix this, wrap the initialization of 'selectedIds' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\form\sections\CategorySelectField.tsx
+  19:11  warning  The 'selectedCategoryIds' logical expression could make the dependencies of useMemo Hook (at line 74) change on every render. To fix this, wrap the initialization of 'selectedCategoryIds' in its own useMemo() Hook   react-hooks/exhaustive-deps
+  19:11  warning  The 'selectedCategoryIds' logical expression could make the dependencies of useMemo Hook (at line 121) change on every render. To fix this, wrap the initialization of 'selectedCategoryIds' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\form\sections\DeviceModelSelectField.tsx
+  24:11  warning  The 'selectedModelIds' logical expression could make the dependencies of useMemo Hook (at line 48) change on every render. To fix this, wrap the initialization of 'selectedModelIds' in its own useMemo() Hook  react-hooks/exhaustive-deps
+  24:11  warning  The 'selectedModelIds' logical expression could make the dependencies of useMemo Hook (at line 59) change on every render. To fix this, wrap the initialization of 'selectedModelIds' in its own useMemo() Hook  react-hooks/exhaustive-deps
+  25:11  warning  The 'selectedGroupIds' logical expression could make the dependencies of useMemo Hook (at line 63) change on every render. To fix this, wrap the initialization of 'selectedGroupIds' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\form\sections\DynamicSpecsFields.tsx
+  16:11  warning  The 'selectedCategoryIds' logical expression could make the dependencies of useMemo Hook (at line 60) change on every render. To fix this, wrap the initialization of 'selectedCategoryIds' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\form\sections\EntityBindingManager.tsx
+  45:6  warning  React Hook useEffect has a missing dependency: 'loadBindings'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\form\sections\SeriesSelectField.tsx
+  20:11  warning  The 'brandIds' logical expression could make the dependencies of useMemo Hook (at line 32) change on every render. To fix this, wrap the initialization of 'brandIds' in its own useMemo() Hook        react-hooks/exhaustive-deps
+  27:11  warning  The 'selectedIds' logical expression could make the dependencies of useMemo Hook (at line 68) change on every render. To fix this, wrap the initialization of 'selectedIds' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\form\sections\VariantBindingManager.tsx
+  44:6  warning  React Hook useEffect has a missing dependency: 'loadBindings'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\form\useVariantBatchCreator.ts
+  101:6  warning  React Hook useEffect has missing dependencies: 'fetchSuggestions' and 'loadExistingData'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\import\PreviewTable.tsx
+  31:11  warning  The 'safeData' logical expression could make the dependencies of useMemo Hook (at line 44) change on every render. To fix this, wrap the initialization of 'safeData' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\import\useProductImport.ts
+  182:8  warning  React Hook useEffect has a missing dependency: 'importData.length'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\products\import\useProductImportValidator.ts
+   95:8  warning  React Hook useCallback has a missing dependency: 'categories'. Either include it or remove the dependency array         react-hooks/exhaustive-deps
+  349:8  warning  React Hook useCallback has a missing dependency: 'mergeEnrichedRows'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\repair\RepairBatchSelect.tsx
+  16:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\shipping\DeliveryMethodPicker.tsx
+    9:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+   33:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+   42:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  109:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  113:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  172:10  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\shipping\ShippingAddressFields.tsx
+  184:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\shipping\ShippingDeliveryFields.tsx
+  21:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\supplier\SupplierProductDiffDialog.tsx
+  578:6  warning  React Hook useEffect has missing dependencies: 'diffs.length' and 'processProducts'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  593:6  warning  React Hook useEffect has missing dependencies: 'diffs' and 'skippedIndices'. Either include them or remove the dependency array          react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\ui\badge.tsx
+  32:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\ui\button.tsx
+  54:18  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\ui\form.tsx
+  129:10  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\ui\navigation-menu.tsx
+  111:3  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\ui\sidebar.tsx
+  636:3  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\ui\sonner.tsx
+  28:19  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\components\ui\toggle.tsx
+  37:18  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\hooks\useAuth.tsx
+  193:6   warning  React Hook useEffect has a missing dependency: 'fetchRoles'. Either include it or remove the dependency array                   react-hooks/exhaustive-deps
+  279:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\hooks\useProductCache.ts
+  338:6  warning  React Hook useMemo has a missing dependency: 'includeShipping'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\pages\AcceptInvite.tsx
+  127:6  warning  React Hook useEffect has missing dependencies: 'authLoading' and 'user'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\pages\admin\cross-border\CrossBorderPage.tsx
+  205:6  warning  React Hook useMemo has a missing dependency: 'selectedShipment'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\pages\admin\libraries\colors\ColorManager.tsx
+  23:6  warning  React Hook useEffect has a missing dependency: 'fetchColors'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\pages\admin\libraries\colors\QuickColorAdd.tsx
+  33:6  warning  React Hook useEffect has a missing dependency: 'form.code'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\pages\admin\orders\form\useAdminOrderFormController.ts
+  234:6  warning  React Hook useEffect has a missing dependency: 'priceSyncMap'. Either include it or remove the dependency array. You can also replace multiple useState variables with useReducer if 'setItems' needs the current value of 'priceSyncMap'  react-hooks/exhaustive-deps
+  283:6  warning  React Hook useEffect has a missing dependency: 'priceSyncMap'. Either include it or remove the dependency array. You can also replace multiple useState variables with useReducer if 'setItems' needs the current value of 'priceSyncMap'  react-hooks/exhaustive-deps
+  287:6  warning  React Hook useEffect has a missing dependency: 'warehouseId'. Either include it or remove the dependency array                                                                                                                             react-hooks/exhaustive-deps
+  357:6  warning  React Hook useCallback has a missing dependency: 'isPurchase'. Either include it or remove the dependency array                                                                                                                            react-hooks/exhaustive-deps
+  382:6  warning  React Hook useCallback has a missing dependency: 'itemsRef'. Either include it or remove the dependency array                                                                                                                              react-hooks/exhaustive-deps
+  401:6  warning  React Hook useCallback has a missing dependency: 'itemsRef'. Either include it or remove the dependency array                                                                                                                              react-hooks/exhaustive-deps
+  426:6  warning  React Hook useCallback has a missing dependency: 'itemsRef'. Either include it or remove the dependency array                                                                                                                              react-hooks/exhaustive-deps
+  462:6  warning  React Hook useCallback has a missing dependency: 'itemsRef'. Either include it or remove the dependency array                                                                                                                              react-hooks/exhaustive-deps
+  498:6  warning  React Hook useCallback has a missing dependency: 'itemsRef'. Either include it or remove the dependency array                                                                                                                              react-hooks/exhaustive-deps
+  506:6  warning  React Hook useCallback has a missing dependency: 'itemsRef'. Either include it or remove the dependency array                                                                                                                              react-hooks/exhaustive-deps
+  582:6  warning  React Hook useCallback has a missing dependency: 'isPurchase'. Either include it or remove the dependency array                                                                                                                            react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\pages\admin\orders\form\useAdminOrderFormHeader.tsx
+  136:6  warning  React Hook useLayoutEffect has missing dependencies: 'isPurchaseEdit' and 'navigate'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\pages\admin\orders\form\useOrderFormMutations.ts
+  507:6  warning  React Hook useCallback has missing dependencies: 'consignmentModeRef', 'getDeliveryType', 'itemsRef', and 'notesRef'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\pages\admin\products\hooks\useProductsList.ts
+  271:8  warning  React Hook useCallback has a missing dependency: 'updateSearch'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\pages\admin\purchase-orders\components\BindSourceOrdersDialog.tsx
+  136:6  warning  React Hook useEffect has missing dependencies: 'existingIds' and 'existingQtysBase'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\pages\admin\reps\CostSettingsTab.tsx
+  110:30  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+  126:30  warning  Unused eslint-disable directive (no problems were reported from 'no-console')
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\pages\market\detail.tsx
+  83:6  warning  React Hook useEffect has a missing dependency: 'navigate'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\pages\share\SharedReceiptExport.tsx
+  26:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  36:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  42:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\pages\store\Catalog.tsx
+  66:9  warning  The 'selectedBrands' logical expression could make the dependencies of useMemo Hook (at line 96) change on every render. To fix this, wrap the initialization of 'selectedBrands' in its own useMemo() Hook              react-hooks/exhaustive-deps
+  67:9  warning  The 'selectedSeries' logical expression could make the dependencies of useMemo Hook (at line 96) change on every render. To fix this, wrap the initialization of 'selectedSeries' in its own useMemo() Hook              react-hooks/exhaustive-deps
+  68:9  warning  The 'selectedDeviceModels' logical expression could make the dependencies of useMemo Hook (at line 96) change on every render. To fix this, wrap the initialization of 'selectedDeviceModels' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\routes\admin.tsx
+  36:7  warning  Fast refresh only works when a file only exports components. Move your component(s) to a separate file  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\routes\shared.tsx
+  12:7  warning  Fast refresh only works when a file only exports components. Move your component(s) to a separate file  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\routes\store.tsx
+  22:7  warning  Fast refresh only works when a file only exports components. Move your component(s) to a separate file  react-refresh/only-export-components
+
+C:\Users\qaz20\Desktop\ordermanagerpro-main\src\routes\workshop.tsx
+  8:7  warning  Fast refresh only works when a file only exports components. Move your component(s) to a separate file  react-refresh/only-export-components
+
+??79 problems (0 errors, 79 warnings)
+  0 errors and 3 warnings potentially fixable with the `--fix` option.
+
