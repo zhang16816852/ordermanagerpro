@@ -23,7 +23,6 @@ export interface RepairPart {
   id: string;
   device_model_id: string | null;
   name: string;
-  tags: string[];
   description: string | null;
   supplier_id: string | null;
   default_unit_cost: number;
@@ -31,14 +30,10 @@ export interface RepairPart {
   is_active: boolean;
   sort_order: number;
   version: string | null;
+  device_models?: { id: string; name: string }[];
+  spec_values?: Record<string, any> | null;
   device_model?: { name: string } | null;
   links: RepairPartLink[];
-}
-
-export interface RepairPartTag {
-  id: string;
-  name: string;
-  sort_order: number;
 }
 
 export interface RepairPartLinkInput {
@@ -52,7 +47,6 @@ export interface RepairPartLinkInput {
 export interface RepairPartInput {
   device_model_id: string | null;
   name: string;
-  tags: string[];
   description: string | null;
   supplier_id: string | null;
   default_unit_cost: number;
@@ -82,7 +76,7 @@ export function resolveLinkOf(part: Pick<RepairPart, 'links'>) {
   return part.links.find(l => l.is_default) || part.links[0];
 }
 
-function mapPart(raw: any, stockMap: Map<string, number>): RepairPart {
+function mapPart(raw: any, stockMap: Map<string, number>, specMap?: Map<string, Record<string, any>>): RepairPart {
   const links: RepairPartLink[] = (raw.links || []).map((l: any) => {
     const variant = l.variant;
     const product = l.product;
@@ -112,7 +106,6 @@ function mapPart(raw: any, stockMap: Map<string, number>): RepairPart {
     id: raw.id,
     device_model_id: raw.device_model_id || null,
     name: raw.name || '',
-    tags: raw.tags || [],
     description: raw.description || null,
     supplier_id: raw.supplier_id || null,
     default_unit_cost: Number(raw.default_unit_cost) || 0,
@@ -120,26 +113,16 @@ function mapPart(raw: any, stockMap: Map<string, number>): RepairPart {
     is_active: raw.is_active !== false,
     sort_order: raw.sort_order ?? 0,
     version: raw.version || null,
+    spec_values: (raw.links || []).length > 0
+      ? specMap?.get((raw.links || [])[0]?.product_id) || null
+      : null,
     device_model: raw.device_model || null,
+    device_models: (raw.device_models || []).map((r: any) => r.device_model).filter(Boolean),
     links,
   };
 }
 
-export function useRepairPartTags() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['repair-part-tags'],
-    queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from('repair_part_tags')
-        .select('id, name, sort_order')
-        .order('sort_order')
-        .order('name');
-      if (error) throw error;
-      return (data || []) as RepairPartTag[];
-    },
-  });
-  return { tags: data || [], isLoading };
-}
+
 
 export function useRepairParts() {
   const { data, isLoading, error } = useQuery({
@@ -150,6 +133,7 @@ export function useRepairParts() {
         .select(`
           *,
           device_model:device_model_id(name),
+          device_models:repair_part_device_models(device_model:device_model_id(id, name)),
           links:repair_part_variants(
             *,
             product:product_id(name, code, unified_wholesale_price),
@@ -180,7 +164,24 @@ export function useRepairParts() {
           });
       }
 
-      return rows.map(p => mapPart(p, stockMap)).sort((a, b) => a.sort_order - b.sort_order);
+      // 載入 spec_values（從 entity_spec_values，entity_type='product'）
+      const specMap = new Map<string, Record<string, any>>();
+      if (productIds.length > 0) {
+        const { data: specs, error: specError } = await (supabase as any)
+          .from('entity_spec_values')
+          .select('entity_id, value')
+          .eq('entity_type', 'product')
+          .in('entity_id', productIds);
+        if (!specError && specs) {
+          (specs || []).forEach((s: any) => {
+            if (s.entity_id && s.value) {
+              specMap.set(s.entity_id, s.value);
+            }
+          });
+        }
+      }
+
+      return rows.map(p => mapPart(p, stockMap, specMap)).sort((a, b) => a.sort_order - b.sort_order);
     },
   });
 
@@ -296,7 +297,6 @@ export function useRepairPartMutations() {
         .insert({
           device_model_id: input.device_model_id || null,
           name: input.name.trim(),
-          tags: input.tags,
           description: input.description || null,
           supplier_id: input.supplier_id || null,
           default_unit_cost: input.default_unit_cost,
@@ -310,6 +310,12 @@ export function useRepairPartMutations() {
       if (error) throw error;
 
       await saveLinks(data.id, input.links, []);
+      // 同步多型號 join table
+      const modelIds = input.device_model_id ? [input.device_model_id] : [];
+      if (modelIds.length > 0) {
+        const rows = modelIds.map((mid: string) => ({ repair_part_id: data.id, device_model_id: mid }));
+        await (db as any).from('repair_part_device_models').upsert(rows, { onConflict: 'repair_part_id,device_model_id' });
+      }
       return data.id as string;
     },
     onSuccess: () => {
@@ -320,14 +326,13 @@ export function useRepairPartMutations() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, input, keepIds }: { id: string; input: RepairPartInput; keepIds: string[] }) => {
+    mutationFn: async ({ id, input, keepIds, deviceModelIds }: { id: string; input: RepairPartInput; keepIds: string[]; deviceModelIds?: string[] }) => {
       const db = supabase as any;
       const { error } = await db
         .from('repair_parts')
         .update({
           device_model_id: input.device_model_id || null,
           name: input.name.trim(),
-          tags: input.tags,
           description: input.description || null,
           supplier_id: input.supplier_id || null,
           default_unit_cost: input.default_unit_cost,
@@ -340,6 +345,13 @@ export function useRepairPartMutations() {
       if (error) throw error;
 
       await saveLinks(id, input.links, keepIds);
+      // 同步多型號 join table
+      await db.from('repair_part_device_models').delete().eq('repair_part_id', id);
+      const modelIds = deviceModelIds && deviceModelIds.length > 0 ? deviceModelIds : (input.device_model_id ? [input.device_model_id] : []);
+      if (modelIds.length > 0) {
+        const rows = modelIds.map((mid: string) => ({ repair_part_id: id, device_model_id: mid }));
+        await db.from('repair_part_device_models').upsert(rows, { onConflict: 'repair_part_id,device_model_id' });
+      }
       return id;
     },
     onSuccess: () => {
@@ -362,54 +374,4 @@ export function useRepairPartMutations() {
   });
 
   return { createMutation, updateMutation, deleteMutation };
-}
-
-export function useRepairPartTagMutations() {
-  const queryClient = useQueryClient();
-
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['repair-part-tags'] });
-  };
-
-  const createTagMutation = useMutation({
-    mutationFn: async (name: string) => {
-      const trimmed = name.trim();
-      if (!trimmed) throw new Error('標籤名稱不可為空');
-      const { data: existing } = await (supabase as any)
-        .from('repair_part_tags')
-        .select('id')
-        .eq('name', trimmed)
-        .maybeSingle();
-      if (existing) throw new Error(`標籤「${trimmed}」已存在`);
-      const { data: maxRow } = await (supabase as any)
-        .from('repair_part_tags')
-        .select('sort_order')
-        .order('sort_order', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const { error } = await (supabase as any)
-        .from('repair_part_tags')
-        .insert({ name: trimmed, sort_order: (maxRow?.sort_order ?? -1) + 1 });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      invalidate();
-      toast.success('標籤已新增');
-    },
-    onError: (err: any) => toast.error('新增失敗：' + getErrorMessage(err)),
-  });
-
-  const deleteTagMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await (supabase as any).from('repair_part_tags').delete().eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      invalidate();
-      toast.success('標籤已刪除');
-    },
-    onError: (err: any) => toast.error('刪除失敗：' + getErrorMessage(err)),
-  });
-
-  return { createTagMutation, deleteTagMutation };
 }

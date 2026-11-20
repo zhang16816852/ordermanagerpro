@@ -21,12 +21,20 @@ export function DeviceFieldsSection({ block, onChange, models, showRam = true, s
   const set = (patch: Partial<DeviceBlock>) => onChange({ ...block, ...patch });
 
   const handleModelChange = (modelId: string | null) => {
+    const model = models.find((m) => m.id === modelId);
+    const specs = model?.specifications || {};
+    const versions: any[] = Array.isArray(specs.versions) ? specs.versions : [];
+    const defVer = versions.find((v) => v.is_default) || (versions.length === 1 ? versions[0] : null);
+    const colors = Array.isArray(specs.colors) ? specs.colors : [];
+    const storages = Array.isArray(specs.storage_options) ? specs.storage_options : [];
+    const rams = Array.isArray(specs.ram_options) ? specs.ram_options : [];
+    const cpus = Array.isArray(specs.cpu_options) ? specs.cpu_options : [];
     set({
       device_model_id: modelId || '',
-      device_color: '',
-      device_storage: '',
-      device_ram: '',
-      device_cpu: '',
+      device_color: defVer?.color || (colors.length === 1 ? colors[0] : ''),
+      device_storage: defVer?.storage || (storages.length === 1 ? storages[0] : ''),
+      device_ram: defVer?.ram || (rams.length === 1 ? rams[0] : ''),
+      device_cpu: defVer?.cpu || (cpus.length === 1 ? cpus[0] : ''),
     });
   };
 
@@ -41,7 +49,7 @@ export function DeviceFieldsSection({ block, onChange, models, showRam = true, s
   };
 
   return (
-    <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
       <div className="space-y-2 md:col-span-2">
         <Label>型號</Label>
         <ModelPicker

@@ -60,7 +60,7 @@ export default function AdminRepairOrderDetail() {
       toast.success('零件已成功出庫扣減庫存！');
       queryClient.invalidateQueries({ queryKey: ['repair_order', id] });
       queryClient.invalidateQueries({ queryKey: ['repair_orders'] });
-      queryClient.invalidateQueries({ queryKey: ['repair_parts_catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['repair-parts-catalog'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
     },
     onError: (err: any) => {
@@ -98,7 +98,7 @@ export default function AdminRepairOrderDetail() {
 
       queryClient.invalidateQueries({ queryKey: ['repair_order', id] });
       queryClient.invalidateQueries({ queryKey: ['repair_orders'] });
-      queryClient.invalidateQueries({ queryKey: ['repair_parts_catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['repair-parts-catalog'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
 
       if (errors.length === 0) {

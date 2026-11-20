@@ -18,13 +18,15 @@ import { getErrorMessage } from '@/lib/errorMessages';
 import { useRepairBase } from '@/lib/repairBase';
 import { useDeviceModels } from '@/hooks/useDeviceModels';
 import { ProductFormDialog } from '@/components/products/form/ProductFormDialog';
-import { DeviceBlock, createEmptyDeviceBlock, calcBlockTotals } from '@/components/repair/deviceBlockTypes';
+import { DeviceBlock, createEmptyDeviceBlock, createEmptyBlockItem, calcBlockTotals } from '@/components/repair/deviceBlockTypes';
 import { DeviceBlockSection } from '@/components/repair/DeviceBlockSection';
 import { DeviceBlockSummaryCard } from '@/components/repair/FeesFieldsSection';
 import { useProductMutations } from '@/pages/admin/products/hooks/useProductMutations';
 import { StorePicker } from '@/components/ui/StorePicker';
 import { RepairPurchaseDialog } from '@/components/repair/RepairPurchaseDialog';
-import { RepairPartFormDialog } from '@/components/repair/RepairPartFormDialog';
+import QuickCreatePrototype from '@/pages/admin/repair-parts/RepairPartQuickCreate';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+
 import { useRepairParts } from '@/hooks/useRepairParts';
 
 export default function AdminRepairOrderForm() {
@@ -80,20 +82,20 @@ export default function AdminRepairOrderForm() {
   const [blocks, setBlocks] = useState<DeviceBlock[]>(() => [createEmptyDeviceBlock()]);
   const [existingItemIds, setExistingItemIds] = useState<string[]>([]);
 
-  const [partDialogOpen, setPartDialogOpen] = useState(false);
-  const [partModelId, setPartModelId] = useState<string | null>(null);
-  const [editingPartId, setEditingPartId] = useState<string | null>(null);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const [partDialogOpen, setPartDialogOpen] = useState(false);
+  const [activeCreateBlockKey, setActiveCreateBlockKey] = useState<string | null>(null);
+  const [editingPartId, setEditingPartId] = useState<string | null>(null);
   const { parts: repairParts } = useRepairParts();
 
-  const openCreatePart = (modelId: string | null) => {
-    setPartModelId(modelId);
+  const openCreatePart = (modelId: string | null, blockKey?: string) => {
+    setActiveCreateBlockKey(blockKey || null);
     setEditingPartId(null);
     setPartDialogOpen(true);
   };
 
   const openEditPart = (repairPartId: string) => {
-    setPartModelId(null);
+    setActiveCreateBlockKey(null);
     setEditingPartId(repairPartId);
     setPartDialogOpen(true);
   };
@@ -610,18 +612,6 @@ export default function AdminRepairOrderForm() {
         </div>
       </div>
 
-      <RepairPartFormDialog
-        open={partDialogOpen}
-        onOpenChange={setPartDialogOpen}
-        editingPart={editingPartId ? repairParts.find(p => p.id === editingPartId) || null : null}
-        presetDeviceModelId={partModelId}
-        onCreateProduct={(modelId) => {
-          setPartDialogOpen(false);
-          setPartModelId(modelId);
-          setProductDialogOpen(true);
-        }}
-      />
-
       <ProductFormDialog
         open={productDialogOpen}
         onOpenChange={setProductDialogOpen}
@@ -639,7 +629,7 @@ export default function AdminRepairOrderForm() {
           brand_series_ids: [],
           device_model_group_ids: [],
           device_model_exclusion_ids: [],
-          device_model_ids: partModelId ? [partModelId] : [],
+          device_model_ids: [],
         } as any}
       />
 
@@ -651,6 +641,31 @@ export default function AdminRepairOrderForm() {
         customerName={customer.customer_name}
         onItemsLinked={handleItemsLinked}
       />
+
+      <Dialog open={partDialogOpen} onOpenChange={setPartDialogOpen}>
+        <DialogContent className="w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto p-0">
+          <QuickCreatePrototype
+            editingId={editingPartId}
+            onCreated={(partId) => {
+              // 自動加入到當前 block
+              if (activeCreateBlockKey) {
+                setBlocks(prev => prev.map(b => {
+                  if (b.key !== activeCreateBlockKey) return b;
+                  return { ...b, items: [...b.items, { ...createEmptyBlockItem('part'), repair_part_id: partId, part_name: '', service_name: '' }] };
+                }));
+              }
+              setPartDialogOpen(false);
+              setActiveCreateBlockKey(null);
+              setEditingPartId(null);
+            }}
+            onSaved={() => {
+              setPartDialogOpen(false);
+              setActiveCreateBlockKey(null);
+              setEditingPartId(null);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

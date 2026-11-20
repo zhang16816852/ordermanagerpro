@@ -143,6 +143,11 @@ export function CategoryTreeNode({
                     )}
                     <FolderTree className="h-4 w-4 text-primary/70" />
                     <span className="font-medium text-sm">{node.name}</span>
+                    {node.is_repair_part && (
+                      <InlineBadge variant="outline" className="text-[10px] px-1.5 py-0 bg-orange-50 text-orange-700 border-orange-200">
+                        維修零件
+                      </InlineBadge>
+                    )}
                     {linkedSpecsCount > 0 && (
                         <InlineBadge variant="secondary" className="text-[10px] py-0 h-4">
                             {linkedSpecsCount} 個規格

@@ -112,6 +112,25 @@ export function RepairPurchaseDialog({
     enabled: open && !!block,
   });
 
+  // 零件型錄 supplier_id 預帶（所有選中零件共用同一供應商時預設選中）
+  const { data: partSupplierMap = {} } = useQuery<Record<string, string | null>>({
+    queryKey: ['repair-dialog-part-suppliers', open ? block?.key : null],
+    queryFn: async () => {
+      const partIds = [...new Set((block?.items || []).map(i => i.repair_part_id).filter(Boolean))] as string[];
+      if (partIds.length === 0) return {};
+      const { data, error } = await (supabase as any)
+        .from('repair_parts')
+        .select('id, supplier_id')
+        .in('id', partIds);
+      if (error) throw error;
+      return (data || []).reduce((acc: Record<string, string | null>, p: any) => {
+        acc[p.id] = p.supplier_id || null;
+        return acc;
+      }, {});
+    },
+    enabled: open && !!block,
+  });
+
   // 當打開或 block 改變時初始化品項列表
   useEffect(() => {
     if (open && block) {
@@ -138,13 +157,15 @@ export function RepairPurchaseDialog({
       const targetDevice = deviceModelName || '維修裝置';
       const targetCustomer = customerName ? `（客戶: ${customerName}）` : '';
       setNotes(`維修叫料 - ${targetDevice}${targetCustomer}`);
-      setSupplierId('');
+      // 預帶供應商：所有零件共用同一 supplier_id 時自動選中
+      const supplierIds = [...new Set(partItems.map(i => i.repair_part_id ? partSupplierMap[i.repair_part_id] : null).filter(Boolean))];
+      setSupplierId(supplierIds.length === 1 ? (supplierIds[0] as string) : '');
       setExpectedDate('');
       setSupplierOrderNumber('');
       setDirectReceive(false);
       setLots({});
     }
-  }, [open, block, deviceModelName, customerName]);
+  }, [open, block, deviceModelName, customerName, partSupplierMap]);
 
   const selectedCount = purchaseItems.filter(i => i.selected).length;
   const totalCost = purchaseItems
@@ -306,7 +327,7 @@ export function RepairPurchaseDialog({
       // 4. 失效快取以同步採購單與庫存
       queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
-      queryClient.invalidateQueries({ queryKey: ['repair_parts_catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['repair-parts-catalog'] });
 
       // 5. 回填至維修單中的品項
       if (block) {

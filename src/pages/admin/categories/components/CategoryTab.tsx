@@ -73,9 +73,9 @@ function buildTree(cats: Category[], h: CategoryHierarchy[], links: any[]): any[
 }
 
 // 分類管理 Tab（樹狀列表 + 新增/匯出/匯入）
-export function CategoryTab() {
+export function CategoryTab({ repairPartOnly = false }: { repairPartOnly?: boolean }) {
     const {
-        categories,
+        categories: allCategories,
         isLoadingCats,
         categorySpecLinks,
         categoryHierarchy,
@@ -85,6 +85,10 @@ export function CategoryTab() {
         parseCategoryFile,
         confirmCategoryImport,
     } = useCategoryData();
+
+    const categories = allCategories.filter((c: any) =>
+        repairPartOnly ? c.is_repair_part === true : c.is_repair_part !== true
+    );
 
     // 匯入預覽狀態
     const [previewOpen, setPreviewOpen] = useState(false);

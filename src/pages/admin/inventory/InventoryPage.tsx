@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Search, RefreshCw, AlertTriangle, Save, FileText, History, Calculator, Warehouse, PackageSearch, ShieldCheck } from 'lucide-react';
+import { Search, RefreshCw, AlertTriangle, Save, FileText, History, Warehouse, PackageSearch, ShieldCheck } from 'lucide-react';
 import { DataTable } from '@/components/shared/DataTable';
 import { formatCurrency } from '@/lib/formatters';
 import { exportToCSV } from '@/lib/exportUtils';
@@ -45,9 +46,9 @@ export default function AdminInventory() {
         pageSize,
         setPageIndex,
         updateInventory,
-        recalculateInventory,
     } = useInventory();
-
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'inventory');
     const [movementsTarget, setMovementsTarget] = useState<{ productId: string; variantId: string | null; name: string } | null>(null);
     const [reconcileOpen, setReconcileOpen] = useState(false);
     const [stocktakeOpen, setStocktakeOpen] = useState(false);
@@ -168,7 +169,14 @@ export default function AdminInventory() {
                 </Card>
             </div>
 
-            <Tabs defaultValue="inventory">
+            <Tabs value={activeTab} onValueChange={(v) => {
+                setActiveTab(v);
+                setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    next.set('tab', v);
+                    return next;
+                }, { replace: true });
+            }}>
                 <TabsList>
                     <TabsTrigger value="inventory">庫存列表</TabsTrigger>
                     <TabsTrigger value="warehouses">
@@ -200,23 +208,10 @@ export default function AdminInventory() {
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => {
-                                    if (window.confirm('將根據採購入庫與出貨紀錄重新計算所有庫存數量，確定繼續？')) {
-                                        recalculateInventory.mutate();
-                                    }
-                                }}
-                                disabled={recalculateInventory.isPending}
-                            >
-                                <Calculator className="mr-2 h-4 w-4" />
-                                {recalculateInventory.isPending ? '計算中...' : '系統重算'}
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
                                 onClick={() => setReconcileOpen(true)}
                             >
                                 <ShieldCheck className="mr-2 h-4 w-4" />
-                                FIFO 驗算
+                                檢查並重算
                             </Button>
                             <Button
                                 variant="outline"

@@ -21,7 +21,7 @@ export interface DeviceBlockSectionProps {
   onUpdate: (block: DeviceBlock) => void;
   onAddBlock: () => void;
   onRemoveBlock: (key: string) => void;
-  onCreatePart?: (deviceModelId: string | null) => void;
+  onCreatePart?: (deviceModelId: string | null, blockKey?: string) => void;
   onEditPart?: (repairPartId: string) => void;
   onNavigateToPurchase?: () => void;
   onRequestPurchase?: (block: DeviceBlock) => void;
@@ -98,7 +98,7 @@ export function DeviceBlockSection({
               </div>
               <div className="flex items-center gap-2">
                 {onCreatePart && (
-                  <Button variant="ghost" size="sm" className="text-muted-foreground text-xs" onClick={() => onCreatePart(block.device_model_id || null)}>
+                  <Button variant="ghost" size="sm" className="text-muted-foreground text-xs" onClick={() => onCreatePart(block.device_model_id || null, block.key)}>
                     <Plus className="h-3.5 w-3.5 mr-1" />
                     建立零件
                   </Button>

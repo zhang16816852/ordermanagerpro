@@ -8,8 +8,8 @@ import { useSpecStore } from '@/store/useSpecStore';
 export interface QuickCreateRepairPartInput {
   // 零件型錄
   device_model_id: string | null;
+  device_model_ids?: string[];
   name: string;
-  tags: string[];
   description: string | null;
   supplier_id: string | null;
   default_unit_cost: number;
@@ -44,7 +44,6 @@ export function useQuickCreateRepairPart() {
         .insert({
           device_model_id: input.device_model_id || null,
           name: input.name.trim(),
-          tags: input.tags,
           description: input.description || null,
           supplier_id: input.supplier_id || null,
           default_unit_cost: input.default_unit_cost,
@@ -56,6 +55,15 @@ export function useQuickCreateRepairPart() {
         .select('id')
         .single();
       if (partError) throw partError;
+
+      // 寫入多型號 join table
+      const modelIds = input.device_model_ids && input.device_model_ids.length > 0
+        ? input.device_model_ids
+        : (input.device_model_id ? [input.device_model_id] : []);
+      if (modelIds.length > 0) {
+        const rows = modelIds.map((mid: string) => ({ repair_part_id: part.id, device_model_id: mid }));
+        await db.from('repair_part_device_models').upsert(rows, { onConflict: 'repair_part_id,device_model_id' });
+      }
 
       let productId: string | null = null;
       let variantId: string | null = null;

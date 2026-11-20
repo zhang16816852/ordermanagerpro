@@ -489,6 +489,11 @@ export function PurchaseOrderDetailDialog({
           <div className="flex flex-col">
             <span className="font-mono text-xs text-muted-foreground">{item.variant?.sku || item.product?.code}</span>
             <span className="text-sm font-medium">{item.variant?.name || item.product?.name}</span>
+            {item.repair_part_version && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 mt-0.5 self-start">
+                版本: {item.repair_part_version}
+              </Badge>
+            )}
           </div>
         </TableCell>
         <TableCell>

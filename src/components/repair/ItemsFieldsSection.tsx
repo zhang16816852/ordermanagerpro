@@ -11,7 +11,7 @@ import { DeviceBlock, RepairBlockItem, BlockUpdateProps, createEmptyBlockItem } 
 
 export interface ItemsFieldsSectionProps extends BlockUpdateProps {
   mode?: 'admin' | 'store';
-  onCreatePart?: (deviceModelId: string | null) => void;
+  onCreatePart?: (deviceModelId: string | null, blockKey?: string) => void;
   onEditPart?: (repairPartId: string) => void;
   onNavigateToPurchase?: () => void;
   onRequestPurchase?: (block: DeviceBlock) => void;
@@ -139,7 +139,7 @@ export function ItemsFieldsSection({
                       unit_cost: item.unit_cost,
                     }}
                     deviceModelId={block.device_model_id || null}
-                    onCreatePart={onCreatePart ? () => onCreatePart(block.device_model_id || null) : undefined}
+                    onCreatePart={onCreatePart ? () => onCreatePart(block.device_model_id || null, block.key) : undefined}
                     onEditPart={onEditPart}
                     onSelect={(sel) => {
                       if (!sel) {
@@ -240,11 +240,11 @@ export function ItemsFieldsSection({
             </div>
 
             {item.item_type === 'part' && (item.product_id || item.variant_id) && (
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
                 {mode === 'admin' && (
                   <div className="flex items-center gap-1.5">
                     <Label className="shrink-0 text-xs text-muted-foreground">批次:</Label>
-                    <div className="w-44 min-w-0">
+                    <div className="w-full sm:w-44 min-w-0">
                       <RepairBatchSelect
                         productId={item.product_id}
                         variantId={item.variant_id}

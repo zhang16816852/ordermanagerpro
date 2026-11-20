@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, Link2, Star, Package, Tags, Loader2, Wrench, Sparkles } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Plus, Pencil, Trash2, Link2, Star, Package, Loader2, Wrench, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -9,37 +10,44 @@ import { formatCurrency } from '@/lib/formatters';
 import { useDeviceModels } from '@/hooks/useDeviceModels';
 import {
   useRepairParts,
-  useRepairPartTags,
   useRepairPartMutations,
   useRepairPartProductOptions,
   partLabelOf,
   resolveLinkOf,
   RepairPart,
 } from '@/hooks/useRepairParts';
-import { RepairPartFormDialog } from '@/components/repair/RepairPartFormDialog';
-import { RepairPartTagsManager } from './RepairPartTagsManager';
+
+
 import { RepairPartBatchCreateDialog } from './RepairPartBatchCreateDialog';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import QuickCreatePrototype from './RepairPartQuickCreate';
+import { CategoryTab } from '@/pages/admin/categories/components/CategoryTab';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { FolderTree } from 'lucide-react';
 import { toast } from 'sonner';
 
 type ModelFilter = 'all' | 'mine' | 'generic';
 
 export default function RepairPartsPage() {
   const { parts, isLoading } = useRepairParts();
-  const { tags: allTags } = useRepairPartTags();
-  const { deleteMutation } = useRepairPartMutations();
+  const { deleteMutation, updateMutation, createMutation } = useRepairPartMutations();
   const { data: models } = useDeviceModels();
 
   const [keyword, setKeyword] = useState('');
   const [modelFilter, setModelFilter] = useState<ModelFilter>('all');
   const [modelId, setModelId] = useState<string | null>(null);
-  const [activeTags, setActiveTags] = useState<string[]>([]);
-  const [showInactive, setShowInactive] = useState(false);
 
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingPart, setEditingPart] = useState<RepairPart | null>(null);
-  const [presetModelId, setPresetModelId] = useState<string | null>(null);
-  const [tagsOpen, setTagsOpen] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
+  const [stockFilter, setStockFilter] = useState<'all' | 'in' | 'out' | 'low'>('all');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+
+
+
   const [batchOpen, setBatchOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingPartId, setEditingPartId] = useState<string | null>(null);
 
   const modelOptions = useMemo(
     () => models.map(m => ({ id: m.id, name: m.name })),
@@ -48,26 +56,39 @@ export default function RepairPartsPage() {
 
   const filtered = useMemo(() => {
     const q = keyword.trim().toLowerCase();
-    return parts.filter(p => {
+    const base = parts.filter(p => {
       if (!showInactive && !p.is_active) return false;
       if (modelFilter === 'mine' && !p.device_model_id) return false;
       if (modelFilter === 'generic' && p.device_model_id) return false;
-      if (modelFilter === 'all' && modelId && p.device_model_id !== modelId) return false;
-      if (activeTags.length > 0 && !activeTags.every(t => p.tags.includes(t))) return false;
+      if (modelFilter === 'all' && modelId && !(p.device_models || []).some((m: any) => m.id === modelId) && p.device_model_id !== modelId) return false;
+      const stock = p.links.reduce((sum: number, l: any) => sum + (l.stock || 0), 0);
+      if (stockFilter === 'in' && stock <= 0) return false;
+      if (stockFilter === 'out' && stock > 0) return false;
+      if (stockFilter === 'low' && !(stock > 0 && stock <= 5)) return false;
       if (!q) return true;
       const haystack = [
         p.name,
         p.description,
         p.device_model?.name,
-        ...p.tags,
         ...p.links.map(l => [l.product_name, l.variant_name, l.sku, l.product_code].filter(Boolean).join(' ')),
       ].filter(Boolean).join(' ').toLowerCase();
       return haystack.includes(q);
     });
-  }, [parts, keyword, modelFilter, modelId, activeTags, showInactive]);
+    return [...base].sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  }, [parts, keyword, modelFilter, modelId, showInactive, stockFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pagedFiltered = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  // reset page when filters change
+  // (handled via useEffect-like: clamp page)
+  const safePage = Math.min(page, totalPages);
 
   const noLinkCount = filtered.filter(p => p.links.length === 0).length;
   const inactiveCount = parts.filter(p => !p.is_active).length;
+
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+  useEffect(() => { setPage(1); }, [keyword, modelFilter, modelId, showInactive, stockFilter]);
 
   const handleDelete = (part: RepairPart) => {
     if (part.links.length > 0) {
@@ -77,6 +98,8 @@ export default function RepairPartsPage() {
     if (!window.confirm(`確定刪除零件「${partLabelOf(part)}」？已使用此零件的維修單品項不會被刪除。`)) return;
     deleteMutation.mutate(part.id);
   };
+
+  const [activeTab, setActiveTab] = useState('parts');
 
   return (
     <div className="space-y-6">
@@ -91,29 +114,112 @@ export default function RepairPartsPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={() => setTagsOpen(true)}>
-            <Tags className="h-4 w-4 mr-1.5" />
-            標籤字典
-          </Button>
+
           <Button variant="outline" onClick={() => setBatchOpen(true)}>
             <Package className="h-4 w-4 mr-1.5" />
             批次建立
           </Button>
+          {selectedIds.size === 1 && (
+            <Button variant="outline" onClick={() => {
+              const p = parts.find(x => x.id === Array.from(selectedIds)[0]);
+              if (!p) return;
+              createMutation.mutate({
+                name: `${p.name} (複製)`,
+                description: p.description,
+                device_model_id: p.device_model_id,
+
+                is_active: p.is_active,
+                default_unit_cost: p.default_unit_cost,
+                default_unit_price: p.default_unit_price,
+                spec_values: p.spec_values,
+              } as any, {
+                onSuccess: () => setSelectedIds(new Set()),
+              });
+            }}>
+              複製零件
+            </Button>
+          )}
+          {selectedIds.size > 0 && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => {
+                selectedIds.forEach(id => {
+                  const p = parts.find(x => x.id === id) as any;
+                  if (!p) return;
+                  const input: any = {
+                    device_model_id: p.device_model_id || null,
+                    name: p.name,
+
+                    description: p.description || null,
+                    supplier_id: p.supplier_id || null,
+                    default_unit_cost: p.default_unit_cost || 0,
+                    default_unit_price: p.default_unit_price || 0,
+                    is_active: !p.is_active,
+                    sort_order: p.sort_order || 0,
+                    version: p.version || null,
+                    links: (p.links || []).map((l: any) => ({
+                      id: l.id,
+                      product_id: l.product_id,
+                      variant_id: l.variant_id || null,
+                      spec_label: l.spec_label || null,
+                      is_default: !!l.is_default,
+                    })),
+                  };
+                  updateMutation.mutate({ id: p.id, input, keepIds: (p.links || []).map((l: any) => l.id) });
+                });
+                setSelectedIds(new Set());
+              }}>
+                批次切換啟用
+              </Button>
+              <Button variant="outline" size="sm" className="text-destructive" onClick={() => {
+                if (!window.confirm(`確定刪除 ${selectedIds.size} 個零件？`)) return;
+                selectedIds.forEach(id => {
+                  const p = parts.find(x => x.id === id);
+                  if (p && p.links.length === 0) deleteMutation.mutate(id);
+                });
+                setSelectedIds(new Set());
+              }}>
+                批次刪除
+              </Button>
+            </>
+          )}
           <Button variant="outline" asChild>
             <a href="/admin/repair-parts/quick-create">
               <Sparkles className="h-4 w-4 mr-1.5" />
-              快速建立（Prototype）
+              快速建立零件
             </a>
           </Button>
-          <Button onClick={() => { setEditingPart(null); setPresetModelId(null); setFormOpen(true); }}>
-            <Plus className="h-4 w-4 mr-1.5" />
-            新增零件
+          <Button asChild>
+            <a href="/admin/repair-parts/quick-create">
+              <Sparkles className="h-4 w-4 mr-1.5" />
+              新增零件（新版）
+            </a>
           </Button>
         </div>
       </div>
 
-      <Card>
-        <CardContent className="pt-4 space-y-3">
+      <div className="space-y-4">
+        <div className="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => setActiveTab('parts')}
+            className={`inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all ${activeTab === 'parts' ? 'bg-background text-foreground shadow-sm' : ''}`}
+          >
+            <Wrench className="h-4 w-4 mr-2" />
+            零件列表
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('categories')}
+            className={`inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all ${activeTab === 'categories' ? 'bg-background text-foreground shadow-sm' : ''}`}
+          >
+            <FolderTree className="h-4 w-4 mr-2" />
+            維修零件分類
+          </button>
+        </div>
+
+        {activeTab === 'parts' && (
+          <Card>
+            <CardContent className="pt-4 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <Input
               value={keyword}
@@ -154,30 +260,25 @@ export default function RepairPartsPage() {
               />
               顯示停用{inactiveCount > 0 ? `（${inactiveCount}）` : ''}
             </label>
-          </div>
-
-          {allTags.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              {allTags.map(t => (
+            <div className="flex items-center gap-1 rounded-full border p-0.5 text-xs">
+              {([['all', '全部庫存'], ['in', '有庫存'], ['out', '零庫存'], ['low', '低庫存']] as [typeof stockFilter, string][]).map(([v, label]) => (
                 <button
-                  key={t.id}
+                  key={v}
                   type="button"
-                  onClick={() => setActiveTags(prev => prev.includes(t.name) ? prev.filter(x => x !== t.name) : [...prev, t.name])}
-                  className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
-                    activeTags.includes(t.name)
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
-                  }`}
+                  onClick={() => setStockFilter(v)}
+                  className={`rounded-full px-2.5 py-1 transition-colors ${stockFilter === v ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                 >
-                  #{t.name}
+                  {label}
                 </button>
               ))}
             </div>
-          )}
+          </div>
+
+
 
           <p className="text-xs text-muted-foreground">
             共 {filtered.length} 項符合
-            {activeTags.length > 0 && `（已套用 ${activeTags.length} 個標籤）`}
+            
             {noLinkCount > 0 && `，其中 ${noLinkCount} 項尚未綁定庫存商品`}
           </p>
 
@@ -196,8 +297,17 @@ export default function RepairPartsPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left text-xs text-muted-foreground">
-                      <th className="py-2 px-2 font-medium">零件</th>
-                      <th className="py-2 px-2 font-medium">標籤</th>
+                      <th className="py-2 px-2 w-8">
+                         <Checkbox
+                           checked={filtered.length > 0 && filtered.every(p => selectedIds.has(p.id))}
+                           onCheckedChange={(c) => {
+                             if (c) setSelectedIds(new Set(filtered.map(p => p.id)));
+                             else setSelectedIds(new Set());
+                           }}
+                         />
+                       </th>
+                       <th className="py-2 px-2 font-medium">零件</th>
+                      
                       <th className="py-2 px-2 font-medium">庫存連結</th>
                       <th className="py-2 px-2 font-medium text-right">自有庫存</th>
                       <th className="py-2 px-2 font-medium text-right">成本 / 售價</th>
@@ -205,30 +315,40 @@ export default function RepairPartsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map(part => {
+                    {pagedFiltered.map(part => {
                       const def = resolveLinkOf(part);
                       const stock = part.links.reduce((sum, l) => sum + l.stock, 0);
                       return (
                         <tr key={part.id} className="border-b last:border-0 hover:bg-muted/20">
+                           <td className="py-2.5 px-2 align-top w-8">
+                             <Checkbox
+                               checked={selectedIds.has(part.id)}
+                               onCheckedChange={(c) => {
+                                 const next = new Set(selectedIds);
+                                 if (c) next.add(part.id); else next.delete(part.id);
+                                 setSelectedIds(next);
+                               }}
+                             />
+                           </td>
                           <td className="py-2.5 px-2 align-top">
                             <div className="font-medium flex items-center gap-1.5 flex-wrap">
                               {partLabelOf(part, def)}
                               {!part.is_active && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">停用</Badge>}
                             </div>
+                            {part.spec_values && Object.keys(part.spec_values).length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-0.5">
+                                {Object.entries(part.spec_values).map(([k, v]) => (
+                                  <Badge key={k} variant="outline" className="text-[10px] px-1 py-0">
+                                    {k}: {Array.isArray(v) ? v.join('、') : String(v)}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
                             {part.description && (
                               <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{part.description}</p>
                             )}
                           </td>
-                          <td className="py-2.5 px-2 align-top">
-                            {part.tags.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {part.tags.map(t => (
-                                  <span key={t} className="rounded-full border border-border bg-muted/40 px-1.5 py-0 text-[10px] text-muted-foreground">#{t}</span>
-                                ))}
-                              </div>
-                            ) : <span className="text-muted-foreground/30">-</span>}
-                          </td>
-                          <td className="py-2.5 px-2 align-top text-xs">
+                          <td className="py-2.5 px-2 align-top text-xs max-w-[220px]">
                             {part.links.length === 0 ? (
                               <span className="text-amber-600 dark:text-amber-400">未綁定</span>
                             ) : (
@@ -255,7 +375,7 @@ export default function RepairPartsPage() {
                           <td className="py-2.5 px-2 align-top">
                             <div className="flex items-center justify-center gap-1">
                               <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="編輯零件" title="編輯"
-                                onClick={() => { setEditingPart(part); setPresetModelId(null); setFormOpen(true); }}>
+                                onClick={() => { setEditingPartId(part.id); setEditDialogOpen(true); }}>
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
                               <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" aria-label="刪除零件" title="刪除"
@@ -273,7 +393,7 @@ export default function RepairPartsPage() {
 
               {/* 行動卡片 */}
               <div className="md:hidden space-y-3">
-                {filtered.map(part => {
+                {pagedFiltered.map(part => {
                   const def = resolveLinkOf(part);
                   const stock = part.links.reduce((sum, l) => sum + l.stock, 0);
                   return (
@@ -281,17 +401,11 @@ export default function RepairPartsPage() {
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="font-medium text-sm">{partLabelOf(part, def)}</div>
-                          {part.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {part.tags.map(t => (
-                                <span key={t} className="rounded-full border border-border bg-muted/40 px-1.5 py-0 text-[10px] text-muted-foreground">#{t}</span>
-                              ))}
-                            </div>
-                          )}
+
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="編輯零件"
-                            onClick={() => { setEditingPart(part); setPresetModelId(null); setFormOpen(true); }}>
+                            onClick={() => { setEditingPartId(part.id); setEditDialogOpen(true); }}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" aria-label="刪除零件"
@@ -317,15 +431,29 @@ export default function RepairPartsPage() {
           )}
         </CardContent>
       </Card>
+        )}
 
-      <RepairPartFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        editingPart={editingPart}
-        presetDeviceModelId={presetModelId}
-      />
-      <RepairPartTagsManager open={tagsOpen} onOpenChange={setTagsOpen} />
+        {activeTab === 'parts' && filtered.length > pageSize && (
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <Button variant="outline" size="sm" disabled={safePage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>上一頁</Button>
+            <span className="text-xs text-muted-foreground">第 {safePage} / {totalPages} 頁</span>
+            <Button variant="outline" size="sm" disabled={safePage >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>下一頁</Button>
+          </div>
+        )}
+
+        {activeTab === 'categories' && (
+          <CategoryTab repairPartOnly={true} />
+        )}
+      </div>
+
+
+
       <RepairPartBatchCreateDialog open={batchOpen} onOpenChange={setBatchOpen} />
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto p-0">
+          <QuickCreatePrototype editingId={editingPartId} onSaved={() => { setEditDialogOpen(false); setEditingPartId(null); }} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,6 +23,26 @@ export function ProductsTable({
     onDelete,
     onUpdateVariant
 }: ProductsListViewProps) {
+    const [sortField, setSortField] = useState<'name' | 'category' | null>(null);
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+    const toggleSort = (f: 'name' | 'category') => {
+        if (sortField === f) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        else { setSortField(f); setSortDir('asc'); }
+    };
+    const sortedProducts = useMemo(() => {
+        if (!products) return products;
+        if (!sortField) return products;
+        const arr = [...products];
+        arr.sort((a: any, b: any) => {
+            const va = (a[sortField] ?? '').toString().toLowerCase();
+            const vb = (b[sortField] ?? '').toString().toLowerCase();
+            if (va < vb) return sortDir === 'asc' ? -1 : 1;
+            if (va > vb) return sortDir === 'asc' ? 1 : -1;
+            return 0;
+        });
+        return arr;
+    }, [products, sortField, sortDir]);
+
     if (isLoading) {
         return (
             <div className="rounded-xl border bg-card overflow-x-auto">
@@ -30,8 +51,8 @@ export function ProductsTable({
                         <TableRow>
                             <TableHead className="w-[40px]"></TableHead>
                             <TableHead className="w-[50px]"></TableHead>
-                            <TableHead>名稱</TableHead>
-                            <TableHead>類別</TableHead>
+                            <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('name')}>名稱 {sortField==='name' ? (sortDir==='asc'?'↑':'↓') : ''}</TableHead>
+                            <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('category')}>類別 {sortField==='category' ? (sortDir==='asc'?'↑':'↓') : ''}</TableHead>
                             <TableHead>廠牌/型號</TableHead>
                             <TableHead className="text-right">批發/零售價</TableHead>
                             <TableHead>狀態</TableHead>
@@ -63,8 +84,8 @@ export function ProductsTable({
                             />
                         </TableHead>
                         <TableHead className="w-[50px]"></TableHead>
-                        <TableHead>名稱</TableHead>
-                        <TableHead>類別</TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('name')}>名稱 {sortField==='name' ? (sortDir==='asc'?'↑':'↓') : ''}</TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('category')}>類別 {sortField==='category' ? (sortDir==='asc'?'↑':'↓') : ''}</TableHead>
                         <TableHead className="min-w-[120px]">廠牌 / 型號</TableHead>
                         <TableHead className="text-right">批發 / 零售價</TableHead>
                         <TableHead>狀態</TableHead>
@@ -79,7 +100,7 @@ export function ProductsTable({
                             </TableCell>
                         </TableRow>
                     ) : (
-                        products?.map((product) => (
+                        sortedProducts?.map((product) => (
                             <ProductRowItem
                                 key={product.id}
                                 product={product}

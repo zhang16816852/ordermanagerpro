@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, Package, Plus, Check, Loader2, X, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { formatCurrency } from '@/lib/formatters';
-import { useRepairParts, useRepairPartTags, partLabelOf, RepairPart } from '@/hooks/useRepairParts';
+import { useRepairParts, partLabelOf, RepairPart } from '@/hooks/useRepairParts';
 
 export interface RepairPartSelection {
   repair_part_id: string | null;
@@ -37,9 +37,7 @@ export function RepairPartPickerDialog({
   onCreatePart,
 }: RepairPartPickerDialogProps) {
   const { parts, isLoading } = useRepairParts();
-  const { tags: allTags } = useRepairPartTags();
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTags, setActiveTags] = useState<string[]>([]);
   const [scope, setScope] = useState<Scope>(deviceModelId ? 'device' : 'all');
   const [modelFilter, setModelFilter] = useState<string>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -57,7 +55,7 @@ export function RepairPartPickerDialog({
   const filtered = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return parts.filter((p) => {
-      if (!p.is_active && q === '' && activeTags.length === 0) return false;
+      if (!p.is_active && q === '') return false;
 
       if (scope === 'device' && deviceModelId) {
         if (p.device_model_id !== deviceModelId && p.device_model_id !== null) return false;
@@ -66,14 +64,14 @@ export function RepairPartPickerDialog({
       }
       if (modelFilter !== 'all' && (p.device_model_id || '') !== modelFilter) return false;
 
-      if (activeTags.length > 0 && !activeTags.some(t => (p.tags || []).includes(t))) return false;
+
 
       if (q) {
         const haystack = [
           p.name,
           p.device_model?.name || '',
           p.description || '',
-          ...(p.tags || []),
+
           ...p.links.map(l => [l.product_name, l.variant_name, l.sku, l.spec_label].filter(Boolean).join(' ')),
         ].join(' ').toLowerCase();
         if (!haystack.includes(q)) return false;
@@ -91,11 +89,8 @@ export function RepairPartPickerDialog({
       if (d !== 0) return d;
       return a.sort_order - b.sort_order || a.name.localeCompare(b.name);
     });
-  }, [parts, searchTerm, activeTags, scope, modelFilter, deviceModelId]);
+  }, [parts, searchTerm, scope, modelFilter, deviceModelId]);
 
-  const toggleTag = (tag: string) => {
-    setActiveTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
-  };
 
   const selectLink = (part: RepairPart, link: RepairPart['links'][number]) => {
     onSelect({
@@ -186,35 +181,6 @@ export function RepairPartPickerDialog({
               </SelectContent>
             </Select>
           </div>
-
-          {allTags.length > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] text-muted-foreground shrink-0">標籤</span>
-              {allTags.map(t => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => toggleTag(t.name)}
-                  className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
-                    activeTags.includes(t.name)
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
-                  }`}
-                >
-                  {t.name}
-                </button>
-              ))}
-              {activeTags.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTags([])}
-                  className="text-[11px] text-muted-foreground hover:text-foreground underline"
-                >
-                  清除
-                </button>
-              )}
-            </div>
-          )}
         </DialogHeader>
 
         <div className="p-2">
@@ -228,7 +194,7 @@ export function RepairPartPickerDialog({
               <Package className="h-10 w-10 text-muted-foreground/40 mb-2" />
               <p className="text-sm font-medium text-foreground">找不到符合條件的維修零件</p>
               <p className="text-xs text-muted-foreground mt-1">
-                {searchTerm || activeTags.length > 0 ? '請嘗試調整搜尋或標籤條件' : '目前尚無零件，可先建立零件型錄'}
+                {searchTerm ? '請嘗試調整搜尋條件' : '目前尚無零件，可先建立零件型錄'}
               </p>
               {onCreatePart && (
                 <Button
@@ -287,9 +253,12 @@ export function RepairPartPickerDialog({
                             {!part.is_active && (
                               <Badge variant="secondary" className="h-5 px-1.5 text-[10px] shrink-0">停用</Badge>
                             )}
-                            {(part.tags || []).map(t => (
-                              <Badge key={t} variant="outline" className="h-5 px-1.5 text-[10px] font-normal shrink-0">{t}</Badge>
-                            ))}
+
+                            {part.spec_values && Object.keys(part.spec_values).length > 0 && (
+                              <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal shrink-0 bg-blue-50 text-blue-700 border-blue-200">
+                                {Object.entries(part.spec_values).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join('、') : v}`).join(' / ')}
+                              </Badge>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">

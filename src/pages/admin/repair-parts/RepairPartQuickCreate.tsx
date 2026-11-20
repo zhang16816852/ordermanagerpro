@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import {
   DndContext,
   closestCenter,
@@ -29,6 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ModelPicker } from '@/components/repair/ModelPicker';
 import { useDeviceModels } from '@/hooks/useDeviceModels';
 import { useQuickCreateRepairPart } from '@/hooks/useQuickCreateRepairPart';
+import { useRepairParts, useRepairPartMutations } from '@/hooks/useRepairParts';
 import { useRepairPartCategories } from '@/hooks/useRepairPartCategories';
 import { useRepairPartSpecs } from '@/hooks/useRepairPartSpecs';
 
@@ -116,7 +118,6 @@ const MOCK_CATEGORIES_ORIGINAL: CategoryDef[] = [
   },
 ];
 
-const MOCK_TAGS = ['熱門', '缺貨中', '需預約', '原廠件', '高毛利'];
 const MOCK_VERSIONS = ['a版', 'b版', 'c版', 'dtp', 'c3f', '原廠', '副廠'];
 
 // ---------- Sortable spec field wrapper ----------
@@ -152,9 +153,19 @@ function SortableSelectedTag({ id, value, onRemove }: { id: string; value: strin
   );
 }
 
-export default function QuickCreatePrototype() {
+export default function QuickCreatePrototype({ onCreated, onSaved, editingId: editingIdProp }: { onCreated?: (partId: string) => void; onSaved?: () => void; editingId?: string | null } = {}) {
+  const { id: editId } = useParams<{ id?: string }>();
+  const [searchParams] = useSearchParams();
+  const idFromQuery = searchParams.get('id');
+  const editingId = editingIdProp || editId || idFromQuery;
+  const isEdit = !!editingId;
+
   const { data: models } = useDeviceModels();
   const { createMutation } = useQuickCreateRepairPart();
+  const { parts } = useRepairParts();
+  const { updateMutation } = useRepairPartMutations();
+  const editingPart = isEdit ? parts.find(p => p.id === editingId) || null : null;
+
   const { categories: dbCategories, isLoading: categoriesLoading } = useRepairPartCategories();
 
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
@@ -177,18 +188,58 @@ export default function QuickCreatePrototype() {
   const [editingSpecId, setEditingSpecId] = useState<string | null>(null);
   const [editingSpecName, setEditingSpecName] = useState('');
   const [customInput, setCustomInput] = useState<Record<string, string>>({});
-  const [newTag, setNewTag] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
+
   const [deviceModelIds, setDeviceModelIds] = useState<string[]>([]);
   const [defaultCost, setDefaultCost] = useState(0);
   const [defaultPrice, setDefaultPrice] = useState(0);
   const [version, setVersion] = useState('');
   const [versionInput, setVersionInput] = useState('');
+  const [loadedSpecValues, setLoadedSpecValues] = useState<Record<string, string[]> | null>(null);
   const [createProduct, setCreateProduct] = useState(true);
   const [nameOverride, setNameOverride] = useState('');
   const [nameAuto, setNameAuto] = useState(true);
   const [expandedTriggers, setExpandedTriggers] = useState<Record<string, boolean>>({});
   const [newTriggerState, setNewTriggerState] = useState<Record<string, { triggerValue: string; targetSpec: string; relationType: 'visibility' | 'quantity' }>>({});
+
+  // 編輯模式：預填基本欄位
+  useEffect(() => {
+    if (!editingPart) return;
+    setNameOverride(editingPart.name || '');
+    setNameAuto(false);
+
+    setDefaultCost(editingPart.default_unit_cost || 0);
+    setDefaultPrice(editingPart.default_unit_price || 0);
+    setVersion(editingPart.version || '');
+    const modelIds = (editingPart.device_models && editingPart.device_models.length > 0)
+      ? editingPart.device_models.map((m: any) => m.id)
+      : (editingPart.device_model_id ? [editingPart.device_model_id] : []);
+    setDeviceModelIds(modelIds);
+    if (editingPart.device_model_id) setSelectedCategoryIds([]); // keep simple
+
+    // 編輯模式：載入分類與規格
+    const productId = editingPart.links && editingPart.links.length > 0 ? editingPart.links[0].product_id : null;
+    if (productId) {
+      (async () => {
+        try {
+          const { data: catLinks } = await (supabase as any).from('product_category_links').select('category_id').eq('product_id', productId);
+          const catIds = (catLinks || []).map((c: any) => c.category_id);
+          if (catIds.length > 0) setSelectedCategoryIds(catIds);
+          const { data: specRows } = await (supabase as any).from('entity_spec_values').select('spec_id, value, spec:spec_id(name)').eq('entity_id', productId).eq('entity_type', 'product').is('deleted_at', null);
+          const sv: Record<string, string[]> = {};
+          (specRows || []).forEach((r: any) => {
+            const v = r.value;
+            const name = r.spec?.name;
+            if (name) sv[name] = Array.isArray(v) ? v.map(String) : [String(v)];
+          });
+          setLoadedSpecValues(sv);
+        } catch (e) {
+          console.warn('載入編輯資料失敗', e);
+        }
+      })();
+    } else {
+      setLoadedSpecValues({});
+    }
+  }, [editingPart]);
 
   const selectedCategories = useMemo(
     () => repairCategories.filter(c => selectedCategoryIds.includes(c.id)),
@@ -236,8 +287,16 @@ export default function QuickCreatePrototype() {
     }));
     setSpecDefs(result);
     setSpecOrder(result.map(s => s.id));
-    setSpecValues({});
-  }, [selectedCategoryIds, dbSpecs]);
+    if (isEdit && loadedSpecValues) {
+      const sv: Record<string, string[]> = {};
+      result.forEach(s => {
+        if (loadedSpecValues[s.name]) sv[s.id] = loadedSpecValues[s.name];
+      });
+      setSpecValues(sv);
+    } else {
+      setSpecValues({});
+    }
+  }, [selectedCategoryIds, dbSpecs, isEdit, loadedSpecValues]);
 
   const orderedSpecs = useMemo(() => {
     if (specOrder.length === 0) return specDefs;
@@ -448,17 +507,6 @@ export default function QuickCreatePrototype() {
 
   const displayName = nameAuto ? autoName : nameOverride;
 
-  const handleToggleTag = (tag: string) => {
-    setTags(prev => (prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]));
-  };
-
-  const handleAddTag = () => {
-    const t = newTag.trim();
-    if (!t || tags.includes(t)) return;
-    setTags(prev => [...prev, t]);
-    setNewTag('');
-  };
-
   return (
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
@@ -467,10 +515,10 @@ export default function QuickCreatePrototype() {
             <ArrowLeft className="h-4 w-4" /> 返回零件管理
           </Link>
           <div className="flex-1">
-            <h1 className="text-lg font-semibold">快速建立零件（Prototype v7）</h1>
-            <p className="text-xs text-muted-foreground">UI 模擬 — Trigger 管理移到 source spec + 已選值拖曳排序</p>
+            <h1 className="text-lg font-semibold">快速建立零件</h1>
+            <p className="text-xs text-muted-foreground">建立維修零件型錄，同時自動建立庫存商品</p>
           </div>
-          <Badge variant="outline" className="text-amber-600 border-amber-300">Prototype</Badge>
+          <Badge variant="outline" className="text-green-600 border-green-300">正式版</Badge>
         </div>
       </div>
 
@@ -900,30 +948,7 @@ export default function QuickCreatePrototype() {
             </div>
           </div>
 
-          {/* 6. 標籤 */}
-          <div className="rounded-lg border bg-card p-4 space-y-2">
-            <Label>標籤</Label>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {MOCK_TAGS.map(t => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => handleToggleTag(t)}
-                  className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
-                    tags.includes(t) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <Input value={newTag} onChange={(e) => setNewTag(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }} placeholder="新增標籤後按 Enter" className="h-8 text-xs" />
-              <Button type="button" variant="outline" size="sm" className="h-8 text-xs shrink-0" onClick={handleAddTag} disabled={!newTag.trim()}>
-                <Plus className="h-3 w-3 mr-1" />新增
-              </Button>
-            </div>
-          </div>
+
 
           {/* 7. 庫存商品連結 */}
           <div className="rounded-lg border bg-card p-4 space-y-2">
@@ -931,12 +956,25 @@ export default function QuickCreatePrototype() {
               <Label className="flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" />庫存商品連結</Label>
               <Button type="button" variant="outline" size="sm" className="h-7 text-xs">新增連結</Button>
             </div>
-            <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-3 text-center">
-              尚未綁定庫存商品。未綁定的零件無法扣庫存或叫料。
-            </p>
+            {isEdit && editingPart?.links && editingPart.links.length > 0 ? (
+              <div className="space-y-1">
+                {editingPart.links.map((l: any) => (
+                  <div key={l.id} className="text-xs rounded-md border px-3 py-2 flex items-center justify-between">
+                    <span className="truncate">{l.variant_name || l.product_name}{l.sku ? ` (${l.sku})` : ''}</span>
+                    {l.is_default && <span className="text-amber-500 text-[10px]">預設</span>}
+                  </div>
+                ))}
+                <p className="text-[10px] text-muted-foreground">編輯連結請至零件列表頁操作。</p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-3 text-center">
+                尚未綁定庫存商品。未綁定的零件無法扣庫存或叫料。
+              </p>
+            )}
           </div>
 
-          {/* 8. 同時建立庫存商品 */}
+          {/* 8. 同時建立庫存商品（僅新建模式） */}
+          {!isEdit && (
           <div className="flex items-center justify-between rounded-md border px-3 py-2">
             <div>
               <Label htmlFor="create-product">同時建立庫存商品</Label>
@@ -944,6 +982,7 @@ export default function QuickCreatePrototype() {
             </div>
             <Switch id="create-product" checked={createProduct} onCheckedChange={setCreateProduct} />
           </div>
+          )}
         </div>
 
         {/* 右：預覽 */}
@@ -1009,14 +1048,6 @@ export default function QuickCreatePrototype() {
                   <p className="text-sm font-medium">${defaultPrice}</p>
                 </div>
               </div>
-              {tags.length > 0 && (
-                <div>
-                  <p className="text-[11px] text-muted-foreground">標籤</p>
-                  <div className="flex flex-wrap gap-1">
-                    {tags.map(t => <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>)}
-                  </div>
-                </div>
-              )}
               {createProduct && (
                 <div className="rounded-md bg-primary/5 border border-primary/20 px-2 py-1.5 text-[11px] text-primary">
                   ✓ 建立時將自動建立庫存商品（item_type=repair_part）
@@ -1026,16 +1057,67 @@ export default function QuickCreatePrototype() {
             <div className="pt-3 border-t space-y-2">
               <Button
                 className="w-full"
-                disabled={!displayName || selectedCategoryIds.length === 0 || createMutation.isPending}
+                disabled={!displayName || createMutation.isPending || updateMutation.isPending}
                 onClick={() => {
                   const specValuesObj: Record<string, string[]> = {};
                   for (const [k, v] of Object.entries(specValues)) {
                     if (v && v.length > 0) specValuesObj[k] = v;
                   }
-                  createMutation.mutate({
+                  if (isEdit && editingId) {
+                     updateMutation.mutate({
+                       id: editingId,
+                       input: {
+                         device_model_id: deviceModelIds.length > 0 ? deviceModelIds[0] : null,
+                         name: displayName,
+                         description: null,
+                         supplier_id: null,
+                         default_unit_cost: defaultCost,
+                         default_unit_price: defaultPrice,
+                         is_active: true,
+                         sort_order: editingPart?.sort_order || 0,
+                         version: version || null,
+                         links: editingPart?.links?.map((l: any) => ({
+                           id: l.id,
+                           product_id: l.product_id,
+                           variant_id: l.variant_id || null,
+                           spec_label: l.spec_label || null,
+                           is_default: !!l.is_default,
+                         })) || [],
+                       },
+                       keepIds: (editingPart?.links || []).map((l: any) => l.id),
+                       deviceModelIds: deviceModelIds,
+                     }, {
+                       onSuccess: async () => {
+                          const productId = editingPart?.links?.[0]?.product_id;
+                          if (productId && selectedCategoryIds.length > 0) {
+                            const specData: Record<string, any> = {};
+                            for (const [specId, values] of Object.entries(specValues)) {
+                              const specDef = specDefs.find(s => s.id === specId);
+                              if (specDef && values && (values as string[]).length > 0) {
+                                const v = values as string[];
+                                specData[specDef.name] = v.length === 1 ? v[0] : v;
+                              }
+                            }
+                            if (Object.keys(specData).length > 0) {
+                              try {
+                                await (supabase as any).rpc('sync_product_specs_v6', {
+                                  p_entity_id: productId,
+                                  p_entity_type: 'product',
+                                  p_category_id: selectedCategoryIds[0],
+                                  p_new_data: specData,
+                                });
+                              } catch (e) {
+                                console.warn('Spec sync warning:', e);
+                              }
+                            }
+                          }
+                          onSaved?.();
+                        },
+                     });
+                   } else {
+                     createMutation.mutate({
                     device_model_id: deviceModelIds.length > 0 ? deviceModelIds[0] : null,
                     name: displayName,
-                    tags,
                     description: null,
                     supplier_id: null,
                     default_unit_cost: defaultCost,
@@ -1047,13 +1129,16 @@ export default function QuickCreatePrototype() {
                     spec_values: specValuesObj,
                     create_product: createProduct,
                     links: [],
+                  }, {
+                    onSuccess: (result: any) => { onCreated?.(result?.partId); onSaved?.(); },
                   });
+                   }
                 }}
               >
-                {createMutation.isPending ? '建立中...' : '建立零件（寫入 DB）'}
+                { (createMutation.isPending || updateMutation.isPending) ? '儲存中...' : (isEdit ? '儲存零件' : '建立零件（寫入 DB）')}
               </Button>
               <p className="text-[10px] text-muted-foreground text-center">
-                此為完整版，會寫入資料庫
+                建立後將自動建立庫存商品（item_type=repair_part）
               </p>
             </div>
           </div>

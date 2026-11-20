@@ -209,10 +209,26 @@ export function usePurchaseOrders(viewingOrderId?: string, filters?: PurchaseOrd
         variantMap = (variants || []).reduce((acc, v) => ({ ...acc, [v.id]: v }), {});
       }
 
+      // Get repair part version info
+      const versionMap: Record<string, string> = {};
+      if (productIds.length > 0) {
+        const { data: rpLinks } = await (supabase as any)
+          .from('repair_part_variants')
+          .select('product_id, variant_id, repair_part:repair_part_id(version)')
+          .in('product_id', productIds);
+        (rpLinks || []).forEach((l: any) => {
+          const key = l.variant_id ? `${l.product_id}|${l.variant_id}` : `${l.product_id}|`;
+          if (l.repair_part?.version && !versionMap[key]) {
+            versionMap[key] = l.repair_part.version;
+          }
+        });
+      }
+
       return ((data || []) as any[]).map((item) => ({
         ...item,
         product: productMap[item.product_id],
         variant: variantMap[item.variant_id],
+        repair_part_version: versionMap[item.variant_id ? `${item.product_id}|${item.variant_id}` : `${item.product_id}|`] || null,
       })) as PurchaseOrderItem[];
     },
     enabled: !!viewingOrderId,

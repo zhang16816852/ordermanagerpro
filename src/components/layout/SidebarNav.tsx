@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -22,11 +23,43 @@ interface SidebarNavProps {
   onNavClick?: () => void;
 }
 
+const STORAGE_KEY = 'sidebar-open-group';
+
 export function SidebarNav({ navItems, collapsed: navCollapsed, onNavClick }: SidebarNavProps) {
   const { user, isAdmin, isRep, isFixEngineer, storeRoles, signOut } = useAuth();
   const navigate = useNavigate();
 
   const userInitial = user?.email?.charAt(0).toUpperCase() || 'U';
+
+  const [openGroup, setOpenGroup] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
+
+  const handleOpen = (href: string) => {
+    setOpenGroup(href);
+    try {
+      localStorage.setItem(STORAGE_KEY, href);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleToggle = (href: string) => {
+    setOpenGroup((prev) => {
+      const next = prev === href ? null : href;
+      try {
+        if (next) localStorage.setItem(STORAGE_KEY, next);
+        else localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -44,6 +77,9 @@ export function SidebarNav({ navItems, collapsed: navCollapsed, onNavClick }: Si
               item={item}
               collapsed={navCollapsed}
               onClick={onNavClick ?? (() => {})}
+              isOpen={openGroup === item.href}
+              onOpen={() => handleOpen(item.href)}
+              onToggle={() => handleToggle(item.href)}
             />
           ))}
         </nav>

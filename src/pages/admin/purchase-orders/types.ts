@@ -109,6 +109,7 @@ export interface PurchaseOrderItem {
   freight_manual_weight?: number | null;
   product?: { id: string; name: string; code: string };
   variant?: { id: string; name: string; sku: string; tracking_mode?: 'none' | 'serial' | 'batch' };
+  repair_part_version?: string | null;
 }
 
 export interface Product {

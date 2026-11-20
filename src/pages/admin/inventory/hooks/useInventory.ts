@@ -22,33 +22,33 @@ export function useInventory() {
         queryKey: ['inventory-list'],
         queryFn: async () => {
             const { data, error } = await (supabase
-                .from('product_inventory') as any)
-                .select(`
-                    id,
-                    quantity,
-                    updated_at,
-                    product_id,
-                    variant_id,
-                    warehouse_id,
-                    products (
-                        name,
-                        code,
-                        item_type
-                    ),
-                    suspense_quantity,
-                    product_variants (
-                        name,
-                        sku,
-                        retail_price
-                    ),
-                    warehouses (
-                        code,
-                        name
-                    )
-                `);
+                .from('product_inventory_detail') as any)
+                .select('*');
 
             if (error) throw error;
-            return data || [];
+            return (data || []).map((item: any) => ({
+                id: item.id,
+                quantity: item.quantity,
+                updated_at: item.updated_at,
+                product_id: item.product_id,
+                variant_id: item.variant_id,
+                warehouse_id: item.warehouse_id,
+                suspense_quantity: item.suspense_quantity,
+                products: {
+                    name: item.product_name,
+                    code: item.product_code,
+                    item_type: item.item_type,
+                },
+                product_variants: {
+                    name: item.variant_name,
+                    sku: item.variant_sku,
+                    retail_price: item.retail_price,
+                },
+                warehouses: {
+                    code: item.warehouse_code,
+                    name: item.warehouse_name,
+                },
+            }));
         }
     });
 
@@ -135,7 +135,7 @@ export function useInventory() {
     const queryClient = useQueryClient();
     const recalculateInventory = useMutation({
         mutationFn: async () => {
-            const { data, error } = await (supabase.rpc('recalculate_inventory' as any) as any)({
+            const { data, error } = await (supabase as any).rpc('recalculate_inventory', {
                 p_created_by: user?.id || null,
             });
             if (error) throw error;

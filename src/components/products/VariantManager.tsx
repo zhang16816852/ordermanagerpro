@@ -30,6 +30,7 @@ export function VariantManager({ products, search }: VariantManagerProps) {
         onToggleSelectAll={c.toggleSelectAll}
         onToggleVariant={c.toggleSelectVariant}
         onEdit={c.openEditDialog}
+        onDuplicate={(v) => c.openEditDialog({ ...v, id: undefined } as any)}
         onDelete={c.deleteMutation.mutate}
         onOpenBatchEdit={() => { c.setBatchEditEntries([]); c.setIsBatchEditOpen(true); }}
         onBatchDelete={() => c.batchDeleteMutation.mutate(Array.from(c.selectedVariantIds))}

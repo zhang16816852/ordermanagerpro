@@ -9,7 +9,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CheckSquare, Edit3, Trash2, Pencil } from 'lucide-react';
+import { CheckSquare, Edit3, Trash2, Pencil, Copy } from 'lucide-react';
 import type { VariantWithExtras } from '../variantManagerTypes';
 import { STATUS_LABELS } from '../variantManagerTypes';
 
@@ -21,6 +21,7 @@ interface VariantsTableProps {
   onToggleSelectAll: (checked: boolean) => void;
   onToggleVariant: (id: string) => void;
   onEdit: (variant: VariantWithExtras) => void;
+  onDuplicate: (variant: VariantWithExtras) => void;
   onDelete: (id: string) => void;
   onOpenBatchEdit: () => void;
   onBatchDelete: () => void;
@@ -35,6 +36,7 @@ export function VariantsTable({
   onToggleSelectAll,
   onToggleVariant,
   onEdit,
+  onDuplicate,
   onDelete,
   onOpenBatchEdit,
   onBatchDelete,
@@ -156,8 +158,11 @@ export function VariantsTable({
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => onEdit(variant)}>
+                      <Button variant="ghost" size="icon" onClick={() => onEdit(variant)} title="編輯">
                         <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => onDuplicate(variant)} title="複製">
+                        <Copy className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"

@@ -108,7 +108,6 @@ export function RepairPartBatchCreateDialog({ open, onOpenChange }: RepairPartBa
       const payload: RepairPartInput = {
         device_model_id: row.deviceModelId,
         name: row.name.trim(),
-        tags: [],
         description: null,
         supplier_id: null,
         default_unit_cost: 0,
